@@ -1,0 +1,135 @@
+"""Tests for the PDF generation service (pdf.py).
+
+The generate_pdf tests call WeasyPrint directly and require system-level
+libraries (cairo, pango, gobject).  If WeasyPrint cannot be imported the
+tests are skipped gracefully rather than erroring.
+"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+# ---------------------------------------------------------------------------
+# Skip the WeasyPrint-dependent tests if the library cannot be imported.
+# ---------------------------------------------------------------------------
+weasyprint = pytest.importorskip("weasyprint")
+
+from app.services.pdf import generate_pdf, get_signed_url, upload_pdf  # noqa: E402
+
+SAMPLE_RESUME = {
+    "contact": {
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "phone": "555-0100",
+        "location": "NYC",
+    },
+    "experience": [
+        {
+            "company": "Acme Corp",
+            "title": "Engineer",
+            "dates": "2022\u20132024",
+            "bullets": ["Built APIs", "Led team of 3"],
+        }
+    ],
+    "education": [
+        {
+            "school": "MIT",
+            "degree": "B.S. Computer Science",
+            "dates": "2018\u20132022",
+        }
+    ],
+    "skills": ["Python", "FastAPI", "PostgreSQL"],
+}
+
+
+# ---------------------------------------------------------------------------
+# generate_pdf tests
+# ---------------------------------------------------------------------------
+
+
+def test_generate_pdf_returns_bytes_ats_clean():
+    pdf = generate_pdf(SAMPLE_RESUME, "ats_clean")
+    assert isinstance(pdf, bytes)
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_returns_bytes_ats_modern():
+    pdf = generate_pdf(SAMPLE_RESUME, "ats_modern")
+    assert isinstance(pdf, bytes)
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_invalid_template_raises():
+    with pytest.raises(ValueError, match="Unknown template"):
+        generate_pdf(SAMPLE_RESUME, "unknown_template")
+
+
+# ---------------------------------------------------------------------------
+# upload_pdf tests (Supabase mocked)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_pdf_returns_storage_path():
+    mock_client = MagicMock()
+    mock_client.storage.from_.return_value.upload.return_value = {}
+
+    path = await upload_pdf(b"%PDF-test", "user-123", "resume-456", mock_client)
+
+    assert path == "resumes/user-123/resume-456.pdf"
+    mock_client.storage.from_.assert_called_with("resumes")
+    mock_client.storage.from_.return_value.upload.assert_called_once_with(
+        "resumes/user-123/resume-456.pdf",
+        b"%PDF-test",
+        {"content-type": "application/pdf", "upsert": "true"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_pdf_path_format():
+    """Storage path must follow the resumes/{user_id}/{resume_id}.pdf convention."""
+    mock_client = MagicMock()
+    mock_client.storage.from_.return_value.upload.return_value = {}
+
+    user_id = "aabbccdd-1234-5678-abcd-ef0123456789"
+    resume_id = "ffee1234-aaaa-bbbb-cccc-dddd00001111"
+    path = await upload_pdf(b"%PDF", user_id, resume_id, mock_client)
+
+    assert path.startswith("resumes/")
+    assert path.endswith(".pdf")
+    assert user_id in path
+    assert resume_id in path
+
+
+# ---------------------------------------------------------------------------
+# get_signed_url tests (Supabase mocked)
+# ---------------------------------------------------------------------------
+
+
+def test_get_signed_url_returns_url():
+    mock_client = MagicMock()
+    mock_client.storage.from_.return_value.create_signed_url.return_value = {
+        "signedURL": "https://storage.example.com/signed-token"
+    }
+
+    url = get_signed_url("resumes/user-123/resume-456.pdf", mock_client)
+
+    assert url == "https://storage.example.com/signed-token"
+    mock_client.storage.from_.assert_called_with("resumes")
+    mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with(
+        "resumes/user-123/resume-456.pdf", 3600
+    )
+
+
+def test_get_signed_url_custom_expiry():
+    mock_client = MagicMock()
+    mock_client.storage.from_.return_value.create_signed_url.return_value = {
+        "signedURL": "https://storage.example.com/short-token"
+    }
+
+    url = get_signed_url("resumes/u/r.pdf", mock_client, expires_in=300)
+
+    mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with(
+        "resumes/u/r.pdf", 300
+    )
+    assert url == "https://storage.example.com/short-token"

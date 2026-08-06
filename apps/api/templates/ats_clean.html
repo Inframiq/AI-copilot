@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; margin: 1in; color: #000; }
+  h1 { font-size: 16pt; margin: 0 0 4px; }
+  .contact { font-size: 10pt; margin-bottom: 12px; }
+  h2 { font-size: 12pt; border-bottom: 1px solid #000; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .job-title { font-weight: bold; }
+  .dates { float: right; font-size: 10pt; }
+  ul { margin: 4px 0 8px 16px; padding: 0; }
+  li { margin-bottom: 2px; }
+  .skills { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>{{ contact.name }}</h1>
+<div class="contact">{{ contact.email }} | {{ contact.phone }} | {{ contact.location }}</div>
+
+{% if experience %}
+<h2>Experience</h2>
+{% for job in experience %}
+<div><span class="job-title">{{ job.title }}</span>, {{ job.company }} <span class="dates">{{ job.dates }}</span></div>
+<ul>{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+{% endfor %}
+{% endif %}
+
+{% if education %}
+<h2>Education</h2>
+{% for edu in education %}
+<div><span class="job-title">{{ edu.degree }}</span>, {{ edu.school }} <span class="dates">{{ edu.dates }}</span></div>
+{% endfor %}
+{% endif %}
+
+{% if skills %}
+<h2>Skills</h2>
+<div class="skills">{{ skills | join(", ") }}</div>
+{% endif %}
+</body>
+</html>
