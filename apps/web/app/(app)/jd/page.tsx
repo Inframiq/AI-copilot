@@ -84,7 +84,7 @@ export default function JDIndexPage() {
           <Card className="flex flex-col gap-md">
             <h2 className="text-headline-md text-on-surface">ATS Results</h2>
             <div className="flex items-center justify-center py-md">
-              <span className="text-display-lg text-primary font-bold">{atsScore}%</span>
+              <span className="text-headline-xl text-primary font-bold">{atsScore}%</span>
             </div>
             {matchedSkills.length > 0 && (
               <div>

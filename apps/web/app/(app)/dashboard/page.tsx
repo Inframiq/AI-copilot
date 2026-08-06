@@ -28,30 +28,38 @@ export default function DashboardPage() {
 
   async function handleStartTailoring() {
     if (!jdText.trim()) return;
-    const jd = await apiClient.createJd({ title: "Untitled JD", raw_text: jdText });
-    router.push(`/jd/${jd.id}`);
+    try {
+      const jd = await apiClient.createJd({ title: "Untitled JD", raw_text: jdText });
+      router.push(`/jd/${jd.id}`);
+    } catch (err) {
+      console.error("Failed to start tailoring:", err);
+    }
   }
 
   async function createNewResume() {
-    const resume = await apiClient.createResume({
-      title: "Untitled Resume",
-      content: {
-        contact: { name: "", email: "" },
-        experience: [],
-        education: [],
-        skills: [],
-      },
-    });
-    router.push(`/studio/${resume.id}`);
+    try {
+      const resume = await apiClient.createResume({
+        title: "Untitled Resume",
+        content: {
+          contact: { name: "", email: "" },
+          experience: [],
+          education: [],
+          skills: [],
+        },
+      });
+      router.push(`/studio/${resume.id}`);
+    } catch (err) {
+      console.error("Failed to create resume:", err);
+    }
   }
 
   const metrics = [
     {
       label: "Profile Health",
-      value: "92",
-      badge: "Excellent",
+      value: "—",
+      badge: "—",
       icon: Heartbeat,
-      barWidth: "92%",
+      barWidth: null,
     },
     {
       label: "Active Applications",

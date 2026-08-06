@@ -41,7 +41,14 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true, error: null });
+    set({
+      isLoading: true,
+      error: null,
+      atsScore: null,
+      matchedSkills: [],
+      missingSkills: [],
+      sessionId: null,
+    });
     try {
       const result = await apiClient.tailorResume(
         resumeId,

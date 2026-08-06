@@ -20,7 +20,27 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh session if expired — required for Server Components
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+
+  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview"];
+  const PUBLIC_PATHS = ["/", "/login", "/register", "/callback"];
+
+  const isPublic =
+    PUBLIC_PATHS.includes(pathname) ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon.ico");
+
+  const isProtected = PROTECTED_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(prefix + "/")
+  );
+
+  if (!isPublic && isProtected && !user) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    return NextResponse.redirect(loginUrl);
+  }
 
   return response;
 }

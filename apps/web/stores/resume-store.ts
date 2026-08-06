@@ -80,8 +80,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       try {
         await apiClient.updateResume(resumeId, { content });
         set({ isDirty: false, _saveTimer: null });
-      } catch {
-        // Auto-save failures are silent; user can retry manually
+      } catch (err) {
+        console.error("Auto-save failed:", err);
       }
     }, AUTO_SAVE_DELAY_MS);
     set({ _saveTimer: timer });

@@ -2,20 +2,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  SquaresFour, FileDashed, FileText, Brain, Gear, Headset, RocketLaunch
+  SquaresFour, FileDashed, FileText, Brain, RocketLaunch
 } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
 
 const NAV = [
   { href: "/dashboard", icon: SquaresFour, label: "Dashboard" },
-  { href: "/resumes", icon: FileText, label: "Resume Builder" },
+  { href: "/dashboard", icon: FileText, label: "Resumes" },
   { href: "/jd", icon: FileDashed, label: "JD Analyzer" },
   { href: "/interview", icon: Brain, label: "Interview Center" },
-];
-
-const BOTTOM = [
-  { href: "/settings", icon: Gear, label: "Settings" },
-  { href: "/support", icon: Headset, label: "Support" },
 ];
 
 export function Sidebar() {
@@ -59,10 +54,9 @@ export function Sidebar() {
       </nav>
       <div className="mt-auto flex flex-col gap-sm pb-md">
         <button onClick={signOut}
-          className="w-full py-md rounded-xl text-label-md font-label-md text-on-primary bg-gradient-to-b from-primary-container to-primary shadow-md hover:shadow-lg transition-all mb-md">
+          className="w-full py-md rounded-xl text-label-md font-label-md text-on-primary bg-gradient-to-b from-primary-container to-primary shadow-md hover:shadow-lg transition-all">
           Sign Out
         </button>
-        {BOTTOM.map(item => <NavItem key={item.href} {...item} />)}
       </div>
     </aside>
   );

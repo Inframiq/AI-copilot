@@ -87,7 +87,7 @@ export default function InterviewPage({
                   </span>
                 </div>
 
-                <QuestionCard question={active} />
+                <QuestionCard key={active.id} question={active} />
 
                 <div className="flex items-center justify-between">
                   <button
