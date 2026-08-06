@@ -8,3 +8,4 @@ node_modules/
 dist/
 *.pdf
 .DS_Store
+apps/web/.env.local
