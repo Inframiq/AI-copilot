@@ -1,0 +1,220 @@
+import pytest
+import time
+import uuid
+import jwt as pyjwt
+from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, MagicMock, patch
+from app.main import app
+from app.core.config import settings
+from app.db.session import get_db
+
+
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def make_auth_header():
+    payload = {
+        "sub": TEST_USER_ID,
+        "email": "test@test.com",
+        "exp": int(time.time()) + 3600,
+    }
+    token = pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
+
+
+def make_mock_db():
+    """Return an async generator that yields a mock AsyncSession."""
+    mock_session = MagicMock()
+    mock_session.execute = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_session.flush = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.add_all = MagicMock()
+    mock_session.delete = AsyncMock()
+
+    async def _override():
+        yield mock_session
+
+    return _override, mock_session
+
+
+@pytest.mark.asyncio
+async def test_health_is_public():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_list_resumes_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/resumes")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_resumes_returns_200_with_valid_token():
+    override, mock_session = make_mock_db()
+    # execute returns an object with scalars().all() = []
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = []
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/resumes", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json() == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_resume_returns_201():
+    override, mock_session = make_mock_db()
+
+    # Simulate what db.refresh does: populate the resume fields
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    created_resume = Resume(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="My Resume",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    async def fake_refresh(obj):
+        obj.id = created_resume.id
+        obj.user_id = created_resume.user_id
+        obj.title = created_resume.title
+        obj.content = created_resume.content
+        obj.template_id = created_resume.template_id
+        obj.pdf_url = created_resume.pdf_url
+        obj.created_at = created_resume.created_at
+        obj.updated_at = created_resume.updated_at
+
+    mock_session.refresh = fake_refresh
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/resumes",
+                json={"title": "My Resume"},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["title"] == "My Resume"
+        assert data["template_id"] == "ats_clean"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_resume_404_when_not_found():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                f"/resumes/{uuid.uuid4()}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_resume_204():
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Old",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    mock_result.scalar_one_or_none.return_value = existing
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.delete(
+                f"/resumes/{existing.id}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_jd_404_when_not_found():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                f"/jd/{uuid.uuid4()}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_questions_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get(f"/ai/sessions/{uuid.uuid4()}/questions")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_questions_returns_list():
+    override, mock_session = make_mock_db()
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = []
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                f"/ai/sessions/{uuid.uuid4()}/questions",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 200
+        assert r.json() == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
