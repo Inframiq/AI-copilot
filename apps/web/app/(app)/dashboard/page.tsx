@@ -22,7 +22,9 @@ export default function DashboardPage() {
     queryFn: () => apiClient.getResumes(),
   });
 
-  const topAtsScore = 78; // placeholder until ATS scoring is wired to resumes
+  const topAtsScore = resumes.length > 0
+    ? Math.max(0, ...resumes.map((r) => r.ats_score ?? 0))
+    : 0;
 
   async function handleStartTailoring() {
     if (!jdText.trim()) return;
@@ -53,15 +55,15 @@ export default function DashboardPage() {
     },
     {
       label: "Active Applications",
-      value: "14",
-      badge: "+2 this week",
+      value: "—",
+      badge: "—",
       icon: Briefcase,
       barWidth: null,
     },
     {
       label: "Interview Readiness",
-      value: "78%",
-      badge: "Needs prep",
+      value: "—",
+      badge: "—",
       icon: Brain,
       barWidth: null,
     },
