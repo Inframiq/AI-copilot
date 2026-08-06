@@ -44,7 +44,7 @@ export default function InterviewPage({
           <div className="w-16 h-16 rounded-full bg-secondary-container flex items-center justify-center">
             <CaretRight size={32} className="text-primary" />
           </div>
-          <div className="text-center max-w-sm">
+          <div className="text-center max-w-[24rem]">
             <h2 className="text-headline-md text-on-surface mb-sm">
               No questions yet
             </h2>

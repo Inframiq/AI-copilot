@@ -32,7 +32,7 @@ export default function LandingPage() {
           <h1 className="text-headline-xl text-on-surface mb-lg">
             Land Your Dream Job with AI
           </h1>
-          <p className="text-body-lg text-on-surface-variant mb-xl max-w-xl mx-auto">
+          <p className="text-body-lg text-on-surface-variant mb-xl max-w-[36rem] mx-auto">
             Career Copilot tailors your resume to any job description in seconds,
             calculates your ATS score, and generates interview questions targeting
             your exact skill gaps.

@@ -65,9 +65,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       });
 
       // Hydrate the resume store with the tailored content
-      useResumeStore
-        .getState()
-        .updateContent(result.tailored_content);
+      if (result.tailored_content) {
+        useResumeStore.getState().updateContent(result.tailored_content);
+      }
     } catch (e: unknown) {
       set({
         error: e instanceof Error ? e.message : "Tailoring failed",

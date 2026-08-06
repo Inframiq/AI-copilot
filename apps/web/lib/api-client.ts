@@ -7,7 +7,10 @@ import type {
   ResumeContent,
 } from "@career-copilot/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL!;
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+if (!BASE && typeof window !== "undefined") {
+  console.error("NEXT_PUBLIC_API_URL is not set — all API calls will fail");
+}
 
 async function getToken(): Promise<string> {
   const supabase = createBrowserClient();

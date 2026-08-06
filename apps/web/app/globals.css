@@ -106,3 +106,46 @@
 :root {
   font-family: var(--font-hanken), sans-serif;
 }
+
+html, body {
+  background-color: #faf8ff; /* --color-background */
+  height: 100%;
+}
+
+/* ── Page shell: quick fade prevents flash between routes ────────────────── */
+@keyframes page-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.page-enter {
+  animation: page-fade 0.15s ease both;
+}
+
+/* ── Card stagger: clean fade + gentle rise, nothing more ────────────────── */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter > div > * {
+  animation: card-enter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  will-change: opacity, transform;
+}
+
+.page-enter > div > *:nth-child(1)  { animation-delay: 0.00s; }
+.page-enter > div > *:nth-child(2)  { animation-delay: 0.07s; }
+.page-enter > div > *:nth-child(3)  { animation-delay: 0.14s; }
+.page-enter > div > *:nth-child(4)  { animation-delay: 0.21s; }
+.page-enter > div > *:nth-child(5)  { animation-delay: 0.28s; }
+.page-enter > div > *:nth-child(6)  { animation-delay: 0.35s; }
+.page-enter > div > *:nth-child(7)  { animation-delay: 0.42s; }
+.page-enter > div > *:nth-child(8)  { animation-delay: 0.49s; }
+.page-enter > div > *:nth-child(9)  { animation-delay: 0.56s; }
+.page-enter > div > *:nth-child(10) { animation-delay: 0.63s; }

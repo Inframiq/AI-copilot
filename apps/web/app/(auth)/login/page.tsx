@@ -37,7 +37,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-gutter">
-      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-md">
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-[28rem]">
         {/* Logo */}
         <div className="flex items-center gap-md mb-xl">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
