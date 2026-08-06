@@ -3,10 +3,9 @@ import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
-import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Card } from "@/components/ui/Card";
 import type { JobDescription } from "@career-copilot/types";
-import { CheckCircle, XCircle, ArrowLeft } from "@phosphor-icons/react";
+import { CheckCircle, ArrowLeft } from "@phosphor-icons/react";
 
 export default function JDPage({
   params,
