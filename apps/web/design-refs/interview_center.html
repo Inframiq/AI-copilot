@@ -1,0 +1,300 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Career Copilot - Interview Center</title>
+<script src="https://unpkg.com/@phosphor-icons/web"></script><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/thin/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/light/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/fill/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/duotone/style.css">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#000a56",
+                        "surface-container": "#eaedff",
+                        "tertiary-container": "#292c2e",
+                        "tertiary-fixed": "#e1e3e5",
+                        "background": "#faf8ff",
+                        "primary-container": "#142175",
+                        "surface-container-high": "#e1e7ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "tertiary-fixed-dim": "#c5c7c9",
+                        "inverse-primary": "#bcc3ff",
+                        "on-tertiary-container": "#919395",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#bcc3ff",
+                        "secondary": "#505f76",
+                        "on-primary-fixed": "#000d60",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-dim": "#d2d9f4",
+                        "on-primary-fixed-variant": "#333f91",
+                        "on-background": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "on-surface-variant": "#454651",
+                        "surface-tint": "#4b57aa",
+                        "outline-variant": "#c6c5d3",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-fixed-dim": "#b8c7e2",
+                        "surface-bright": "#faf8ff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed": "#191c1e",
+                        "secondary-container": "#d4e3ff",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#dae2fc",
+                        "on-surface": "#131b2e",
+                        "on-primary-container": "#818de4",
+                        "primary-fixed": "#dfe0ff",
+                        "surface": "#faf8ff",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "on-secondary-fixed-variant": "#39485e",
+                        "on-secondary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#283044",
+                        "surface-variant": "#dae2fc",
+                        "outline": "#767682",
+                        "success-accent": "#4b57aa",
+                        "tertiary": "#151819",
+                        "on-secondary-container": "#56657c",
+                        "secondary-fixed": "#d4e3ff",
+                        "on-secondary-fixed": "#0c1c30"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "xxl": "48px",
+                        "xs": "4px",
+                        "sidebar-width": "280px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-md": ["Hanken Grotesk"],
+                        "caption": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-xl": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["22px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                        "label-md": ["14px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "caption": ["10px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-lg": ["28px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "headline-xl": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased min-h-screen flex">
+<!-- SideNavBar (Shared Component) -->
+<nav class="hidden md:flex flex-col p-md gap-sm bg-surface-container-lowest/80 dark:bg-tertiary/80 backdrop-blur-xl h-screen w-sidebar-width left-0 fixed border-r border-outline-variant/20 shadow-sm z-40">
+<div class="flex items-center gap-md px-md py-lg mb-md">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+<i class="ph-fill ph-rocket text-on-primary text-[20px]"></i>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md font-black text-primary dark:text-primary-fixed">Career Copilot</span>
+<span class="font-caption text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto flex flex-col gap-sm">
+<a class="flex items-center gap-md px-md py-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-squares-four text-[24px]"></i>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-path text-[24px]"></i>
+<span class="font-label-md text-label-md">Career Path</span>
+</a>
+<a class="bg-secondary-container text-primary font-bold rounded-xl scale-95 flex items-center gap-md px-md py-md transition-all duration-200" href="#">
+<i class="ph-fill ph-microphone-stage text-[24px]"></i>
+<span class="font-label-md text-label-md">Interview Center</span>
+</a>
+<a class="flex items-center gap-md px-md py-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-file-text text-[24px]"></i>
+<span class="font-label-md text-label-md">Resume Builder</span>
+</a>
+<a class="flex items-center gap-md px-md py-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-users text-[24px]"></i>
+<span class="font-label-md text-label-md">Networking</span>
+</a>
+<a class="flex items-center gap-md px-md py-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-chart-line-up text-[24px]"></i>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</div>
+<div class="mt-auto flex flex-col gap-sm pb-md border-t border-outline-variant/20 pt-md">
+<a class="flex items-center gap-md px-md py-sm font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-gear text-[24px]"></i>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-all duration-300" href="#">
+<i class="ph ph-headset text-[24px]"></i>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+<button class="bg-primary text-on-primary w-full py-md rounded-xl font-label-md text-label-md hover:bg-primary/90 hover:scale-[0.98] active:translate-y-1 active:border-b-0 border-b-4 border-primary-container transition-all mt-sm shadow-lg shadow-primary/20">
+                Upgrade to Executive
+            </button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-sidebar-width min-h-screen flex flex-col">
+<!-- TopNavBar (Shared Component) -->
+<header class="flex justify-between items-center w-full px-lg h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-md docked full-width top-0 sticky border-b border-outline-variant/30 shadow-sm z-30">
+<div class="md:hidden flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+<i class="ph-fill ph-rocket text-on-primary text-[18px]"></i>
+</div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary">Career Copilot</h1>
+</div>
+<!-- Search Bar -->
+<div class="hidden md:flex items-center bg-surface-container-low rounded-full px-md py-sm border border-outline-variant/30 w-96">
+<i class="ph ph-magnifying-glass text-on-surface-variant text-[20px]"></i>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full ml-sm" placeholder="Search resources..." type="text">
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-md">
+<button class="p-sm text-on-surface-variant hover:bg-surface-container-high/50 dark:hover:bg-tertiary-container/50 transition-colors rounded-full">
+<i class="ph ph-bell text-[24px]"></i>
+</button>
+<button class="p-sm text-on-surface-variant hover:bg-surface-container-high/50 dark:hover:bg-tertiary-container/50 transition-colors rounded-full">
+<i class="ph ph-question text-[24px]"></i>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30 shadow-sm">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A professional headshot of a person looking confident, well-lit studio lighting, corporate modern style, deep indigo and pristine white background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpPSmuiDFRQxJvUVgo_7LnTW9O_M57KkY-mzhR-vtVO70U6j7Bfp2YZmKMNkcbcWqdrO5_OTlvaOyejH79bJiN-ZiDZocjX6vjJOLFaxg3vk7UriZmcGgDEaWscNTfF2wR9oj_iyU52tJvzbArl7PldTZ6jytHBExjp8I4YkEQ-s6q6js9l0W4tTKur2ZYSOYyF00FSMz43Amv7EST9_EAmKmhbUbU5HrWAwma20i2coXRAxrjye_5">
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<div class="p-lg md:p-xl max-w-[1440px] mx-auto w-full flex flex-col lg:flex-row gap-lg">
+<!-- Left Column: Tabs & Content -->
+<div class="flex-1 flex flex-col gap-lg">
+<!-- Page Header -->
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Interview Center</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-sm max-w-2xl">Prepare, practice, and perfect your interview skills across technical, behavioral, and HR disciplines.</p>
+</div>
+<!-- Tabbed Navigation -->
+<div class="flex gap-lg border-b border-outline-variant/30">
+<button class="pb-sm font-label-md text-label-md text-primary font-bold border-b-2 border-primary">Technical</button>
+<button class="pb-sm font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">Behavioral</button>
+<button class="pb-sm font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">HR &amp; Culture</button>
+</div>
+<!-- Topic Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow group flex flex-col">
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+<i class="ph ph-code text-[24px]"></i>
+</div>
+<span class="bg-surface-container font-caption text-caption text-primary px-sm py-xs rounded-full">Algorithms</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-sm">Data Structures &amp; Algos</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-lg flex-1">Practice common sorting, searching, and graph traversal problems.</p>
+<div class="flex items-center gap-sm mb-lg">
+<div class="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[45%] rounded-full"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">45%</span>
+</div>
+<button class="w-full py-md px-md bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl font-label-md text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 active:shadow-inner transition-all duration-200 flex justify-center items-center gap-sm border-none">
+<i class="ph-fill ph-play text-[16px]"></i>
+                            Start Practice
+                        </button>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow group flex flex-col">
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+<i class="ph ph-bezier-curve text-[24px]"></i>
+</div>
+<span class="bg-surface-container font-caption text-caption text-primary px-sm py-xs rounded-full">System Design</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-sm">System Design</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-lg flex-1">Architect scalable systems, handle load balancing, and database choices.</p>
+<div class="flex items-center gap-sm mb-lg">
+<div class="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[20%] rounded-full"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">20%</span>
+</div>
+<button class="w-full py-md px-md bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl font-label-md text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 active:shadow-inner transition-all duration-200 flex justify-center items-center gap-sm border-none">
+<i class="ph-fill ph-play text-[16px]"></i>
+                            Start Practice
+                        </button>
+</div>
+</div>
+</div>
+<!-- Right Column: Progress Tracking -->
+<aside class="w-full lg:w-80 flex flex-col gap-md">
+<div class="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-lg">Overall Readiness</h3>
+<!-- Faux Radial Chart (CSS based) -->
+<div class="relative w-32 h-32 mx-auto mb-lg flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="65, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline-lg text-headline-lg text-primary">65%</span>
+</div>
+</div>
+<div class="space-y-md">
+<div>
+<h4 class="font-label-md text-label-md text-on-surface mb-sm flex items-center gap-sm">
+<i class="ph-fill ph-thumbs-up text-success-accent text-[18px]"></i> Strengths
+                            </h4>
+<div class="flex flex-wrap gap-sm">
+<span class="px-sm py-xs bg-surface-container-high text-on-surface-variant font-caption text-caption rounded-md border border-outline-variant/30">System Design</span>
+<span class="px-sm py-xs bg-surface-container-high text-on-surface-variant font-caption text-caption rounded-md border border-outline-variant/30">Communication</span>
+</div>
+</div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface mb-sm flex items-center gap-sm">
+<i class="ph-fill ph-trend-down text-error text-[18px]"></i> Needs Focus
+                            </h4>
+<div class="flex flex-wrap gap-sm">
+<span class="px-sm py-xs bg-error-container/50 text-on-error-container font-caption text-caption rounded-md border border-error/20">Dynamic Programming</span>
+<span class="px-sm py-xs bg-error-container/50 text-on-error-container font-caption text-caption rounded-md border border-error/20">Concurrency</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Upcoming Mock Interview -->
+<div class="bg-primary text-on-primary rounded-2xl p-md shadow-lg shadow-primary/10 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-container/50 rounded-full blur-2xl -mr-10 -mt-10"></div>
+<h4 class="font-label-md text-label-md font-bold mb-sm relative z-10">Next Mock Interview</h4>
+<p class="font-body-sm text-body-sm mb-md relative z-10 opacity-90">Tomorrow, 10:00 AM</p>
+<button class="w-full bg-gradient-to-b from-surface-container-lowest to-surface-container-low text-primary font-label-md text-label-md py-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 active:shadow-inner transition-all duration-200 relative z-10 border-none">
+                        Join Session
+                    </button>
+</div>
+</aside>
+</div>
+</main>
+
+
+</body></html>

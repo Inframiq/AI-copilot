@@ -1,0 +1,343 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Career Copilot - JD Analyzer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web"></script><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/thin/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/light/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/fill/style.css"><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/duotone/style.css">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#000a56",
+                        "surface-container": "#eaedff",
+                        "tertiary-container": "#292c2e",
+                        "tertiary-fixed": "#e1e3e5",
+                        "background": "#faf8ff",
+                        "primary-container": "#142175",
+                        "surface-container-high": "#e1e7ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "tertiary-fixed-dim": "#c5c7c9",
+                        "inverse-primary": "#bcc3ff",
+                        "on-tertiary-container": "#919395",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#bcc3ff",
+                        "secondary": "#505f76",
+                        "on-primary-fixed": "#000d60",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-dim": "#d2d9f4",
+                        "on-primary-fixed-variant": "#333f91",
+                        "on-background": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "on-surface-variant": "#454651",
+                        "surface-tint": "#4b57aa",
+                        "outline-variant": "#c6c5d3",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-fixed-dim": "#b8c7e2",
+                        "surface-bright": "#faf8ff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed": "#191c1e",
+                        "secondary-container": "#d4e3ff",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#dae2fc",
+                        "on-surface": "#131b2e",
+                        "on-primary-container": "#818de4",
+                        "primary-fixed": "#dfe0ff",
+                        "surface": "#faf8ff",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "on-secondary-fixed-variant": "#39485e",
+                        "on-secondary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#283044",
+                        "surface-variant": "#dae2fc",
+                        "outline": "#767682",
+                        "success-accent": "#4b57aa",
+                        "tertiary": "#151819",
+                        "on-secondary-container": "#56657c",
+                        "secondary-fixed": "#d4e3ff",
+                        "on-secondary-fixed": "#0c1c30"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "2xl": "1rem"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "xxl": "48px",
+                        "xs": "4px",
+                        "sidebar-width": "280px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-md": ["Hanken Grotesk"],
+                        "caption": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-xl": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["22px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                        "label-md": ["14px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "caption": ["10px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-lg": ["28px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "headline-xl": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; }
+        
+        /* Custom scrollbar for modern feel */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #c6c5d3; border-radius: 20px; }
+        
+        .gauge-circle {
+            stroke-dasharray: 283; /* 2 * pi * r (45) */
+            stroke-dashoffset: 283;
+            animation: fillGauge 1.5s ease-out forwards;
+        }
+        
+        @keyframes fillGauge {
+            to { stroke-dashoffset: 42; /* 85% full */ }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-full font-sans antialiased flex flex-col md:flex-row overflow-hidden min-h-screen">
+<!-- SideNavBar (Hidden on Mobile, Visible on Desktop) -->
+<aside class="hidden md:flex flex-col p-md gap-sm bg-surface-container-lowest/80 backdrop-blur-xl docked h-screen w-sidebar-width left-0 fixed border-r border-outline-variant/20 shadow-sm z-50">
+<div class="flex items-center gap-md px-md py-lg mb-md">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+<i class="ph-fill ph-rocket text-on-primary text-[20px]"></i>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md font-black text-primary tracking-tight">Career Copilot</span>
+<span class="font-caption text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-sm">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-squares-four text-[24px]"></i>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-path text-[24px]"></i>
+<span class="font-label-md text-label-md">Career Path</span>
+</a>
+<a class="bg-secondary-container text-primary font-bold rounded-xl scale-95 flex items-center gap-md px-md py-md transition-all duration-200" href="#">
+<i class="ph-fill ph-file-dashed text-[24px]"></i>
+<span class="font-label-md text-label-md">JD Analyzer</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-users text-[24px]"></i>
+<span class="font-label-md text-label-md">Networking</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-chart-line-up text-[24px]"></i>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</nav>
+<div class="mt-auto flex flex-col gap-sm pb-md">
+<button class="w-full py-md rounded-xl font-label-md text-label-md text-on-primary bg-gradient-to-b from-primary to-[#000840] shadow-[0_4px_12px_rgba(0,10,86,0.3)] hover:shadow-[0_8px_20px_rgba(0,10,86,0.4)] hover:scale-[0.98] active:scale-95 active:shadow-inner transition-all duration-300 mb-md border-t border-white/10">
+                Upgrade to Executive
+            </button>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-gear text-[24px]"></i>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-xl flex items-center gap-md px-md py-md hover:bg-surface-container-high/40 transition-all duration-300" href="#">
+<i class="ph ph-headset text-[24px]"></i>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-[280px] flex flex-col h-screen overflow-y-auto relative w-full">
+<!-- TopNavBar (Visible on Mobile) -->
+<header class="md:hidden flex justify-between items-center w-full px-lg h-16 bg-surface/80 backdrop-blur-md sticky top-0 z-40 border-b border-outline-variant/30 shadow-sm">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+<i class="ph-fill ph-rocket text-on-primary text-[18px]"></i>
+</div>
+<span class="font-headline-md text-headline-md font-bold text-primary tracking-tight">Career Copilot</span>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:bg-surface-container-high/50 p-sm rounded-full transition-colors">
+<i class="ph ph-bell text-[24px]"></i>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container-high/50 p-sm rounded-full transition-colors">
+<i class="ph ph-list text-[24px]"></i>
+</button>
+</div>
+</header>
+<!-- Page Canvas -->
+<div class="max-w-[1440px] w-full mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+<!-- Page Header -->
+<section class="pt-xl pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface mb-xs">JD Analyzer</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Paste a job description to instantly analyze fit, extract key skills, and identify gaps.</p>
+</div>
+</section>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter flex-1">
+<!-- Input Area (Spans 2 columns on desktop) -->
+<div class="lg:col-span-2 flex flex-col gap-md bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden group">
+<div class="flex justify-between items-center mb-xs">
+<h2 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
+<i class="ph ph-clipboard-text text-primary text-[24px]"></i>
+                            Job Description Input
+                        </h2>
+<button class="p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95">
+<i class="ph ph-list-dashes text-[20px]"></i>
+</button>
+</div>
+<div class="relative flex-1 min-h-[300px]">
+<textarea class="w-full h-full p-md bg-surface-container-lowest/50 border border-outline-variant/50 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/60" placeholder="Paste the full job description here...
+
+e.g., 'Looking for a Senior Product Designer with 5+ years of experience in Figma, design systems, and user testing. Must have strong cross-functional collaboration skills...'"></textarea>
+</div>
+<button class="w-full py-md font-label-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-primary to-[#000840] shadow-[0_4px_12px_rgba(0,10,86,0.3)] hover:shadow-[0_8px_20px_rgba(0,10,86,0.4)] hover:scale-[0.98] active:scale-95 active:shadow-inner transition-all duration-300 flex items-center justify-center gap-sm mt-auto border-t border-white/10">
+<i class="ph ph-magnifying-glass text-[20px]"></i>
+                        Analyze Description
+                    </button>
+</div>
+<!-- Match Results & Gauge (Spans 1 column) -->
+<div class="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col items-center justify-center gap-md relative overflow-hidden group">
+<div class="absolute top-lg left-lg">
+<h2 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
+<i class="ph ph-target text-surface-tint text-[24px]"></i>
+                            Profile Match
+                        </h2>
+</div>
+<div class="relative w-48 h-48 mt-xl">
+<!-- Background Circle -->
+<svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="45" stroke="#eaedff" stroke-width="8"></circle>
+<!-- Foreground Gauge Circle -->
+<circle class="gauge-circle" cx="50" cy="50" fill="none" r="45" stroke="#000a56" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline-xl text-headline-xl text-primary font-bold">85%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Strong Fit</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-center px-md mt-sm">Your profile aligns closely with the core requirements. Focus on bridging the gap in specific technical tools.</p>
+</div>
+<!-- Skill Gap Analysis (Spans 1 column) -->
+<div class="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-md relative overflow-hidden group">
+<h2 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm mb-xs">
+<i class="ph ph-list-checks text-primary text-[24px]"></i>
+                        Skill Breakdown
+                    </h2>
+<div class="flex flex-col gap-sm">
+<h3 class="font-label-md text-label-md text-on-surface-variant flex items-center gap-xs">
+<i class="ph ph-check-circle text-[16px] text-surface-tint"></i>
+                            Matched Skills (6)
+                        </h3>
+<div class="flex flex-wrap gap-xs">
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">React.js</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">TypeScript</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">System Design</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">Agile</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">REST APIs</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface font-label-sm text-label-sm rounded-md border border-outline-variant/30">Git</span>
+</div>
+</div>
+<div class="w-full h-px bg-outline-variant/30 my-sm"></div>
+<div class="flex flex-col gap-sm">
+<h3 class="font-label-md text-label-md text-on-surface-variant flex items-center gap-xs">
+<i class="ph ph-warning-circle text-[16px] text-error"></i>
+                            Missing Skills (2)
+                        </h3>
+<div class="flex flex-wrap gap-xs">
+<span class="px-sm py-xs bg-error-container/30 text-error font-label-sm text-label-sm rounded-md border border-error/20 flex items-center gap-xs">
+                                GraphQL
+                                <i class="ph ph-plus-circle text-[14px] cursor-pointer hover:text-error/70" title="Add to learning path"></i>
+</span>
+<span class="px-sm py-xs bg-error-container/30 text-error font-label-sm text-label-sm rounded-md border border-error/20 flex items-center gap-xs">
+                                Kubernetes
+                                <i class="ph ph-plus-circle text-[14px] cursor-pointer hover:text-error/70" title="Add to learning path"></i>
+</span>
+</div>
+<p class="font-caption text-caption text-on-surface-variant mt-xs italic">Tip: Click '+' to add missing skills to your Learning Path.</p>
+</div>
+</div>
+<!-- Job Details Insights (Bottom full width) -->
+<div class="lg:col-span-4 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
+<h2 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm mb-md">
+<i class="ph ph-lightbulb text-primary text-[24px]"></i>
+                        Extracted Job Insights
+                    </h2>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md">
+<!-- Insight Card 1 -->
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+<div class="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+<i class="ph ph-briefcase text-[20px]"></i>
+</div>
+<div>
+<h4 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-xs">Seniority</h4>
+<p class="font-body-md text-body-md text-on-surface font-medium">Senior Level</p>
+<p class="font-caption text-caption text-on-surface-variant mt-1">5+ years required</p>
+</div>
+</div>
+<!-- Insight Card 2 -->
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+<div class="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+<i class="ph ph-map-pin text-[20px]"></i>
+</div>
+<div>
+<h4 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-xs">Location</h4>
+<p class="font-body-md text-body-md text-on-surface font-medium">Remote (US)</p>
+<p class="font-caption text-caption text-on-surface-variant mt-1">PST Timezone preferred</p>
+</div>
+</div>
+<!-- Insight Card 3 -->
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+<div class="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+<i class="ph ph-money text-[20px]"></i>
+</div>
+<div>
+<h4 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-xs">Compensation</h4>
+<p class="font-body-md text-body-md text-on-surface font-medium">$140k - $170k</p>
+<p class="font-caption text-caption text-on-surface-variant mt-1">Estimated range</p>
+</div>
+</div>
+<!-- Insight Card 4 -->
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+<div class="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+<i class="ph ph-brain text-[20px]"></i>
+</div>
+<div>
+<h4 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-xs">Key Vibe</h4>
+<p class="font-body-md text-body-md text-on-surface font-medium">Fast-paced, Autonomous</p>
+<p class="font-caption text-caption text-on-surface-variant mt-1">Mentions "self-starter" 3x</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+
+</body></html>
