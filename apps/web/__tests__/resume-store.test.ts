@@ -135,9 +135,16 @@ describe("useResumeStore", () => {
     expect(state.pdfSignedUrl).toBeNull();
   });
 
-  it("setTemplateId updates templateId", () => {
+  it("setTemplateId updates templateId and sets isDirty", () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-123", SAMPLE_CONTENT, "ats_clean");
+
     useResumeStore.getState().setTemplateId("ats_modern");
-    expect(useResumeStore.getState().templateId).toBe("ats_modern");
+
+    const state = useResumeStore.getState();
+    expect(state.templateId).toBe("ats_modern");
+    expect(state.isDirty).toBe(true);
   });
 
   it("setPdfSignedUrl stores the URL", () => {

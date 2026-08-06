@@ -51,7 +51,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     get()._triggerAutoSave();
   },
 
-  setTemplateId: (id) => set({ templateId: id }),
+  setTemplateId: (id) => {
+    set({ templateId: id, isDirty: true });
+    get()._triggerAutoSave();
+  },
 
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
