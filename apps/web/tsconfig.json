@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@career-copilot/types": ["../../packages/types/index.ts"]
     }
   },
   "include": [

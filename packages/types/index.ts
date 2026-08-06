@@ -1,16 +1,38 @@
-// Career Copilot shared types
+// Career Copilot shared types — canonical source of truth
 
-export interface User {
-  id: string;
-  email: string;
-  created_at: string;
+export interface ResumeContent {
+  contact: {
+    name: string;
+    email: string;
+    phone?: string;
+    location?: string;
+    linkedin?: string;
+    github?: string;
+  };
+  summary?: string;
+  experience: Array<{
+    company: string;
+    title: string;
+    start: string;
+    end?: string;
+    bullets: string[];
+  }>;
+  education: Array<{
+    institution: string;
+    degree: string;
+    year: string;
+  }>;
+  skills: string[];
 }
 
 export interface Resume {
   id: string;
   user_id: string;
   title: string;
-  content: string;
+  template_id: string;
+  content: ResumeContent;
+  ats_score?: number;
+  pdf_path?: string;
   created_at: string;
   updated_at: string;
 }
@@ -19,32 +41,27 @@ export interface JobDescription {
   id: string;
   user_id: string;
   title: string;
-  company: string;
-  description: string;
+  raw_text: string;
+  parsed_skills: string[];
   created_at: string;
 }
 
-export interface TailoringResult {
-  id: string;
+export interface TailorOut {
+  session_id: string;
   resume_id: string;
-  job_description_id: string;
-  ats_score: number;
-  tailored_content: string;
-  suggestions: string[];
-  created_at: string;
+  jd_id: string;
+  ats_score_before: number;
+  ats_score_after: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  tailored_content: ResumeContent;
+  humanize_level: number;
 }
 
-export interface InterviewSession {
+export interface PrepQuestionOut {
   id: string;
-  user_id: string;
-  job_description_id: string;
-  questions: InterviewQuestion[];
-  created_at: string;
-}
-
-export interface InterviewQuestion {
-  id: string;
+  session_id: string;
+  topic: string;
   question: string;
-  answer?: string;
-  feedback?: string;
+  answer_hint: string;
 }
