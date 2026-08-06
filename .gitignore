@@ -1,1 +1,10 @@
 .worktrees/
+.env
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.next/
+dist/
+*.pdf
+.DS_Store
