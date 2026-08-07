@@ -4,11 +4,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ArrowSquareOut, DownloadSimple } from "@phosphor-icons/react";
-
-const TEMPLATE_OPTIONS: Array<{ id: string; label: string }> = [
-  { id: "ats_clean", label: "ATS Clean" },
-  { id: "ats_modern", label: "ATS Modern" },
-];
+import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
 export function PreviewPanel() {
   const resumeId = useResumeStore((s) => s.resumeId);
@@ -34,14 +30,14 @@ export function PreviewPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Controls Bar */}
-      <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/20 flex-shrink-0 bg-surface-container-lowest">
+      <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/20 flex-shrink-0 bg-surface-container-lowest flex-wrap gap-sm">
         {/* Template Switcher */}
-        <div className="flex items-center gap-sm">
-          {TEMPLATE_OPTIONS.map((t) => (
+        <div className="flex items-center gap-xs flex-wrap">
+          {RESUME_TEMPLATES.map((t) => (
             <button
               key={t.id}
               onClick={() => setTemplateId(t.id)}
-              className={`px-md py-sm rounded-lg text-label-sm transition-colors ${
+              className={`px-sm py-xs rounded-lg text-label-sm transition-colors ${
                 templateId === t.id
                   ? "bg-secondary-container text-primary font-bold"
                   : "text-on-surface-variant hover:bg-surface-container-low"

@@ -5,6 +5,7 @@
 <style>
   body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; line-height: 1.5; margin: 0.75in 1in; color: #131b2e; }
   h1 { font-size: 18pt; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.02em; }
+  .headline { font-size: 12pt; color: #454651; margin-bottom: 4px; }
   .contact { font-size: 10pt; color: #454651; margin-bottom: 16px; }
   h2 { font-size: 11pt; font-weight: 700; color: #000a56; border-bottom: 1.5px solid #eaedff; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.08em; }
   .job-header { display: flex; justify-content: space-between; align-items: baseline; }
@@ -14,18 +15,25 @@
   ul { margin: 4px 0 10px 16px; padding: 0; }
   li { margin-bottom: 3px; font-size: 10.5pt; }
   .skills { font-size: 10.5pt; margin: 4px 0; }
+  p.summary { font-size: 10.5pt; margin: 4px 0 8px; }
 </style>
 </head>
 <body>
 <h1>{{ contact.name }}</h1>
+{% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
 <div class="contact">{{ contact.email }} &nbsp;·&nbsp; {{ contact.phone }} &nbsp;·&nbsp; {{ contact.location }}</div>
+
+{% if summary %}
+<h2>Summary</h2>
+<p class="summary">{{ summary }}</p>
+{% endif %}
 
 {% if experience %}
 <h2>Experience</h2>
 {% for job in experience %}
 <div class="job-header">
   <div><span class="job-title">{{ job.title }}</span> &nbsp;·&nbsp; <span class="company">{{ job.company }}</span></div>
-  <span class="dates">{{ job.dates }}</span>
+  <span class="dates">{{ job.start }} – {{ job.end or "Present" }}</span>
 </div>
 <ul>{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
 {% endfor %}
@@ -35,15 +43,30 @@
 <h2>Education</h2>
 {% for edu in education %}
 <div class="job-header">
-  <div><span class="job-title">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company">{{ edu.school }}</span></div>
-  <span class="dates">{{ edu.dates }}</span>
+  <div><span class="job-title">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company">{{ edu.institution }}</span></div>
+  <span class="dates">{{ edu.year }}</span>
 </div>
 {% endfor %}
 {% endif %}
 
 {% if skills %}
 <h2>Skills</h2>
-<div class="skills">{{ skills | join(" &nbsp;·&nbsp; ") }}</div>
+<div class="skills">{{ skills | join(" · ") }}</div>
+{% endif %}
+
+{% if languages %}
+<h2>Languages</h2>
+<div class="skills">{% for l in languages %}{{ l.name }} ({{ l.level }}){% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% endfor %}</div>
+{% endif %}
+
+{% if certifications %}
+<h2>Certifications</h2>
+<ul>{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if awards %}
+<h2>Awards</h2>
+<ul>{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul>
 {% endif %}
 </body>
 </html>

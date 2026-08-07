@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #2b2b2b; margin: 0.7in 0.9in; }
+  .name { font-size: 20pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 6px; color: #1a1a1a; }
+  .contact-line { font-size: 9.5pt; text-align: center; color: #444; margin-bottom: 10px; }
+  hr { border: none; border-top: 1.5px solid #999; margin: 8px 0 4px; }
+  h2 { font-size: 10.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #1a1a1a; margin: 14px 0 6px; }
+  p.summary { margin: 0; font-size: 10pt; }
+  .job-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+  .job-title { font-weight: 700; font-size: 10.5pt; }
+  .job-dates { font-size: 9.5pt; color: #444; }
+  ul.bullets { margin: 2px 0 4px 16px; padding: 0; font-size: 10pt; }
+  ul.bullets li { margin-bottom: 2px; }
+  .edu-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+  .edu-degree { font-weight: 700; font-size: 10.5pt; }
+  .edu-institution { font-size: 10pt; color: #444; }
+  ul.additional { margin: 0 0 0 16px; padding: 0; font-size: 10pt; }
+  ul.additional li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<div class="name">{{ contact.name | upper }}</div>
+<div class="contact-line">
+  {{ contact.location }}{% if contact.location %} &bull; {% endif %}{{ contact.phone }}{% if contact.phone %} &bull; {% endif %}{{ contact.email }}{% if contact.linkedin %} &bull; {{ contact.linkedin }}{% endif %}{% if contact.github %} &bull; {{ contact.github }}{% endif %}
+</div>
+<hr>
+
+{% if summary %}
+<h2>Summary</h2>
+<p class="summary">{{ summary }}</p>
+{% endif %}
+
+{% if experience %}
+<h2>Work Experience</h2>
+{% for job in experience %}
+<div class="job-row">
+  <span class="job-title">{{ job.title }} &mdash; {{ job.company }}</span>
+  <span class="job-dates">{{ job.start }} - {{ job.end or "Present" }}</span>
+</div>
+<ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+{% endfor %}
+{% endif %}
+
+{% if education %}
+<h2>Education</h2>
+{% for edu in education %}
+<div class="edu-row">
+  <span class="edu-degree">{{ edu.degree }}</span>
+  <span class="job-dates">{{ edu.year }}</span>
+</div>
+<div class="edu-institution">{{ edu.institution }}</div>
+{% endfor %}
+{% endif %}
+
+{% if skills or languages or certifications or awards %}
+<h2>Additional Information</h2>
+<ul class="additional">
+  {% if skills %}<li><b>Technical Skills:</b> {{ skills | join(", ") }}</li>{% endif %}
+  {% if languages %}<li><b>Languages:</b> {% for l in languages %}{{ l.name }}{% if l.level %} ({{ l.level }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endif %}
+  {% if certifications %}<li><b>Certifications:</b> {{ certifications | join(", ") }}</li>{% endif %}
+  {% if awards %}<li><b>Awards:</b> {{ awards | join(", ") }}</li>{% endif %}
+</ul>
+{% endif %}
+</body>
+</html>

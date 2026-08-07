@@ -15,6 +15,10 @@ class ResumeUpdate(BaseModel):
     template_id: str | None = None
 
 
+class PdfGenerateRequest(BaseModel):
+    template_id: str | None = None
+
+
 class ResumeOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

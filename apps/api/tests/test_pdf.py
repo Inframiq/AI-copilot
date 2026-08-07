@@ -23,22 +23,28 @@ SAMPLE_RESUME = {
         "phone": "555-0100",
         "location": "NYC",
     },
+    "headline": "Senior Software Engineer",
+    "summary": "Backend engineer with 6 years building distributed systems.",
     "experience": [
         {
             "company": "Acme Corp",
             "title": "Engineer",
-            "dates": "2022\u20132024",
+            "start": "2022",
+            "end": "2024",
             "bullets": ["Built APIs", "Led team of 3"],
         }
     ],
     "education": [
         {
-            "school": "MIT",
+            "institution": "MIT",
             "degree": "B.S. Computer Science",
-            "dates": "2018\u20132022",
+            "year": "2018\u20132022",
         }
     ],
     "skills": ["Python", "FastAPI", "PostgreSQL"],
+    "languages": [{"name": "English", "level": "Native"}, {"name": "Spanish", "level": "B2"}],
+    "certifications": ["AWS Certified Solutions Architect"],
+    "awards": ["Employee of the Year 2023"],
 }
 
 
@@ -57,6 +63,37 @@ def test_generate_pdf_returns_bytes_ats_modern():
     pdf = generate_pdf(SAMPLE_RESUME, "ats_modern")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_returns_bytes_ats_sidebar():
+    pdf = generate_pdf(SAMPLE_RESUME, "ats_sidebar")
+    assert isinstance(pdf, bytes)
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_returns_bytes_ats_professional():
+    pdf = generate_pdf(SAMPLE_RESUME, "ats_professional")
+    assert isinstance(pdf, bytes)
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_returns_bytes_ats_minimal():
+    pdf = generate_pdf(SAMPLE_RESUME, "ats_minimal")
+    assert isinstance(pdf, bytes)
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_new_templates_work_without_optional_fields():
+    """Photo, headline, languages, certifications, awards are all optional."""
+    minimal_resume = {
+        "contact": {"name": "Jane Doe", "email": "jane@example.com"},
+        "experience": [],
+        "education": [],
+        "skills": [],
+    }
+    for template_id in ("ats_sidebar", "ats_professional", "ats_minimal"):
+        pdf = generate_pdf(minimal_resume, template_id)
+        assert pdf[:4] == b"%PDF"
 
 
 def test_generate_pdf_invalid_template_raises():

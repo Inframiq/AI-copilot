@@ -30,13 +30,13 @@ def upgrade() -> None:
         sa.Column("pdf_url", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
-            postgresql.TIMESTAMPTZ(),
+            postgresql.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
             "updated_at",
-            postgresql.TIMESTAMPTZ(),
+            postgresql.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column("parsed", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "created_at",
-            postgresql.TIMESTAMPTZ(),
+            postgresql.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
@@ -93,7 +93,7 @@ def upgrade() -> None:
         sa.Column("humanize_level", sa.Integer(), nullable=False, server_default="50"),
         sa.Column(
             "created_at",
-            postgresql.TIMESTAMPTZ(),
+            postgresql.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),

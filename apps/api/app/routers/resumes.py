@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.db.models import Resume
 from app.core.security import get_current_user
-from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut
+from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest
 from app.services.pdf import generate_pdf, upload_pdf, get_signed_url
 from supabase import create_client
 from app.core.config import settings
@@ -78,6 +78,7 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
 @router.post("/{resume_id}/pdf")
 async def generate_resume_pdf(
     resume_id: uuid.UUID,
+    body: PdfGenerateRequest | None = None,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -87,7 +88,10 @@ async def generate_resume_pdf(
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    pdf_bytes = generate_pdf(resume.content, resume.template_id)
+    template_id = (body.template_id if body else None) or resume.template_id
+    if template_id != resume.template_id:
+        resume.template_id = template_id
+    pdf_bytes = generate_pdf(resume.content, template_id)
     sb = _supabase()
     path = await upload_pdf(pdf_bytes, str(user["sub"]), str(resume_id), sb)
     resume.pdf_url = path

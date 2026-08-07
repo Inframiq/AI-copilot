@@ -30,3 +30,15 @@ def test_compute_delta_partial_match():
 def test_ats_score_is_0_to_100():
     result = compute_delta(["X", "Y"], "nothing relevant")
     assert 0 <= result.ats_score <= 100
+
+def test_no_false_positive_on_substring():
+    # "Java" must not match inside "JavaScript"
+    result = compute_delta(["Java"], "5 years of JavaScript experience.")
+    assert result.matched == []
+    assert result.missing == ["Java"]
+
+def test_matches_skill_ending_in_symbol():
+    # Plain \b word-boundary regex fails on skills ending in non-word chars
+    result = compute_delta(["C++", "C#"], "Proficient in C++ and C# development.")
+    assert set(result.matched) == {"C++", "C#"}
+    assert result.missing == []

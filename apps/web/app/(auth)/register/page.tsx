@@ -37,7 +37,7 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-gutter">
+      <div className="min-h-screen flex items-center justify-center p-gutter">
         <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl text-center max-w-[28rem] w-full">
           <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto mb-lg">
             <span className="text-2xl">✉️</span>
@@ -60,7 +60,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-gutter">
+    <div className="min-h-screen flex items-center justify-center p-gutter">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-[28rem]">
         {/* Logo */}
         <div className="flex items-center gap-md mb-xl">

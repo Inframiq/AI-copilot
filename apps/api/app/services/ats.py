@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 @dataclass
@@ -7,12 +8,18 @@ class DeltaResult:
     ats_score: int
 
 def compute_delta(jd_skills: list[str], resume_text: str) -> DeltaResult:
-    """Case-insensitive keyword match of JD skills against resume plain text."""
-    resume_lower = resume_text.lower()
+    """Case-insensitive, word-boundary keyword match of JD skills against resume plain text.
+
+    Matches require no alphanumeric character directly adjacent on either side,
+    rather than relying on \b: plain \b breaks on skills that themselves end in
+    a non-word character (e.g. "C++", "C#"), and plain substring matching would
+    report false positives like "Java" matching inside "JavaScript".
+    """
     matched = []
     missing = []
     for skill in jd_skills:
-        if skill.lower() in resume_lower:
+        pattern = r"(?<![A-Za-z0-9])" + re.escape(skill.strip()) + r"(?![A-Za-z0-9])"
+        if re.search(pattern, resume_text, re.IGNORECASE):
             matched.append(skill)
         else:
             missing.append(skill)

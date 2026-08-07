@@ -80,7 +80,16 @@ async def run_tailoring_pipeline(
 ) -> TailoringResult:
     # Step A: extract JD skills (fast model)
     parsed_jd = await extract_jd_skills(jd_text, provider)
-    all_jd_skills = parsed_jd.required + parsed_jd.nice_to_have
+    # Dedupe case-insensitively (required + nice_to_have aren't guaranteed
+    # disjoint from the model) — otherwise a skill counted twice skews both
+    # the score denominator and the matched/missing lists.
+    seen: set[str] = set()
+    all_jd_skills: list[str] = []
+    for skill in parsed_jd.required + parsed_jd.nice_to_have:
+        key = skill.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            all_jd_skills.append(skill)
 
     # Step B: compute delta (local, no AI)
     resume_text = json.dumps(resume_content)

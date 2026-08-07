@@ -3,7 +3,7 @@ import { RocketLaunch, FileText, Brain, ChartLineUp } from "@phosphor-icons/reac
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="relative z-[1] min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full">
         <div className="flex items-center gap-md">
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">

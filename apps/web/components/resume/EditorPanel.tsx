@@ -1,9 +1,13 @@
 "use client";
+import { useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
 import { SkillsDelta } from "./SkillsDelta";
+import { uploadResumePhoto } from "@/lib/photo-upload";
+import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { CheckCircle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -19,8 +23,28 @@ export function EditorPanel() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
   const resumeId = useResumeStore((s) => s.resumeId);
+  const templateId = useResumeStore((s) => s.templateId);
+  const setTemplateId = useResumeStore((s) => s.setTemplateId);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const { jdText, setJd, runTailoring, isLoading } = useTailoringStore();
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !resumeId || !content) return;
+    setIsUploadingPhoto(true);
+    setPhotoError(null);
+    try {
+      const photoUrl = await uploadResumePhoto(resumeId, file);
+      updateContent({ contact: { ...content.contact, photo_url: photoUrl } });
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setIsUploadingPhoto(false);
+      e.target.value = "";
+    }
+  }
 
   if (!content) {
     return (
@@ -37,9 +61,9 @@ export function EditorPanel() {
         <h3 className="text-headline-md font-bold text-primary">Content Editor</h3>
       </div>
 
-      <Tabs.Root defaultValue="contact">
+      <Tabs.Root defaultValue="template">
         <Tabs.List className="flex gap-xs mb-lg border-b border-outline-variant/20 pb-sm overflow-x-auto">
-          {(["contact", "summary", "experience", "education", "skills"] as const).map((tab) => (
+          {(["template", "contact", "summary", "experience", "education", "skills", "languages", "certifications"] as const).map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
@@ -51,9 +75,91 @@ export function EditorPanel() {
           ))}
         </Tabs.List>
 
+        {/* Template Tab */}
+        <Tabs.Content value="template" className="flex flex-col gap-md">
+          <p className="text-body-sm text-on-surface-variant">
+            Choose the layout used for your live preview and PDF export. Switching updates both immediately.
+          </p>
+          <div className="grid grid-cols-2 gap-md">
+            {RESUME_TEMPLATES.map((t) => {
+              const isSelected = templateId === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTemplateId(t.id)}
+                  className={`text-left rounded-xl border-2 shadow-sm transition-all overflow-hidden flex flex-col ${
+                    isSelected
+                      ? "border-primary ring-2 ring-primary/30"
+                      : "border-outline-variant/30 bg-surface hover:border-primary/40"
+                  }`}
+                >
+                  <div className="relative bg-surface-container-high" style={{ aspectRatio: "834 / 1179" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/resume-templates/${t.id}.png`}
+                      alt={`${t.label} template preview`}
+                      className="w-full h-full object-cover object-top"
+                      loading="lazy"
+                    />
+                    {isSelected && (
+                      <div className="absolute top-xs right-xs w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-md">
+                        <CheckCircle size={16} weight="fill" className="text-on-primary" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-sm bg-surface">
+                    <span className="text-label-sm font-bold text-on-surface block">{t.label}</span>
+                    <p className="text-caption text-on-surface-variant leading-tight">{t.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Tabs.Content>
+
         {/* Contact Tab */}
         <Tabs.Content value="contact" className="flex flex-col gap-md">
           <div className="bg-surface p-lg rounded-xl border border-outline-variant/20 shadow-sm flex flex-col gap-md">
+            <div className="flex flex-col gap-xs">
+              <label className="text-label-sm text-on-surface-variant">Profile Photo</label>
+              <div className="flex items-center gap-md">
+                {content.contact.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={content.contact.photo_url}
+                    alt="Profile"
+                    className="w-16 h-16 rounded-lg object-cover border border-outline-variant/30"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-surface-container-high border border-dashed border-outline-variant flex items-center justify-center text-label-sm text-on-surface-variant">
+                    None
+                  </div>
+                )}
+                <label className="px-md py-sm rounded-lg border border-outline-variant text-label-sm text-primary hover:bg-surface-container-low transition-colors cursor-pointer">
+                  {isUploadingPhoto ? "Uploading…" : "Upload Photo"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handlePhotoChange}
+                    disabled={isUploadingPhoto}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              {photoError && <p className="text-label-sm text-error">{photoError}</p>}
+            </div>
+
+            <div className="flex flex-col gap-xs">
+              <label className="text-label-sm text-on-surface-variant">Headline / Job Title</label>
+              <input
+                type="text"
+                value={content.headline ?? ""}
+                onChange={(e) => updateContent({ headline: e.target.value })}
+                placeholder="e.g. Senior Financial Analyst"
+                className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+              />
+            </div>
+
             {CONTACT_FIELDS.map(({ key, label, type }) => (
               <div key={key} className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant">{label}</label>
@@ -323,6 +429,105 @@ export function EditorPanel() {
                 ))}
               </div>
             )}
+          </div>
+        </Tabs.Content>
+
+        {/* Languages Tab */}
+        <Tabs.Content value="languages" className="flex flex-col gap-md">
+          {(content.languages ?? []).map((lang, i) => (
+            <div
+              key={i}
+              className="bg-surface border border-outline-variant/20 rounded-xl p-md flex items-end gap-sm shadow-sm"
+            >
+              <div className="flex-1 flex flex-col gap-xs">
+                <label className="text-label-sm text-on-surface-variant">Language</label>
+                <input
+                  type="text"
+                  value={lang.name}
+                  onChange={(e) => {
+                    const updated = [...(content.languages ?? [])];
+                    updated[i] = { ...updated[i], name: e.target.value };
+                    updateContent({ languages: updated });
+                  }}
+                  placeholder="e.g. Spanish"
+                  className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                />
+              </div>
+              <div className="flex-1 flex flex-col gap-xs">
+                <label className="text-label-sm text-on-surface-variant">Proficiency</label>
+                <input
+                  type="text"
+                  value={lang.level}
+                  onChange={(e) => {
+                    const updated = [...(content.languages ?? [])];
+                    updated[i] = { ...updated[i], level: e.target.value };
+                    updateContent({ languages: updated });
+                  }}
+                  placeholder="e.g. Native, B2, Proficient"
+                  className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const updated = (content.languages ?? []).filter((_, idx) => idx !== i);
+                  updateContent({ languages: updated });
+                }}
+                className="text-label-sm text-error hover:underline py-xs"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() =>
+              updateContent({ languages: [...(content.languages ?? []), { name: "", level: "" }] })
+            }
+            className="flex items-center justify-center gap-sm px-md py-sm rounded-lg border border-dashed border-outline-variant text-primary text-label-md hover:bg-surface-container-low transition-colors"
+          >
+            + Add Language
+          </button>
+        </Tabs.Content>
+
+        {/* Certifications Tab */}
+        <Tabs.Content value="certifications" className="flex flex-col gap-lg">
+          <div className="bg-surface p-lg rounded-xl border border-outline-variant/20 shadow-sm flex flex-col gap-md">
+            <h4 className="text-headline-md font-bold text-on-surface">Certifications</h4>
+            <div className="flex flex-col gap-xs">
+              <label className="text-label-sm text-on-surface-variant">
+                Certifications <span className="font-normal">(one per line)</span>
+              </label>
+              <textarea
+                value={(content.certifications ?? []).join("\n")}
+                onChange={(e) =>
+                  updateContent({
+                    certifications: e.target.value.split("\n").filter(Boolean),
+                  })
+                }
+                rows={3}
+                placeholder="AWS Certified Solutions Architect&#10;PMP"
+                className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="bg-surface p-lg rounded-xl border border-outline-variant/20 shadow-sm flex flex-col gap-md">
+            <h4 className="text-headline-md font-bold text-on-surface">Awards</h4>
+            <div className="flex flex-col gap-xs">
+              <label className="text-label-sm text-on-surface-variant">
+                Awards <span className="font-normal">(one per line)</span>
+              </label>
+              <textarea
+                value={(content.awards ?? []).join("\n")}
+                onChange={(e) =>
+                  updateContent({
+                    awards: e.target.value.split("\n").filter(Boolean),
+                  })
+                }
+                rows={3}
+                placeholder="Employee of the Year 2023"
+                className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+            </div>
           </div>
         </Tabs.Content>
       </Tabs.Root>
