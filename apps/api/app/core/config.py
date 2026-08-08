@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     ai_model_pro: str = "gemini-2.5-pro"
     gemini_api_key: str = ""
     openai_api_key: str = ""
-    openai_max_output_tokens: int = 800
+    openai_max_output_tokens: int = 4096
 
     class Config:
         env_file = ".env"

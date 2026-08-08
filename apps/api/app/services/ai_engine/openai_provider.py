@@ -11,7 +11,7 @@ _MODEL = "gpt-5.6-luna"
 
 
 class OpenAIProvider(AIProvider):
-    def __init__(self, api_key: str, max_output_tokens: int = 800):
+    def __init__(self, api_key: str, max_output_tokens: int = 4096):
         self._client = AsyncOpenAI(api_key=api_key)
         self._max_output_tokens = max_output_tokens
 

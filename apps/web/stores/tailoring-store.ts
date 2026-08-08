@@ -35,10 +35,26 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
 
   runTailoring: async (resumeId: string) => {
-    const { jdId, humanizeLevel } = get();
+    let { jdId } = get();
+    const { jdText, humanizeLevel } = get();
+
+    // The editor's "paste a JD" box only has raw text, no id — setJd("", text)
+    // leaves jdId empty. Create the JD record here instead of requiring the
+    // caller to have gone through the JD Analyzer flow first.
     if (!jdId) {
-      set({ error: "No job description selected" });
-      return;
+      if (!jdText.trim()) {
+        set({ error: "No job description selected" });
+        return;
+      }
+      try {
+        const title = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
+        const jd = await apiClient.createJd({ title, raw_text: jdText });
+        jdId = jd.id;
+        set({ jdId });
+      } catch (e: unknown) {
+        set({ error: e instanceof Error ? e.message : "Failed to save job description" });
+        return;
+      }
     }
 
     set({
@@ -64,9 +80,25 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         isLoading: false,
       });
 
-      // Hydrate the resume store with the tailored content
+      // Hydrate the resume store with the tailored content, then regenerate
+      // the PDF preview immediately instead of leaving the stale one on
+      // screen until the user clicks "Generate PDF" themselves.
       if (result.tailored_content) {
-        useResumeStore.getState().updateContent(result.tailored_content);
+        const resumeStore = useResumeStore.getState();
+        resumeStore.updateContent(result.tailored_content);
+        try {
+          // saveNow bypasses the auto-save debounce — the PDF endpoint reads
+          // content from the DB, so the tailored content must be persisted
+          // before we ask it to render, not just sitting in local state.
+          await resumeStore.saveNow();
+          const { signed_url } = await apiClient.generatePdf(
+            resumeId,
+            useResumeStore.getState().templateId
+          );
+          useResumeStore.getState().setPdfSignedUrl(signed_url);
+        } catch (err) {
+          console.error("Post-tailoring PDF refresh failed:", err);
+        }
       }
     } catch (e: unknown) {
       set({

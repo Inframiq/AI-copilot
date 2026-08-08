@@ -30,7 +30,7 @@ async def test_valid_token_returns_payload():
 
 
 async def test_expired_token_raises():
-    token = make_token("user-123", exp_offset=-60)
+    token = make_token("user-123", exp_offset=-120)
     with pytest.raises(ValueError, match="expired"):
         await security._verify_jwt(token)
 

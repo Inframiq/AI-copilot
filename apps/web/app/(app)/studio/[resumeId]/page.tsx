@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ClockCounterClockwise, DownloadSimple, Sparkle, X } from "@phosphor-icons/react";
+import { ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { useResumeStore } from "@/stores/resume-store";
@@ -23,6 +23,9 @@ export default function StudioPage({
   const [showAIPanel, setShowAIPanel] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleError, setTitleError] = useState<string | null>(null);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
@@ -42,6 +45,39 @@ export default function StudioPage({
       setResume(resume.id, resume.content, resume.template_id);
     }
   }, [resume, setResume]);
+
+  function startEditingTitle() {
+    setTitleDraft(resume?.title ?? "");
+    setTitleError(null);
+    setIsEditingTitle(true);
+  }
+
+  async function saveTitle() {
+    const nextTitle = titleDraft.trim();
+    setIsEditingTitle(false);
+    if (!resume || !nextTitle || nextTitle === resume.title) return;
+
+    const previousTitle = resume.title;
+    // Optimistic update — reflect the rename immediately, everywhere it's cached.
+    queryClient.setQueryData<Resume>(["resume", resumeId], (r) =>
+      r ? { ...r, title: nextTitle } : r
+    );
+    queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
+      list?.map((r) => (r.id === resumeId ? { ...r, title: nextTitle } : r))
+    );
+
+    try {
+      await apiClient.updateResume(resumeId, { title: nextTitle });
+    } catch (err) {
+      setTitleError(err instanceof Error ? err.message : "Rename failed");
+      queryClient.setQueryData<Resume>(["resume", resumeId], (r) =>
+        r ? { ...r, title: previousTitle } : r
+      );
+      queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
+        list?.map((r) => (r.id === resumeId ? { ...r, title: previousTitle } : r))
+      );
+    }
+  }
 
   async function handleExportPdf() {
     if (!storeResumeId) return;
@@ -99,12 +135,33 @@ export default function StudioPage({
         }}
       >
         <div className="flex items-center gap-4">
-          <h2 className="text-headline-md text-primary font-semibold">
-            {resume?.title || "Resume Studio"}
-          </h2>
+          {isEditingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") setIsEditingTitle(false);
+              }}
+              maxLength={200}
+              className="text-headline-md text-primary font-semibold bg-transparent border-b-2 border-primary outline-none"
+            />
+          ) : (
+            <button
+              onClick={startEditingTitle}
+              className="group flex items-center gap-2 text-headline-md text-primary font-semibold hover:opacity-80 transition-opacity"
+              title="Rename resume"
+            >
+              {resume?.title || "Resume Studio"}
+              <PencilSimple size={16} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+            </button>
+          )}
           <span className="px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
             Draft
           </span>
+          {titleError && <span className="text-caption text-error">{titleError}</span>}
         </div>
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-label-md">

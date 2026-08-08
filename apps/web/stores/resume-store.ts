@@ -19,6 +19,10 @@ interface ResumeState {
   setTemplateId: (id: string) => void;
   setPdfSignedUrl: (url: string) => void;
   resetStore: () => void;
+  /** Bypasses the debounce and persists immediately — for callers that need
+   *  the backend to be caught up before doing something else (e.g. a PDF
+   *  regen right after AI tailoring writes new content). */
+  saveNow: () => Promise<void>;
   /** Internal — exposed for testing */
   _triggerAutoSave: () => void;
 }
@@ -74,16 +78,25 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   _triggerAutoSave: () => {
     const prev = get()._saveTimer;
     if (prev !== null) clearTimeout(prev);
-    const timer = setTimeout(async () => {
-      const { resumeId, content, templateId } = get();
-      if (!resumeId || !content) return;
-      try {
-        await apiClient.updateResume(resumeId, { content, template_id: templateId });
-        set({ isDirty: false, _saveTimer: null });
-      } catch (err) {
-        console.error("Auto-save failed:", err);
-      }
+    const timer = setTimeout(() => {
+      get().saveNow();
     }, AUTO_SAVE_DELAY_MS);
     set({ _saveTimer: timer });
+  },
+
+  saveNow: async () => {
+    const timer = get()._saveTimer;
+    if (timer !== null) clearTimeout(timer);
+    set({ _saveTimer: null });
+
+    const { resumeId, content, templateId } = get();
+    if (!resumeId || !content) return;
+    try {
+      await apiClient.updateResume(resumeId, { content, template_id: templateId });
+      set({ isDirty: false });
+    } catch (err) {
+      console.error("Save failed:", err);
+      throw err;
+    }
   },
 }));

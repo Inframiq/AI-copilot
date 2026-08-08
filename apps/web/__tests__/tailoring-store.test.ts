@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { TailorOut, ResumeContent } from "@career-copilot/types";
+import type { TailorOut, ResumeContent, JobDescription } from "@career-copilot/types";
 
 // ── Mock apiClient ────────────────────────────────────────────────────────
 // NOTE: vi.mock is hoisted, so the factory must NOT reference outer variables.
@@ -7,6 +7,8 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     tailorResume: vi.fn(),
     updateResume: vi.fn().mockResolvedValue({}),
+    generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/tailored.pdf" }),
+    createJd: vi.fn(),
   },
 }));
 
@@ -46,6 +48,17 @@ describe("useTailoringStore", () => {
     // Default: tailorResume resolves with the mock result
     vi.mocked(apiClient.tailorResume).mockResolvedValue(mockTailorResult);
     vi.mocked(apiClient.updateResume).mockResolvedValue({} as any);
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/tailored.pdf",
+    });
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-created-001",
+      user_id: "user-1",
+      title: "Senior TypeScript Engineer",
+      raw_text: "Senior TypeScript Engineer\nWe need 5+ years of React.",
+      parsed_skills: [],
+      created_at: new Date().toISOString(),
+    } satisfies JobDescription);
   });
 
   it("initial state has correct defaults", () => {
@@ -97,12 +110,51 @@ describe("useTailoringStore", () => {
     expect(state.error).toBeNull();
   });
 
-  it("runTailoring without jdId sets error and does not call API", async () => {
+  it("runTailoring without jdId or jdText sets error and does not call API", async () => {
     await useTailoringStore.getState().runTailoring("resume-abc");
     expect(apiClient.tailorResume).not.toHaveBeenCalled();
+    expect(apiClient.createJd).not.toHaveBeenCalled();
     expect(useTailoringStore.getState().error).toBe(
       "No job description selected"
     );
+  });
+
+  it("runTailoring creates a JD from pasted text when only jdText is set (the editor's JD Context box never has a jdId)", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    // This is what EditorPanel's JD Context textarea does: setJd("", text).
+    useTailoringStore.getState().setJd("", "Senior TypeScript Engineer\nWe need 5+ years of React.");
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    expect(apiClient.createJd).toHaveBeenCalledWith({
+      title: "Senior TypeScript Engineer",
+      raw_text: "Senior TypeScript Engineer\nWe need 5+ years of React.",
+    });
+    expect(apiClient.tailorResume).toHaveBeenCalledWith(
+      "resume-abc",
+      "jd-created-001",
+      50
+    );
+    const state = useTailoringStore.getState();
+    expect(state.jdId).toBe("jd-created-001");
+    expect(state.error).toBeNull();
+    expect(state.sessionId).toBe("session-xyz");
+  });
+
+  it("runTailoring surfaces an error if creating the JD fails", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("", "Some JD text");
+    vi.mocked(apiClient.createJd).mockRejectedValueOnce(new Error("Save failed"));
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    expect(apiClient.tailorResume).not.toHaveBeenCalled();
+    expect(useTailoringStore.getState().error).toBe("Save failed");
+    expect(useTailoringStore.getState().isLoading).toBe(false);
   });
 
   it("runTailoring hydrates resume store content with tailored_content", async () => {
@@ -116,6 +168,41 @@ describe("useTailoringStore", () => {
     // Resume store should now reflect the tailored content
     const content = useResumeStore.getState().content;
     expect(content?.skills).toEqual(["TypeScript", "React"]);
+  });
+
+  it("runTailoring persists tailored content and refreshes the PDF preview", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    // Content is saved immediately (not left to the debounce) before the
+    // PDF is regenerated, since the PDF endpoint reads from the DB.
+    expect(apiClient.updateResume).toHaveBeenCalledWith(
+      "resume-abc",
+      expect.objectContaining({ content: expect.any(Object) })
+    );
+    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-abc", "ats_clean");
+    expect(useResumeStore.getState().pdfSignedUrl).toBe(
+      "https://example.com/tailored.pdf"
+    );
+  });
+
+  it("runTailoring surfaces tailoring success even if the PDF refresh fails", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.generatePdf).mockRejectedValueOnce(new Error("render failed"));
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const state = useTailoringStore.getState();
+    expect(state.error).toBeNull();
+    expect(state.sessionId).toBe("session-xyz");
+    expect(useResumeStore.getState().pdfSignedUrl).toBeNull();
   });
 
   it("runTailoring handles API errors gracefully", async () => {
