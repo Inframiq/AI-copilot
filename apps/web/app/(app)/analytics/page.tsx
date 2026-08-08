@@ -72,12 +72,18 @@ export default function AnalyticsPage() {
   const maxApps = Math.max(...weeklyApps.map((w) => w.count), 1);
   const maxScore = 100;
 
+  const reachedInterview = jds.filter((jd) =>
+    ["interview", "final_round", "offer", "accepted"].includes(jd.status)
+  ).length;
+  const reachedFinalRound = jds.filter((jd) => ["final_round", "offer", "accepted"].includes(jd.status)).length;
+  const reachedOffer = jds.filter((jd) => ["offer", "accepted"].includes(jd.status)).length;
+
   const funnel = [
     { stage: "Applied", count: jds.length, color: "bg-primary" },
     { stage: "ATS Passed", count: resumes.filter((r) => (r.ats_score ?? 0) >= 70).length, color: "bg-primary/75" },
-    { stage: "Interview", count: sessionId ? 1 : 0, color: "bg-primary/55" },
-    { stage: "Final Round", count: 0, color: "bg-primary/35" },
-    { stage: "Offer", count: 0, color: "bg-primary/20" },
+    { stage: "Interview", count: reachedInterview, color: "bg-primary/55" },
+    { stage: "Final Round", count: reachedFinalRound, color: "bg-primary/35" },
+    { stage: "Offer", count: reachedOffer, color: "bg-primary/20" },
   ];
 
   const funnelMax = funnel[0].count > 0 ? funnel[0].count : 1;

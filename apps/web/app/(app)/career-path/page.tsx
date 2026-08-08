@@ -84,7 +84,11 @@ export default function CareerPathPage() {
     {
       title: "Negotiate & Accept Offer",
       description: "Use salary negotiation strategies and sign your offer.",
-      status: "upcoming" as const,
+      status: jds.some((jd) => jd.status === "accepted")
+        ? ("done" as const)
+        : jds.some((jd) => jd.status === "offer" || jd.status === "final_round")
+        ? ("active" as const)
+        : ("upcoming" as const),
     },
   ];
 

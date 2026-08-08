@@ -32,40 +32,13 @@ import {
 import { ProfileForm } from "@/components/networking/ProfileForm";
 import { ProfileCard } from "@/components/networking/ProfileCard";
 import { ConnectionDrawer } from "@/components/networking/ConnectionDrawer";
+import { apiClient } from "@/lib/api-client";
+import type { ExternalContact } from "@career-copilot/types";
 
-// ── Legacy local contact tracker ─────────────────────────────────────────────
+// ── External contact tracker (people not on the platform) ───────────────────
+// Real backend now (external_contacts table) — was localStorage-only.
 
-interface Contact {
-  id: string;
-  name: string;
-  role: string;
-  company: string;
-  status: "connected" | "following-up" | "new";
-  lastContact: string;
-  notes: string;
-  email: string;
-  linkedinUrl: string;
-}
-
-const STORAGE_KEY = "career-copilot-contacts";
-const SEED_CONTACTS: Contact[] = [
-  { id: "1", name: "Sarah Chen", role: "Engineering Manager", company: "Google", status: "connected", lastContact: new Date(Date.now() - 2 * 86400000).toISOString(), notes: "Met at SF Tech Meetup. Offered to refer.", email: "", linkedinUrl: "" },
-  { id: "2", name: "Marcus Johnson", role: "Senior SWE", company: "Stripe", status: "following-up", lastContact: new Date(Date.now() - 7 * 86400000).toISOString(), notes: "Coffee chat scheduled.", email: "", linkedinUrl: "" },
-  { id: "3", name: "Priya Patel", role: "Staff Engineer", company: "Airbnb", status: "new", lastContact: new Date().toISOString(), notes: "Connected after her talk on distributed systems.", email: "", linkedinUrl: "" },
-];
-
-function loadContacts(): Contact[] {
-  if (typeof window === "undefined") return SEED_CONTACTS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) { localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_CONTACTS)); return SEED_CONTACTS; }
-    return JSON.parse(raw);
-  } catch { return SEED_CONTACTS; }
-}
-
-function saveContacts(c: Contact[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
-}
+type Contact = ExternalContact;
 
 function formatDate(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -99,7 +72,7 @@ const LEGACY_AVATAR_COLORS = [
   "bg-primary-container text-on-primary-container",
 ];
 
-const EMPTY_CONTACT_FORM = { name: "", role: "", company: "", status: "new" as Contact["status"], notes: "", email: "", linkedinUrl: "" };
+const EMPTY_CONTACT_FORM = { name: "", role: "", company: "", status: "new" as Contact["status"], notes: "", email: "", linkedin_url: "" };
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
@@ -128,11 +101,16 @@ export default function NetworkingPage() {
 
   // External contacts
   const [contactsOpen, setContactsOpen] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>(() => loadContacts());
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState(EMPTY_CONTACT_FORM);
   const [contactFormError, setContactFormError] = useState("");
+
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["contacts"],
+    queryFn: () => apiClient.getContacts(),
+    staleTime: 60_000,
+  });
 
   // ── Queries ─────────────────────────────────────────────────────────────────
   const { data: myProfile = null } = useQuery({
@@ -261,48 +239,62 @@ export default function NetworkingPage() {
   });
 
   // ── External contact helpers ─────────────────────────────────────────────────
-  function handleAddContact(e: React.FormEvent) {
+  async function handleAddContact(e: React.FormEvent) {
     e.preventDefault();
     if (!contactForm.name.trim() || !contactForm.role.trim() || !contactForm.company.trim()) {
       setContactFormError("Name, Role, and Company are required.");
       return;
     }
-    const c: Contact = {
-      id: Date.now().toString(),
-      name: contactForm.name.trim(),
-      role: contactForm.role.trim(),
-      company: contactForm.company.trim(),
-      status: contactForm.status,
-      notes: contactForm.notes.trim(),
-      email: contactForm.email.trim(),
-      linkedinUrl: contactForm.linkedinUrl.trim(),
-      lastContact: new Date().toISOString(),
-    };
-    const updated = [...contacts, c];
-    setContacts(updated);
-    saveContacts(updated);
-    setShowAddContact(false);
-    setContactForm(EMPTY_CONTACT_FORM);
-    setContactFormError("");
-  }
-
-  function handleDeleteContact(id: string) {
-    if (deleteConfirm === id) {
-      const updated = contacts.filter((c) => c.id !== id);
-      setContacts(updated);
-      saveContacts(updated);
-      setDeleteConfirm(null);
-    } else {
-      setDeleteConfirm(id);
+    try {
+      const created = await apiClient.addContact({
+        name: contactForm.name.trim(),
+        role: contactForm.role.trim(),
+        company: contactForm.company.trim(),
+        status: contactForm.status,
+        notes: contactForm.notes.trim(),
+        email: contactForm.email.trim(),
+        linkedin_url: contactForm.linkedin_url.trim(),
+      });
+      qc.setQueryData<Contact[]>(["contacts"], (list) => [created, ...(list ?? [])]);
+      setShowAddContact(false);
+      setContactForm(EMPTY_CONTACT_FORM);
+      setContactFormError("");
+    } catch (err) {
+      setContactFormError(err instanceof Error ? err.message : "Failed to add contact");
     }
   }
 
-  function handleCycleStatus(id: string) {
-    const updated = contacts.map((c) =>
-      c.id === id ? { ...c, status: STATUS_CYCLE[c.status] } : c
+  async function handleDeleteContact(id: string) {
+    if (deleteConfirm !== id) {
+      setDeleteConfirm(id);
+      return;
+    }
+    setDeleteConfirm(null);
+    const previous = contacts;
+    qc.setQueryData<Contact[]>(["contacts"], (list) => list?.filter((c) => c.id !== id));
+    try {
+      await apiClient.deleteContact(id);
+    } catch (err) {
+      console.error("Failed to delete contact:", err);
+      qc.setQueryData<Contact[]>(["contacts"], previous);
+    }
+  }
+
+  async function handleCycleStatus(id: string) {
+    const current = contacts.find((c) => c.id === id);
+    if (!current) return;
+    const nextStatus = STATUS_CYCLE[current.status];
+    qc.setQueryData<Contact[]>(["contacts"], (list) =>
+      list?.map((c) => (c.id === id ? { ...c, status: nextStatus } : c))
     );
-    setContacts(updated);
-    saveContacts(updated);
+    try {
+      await apiClient.updateContactStatus(id, nextStatus);
+    } catch (err) {
+      console.error("Failed to update contact status:", err);
+      qc.setQueryData<Contact[]>(["contacts"], (list) =>
+        list?.map((c) => (c.id === id ? { ...c, status: current.status } : c))
+      );
+    }
   }
 
   const pendingIncoming = incoming.length;
@@ -811,16 +803,16 @@ export default function NetworkingPage() {
                     <div className="flex items-center justify-between pt-sm border-t border-outline-variant/20">
                       <div className="flex items-center gap-xs text-caption text-on-surface-variant">
                         <Clock size={12} />
-                        {formatDate(contact.lastContact)}
+                        {formatDate(contact.last_contact)}
                       </div>
                       <div className="flex gap-sm">
                         <button
                           onClick={() =>
-                            contact.linkedinUrl
-                              ? window.open(contact.linkedinUrl, "_blank")
+                            contact.linkedin_url
+                              ? window.open(contact.linkedin_url, "_blank")
                               : undefined
                           }
-                          className={`w-8 h-8 rounded-full bg-surface-container flex items-center justify-center transition-colors ${contact.linkedinUrl ? "text-on-surface-variant hover:text-primary cursor-pointer" : "text-outline-variant cursor-not-allowed opacity-50"}`}
+                          className={`w-8 h-8 rounded-full bg-surface-container flex items-center justify-center transition-colors ${contact.linkedin_url ? "text-on-surface-variant hover:text-primary cursor-pointer" : "text-outline-variant cursor-not-allowed opacity-50"}`}
                         >
                           <LinkedinLogo size={16} />
                         </button>
@@ -899,7 +891,7 @@ export default function NetworkingPage() {
                   { label: "Role *", key: "role", placeholder: "Senior Engineer" },
                   { label: "Company *", key: "company", placeholder: "Acme Corp" },
                   { label: "Email", key: "email", placeholder: "jane@example.com" },
-                  { label: "LinkedIn URL", key: "linkedinUrl", placeholder: "https://linkedin.com/in/jane" },
+                  { label: "LinkedIn URL", key: "linkedin_url", placeholder: "https://linkedin.com/in/jane" },
                 ] as const
               ).map(({ label, key, placeholder }) => (
                 <div key={key} className="flex flex-col gap-xs">

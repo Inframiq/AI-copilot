@@ -57,6 +57,7 @@ describe("useTailoringStore", () => {
       title: "Senior TypeScript Engineer",
       raw_text: "Senior TypeScript Engineer\nWe need 5+ years of React.",
       parsed_skills: [],
+      status: "applied",
       created_at: new Date().toISOString(),
     } satisfies JobDescription);
   });

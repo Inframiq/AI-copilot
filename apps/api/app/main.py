@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.routers import resumes, jd, ai, learning
+from app.routers import resumes, jd, ai, learning, contacts
 from app.core.rate_limit import limiter
 
 logger = logging.getLogger("app")
@@ -45,6 +45,7 @@ app.include_router(resumes.router)
 app.include_router(jd.router)
 app.include_router(ai.router)
 app.include_router(learning.router)
+app.include_router(contacts.router)
 
 
 @app.get("/health")

@@ -24,7 +24,18 @@ import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { JobDescription, Resume, LearningItem } from "@career-copilot/types";
+import type { JobDescription, JDStatus, Resume, LearningItem } from "@career-copilot/types";
+
+const STATUS_LABEL: Record<JDStatus, string> = {
+  applied: "Applied",
+  interview: "Interview",
+  final_round: "Final Round",
+  offer: "Offer",
+  accepted: "Accepted",
+  rejected: "Rejected",
+};
+
+const STATUS_ORDER: JDStatus[] = ["applied", "interview", "final_round", "offer", "accepted", "rejected"];
 
 function extractInsights(text: string) {
   const lower = text.toLowerCase();
@@ -99,6 +110,18 @@ export default function JDIndexPage() {
     queryKey: ["learning"],
     queryFn: () => apiClient.getLearningItems(),
   });
+
+  async function handleJdStatusChange(id: string, status: JDStatus) {
+    queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
+      list?.map((jd) => (jd.id === id ? { ...jd, status } : jd))
+    );
+    try {
+      await apiClient.updateJdStatus(id, status);
+    } catch (err) {
+      console.error("Failed to update JD status:", err);
+      queryClient.invalidateQueries({ queryKey: ["jds"] });
+    }
+  }
 
   async function handleAddToLearningPath(skill: string) {
     const sourceTitle = (storedJdText || jdText).trim().split("\n")[0].slice(0, 120) || undefined;
@@ -544,16 +567,29 @@ export default function JDIndexPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
             {jds.map((jd) => (
-              <button
+              <div
                 key={jd.id}
-                onClick={() => router.push(`/jd/${jd.id}`)}
-                className="text-left p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all"
+                className="p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-sm"
               >
-                <p className="text-label-md text-on-surface truncate">{jd.title}</p>
-                <p className="text-caption text-on-surface-variant mt-xs">
-                  {new Date(jd.created_at).toLocaleDateString()} · Click to view analysis
-                </p>
-              </button>
+                <button onClick={() => router.push(`/jd/${jd.id}`)} className="text-left">
+                  <p className="text-label-md text-on-surface truncate">{jd.title}</p>
+                  <p className="text-caption text-on-surface-variant mt-xs">
+                    {new Date(jd.created_at).toLocaleDateString()} · Click to view analysis
+                  </p>
+                </button>
+                <select
+                  value={jd.status}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleJdStatusChange(jd.id, e.target.value as JDStatus)}
+                  className="w-full px-sm py-xs rounded-lg text-caption font-semibold bg-surface-container border border-outline-variant/30 text-on-surface-variant cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
             ))}
           </div>
         </div>

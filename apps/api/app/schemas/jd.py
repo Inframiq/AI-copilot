@@ -1,11 +1,18 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, Field, computed_field
+
+JDStatus = Literal["applied", "interview", "final_round", "offer", "accepted", "rejected"]
 
 
 class JDCreate(BaseModel):
     raw_text: str = Field(max_length=50_000)
     title: str | None = Field(default=None, max_length=255)
+
+
+class JDStatusUpdate(BaseModel):
+    status: JDStatus
 
 
 class JDOut(BaseModel):
@@ -14,6 +21,7 @@ class JDOut(BaseModel):
     title: str
     raw_text: str
     parsed: dict | None
+    status: str
     created_at: datetime
     model_config = {"from_attributes": True}
 

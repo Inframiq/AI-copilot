@@ -185,6 +185,7 @@ async def test_list_jds_returns_200_with_valid_token():
         title="Senior Engineer",
         raw_text="We need a senior engineer.",
         parsed={"required": ["Python"], "nice_to_have": ["Docker"]},
+        status="applied",
         created_at=datetime.now(timezone.utc),
     )
     mock_scalars = MagicMock()
@@ -225,6 +226,76 @@ async def test_get_jd_404_when_not_found():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.get(
                 f"/jd/{uuid.uuid4()}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_update_jd_status_sets_status():
+    from app.db.models import JobDescription
+    from datetime import datetime, timezone
+
+    override, mock_session = make_mock_db()
+    jd = JobDescription(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Senior Engineer",
+        raw_text="...",
+        parsed={},
+        status="applied",
+        created_at=datetime.now(timezone.utc),
+    )
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = jd
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{jd.id}/status",
+                json={"status": "offer"},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 200
+        assert r.json()["status"] == "offer"
+        assert jd.status == "offer"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_update_jd_status_rejects_invalid_value():
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{uuid.uuid4()}/status",
+                json={"status": "not-a-real-status"},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_update_jd_status_404_when_not_owned():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{uuid.uuid4()}/status",
+                json={"status": "offer"},
                 headers=make_auth_header(),
             )
         assert r.status_code == 404

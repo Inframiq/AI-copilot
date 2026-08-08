@@ -34,6 +34,8 @@ class JobDescription(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     parsed: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # applied -> interview -> final_round -> offer -> accepted, or rejected at any point
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="applied")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="jd", cascade="all, delete-orphan")
@@ -88,4 +90,24 @@ class LearningItem(Base):
     # Which JD this was flagged from, if any — informational only, JD may be deleted later.
     source_jd_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
+class ExternalContact(Base):
+    """People tracked outside the platform (not Career Copilot users) —
+    distinct from Networking's Profile/connection_requests, which is for
+    in-platform users."""
+
+    __tablename__ = "external_contacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(255), nullable=False)
+    company: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    linkedin_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    last_contact: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)

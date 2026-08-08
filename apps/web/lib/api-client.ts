@@ -2,10 +2,12 @@ import { createBrowserClient } from "@/lib/supabase";
 import type {
   Resume,
   JobDescription,
+  JDStatus,
   TailorOut,
   PrepQuestionOut,
   ResumeContent,
   LearningItem,
+  ExternalContact,
 } from "@career-copilot/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -99,6 +101,32 @@ export const apiClient = {
     raw_text: string;
   }): Promise<JobDescription> =>
     request<JobDescription>("POST", "/jd", payload),
+
+  updateJdStatus: (id: string, status: JDStatus): Promise<JobDescription> =>
+    request<JobDescription>("PATCH", `/jd/${id}/status`, { status }),
+
+  // ── External Contacts ───────────────────────────────────────────────────────
+  getContacts: (): Promise<ExternalContact[]> =>
+    request<ExternalContact[]>("GET", "/contacts"),
+
+  addContact: (payload: {
+    name: string;
+    role: string;
+    company: string;
+    status?: ExternalContact["status"];
+    notes?: string;
+    email?: string;
+    linkedin_url?: string;
+  }): Promise<ExternalContact> => request<ExternalContact>("POST", "/contacts", payload),
+
+  updateContactStatus: (
+    id: string,
+    status: ExternalContact["status"]
+  ): Promise<ExternalContact> =>
+    request<ExternalContact>("PATCH", `/contacts/${id}/status`, { status }),
+
+  deleteContact: (id: string): Promise<void> =>
+    request<void>("DELETE", `/contacts/${id}`),
 
   // ── AI ────────────────────────────────────────────────────────────────────
   tailorResume: (

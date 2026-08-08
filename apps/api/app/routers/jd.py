@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.db.models import JobDescription
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.jd import JDCreate, JDOut
+from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import extract_jd_skills
 
@@ -57,4 +57,27 @@ async def get_jd(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSess
     jd = result.scalar_one_or_none()
     if not jd:
         raise HTTPException(status_code=404, detail="JD not found")
+    return jd
+
+
+@router.patch("/{jd_id}/status", response_model=JDOut)
+async def update_jd_status(
+    jd_id: uuid.UUID,
+    body: JDStatusUpdate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobDescription).where(
+            JobDescription.id == jd_id,
+            JobDescription.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    jd = result.scalar_one_or_none()
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD not found")
+
+    jd.status = body.status
+    await db.commit()
+    await db.refresh(jd)
     return jd

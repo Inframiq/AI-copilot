@@ -9,8 +9,6 @@ import {
   Path,
   Users,
   ChartLineUp,
-  Gear,
-  Headset,
   MicrophoneStage,
   IdentificationCard,
 } from "@phosphor-icons/react";
@@ -89,14 +87,6 @@ export function Sidebar() {
         >
           Sign Out
         </button>
-        <span className="flex items-center gap-md px-md py-md rounded-xl text-label-md text-on-surface-variant opacity-40 cursor-default">
-          <Gear size={24} />
-          <span>Settings</span>
-        </span>
-        <span className="flex items-center gap-md px-md py-md rounded-xl text-label-md text-on-surface-variant opacity-40 cursor-default">
-          <Headset size={24} />
-          <span>Support</span>
-        </span>
       </div>
     </aside>
   );

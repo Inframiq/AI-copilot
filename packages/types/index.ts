@@ -45,12 +45,28 @@ export interface Resume {
   updated_at: string;
 }
 
+export type JDStatus = "applied" | "interview" | "final_round" | "offer" | "accepted" | "rejected";
+
 export interface JobDescription {
   id: string;
   user_id: string;
   title: string;
   raw_text: string;
   parsed_skills: string[];
+  status: JDStatus;
+  created_at: string;
+}
+
+export interface ExternalContact {
+  id: string;
+  name: string;
+  role: string;
+  company: string;
+  status: "new" | "following-up" | "connected";
+  notes: string;
+  email: string;
+  linkedin_url: string;
+  last_contact: string;
   created_at: string;
 }
 
