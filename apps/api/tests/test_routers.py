@@ -16,6 +16,7 @@ def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,
         "email": "test@test.com",
+        "aud": "authenticated",
         "exp": int(time.time()) + 3600,
     }
     token = pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")

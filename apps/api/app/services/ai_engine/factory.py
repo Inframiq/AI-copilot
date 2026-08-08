@@ -13,6 +13,10 @@ def get_ai_provider() -> AIProvider:
 
     if provider == "openai":
         from app.services.ai_engine.openai_provider import OpenAIProvider
-        return OpenAIProvider(fast_model=fast, pro_model=pro, api_key=os.getenv("OPENAI_API_KEY", ""))
+        max_output_tokens = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "800"))
+        return OpenAIProvider(
+            api_key=os.getenv("OPENAI_API_KEY", ""),
+            max_output_tokens=max_output_tokens,
+        )
 
     raise ValueError(f"Unknown AI_PROVIDER: {provider!r}. Use 'gemini' or 'openai'.")

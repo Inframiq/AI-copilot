@@ -26,7 +26,7 @@ async def test_extract_jd_skills_returns_parsed_jd():
 async def test_rewrite_bullets_returns_dict():
     provider = make_mock_provider(complete_return='{"experience": [{"title": "Engineer", "bullets": ["Built APIs"]}]}')
     resume = {"experience": [{"title": "Engineer", "bullets": ["Built stuff"]}]}
-    result = await rewrite_bullets(resume, ["Python"], 50, provider)
+    result = await rewrite_bullets(resume, ["Python"], ["AWS"], ["Python", "AWS"], 50, provider)
     assert isinstance(result, dict)
 
 @pytest.mark.asyncio

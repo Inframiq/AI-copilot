@@ -13,6 +13,11 @@ bearer_scheme = HTTPBearer()
 # Only allow algorithms the Supabase auth service actually uses.
 _ALLOWED_ALGORITHMS = frozenset({"HS256", "RS256", "ES256"})
 
+# Tolerate small clock drift between this host and the Supabase auth
+# server when checking iat/nbf/exp — without it, ordinary NTP skew of a
+# few seconds trips "not yet valid (iat)" on otherwise-valid tokens.
+_CLOCK_LEEWAY_SECONDS = 30
+
 # JWKS cache with a 1-hour TTL so key rotations propagate within the hour.
 _jwks_cache: dict | None = None
 _jwks_cache_at: float = 0.0
@@ -57,6 +62,7 @@ async def _verify_jwt(token: str) -> dict:
                 settings.supabase_jwt_secret,
                 algorithms=["HS256"],
                 audience="authenticated",
+                leeway=_CLOCK_LEEWAY_SECONDS,
             )
         else:
             jwks = await _get_jwks()
@@ -72,6 +78,7 @@ async def _verify_jwt(token: str) -> dict:
                 public_key,
                 algorithms=[alg],
                 audience="authenticated",
+                leeway=_CLOCK_LEEWAY_SECONDS,
             )
         return payload
     except ExpiredSignatureError:

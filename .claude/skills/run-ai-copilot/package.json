@@ -1,0 +1,9 @@
+{
+  "name": "run-ai-copilot-driver",
+  "private": true,
+  "type": "module",
+  "description": "Playwright driver for the run-ai-copilot skill. Isolated from the app's own package.json/lockfile.",
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}
