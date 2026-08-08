@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   // Skip Supabase when running with placeholder credentials (local preview)
@@ -10,10 +10,11 @@ export async function proxy(request: NextRequest) {
 
   let user: { id: string } | null = null;
 
-  if (!isPlaceholder) {
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  if (!isPlaceholder && supabaseAnonKey) {
     const supabase = createServerClient(
       supabaseUrl,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseAnonKey,
       {
         cookies: {
           getAll: () => request.cookies.getAll(),
@@ -32,7 +33,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/career-path", "/networking", "/analytics"];
+  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/career-path", "/networking", "/analytics", "/profile"];
   const PUBLIC_PATHS = ["/", "/login", "/register", "/callback"];
 
   const isPublic =

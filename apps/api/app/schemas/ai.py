@@ -1,12 +1,12 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TailorRequest(BaseModel):
     resume_id: uuid.UUID
     jd_id: uuid.UUID
-    humanize_level: int = 50  # 0-100
+    humanize_level: int = Field(default=50, ge=0, le=100)
 
 
 class PrepQuestionOut(BaseModel):

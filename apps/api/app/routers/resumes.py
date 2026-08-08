@@ -1,20 +1,51 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
 from app.db.models import Resume
 from app.core.security import get_current_user
+from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest
 from app.services.pdf import generate_pdf, upload_pdf, get_signed_url
+from app.services.resume_parser import extract_text, parse_resume_text
+from app.services.ai_engine.factory import get_ai_provider
 from supabase import create_client
 from app.core.config import settings
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
+# Singleton Supabase service-role client — one connection pool per process
+_sb_client = None
+
 
 def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    global _sb_client
+    if _sb_client is None:
+        _sb_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+    return _sb_client
+
+
+# Allowed upload MIME types and their magic byte signatures
+_ALLOWED_MIME = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+_MAGIC: list[tuple[bytes, str]] = [
+    (b"%PDF", "pdf"),
+    (b"PK\x03\x04", "docx"),
+]
+
+_VALID_TEMPLATES = {"ats_clean", "ats_modern", "ats_professional", "ats_minimal"}
+
+
+def _check_magic_bytes(data: bytes) -> None:
+    """Raise ValueError if the file doesn't start with a recognised magic sequence."""
+    for magic, _ in _MAGIC:
+        if data[: len(magic)] == magic:
+            return
+    raise ValueError("Unrecognised file format — only PDF and DOCX are supported.")
 
 
 @router.get("", response_model=list[ResumeOut])
@@ -89,6 +120,8 @@ async def generate_resume_pdf(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
     template_id = (body.template_id if body else None) or resume.template_id
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
     if template_id != resume.template_id:
         resume.template_id = template_id
     pdf_bytes = generate_pdf(resume.content, template_id)
@@ -98,3 +131,63 @@ async def generate_resume_pdf(
     await db.commit()
     signed_url = get_signed_url(path, sb)
     return {"signed_url": signed_url, "expires_in": 3600}
+
+
+@router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def parse_and_create_resume(
+    request: Request,
+    file: UploadFile = File(...),
+    template_id: str = Form("ats_clean"),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a PDF or DOCX resume, parse it with AI, and create a new Resume row."""
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+
+    content_type = file.content_type or ""
+    if content_type not in _ALLOWED_MIME and not (
+        file.filename or ""
+    ).lower().endswith((".pdf", ".docx", ".doc")):
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
+
+    raw_bytes = await file.read()
+
+    if len(raw_bytes) > 10 * 1024 * 1024:  # 10 MB guard
+        raise HTTPException(status_code=400, detail="File must be smaller than 10 MB.")
+
+    # Magic byte check — prevents content-type spoofing
+    try:
+        _check_magic_bytes(raw_bytes)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
+
+    try:
+        raw_text = extract_text(raw_bytes, content_type or file.filename or "")
+    except ValueError as exc:
+        # Surface user-facing constraint violations (e.g. page count exceeded)
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=422, detail="Could not extract text from the file.")
+
+    if not raw_text.strip():
+        raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+
+    provider = get_ai_provider()
+    parsed = await parse_resume_text(raw_text, provider)
+
+    # Derive a sensible title from the candidate's name
+    name = parsed.get("contact", {}).get("name", "").strip()
+    title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
+
+    resume = Resume(
+        user_id=uuid.UUID(user["sub"]),
+        title=title[:255],
+        template_id=template_id,
+        content=parsed,
+    )
+    db.add(resume)
+    await db.commit()
+    await db.refresh(resume)
+    return resume

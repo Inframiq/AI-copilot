@@ -1,10 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
+from app.core.rate_limit import limiter
 from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline
@@ -13,7 +14,13 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 @router.post("/tailor", response_model=TailorOut)
-async def tailor_resume(body: TailorRequest, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def tailor_resume(
+    request: Request,
+    body: TailorRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     uid = uuid.UUID(user["sub"])
     resume_row = (
         await db.execute(select(Resume).where(Resume.id == body.resume_id, Resume.user_id == uid))

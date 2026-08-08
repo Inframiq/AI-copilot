@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 
 class JDCreate(BaseModel):
-    raw_text: str
-    title: str | None = None
+    raw_text: str = Field(max_length=50_000)
+    title: str | None = Field(default=None, max_length=255)
 
 
 class JDOut(BaseModel):

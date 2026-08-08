@@ -154,28 +154,34 @@ export async function sendRequest(toUserId: string): Promise<void> {
 
 export async function acceptRequest(requestId: string): Promise<void> {
   const sb = createBrowserClient();
+  const me = await uid();
   const { error } = await sb
     .from("connection_requests")
     .update({ status: "accepted" })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("to_user", me); // only the recipient can accept
   if (error) throw new Error(error.message);
 }
 
 export async function rejectRequest(requestId: string): Promise<void> {
   const sb = createBrowserClient();
+  const me = await uid();
   const { error } = await sb
     .from("connection_requests")
     .update({ status: "rejected" })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("to_user", me); // only the recipient can reject
   if (error) throw new Error(error.message);
 }
 
 export async function cancelRequest(requestId: string): Promise<void> {
   const sb = createBrowserClient();
+  const me = await uid();
   const { error } = await sb
     .from("connection_requests")
     .delete()
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("from_user", me); // only the sender can cancel
   if (error) throw new Error(error.message);
 }
 

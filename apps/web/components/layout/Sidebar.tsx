@@ -12,11 +12,13 @@ import {
   Gear,
   Headset,
   MicrophoneStage,
+  IdentificationCard,
 } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
 
 const NAV = [
   { href: "/dashboard", icon: SquaresFour, label: "Dashboard", disabled: false },
+  { href: "/profile", icon: IdentificationCard, label: "My Profile", disabled: false },
   { href: "/career-path", icon: Path, label: "Career Path", disabled: false },
   { href: "/jd", icon: FileDashed, label: "JD Analyzer", disabled: false },
   { href: "/interview", icon: MicrophoneStage, label: "Interview Center", disabled: false },

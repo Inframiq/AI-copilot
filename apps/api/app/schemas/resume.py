@@ -1,22 +1,25 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Literal
+from pydantic import BaseModel, Field
+
+ValidTemplateId = Literal["ats_clean", "ats_modern", "ats_professional", "ats_minimal"]
 
 
 class ResumeCreate(BaseModel):
-    title: str
+    title: str = Field(max_length=255)
     content: dict = {}
-    template_id: str = "ats_clean"
+    template_id: ValidTemplateId = "ats_clean"
 
 
 class ResumeUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=255)
     content: dict | None = None
-    template_id: str | None = None
+    template_id: ValidTemplateId | None = None
 
 
 class PdfGenerateRequest(BaseModel):
-    template_id: str | None = None
+    template_id: ValidTemplateId | None = None
 
 
 class ResumeOut(BaseModel):

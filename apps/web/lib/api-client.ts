@@ -72,6 +72,23 @@ export const apiClient = {
       template_id: templateId,
     }),
 
+  parseResumeFile: async (file: File, templateId: string): Promise<Resume> => {
+    const token = await getToken();
+    const form = new FormData();
+    form.append("file", file);
+    form.append("template_id", templateId);
+    const res = await fetch(`${BASE}/resumes/parse-upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? "Upload failed");
+    }
+    return res.json() as Promise<Resume>;
+  },
+
   // ── Job Descriptions ──────────────────────────────────────────────────────
   getJds: (): Promise<JobDescription[]> =>
     request<JobDescription[]>("GET", "/jd"),

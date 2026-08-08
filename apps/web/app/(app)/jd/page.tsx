@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ClipboardText,
   ListDashes,
@@ -16,11 +17,14 @@ import {
   MapPin,
   Money,
   Brain,
+  UploadSimple,
+  X,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
-import type { JobDescription } from "@career-copilot/types";
+import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import type { JobDescription, Resume } from "@career-copilot/types";
 
 function extractInsights(text: string) {
   const lower = text.toLowerCase();
@@ -75,12 +79,59 @@ export default function JDIndexPage() {
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
   const storedJdText = useTailoringStore((s) => s.jdText);
-  const resumeId = useResumeStore((s) => s.resumeId);
+  const storeResumeId = useResumeStore((s) => s.resumeId);
+
+  // Career profile loaded from DB
+  const [careerProfile, setCareerProfile] = useState<CareerProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Override: user wants to use a different resume for this analysis
+  const [overrideMode, setOverrideMode] = useState<"none" | "upload" | "pick">("none");
+  const [overrideResumeId, setOverrideResumeId] = useState<string | null>(null);
+  const [overrideFile, setOverrideFile] = useState<File | null>(null);
+  const [overrideDragging, setOverrideDragging] = useState(false);
+  const [overrideUploading, setOverrideUploading] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const overrideFileRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  // Resumes list (for pick mode)
+  const { data: resumes = [] } = useQuery<Resume[]>({
+    queryKey: ["resumes"],
+    queryFn: () => apiClient.getResumes(),
+    staleTime: 2 * 60 * 1000,
+  });
 
   const { data: jds = [] } = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn: () => apiClient.getJds(),
   });
+
+  useEffect(() => {
+    getCareerProfile()
+      .then(p => setCareerProfile(p))
+      .catch(console.error)
+      .finally(() => setProfileLoading(false));
+  }, []);
+
+  // Priority: manual override > career profile master resume > store resume
+  const activeResumeId = overrideResumeId ?? careerProfile?.master_resume_id ?? storeResumeId;
+
+  async function handleOverrideUpload() {
+    if (!overrideFile) return;
+    setOverrideUploading(true); setOverrideError(null);
+    try {
+      const resume = await apiClient.parseResumeFile(overrideFile, "ats_clean");
+      await queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      setOverrideResumeId(resume.id);
+      setOverrideMode("none");
+      setOverrideFile(null);
+    } catch (e: unknown) {
+      setOverrideError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setOverrideUploading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,10 +143,10 @@ export default function JDIndexPage() {
       const jd = await apiClient.createJd({ title: firstLine, raw_text: jdText });
       // Use the local jdText we sent — don't rely on the backend echoing it back
       setJd(jd.id, jdText);
-      if (resumeId) {
-        await runTailoring(resumeId);
+      if (activeResumeId) {
+        await runTailoring(activeResumeId);
       } else {
-        setError("JD saved! Open a resume in Resume Builder first so we can tailor it and compute your ATS score.");
+        setError("Set up your profile first so we can compute your ATS match score.");
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -124,6 +175,128 @@ export default function JDIndexPage() {
           </p>
         </div>
       </section>
+
+      {/* Profile status banner */}
+      {!profileLoading && (
+        <div className={`rounded-2xl border p-md flex items-center gap-md flex-wrap ${
+          activeResumeId
+            ? "bg-primary/5 border-primary/20"
+            : "bg-surface-container border-outline-variant/20"
+        }`}>
+          {activeResumeId ? (
+            <>
+              <CheckCircle size={20} weight="fill" className="text-primary shrink-0" />
+              <p className="text-label-md text-on-surface flex-1">
+                {overrideResumeId
+                  ? "Analyzing against uploaded resume"
+                  : careerProfile?.master_resume_id
+                  ? "Analyzing against your saved profile"
+                  : "Analyzing against your resume"}
+              </p>
+              {overrideResumeId ? (
+                <button onClick={() => { setOverrideResumeId(null); setOverrideMode("none"); }}
+                  className="text-label-sm text-primary hover:underline shrink-0">
+                  Revert to profile
+                </button>
+              ) : (
+                <button onClick={() => setOverrideMode(overrideMode === "none" ? "pick" : "none")}
+                  className="text-label-sm text-primary hover:underline shrink-0">
+                  Use a different resume
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <WarningCircle size={20} className="text-on-surface-variant shrink-0" />
+              <p className="text-label-md text-on-surface-variant flex-1">
+                No profile set — match score won&apos;t be computed.
+              </p>
+              <Link href="/profile"
+                className="text-label-sm text-primary border border-primary/30 px-md py-xs rounded-lg hover:bg-primary/5 transition-all shrink-0">
+                Set up Profile →
+              </Link>
+              <button onClick={() => setOverrideMode("upload")}
+                className="text-label-sm text-on-surface-variant hover:text-primary transition-colors shrink-0">
+                or upload a resume
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Compact override panel */}
+      {overrideMode !== "none" && !overrideResumeId && (
+        <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-lg flex flex-col gap-md shadow-md">
+          <div className="flex items-center justify-between">
+            <p className="text-label-md text-on-surface font-semibold">
+              {overrideMode === "upload" ? "Upload a resume" : "Pick a saved resume"}
+            </p>
+            <div className="flex gap-md">
+              <button onClick={() => setOverrideMode(overrideMode === "upload" ? "pick" : "upload")}
+                className="text-label-sm text-primary hover:underline">
+                {overrideMode === "upload" ? "Pick existing instead" : "Upload instead"}
+              </button>
+              <button onClick={() => setOverrideMode("none")} className="text-on-surface-variant hover:text-error transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {overrideMode === "upload" && (
+            <>
+              <input ref={overrideFileRef} type="file" accept=".pdf,.docx,.doc" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) {
+                  if (!f.name.match(/\.(pdf|docx|doc)$/i)) { setOverrideError("PDF or DOCX only"); return; }
+                  setOverrideError(null); setOverrideFile(f);
+                }}} />
+              {overrideFile ? (
+                <div className="flex items-center gap-md p-md rounded-xl border border-primary/30 bg-primary/5">
+                  <UploadSimple size={20} className="text-primary shrink-0" />
+                  <span className="flex-1 text-label-sm text-on-surface truncate">{overrideFile.name}</span>
+                  <button onClick={() => setOverrideFile(null)} className="text-on-surface-variant hover:text-error transition-colors"><X size={14} /></button>
+                </div>
+              ) : (
+                <div
+                  onDragOver={e => { e.preventDefault(); setOverrideDragging(true); }}
+                  onDragLeave={() => setOverrideDragging(false)}
+                  onDrop={e => { e.preventDefault(); setOverrideDragging(false); const f = e.dataTransfer.files[0]; if (f) { setOverrideError(null); setOverrideFile(f); }}}
+                  onClick={() => overrideFileRef.current?.click()}
+                  className={`rounded-xl border-2 border-dashed p-lg flex items-center gap-lg cursor-pointer transition-all ${overrideDragging ? "border-primary bg-primary/5" : "border-outline-variant/40 hover:border-primary/40"}`}
+                >
+                  <UploadSimple size={24} className="text-on-surface-variant/50" />
+                  <div className="flex-1">
+                    <p className="text-label-sm text-on-surface font-semibold">Drop resume here</p>
+                    <p className="text-caption text-on-surface-variant">PDF or DOCX · up to 10 MB</p>
+                  </div>
+                  <span className="text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm">Browse</span>
+                </div>
+              )}
+              {overrideError && <p className="text-caption text-error">{overrideError}</p>}
+              <button onClick={handleOverrideUpload} disabled={!overrideFile || overrideUploading}
+                className="w-full py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+                {overrideUploading ? "Parsing…" : "Use this resume"}
+              </button>
+            </>
+          )}
+
+          {overrideMode === "pick" && (
+            <div className="flex flex-col gap-sm">
+              {resumes.length === 0 ? (
+                <p className="text-body-sm text-on-surface-variant text-center py-md">No saved resumes. Upload one instead.</p>
+              ) : resumes.map(r => (
+                <button key={r.id} onClick={() => { setOverrideResumeId(r.id); setOverrideMode("none"); }}
+                  className="flex items-center gap-md p-md rounded-xl border border-outline-variant/30 hover:border-primary/40 hover:bg-surface-container/50 transition-all text-left">
+                  <UploadSimple size={18} className="text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-label-sm text-on-surface font-semibold truncate">{r.title}</p>
+                    <p className="text-caption text-on-surface-variant">{new Date(r.updated_at).toLocaleDateString()}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
@@ -205,8 +378,8 @@ export default function JDIndexPage() {
           </p>
         </div>
 
-        {/* Skill Breakdown — 1 col */}
-        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-md relative overflow-hidden">
+        {/* Skill Breakdown — 3 cols */}
+        <div className="lg:col-span-3 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-md relative overflow-hidden">
           <h2 className="text-headline-md text-on-surface flex items-center gap-sm mb-xs font-semibold">
             <ListChecks size={24} className="text-primary" />
             Skill Breakdown
