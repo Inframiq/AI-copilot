@@ -3,11 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; line-height: 1.5; margin: 0.75in 1in; color: #131b2e; }
+  /* WeasyPrint applies its own default @page margin (~0.78in) even when
+     one isn't declared — it stacks with body margin rather than being
+     replaced by it. Zero it explicitly so the body margin below is the
+     true, only margin. */
+  @page { margin: 0; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; line-height: 1.4; margin: 0.5in 0.6in; color: #131b2e; }
   h1 { font-size: 18pt; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.02em; }
   .headline { font-size: 12pt; color: #454651; margin-bottom: 4px; }
-  .contact { font-size: 10pt; color: #454651; margin-bottom: 16px; }
-  h2 { font-size: 11pt; font-weight: 700; color: #000a56; border-bottom: 1.5px solid #eaedff; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .contact { font-size: 10pt; color: #454651; margin-bottom: 12px; }
+  h2 { font-size: 11pt; font-weight: 700; color: #000a56; border-bottom: 1.5px solid #eaedff; margin: 11px 0 6px; text-transform: uppercase; letter-spacing: 0.08em; }
   .job-header { display: flex; justify-content: space-between; align-items: baseline; }
   .job-title { font-weight: 600; font-size: 11pt; }
   .company { font-size: 10pt; color: #454651; }

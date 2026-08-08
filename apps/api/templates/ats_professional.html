@@ -3,14 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #1a1a1a; margin: 0.7in 0.8in; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  /* WeasyPrint applies its own default @page margin (~0.78in) even when
+     one isn't declared — it stacks with body margin rather than being
+     replaced by it. Zero it explicitly so the body margin below is the
+     true, only margin. */
+  @page { margin: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; color: #1a1a1a; margin: 0.5in 0.6in; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
   .photo { width: 88px; height: 88px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
   .name { font-size: 22pt; font-weight: 800; color: #1f5fbf; margin: 0 0 2px; }
   .headline { font-size: 12pt; font-weight: 700; color: #1a1a1a; margin: 0 0 6px; }
   .contact-line { font-size: 9.5pt; color: #333; }
   h2 { font-size: 11pt; font-weight: 800; color: #1f5fbf; text-transform: uppercase; letter-spacing: 0.05em;
-    border-bottom: 1.5px solid #1f5fbf; padding-bottom: 3px; margin: 16px 0 8px; }
+    border-bottom: 1.5px solid #1f5fbf; padding-bottom: 3px; margin: 12px 0 8px; }
   p.summary { margin: 0; font-size: 10pt; }
   .job-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
