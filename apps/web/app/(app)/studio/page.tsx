@@ -91,7 +91,7 @@ export default function StudioIndexPage() {
   // Prompt: user has existing resumes — let them choose
   if (showPrompt && existingResumes.length > 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-lg mx-auto w-full">
+      <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-[32rem] mx-auto w-full">
         <div className="text-center">
           <h2 className="text-headline-md text-on-surface font-semibold mb-sm">
             You have saved resumes
@@ -311,9 +311,9 @@ export default function StudioIndexPage() {
             "Create Resume"
           )}
         </button>
-        {error && <p className="text-body-sm text-error text-center max-w-sm">{error}</p>}
+        {error && <p className="text-body-sm text-error text-center max-w-[24rem]">{error}</p>}
         {mode === "upload" && file && (
-          <p className="text-caption text-on-surface-variant text-center max-w-sm">
+          <p className="text-caption text-on-surface-variant text-center max-w-[24rem]">
             AI will extract your contact info, experience, education, and skills — then you can edit everything before exporting.
           </p>
         )}

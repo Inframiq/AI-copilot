@@ -13,10 +13,12 @@ bearer_scheme = HTTPBearer()
 # Only allow algorithms the Supabase auth service actually uses.
 _ALLOWED_ALGORITHMS = frozenset({"HS256", "RS256", "ES256"})
 
-# Tolerate small clock drift between this host and the Supabase auth
-# server when checking iat/nbf/exp — without it, ordinary NTP skew of a
-# few seconds trips "not yet valid (iat)" on otherwise-valid tokens.
-_CLOCK_LEEWAY_SECONDS = 30
+# Tolerate clock drift between this host and the Supabase auth server
+# when checking iat/nbf/exp — without it, NTP skew trips "not yet valid
+# (iat)" on otherwise-valid tokens. Measured drift on the dev machine
+# (w32time service was stopped) was ~40s, so 30s wasn't enough — the
+# real fix is `w32tm /resync` as admin; this is the defensive floor.
+_CLOCK_LEEWAY_SECONDS = 90
 
 # JWKS cache with a 1-hour TTL so key rotations propagate within the hour.
 _jwks_cache: dict | None = None
