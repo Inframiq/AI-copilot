@@ -74,7 +74,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
       set({
         sessionId: result.session_id,
-        atsScore: result.ats_score_after,
+        atsScore: result.ats_score,
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
         isLoading: false,

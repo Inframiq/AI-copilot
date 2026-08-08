@@ -14,10 +14,7 @@ vi.mock("@/lib/api-client", () => ({
 
 const mockTailorResult: TailorOut = {
   session_id: "session-xyz",
-  resume_id: "resume-abc",
-  jd_id: "jd-001",
-  ats_score_before: 60,
-  ats_score_after: 82,
+  ats_score: 82,
   matched_skills: ["TypeScript", "React"],
   missing_skills: ["GraphQL"],
   tailored_content: {
@@ -26,7 +23,7 @@ const mockTailorResult: TailorOut = {
     education: [],
     skills: ["TypeScript", "React"],
   },
-  humanize_level: 50,
+  questions: [],
 };
 
 import { useTailoringStore } from "../stores/tailoring-store";

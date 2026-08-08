@@ -72,14 +72,11 @@ export interface ExternalContact {
 
 export interface TailorOut {
   session_id: string;
-  resume_id: string;
-  jd_id: string;
-  ats_score_before: number;
-  ats_score_after: number;
+  ats_score: number;
   matched_skills: string[];
   missing_skills: string[];
   tailored_content: ResumeContent;
-  humanize_level: number;
+  questions: PrepQuestionOut[];
 }
 
 export interface PrepQuestionOut {
