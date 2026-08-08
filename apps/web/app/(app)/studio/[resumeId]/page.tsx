@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, X } from "@phosphor-icons/react";
+import { ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { useResumeStore } from "@/stores/resume-store";
@@ -26,6 +26,9 @@ export default function StudioPage({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
@@ -76,6 +79,28 @@ export default function StudioPage({
       queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
         list?.map((r) => (r.id === resumeId ? { ...r, title: previousTitle } : r))
       );
+    }
+  }
+
+  async function handleDeleteResume() {
+    if (!deleteArmed) {
+      setDeleteArmed(true);
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiClient.deleteResume(resumeId);
+      queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
+        list?.filter((r) => r.id !== resumeId)
+      );
+      queryClient.removeQueries({ queryKey: ["resume", resumeId] });
+      useResumeStore.getState().resetStore();
+      router.push("/studio");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete resume");
+      setIsDeleting(false);
+      setDeleteArmed(false);
     }
   }
 
@@ -164,6 +189,22 @@ export default function StudioPage({
           {titleError && <span className="text-caption text-error">{titleError}</span>}
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleDeleteResume}
+              disabled={isDeleting}
+              title={deleteArmed ? "Click again to confirm" : "Delete resume"}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-label-md transition-all disabled:opacity-50 ${
+                deleteArmed
+                  ? "bg-error text-on-primary"
+                  : "text-on-surface-variant hover:bg-error-container/50 hover:text-error"
+              }`}
+            >
+              <Trash size={20} />
+              {deleteArmed && (isDeleting ? "Deleting…" : "Confirm delete")}
+            </button>
+            {deleteError && <span className="text-caption text-error">{deleteError}</span>}
+          </div>
           <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-label-md">
             <ClockCounterClockwise size={20} />
             History
