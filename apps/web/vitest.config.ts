@@ -3,8 +3,12 @@ import { resolve } from "path";
 
 export default defineConfig({
   test: {
+    // Default stays "node" — existing store/lib tests don't need a DOM.
+    // Component tests opt into jsdom individually via a
+    // `// @vitest-environment jsdom` pragma at the top of the file.
     environment: "node",
     globals: true,
+    setupFiles: ["./__tests__/setup.ts"],
   },
   resolve: {
     alias: {
