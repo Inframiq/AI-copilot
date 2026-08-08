@@ -1,16 +1,36 @@
 "use client";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   FileDashed,
   Brain,
   Heartbeat,
   Briefcase,
+  BookOpen,
+  Trash,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import type { Resume, JobDescription } from "@career-copilot/types";
+import type { Resume, JobDescription, LearningItem } from "@career-copilot/types";
+
+const STATUS_CYCLE: Record<LearningItem["status"], LearningItem["status"]> = {
+  not_started: "learning",
+  learning: "done",
+  done: "not_started",
+};
+
+const STATUS_LABEL: Record<LearningItem["status"], string> = {
+  not_started: "Not started",
+  learning: "Learning",
+  done: "Done",
+};
+
+const STATUS_COLOR: Record<LearningItem["status"], string> = {
+  not_started: "bg-surface-container text-on-surface-variant",
+  learning: "bg-secondary-container text-on-secondary-container",
+  done: "bg-success-accent/15 text-success-accent",
+};
 
 function computeProfileHealth(resume: Resume | undefined): { score: number; label: string } {
   if (!resume) return { score: 0, label: "Needs work" };
@@ -41,6 +61,7 @@ function computeProfileHealth(resume: Resume | undefined): { score: number; labe
 
 export default function DashboardPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -55,6 +76,40 @@ export default function DashboardPage() {
     queryFn: () => apiClient.getJds(),
     staleTime: 2 * 60 * 1000,
   });
+
+  const { data: learningItems = [] } = useQuery<LearningItem[]>({
+    queryKey: ["learning"],
+    queryFn: () => apiClient.getLearningItems(),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  async function handleCycleStatus(item: LearningItem) {
+    const nextStatus = STATUS_CYCLE[item.status];
+    queryClient.setQueryData<LearningItem[]>(["learning"], (list) =>
+      list?.map((li) => (li.id === item.id ? { ...li, status: nextStatus } : li))
+    );
+    try {
+      await apiClient.updateLearningItemStatus(item.id, nextStatus);
+    } catch (err) {
+      console.error("Failed to update learning item:", err);
+      queryClient.setQueryData<LearningItem[]>(["learning"], (list) =>
+        list?.map((li) => (li.id === item.id ? { ...li, status: item.status } : li))
+      );
+    }
+  }
+
+  async function handleRemoveLearningItem(id: string) {
+    const previous = learningItems;
+    queryClient.setQueryData<LearningItem[]>(["learning"], (list) =>
+      list?.filter((li) => li.id !== id)
+    );
+    try {
+      await apiClient.deleteLearningItem(id);
+    } catch (err) {
+      console.error("Failed to remove learning item:", err);
+      queryClient.setQueryData<LearningItem[]>(["learning"], previous);
+    }
+  }
 
   async function createNewResume() {
     setCreateError(null);
@@ -276,6 +331,54 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Learning Path */}
+      {learningItems.length > 0 && (
+        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
+          <div className="flex items-center gap-sm">
+            <BookOpen size={20} className="text-primary" />
+            <h2 className="text-headline-md text-on-surface font-semibold">Learning Path</h2>
+            <span className="text-caption text-on-surface-variant">
+              {learningItems.filter((li) => li.status === "done").length}/{learningItems.length} done
+            </span>
+          </div>
+          <p className="text-body-sm text-on-surface-variant -mt-sm">
+            Skills flagged from JD Analyzer. Click a status to cycle it.
+          </p>
+          <div className="flex flex-col gap-sm">
+            {learningItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-md p-md rounded-xl border border-outline-variant/20"
+              >
+                <div className="flex flex-col min-w-0">
+                  <span className="text-label-md text-on-surface truncate">{item.skill}</span>
+                  {item.source_jd_title && (
+                    <span className="text-caption text-on-surface-variant truncate">
+                      From: {item.source_jd_title}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-sm shrink-0">
+                  <button
+                    onClick={() => handleCycleStatus(item)}
+                    className={`px-sm py-xs rounded-full text-caption font-semibold hover:opacity-80 transition-opacity ${STATUS_COLOR[item.status]}`}
+                  >
+                    {STATUS_LABEL[item.status]}
+                  </button>
+                  <button
+                    onClick={() => handleRemoveLearningItem(item.id)}
+                    aria-label="Remove from learning path"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error-container/50 hover:text-error transition-colors"
+                  >
+                    <Trash size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

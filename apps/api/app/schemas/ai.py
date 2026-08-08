@@ -17,6 +17,21 @@ class PrepQuestionOut(BaseModel):
     answer_framework: str
     is_gap_based: bool
     order_index: int
+    practiced_at: datetime | None = None
+    model_config = {"from_attributes": True}
+
+
+class LearningItemIn(BaseModel):
+    skill: str = Field(min_length=1, max_length=255)
+    source_jd_title: str | None = Field(default=None, max_length=255)
+
+
+class LearningItemOut(BaseModel):
+    id: uuid.UUID
+    skill: str
+    source_jd_title: str | None
+    status: str
+    created_at: datetime
     model_config = {"from_attributes": True}
 
 

@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner } from "@phosphor-icons/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash } from "@phosphor-icons/react";
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
@@ -16,6 +16,8 @@ type Mode = "blank" | "upload";
 
 export default function StudioIndexPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("ats_clean");
   const [mode, setMode] = useState<Mode>("blank");
   const [file, setFile] = useState<File | null>(null);
@@ -33,15 +35,35 @@ export default function StudioIndexPage() {
     staleTime: 2 * 60 * 1000,
   });
 
+  // Single source of truth: always re-derive from the "resumes" query data,
+  // for both the initial load AND any later mutation (delete, etc.) that
+  // updates that cache. Previously this only handled the "has resumes"
+  // case, so deleting down to zero left the effect doing nothing while a
+  // separate manual state update in handleDeleteResume raced it and lost.
   useEffect(() => {
-    if (!isLoading && resumes.length > 0) {
-      const sorted = [...resumes].sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
-      setExistingResumes(sorted);
-      setShowPrompt(true);
-    }
+    if (isLoading) return;
+    const sorted = [...resumes].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+    setExistingResumes(sorted);
+    setShowPrompt(resumes.length > 0);
   }, [resumes, isLoading]);
+
+  async function handleDeleteResume(id: string) {
+    if (deleteConfirm !== id) {
+      setDeleteConfirm(id);
+      return;
+    }
+    setDeleteConfirm(null);
+    try {
+      await apiClient.deleteResume(id);
+      queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
+        list?.filter((r) => r.id !== id)
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete resume");
+    }
+  }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -101,24 +123,46 @@ export default function StudioIndexPage() {
           </p>
         </div>
 
+        {error && <p className="text-body-sm text-error text-center">{error}</p>}
+
         {/* Existing resumes list */}
         <div className="w-full flex flex-col gap-sm">
           {existingResumes.map((r) => (
-            <button
+            <div
               key={r.id}
-              onClick={() => router.push(`/studio/${r.id}`)}
-              className="flex items-center gap-md p-md rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-md transition-all text-left"
+              className="flex items-center gap-md p-md rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-md transition-all"
             >
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <CheckCircle size={20} weight="fill" className="text-primary" />
+              <button
+                onClick={() => router.push(`/studio/${r.id}`)}
+                className="flex items-center gap-md flex-1 min-w-0 text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <CheckCircle size={20} weight="fill" className="text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-label-md text-on-surface font-semibold truncate">{r.title}</p>
+                  <p className="text-caption text-on-surface-variant">
+                    Last edited {new Date(r.updated_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </button>
+              <div className="flex flex-col items-end gap-xs shrink-0">
+                <button
+                  onClick={() => handleDeleteResume(r.id)}
+                  aria-label="Delete resume"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                    deleteConfirm === r.id
+                      ? "bg-error text-on-primary"
+                      : "bg-surface-container hover:bg-error-container/50 text-on-surface-variant hover:text-error"
+                  }`}
+                >
+                  <Trash size={16} />
+                </button>
+                {deleteConfirm === r.id && (
+                  <span className="text-caption text-error whitespace-nowrap">Click again to confirm</span>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-label-md text-on-surface font-semibold truncate">{r.title}</p>
-                <p className="text-caption text-on-surface-variant">
-                  Last edited {new Date(r.updated_at).toLocaleDateString()}
-                </p>
-              </div>
-            </button>
+            </div>
           ))}
         </div>
 

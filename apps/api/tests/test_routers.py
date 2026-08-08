@@ -259,3 +259,55 @@ async def test_get_questions_returns_list():
         assert r.json() == []
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_mark_question_practiced_sets_practiced_at():
+    from app.db.models import PrepQuestion
+
+    override, mock_session = make_mock_db()
+    question = PrepQuestion(
+        id=uuid.uuid4(),
+        session_id=uuid.uuid4(),
+        topic="System Design",
+        question="How would you scale this?",
+        answer_framework="Discuss horizontal scaling...",
+        is_gap_based=True,
+        order_index=0,
+        practiced_at=None,
+    )
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = question
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/ai/questions/{question.id}/practice",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 200
+        assert r.json()["practiced_at"] is not None
+        assert question.practiced_at is not None
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_mark_question_practiced_404_when_not_owned():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/ai/questions/{uuid.uuid4()}/practice",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Code,
@@ -45,18 +45,12 @@ const TOPIC_DATA: Record<Tab, Array<{ icon: typeof Code; category: string; title
 };
 
 // ── localStorage helpers ────────────────────────────────────────────────────
-const SESSION_PROGRESS_KEY = "career-copilot-interview-progress";
+// Session-level practice progress (answeredSet below) is real, persisted
+// server-side via PrepQuestion.practiced_at — not localStorage. This is only
+// for the generic topic-browsing cards shown before any tailoring session
+// exists, which have no backing DB row to persist against.
 const TOPIC_PROGRESS_KEY   = "career-copilot-topic-practice";
 
-function loadSessionProgress(): Record<string, string[]> {
-  if (typeof window === "undefined") return {};
-  try { return JSON.parse(localStorage.getItem(SESSION_PROGRESS_KEY) || "{}"); } catch { return {}; }
-}
-function markQuestionAnswered(sessionId: string, qId: string) {
-  const p = loadSessionProgress();
-  p[sessionId] = [...new Set([...(p[sessionId] || []), qId])];
-  localStorage.setItem(SESSION_PROGRESS_KEY, JSON.stringify(p));
-}
 function loadTopicProgress(): Record<string, number> {
   if (typeof window === "undefined") return {};
   try { return JSON.parse(localStorage.getItem(TOPIC_PROGRESS_KEY) || "{}"); } catch { return {}; }
@@ -74,17 +68,16 @@ function classifyTopic(topic: string): Tab {
 
 export default function InterviewIndexPage() {
   const router    = useRouter();
+  const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
-  const [sessionProg, setSessionProg] = useState<Record<string, string[]>>(() => loadSessionProgress());
   const [topicProg, setTopicProg]     = useState<Record<string, number>>(() => loadTopicProgress());
 
   // Re-hydrate from localStorage after mount (SSR safety)
   useEffect(() => {
-    setSessionProg(loadSessionProgress());
     setTopicProg(loadTopicProgress());
   }, []);
 
@@ -102,9 +95,9 @@ export default function InterviewIndexPage() {
     queryFn:  () => apiClient.getJds(),
   });
 
-  // Session-level progress
-  const answeredSet   = sessionId ? new Set(sessionProg[sessionId] || []) : new Set<string>();
-  const answeredCount = sessionId ? (sessionProg[sessionId] || []).length : 0;
+  // Session-level progress — real, persisted server-side (PrepQuestion.practiced_at)
+  const answeredSet   = new Set(questions.filter((q) => q.practiced_at).map((q) => q.id));
+  const answeredCount = answeredSet.size;
 
   // Overall readiness (progressive — each milestone = +20 pts, practice fills last 40)
   const practiceScore  = questions.length > 0 ? (answeredCount / questions.length) * 40 : 0;
@@ -136,10 +129,24 @@ export default function InterviewIndexPage() {
   // Current tab's questions
   const tabQuestions = sessionId ? questions.filter((q) => classifyTopic(q.topic) === activeTab) : [];
 
-  function handleMarkAnswered(qId: string) {
+  async function handleMarkAnswered(qId: string) {
     if (!sessionId) return;
-    markQuestionAnswered(sessionId, qId);
-    setSessionProg(loadSessionProgress());
+    // Optimistic — flip it locally immediately, reconcile with the server's
+    // actual practiced_at once the request resolves.
+    queryClient.setQueryData<PrepQuestionOut[]>(["questions", sessionId], (list) =>
+      list?.map((q) => (q.id === qId ? { ...q, practiced_at: new Date().toISOString() } : q))
+    );
+    try {
+      const updated = await apiClient.markQuestionPracticed(qId);
+      queryClient.setQueryData<PrepQuestionOut[]>(["questions", sessionId], (list) =>
+        list?.map((q) => (q.id === qId ? updated : q))
+      );
+    } catch (err) {
+      console.error("Failed to mark question practiced:", err);
+      queryClient.setQueryData<PrepQuestionOut[]>(["questions", sessionId], (list) =>
+        list?.map((q) => (q.id === qId ? { ...q, practiced_at: null } : q))
+      );
+    }
   }
 
   // Increment localStorage progress for a topic card and navigate
@@ -229,8 +236,8 @@ export default function InterviewIndexPage() {
                         </span>
                       </div>
                       <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
-                      {q.answer_hint && (
-                        <p className="text-body-sm text-on-surface-variant mb-md">{q.answer_hint}</p>
+                      {q.answer_framework && (
+                        <p className="text-body-sm text-on-surface-variant mb-md">{q.answer_framework}</p>
                       )}
                       <div className="flex items-center gap-sm mb-lg">
                         <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
@@ -245,7 +252,7 @@ export default function InterviewIndexPage() {
                       </div>
                       <div className="flex gap-sm">
                         <button
-                          onClick={() => router.push(`/interview/${sessionId}`)}
+                          onClick={() => router.push(`/interview/${sessionId}?q=${q.id}`)}
                           className="flex-1 py-md px-md bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
                         >
                           <Play size={16} weight="fill" /> Practice This Question

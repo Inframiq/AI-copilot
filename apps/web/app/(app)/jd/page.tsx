@@ -24,7 +24,7 @@ import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { JobDescription, Resume } from "@career-copilot/types";
+import type { JobDescription, Resume, LearningItem } from "@career-copilot/types";
 
 function extractInsights(text: string) {
   const lower = text.toLowerCase();
@@ -94,6 +94,21 @@ export default function JDIndexPage() {
   const [overrideError, setOverrideError] = useState<string | null>(null);
   const overrideFileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const { data: learningItems = [] } = useQuery<LearningItem[]>({
+    queryKey: ["learning"],
+    queryFn: () => apiClient.getLearningItems(),
+  });
+
+  async function handleAddToLearningPath(skill: string) {
+    const sourceTitle = (storedJdText || jdText).trim().split("\n")[0].slice(0, 120) || undefined;
+    try {
+      const item = await apiClient.addLearningItem({ skill, source_jd_title: sourceTitle });
+      queryClient.setQueryData<LearningItem[]>(["learning"], (list) => [item, ...(list ?? [])]);
+    } catch (err) {
+      console.error("Failed to add to learning path:", err);
+    }
+  }
 
   // Resumes list (for pick mode)
   const { data: resumes = [] } = useQuery<Resume[]>({
@@ -417,15 +432,32 @@ export default function JDIndexPage() {
                     Missing Skills ({missingSkills.length})
                   </h3>
                   <div className="flex flex-wrap gap-xs">
-                    {missingSkills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="px-sm py-xs bg-error-container/30 text-error text-label-sm rounded-md border border-error/20 flex items-center gap-xs"
-                      >
-                        {skill}
-                        <PlusCircle size={14} className="cursor-pointer hover:text-error/70" aria-label="Add to learning path" />
-                      </span>
-                    ))}
+                    {missingSkills.map((skill) => {
+                      const alreadyAdded = learningItems.some(
+                        (li) => li.skill.toLowerCase() === skill.toLowerCase()
+                      );
+                      return (
+                        <span
+                          key={skill}
+                          className="px-sm py-xs bg-error-container/30 text-error text-label-sm rounded-md border border-error/20 flex items-center gap-xs"
+                        >
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => !alreadyAdded && handleAddToLearningPath(skill)}
+                            disabled={alreadyAdded}
+                            aria-label={alreadyAdded ? "Already in learning path" : "Add to learning path"}
+                            className="flex items-center"
+                          >
+                            {alreadyAdded ? (
+                              <CheckCircle size={14} className="text-success-accent" />
+                            ) : (
+                              <PlusCircle size={14} className="cursor-pointer hover:text-error/70" />
+                            )}
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                   <p className="text-caption text-on-surface-variant mt-xs italic">
                     Tip: Click &apos;+&apos; to add missing skills to your Learning Path.

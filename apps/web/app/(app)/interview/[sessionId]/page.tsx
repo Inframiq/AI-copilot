@@ -1,7 +1,7 @@
 "use client";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { QuestionCard } from "@/components/interview/QuestionCard";
 import { TopicList } from "@/components/interview/TopicList";
@@ -15,12 +15,23 @@ export default function InterviewPage({
 }) {
   const { sessionId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const { data: questions = [], isLoading } = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
     queryFn: () => apiClient.getQuestions(sessionId),
   });
+
+  // "Practice This Question" on the overview page links here with ?q=<id> —
+  // jump straight to that question once the list loads, instead of always
+  // landing on index 0 regardless of which one was clicked.
+  useEffect(() => {
+    const targetId = searchParams.get("q");
+    if (!targetId || questions.length === 0) return;
+    const idx = questions.findIndex((q) => q.id === targetId);
+    if (idx !== -1) setActiveIndex(idx);
+  }, [questions, searchParams]);
 
   const active = questions[activeIndex];
 

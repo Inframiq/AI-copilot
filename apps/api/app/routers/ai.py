@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -84,3 +85,25 @@ async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), d
         .order_by(PrepQuestion.order_index)
     )
     return result.scalars().all()
+
+
+@router.patch("/questions/{question_id}/practice", response_model=PrepQuestionOut)
+async def mark_question_practiced(
+    question_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(PrepQuestion)
+        .join(TailoringSession)
+        .where(
+            PrepQuestion.id == question_id,
+            TailoringSession.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    question = result.scalar_one_or_none()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    question.practiced_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(question)
+    return question

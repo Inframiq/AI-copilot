@@ -5,6 +5,7 @@ import type {
   TailorOut,
   PrepQuestionOut,
   ResumeContent,
+  LearningItem,
 } from "@career-copilot/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -116,4 +117,25 @@ export const apiClient = {
       "GET",
       `/ai/sessions/${sessionId}/questions`
     ),
+
+  markQuestionPracticed: (questionId: string): Promise<PrepQuestionOut> =>
+    request<PrepQuestionOut>("PATCH", `/ai/questions/${questionId}/practice`),
+
+  // ── Learning Path ────────────────────────────────────────────────────────
+  getLearningItems: (): Promise<LearningItem[]> =>
+    request<LearningItem[]>("GET", "/learning"),
+
+  addLearningItem: (payload: {
+    skill: string;
+    source_jd_title?: string;
+  }): Promise<LearningItem> => request<LearningItem>("POST", "/learning", payload),
+
+  updateLearningItemStatus: (
+    id: string,
+    status: LearningItem["status"]
+  ): Promise<LearningItem> =>
+    request<LearningItem>("PATCH", `/learning/${id}`, { status }),
+
+  deleteLearningItem: (id: string): Promise<void> =>
+    request<void>("DELETE", `/learning/${id}`),
 };

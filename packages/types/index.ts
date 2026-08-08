@@ -71,5 +71,16 @@ export interface PrepQuestionOut {
   session_id: string;
   topic: string;
   question: string;
-  answer_hint: string;
+  answer_framework: string;
+  is_gap_based: boolean;
+  order_index: number;
+  practiced_at: string | null;
+}
+
+export interface LearningItem {
+  id: string;
+  skill: string;
+  source_jd_title: string | null;
+  status: "not_started" | "learning" | "done";
+  created_at: string;
 }

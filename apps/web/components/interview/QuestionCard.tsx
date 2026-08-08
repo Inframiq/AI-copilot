@@ -22,7 +22,7 @@ export function QuestionCard({ question }: { question: PrepQuestionOut }) {
           <p className="text-label-md text-primary mb-sm uppercase tracking-wider">
             Answer Framework
           </p>
-          <p className="text-body-md text-on-surface">{question.answer_hint}</p>
+          <p className="text-body-md text-on-surface">{question.answer_framework}</p>
         </div>
       ) : (
         <p className="text-body-lg text-on-surface font-medium">
