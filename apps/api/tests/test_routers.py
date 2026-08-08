@@ -173,6 +173,46 @@ async def test_delete_resume_204():
 
 
 @pytest.mark.asyncio
+async def test_list_jds_returns_200_with_valid_token():
+    override, mock_session = make_mock_db()
+    from app.db.models import JobDescription
+    from datetime import datetime, timezone
+
+    jd = JobDescription(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000003"),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Senior Engineer",
+        raw_text="We need a senior engineer.",
+        parsed={"required": ["Python"], "nice_to_have": ["Docker"]},
+        created_at=datetime.now(timezone.utc),
+    )
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [jd]
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/jd", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body) == 1
+        assert body[0]["title"] == "Senior Engineer"
+        assert body[0]["parsed_skills"] == ["Python", "Docker"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_list_jds_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/jd")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_get_jd_404_when_not_found():
     override, mock_session = make_mock_db()
     mock_result = MagicMock()

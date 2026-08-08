@@ -5,7 +5,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-ALLOWED_TEMPLATES = {"ats_clean", "ats_modern"}
+ALLOWED_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
 
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 

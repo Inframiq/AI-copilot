@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { margin: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #1a1a1a; margin: 0; }
+  .banner { background: #4c6178; height: 26px; width: 100%; }
+  .header { display: flex; align-items: flex-start; gap: 20px; padding: 24px 48px 8px; }
+  .photo { width: 96px; height: 96px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+  .name { font-size: 22pt; font-weight: 800; color: #2b2b2b; margin: 4px 0 10px; letter-spacing: 0.02em; }
+  .contact-line { font-size: 9.5pt; color: #333; margin-bottom: 4px; }
+  .contact-line .marker { color: #4c6178; font-weight: bold; margin-right: 6px; }
+  .body { padding: 4px 48px 32px; }
+  .section { margin-top: 18px; }
+  .section-label { font-size: 10pt; font-weight: 800; color: #2b2b2b; text-transform: uppercase;
+    letter-spacing: 0.04em; border-left: 4px solid #4c6178; padding-left: 8px; margin-bottom: 8px; }
+  .section-body { padding-left: 12px; }
+  p.summary { margin: 0; font-size: 10pt; }
+  ul.skills-grid { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 24px; font-size: 10pt; }
+  ul.skills-grid li { margin-bottom: 4px; }
+  ul.skills-grid li:before { content: "· "; color: #4c6178; font-weight: bold; }
+  .job { margin-bottom: 10px; }
+  .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 10px; }
+  .job-title-line { font-size: 10.5pt; }
+  .job-title-line .title { font-weight: 700; }
+  .job-title-line .dates { float: right; font-weight: 400; color: #444; }
+  .job-company { font-weight: 700; font-style: italic; font-size: 10pt; margin-bottom: 2px; }
+  ul.bullets { margin: 2px 0 0 16px; padding: 0; font-size: 10pt; }
+  ul.bullets li { margin-bottom: 2px; }
+  .edu-item { font-size: 10pt; margin-bottom: 4px; }
+  .edu-item .school { font-style: italic; }
+  .edu-item .degree { font-weight: 700; display: block; }
+  .lang-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .lang-name { width: 130px; font-size: 10pt; }
+  .lang-name b { font-weight: 700; }
+  .lang-bar-track { flex: 1; height: 6px; background: #e4e4e4; border-radius: 3px; overflow: hidden; }
+  .lang-bar-fill { height: 100%; background: #4c6178; }
+  ul.plain { margin: 0 0 0 16px; padding: 0; font-size: 10pt; }
+</style>
+</head>
+<body>
+<div class="banner"></div>
+<div class="header">
+  {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
+  <div>
+    <div class="name">{{ contact.name | upper }}</div>
+    {% if contact.location %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.location }}</div>{% endif %}
+    {% if contact.phone %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.phone }}</div>{% endif %}
+    <div class="contact-line"><span class="marker">&#9679;</span>{{ contact.email }}</div>
+  </div>
+</div>
+
+<div class="body">
+  {% if summary %}
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <div class="section-body"><p class="summary">{{ summary }}</p></div>
+  </div>
+  {% endif %}
+
+  {% if skills %}
+  <div class="section">
+    <div class="section-label">Skills</div>
+    <div class="section-body">
+      <ul class="skills-grid">{% for s in skills %}<li>{{ s }}</li>{% endfor %}</ul>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if experience %}
+  <div class="section">
+    <div class="section-label">Experience</div>
+    <div class="section-body">
+      {% for job in experience %}
+      <div class="job">
+        <div class="job-title-line"><span class="title">{{ job.title }}</span>, {{ job.start }} – {{ job.end or "Current" }}</div>
+        <div class="job-company">{{ job.company }}</div>
+        <ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if education %}
+  <div class="section">
+    <div class="section-label">Education and Training</div>
+    <div class="section-body">
+      {% for edu in education %}
+      <div class="edu-item">
+        <span class="school">{{ edu.institution }}, {{ edu.year }}</span>
+        <span class="degree">{{ edu.degree }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if languages %}
+  <div class="section">
+    <div class="section-label">Languages</div>
+    <div class="section-body">
+      {% set levels = {"native": 98, "c2": 95, "c1": 85, "proficient": 85, "fluent": 90,
+                        "b2": 70, "upper-intermediate": 70, "b1": 55, "intermediate": 55,
+                        "a2": 35, "basic": 35, "a1": 20, "beginner": 20} %}
+      {% for l in languages %}
+      <div class="lang-row">
+        <div class="lang-name"><b>{{ l.name }}</b></div>
+        <div class="lang-bar-track"><div class="lang-bar-fill" style="width: {{ levels.get(l.level | lower, 60) }}%;"></div></div>
+        <div style="font-size: 9pt; color: #555; width: 90px;">{{ l.level }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if certifications %}
+  <div class="section">
+    <div class="section-label">Certifications</div>
+    <div class="section-body"><ul class="plain">{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+
+  {% if awards %}
+  <div class="section">
+    <div class="section-label">Awards</div>
+    <div class="section-body"><ul class="plain">{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

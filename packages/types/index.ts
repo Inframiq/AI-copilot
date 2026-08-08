@@ -8,7 +8,9 @@ export interface ResumeContent {
     location?: string;
     linkedin?: string;
     github?: string;
+    photo_url?: string;
   };
+  headline?: string;
   summary?: string;
   experience: Array<{
     company: string;
@@ -23,6 +25,12 @@ export interface ResumeContent {
     year: string;
   }>;
   skills: string[];
+  languages?: Array<{
+    name: string;
+    level: string;
+  }>;
+  certifications?: string[];
+  awards?: string[];
 }
 
 export interface Resume {

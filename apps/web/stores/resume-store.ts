@@ -75,10 +75,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     const prev = get()._saveTimer;
     if (prev !== null) clearTimeout(prev);
     const timer = setTimeout(async () => {
-      const { resumeId, content } = get();
+      const { resumeId, content, templateId } = get();
       if (!resumeId || !content) return;
       try {
-        await apiClient.updateResume(resumeId, { content });
+        await apiClient.updateResume(resumeId, { content, template_id: templateId });
         set({ isDirty: false, _saveTimer: null });
       } catch (err) {
         console.error("Auto-save failed:", err);

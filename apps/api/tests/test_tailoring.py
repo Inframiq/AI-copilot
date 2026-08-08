@@ -50,3 +50,17 @@ async def test_run_tailoring_pipeline_returns_result():
     result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider)
     assert isinstance(result, TailoringResult)
     assert result.ats_score >= 0
+
+@pytest.mark.asyncio
+async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
+    # "Python" appears in both required and nice_to_have — must not be
+    # double-counted in the ats_score denominator or matched/missing lists
+    parsed_jd = ParsedJD(required=["Python", "AWS"], nice_to_have=["python"])
+    questions_wrapper = MagicMock(questions=[])
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=[parsed_jd, questions_wrapper])
+    provider.complete = AsyncMock(return_value='{"experience": []}')
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}]}
+    result = await run_tailoring_pipeline(resume, "Need Python and AWS.", 50, provider)
+    assert result.matched_skills.count("Python") == 1
+    assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3

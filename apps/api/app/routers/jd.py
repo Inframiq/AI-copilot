@@ -16,8 +16,10 @@ router = APIRouter(prefix="/jd", tags=["jd"])
 async def create_jd(body: JDCreate, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     provider = get_ai_provider()
     parsed = await extract_jd_skills(body.raw_text, provider)
+    title = body.title or body.raw_text.strip().split("\n")[0][:120] or "Untitled JD"
     jd = JobDescription(
         user_id=uuid.UUID(user["sub"]),
+        title=title,
         raw_text=body.raw_text,
         parsed=parsed.model_dump(),
     )
@@ -25,6 +27,16 @@ async def create_jd(body: JDCreate, user=Depends(get_current_user), db: AsyncSes
     await db.commit()
     await db.refresh(jd)
     return jd
+
+
+@router.get("", response_model=list[JDOut])
+async def list_jds(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(JobDescription)
+        .where(JobDescription.user_id == uuid.UUID(user["sub"]))
+        .order_by(JobDescription.created_at.desc())
+    )
+    return result.scalars().all()
 
 
 @router.get("/{jd_id}", response_model=JDOut)
