@@ -96,6 +96,9 @@ export const apiClient = {
   getJds: (): Promise<JobDescription[]> =>
     request<JobDescription[]>("GET", "/jd"),
 
+  getJd: (id: string): Promise<JobDescription> =>
+    request<JobDescription>("GET", `/jd/${id}`),
+
   createJd: (payload: {
     title: string;
     raw_text: string;

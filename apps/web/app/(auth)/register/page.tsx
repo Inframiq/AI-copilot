@@ -10,7 +10,21 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const [resendError, setResendError] = useState("");
   const supabase = createBrowserClient();
+
+  async function handleResend() {
+    setResendState("sending");
+    setResendError("");
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    if (error) {
+      setResendError(error.message);
+      setResendState("idle");
+      return;
+    }
+    setResendState("sent");
+  }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -54,6 +68,24 @@ export default function RegisterPage() {
             </a>
             .
           </p>
+
+          {resendError && (
+            <p className="text-body-sm text-error mt-md">{resendError}</p>
+          )}
+
+          {resendState === "sent" ? (
+            <p className="text-body-sm text-primary font-semibold mt-lg">
+              Confirmation email resent — check your inbox.
+            </p>
+          ) : (
+            <button
+              onClick={handleResend}
+              disabled={resendState === "sending"}
+              className="mt-lg text-label-sm text-primary font-semibold hover:underline disabled:opacity-60"
+            >
+              {resendState === "sending" ? "Resending…" : "Didn't get it? Resend confirmation email"}
+            </button>
+          )}
         </div>
       </div>
     );

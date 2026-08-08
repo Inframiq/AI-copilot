@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
@@ -9,10 +9,13 @@ import {
   Briefcase,
   BookOpen,
   Trash,
+  CheckCircle,
+  Circle,
+  X,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import type { Resume, JobDescription, LearningItem } from "@career-copilot/types";
+import type { Resume, JobDescription, LearningItem, PrepQuestionOut } from "@career-copilot/types";
 
 const STATUS_CYCLE: Record<LearningItem["status"], LearningItem["status"]> = {
   not_started: "learning",
@@ -59,11 +62,23 @@ function computeProfileHealth(resume: Resume | undefined): { score: number; labe
   return { score, label };
 }
 
+const ONBOARDING_DISMISSED_KEY = "career-copilot-onboarding-dismissed";
+
 export default function DashboardPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(true); // default hidden until we know client-side state
+
+  useEffect(() => {
+    setOnboardingDismissed(localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "1");
+  }, []);
+
+  function dismissOnboarding() {
+    localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
+    setOnboardingDismissed(true);
+  }
 
   const { data: resumes = [] } = useQuery<Resume[]>({
     queryKey: ["resumes"],
@@ -80,6 +95,13 @@ export default function DashboardPage() {
   const { data: learningItems = [] } = useQuery<LearningItem[]>({
     queryKey: ["learning"],
     queryFn: () => apiClient.getLearningItems(),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: questions = [] } = useQuery<PrepQuestionOut[]>({
+    queryKey: ["questions", sessionId],
+    queryFn: () => apiClient.getQuestions(sessionId!),
+    enabled: sessionId !== null,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -139,8 +161,25 @@ export default function DashboardPage() {
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const jdsThisWeek = jds.filter((jd) => new Date(jd.created_at).getTime() >= oneWeekAgo).length;
 
-  const interviewReadiness = sessionId !== null ? 65 : 0;
-  const interviewLabel = sessionId !== null ? "Ready" : "Needs prep";
+  // Same formula as Interview Center's Overall Readiness gauge — each
+  // milestone is worth 20 pts, practiced-question ratio fills the last 40.
+  const answeredCount = questions.filter((q) => q.practiced_at).length;
+  const practiceScore = questions.length > 0 ? (answeredCount / questions.length) * 40 : 0;
+  const interviewReadiness = Math.round(
+    (resumes.length > 0 ? 20 : 0) +
+    (jds.length > 0 ? 20 : 0) +
+    (sessionId ? 20 : 0) +
+    practiceScore
+  );
+  const interviewLabel =
+    interviewReadiness >= 80 ? "Ready" : interviewReadiness > 0 ? "In progress" : "Needs prep";
+
+  const onboardingSteps = [
+    { label: "Build your first resume", done: resumes.length > 0, action: () => (resumes.length > 0 ? router.push("/studio") : createNewResume()) },
+    { label: "Analyze a job description", done: jds.length > 0, action: () => router.push("/jd") },
+    { label: "Practice for an interview", done: sessionId !== null, action: () => router.push("/interview") },
+  ];
+  const showOnboarding = !onboardingDismissed && onboardingSteps.some((s) => !s.done);
 
   const metrics: Array<{
     label: string;
@@ -195,6 +234,45 @@ export default function DashboardPage() {
           Your career trajectory is looking strong. Here&apos;s a snapshot of your progress.
         </p>
       </section>
+
+      {/* Onboarding Nudge */}
+      {showOnboarding && (
+        <section className="bg-primary-container/20 border border-primary/20 rounded-2xl p-lg flex flex-col gap-md relative">
+          <button
+            onClick={dismissOnboarding}
+            aria-label="Dismiss"
+            className="absolute top-md right-md w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high/50 transition-colors"
+          >
+            <X size={16} />
+          </button>
+          <div>
+            <h2 className="text-headline-md text-on-surface font-semibold">Get started</h2>
+            <p className="text-body-sm text-on-surface-variant mt-xs">
+              A few quick steps to get the most out of Career Copilot.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-sm">
+            {onboardingSteps.map(({ label, done, action }) => (
+              <button
+                key={label}
+                onClick={action}
+                className={`flex-1 flex items-center gap-sm px-md py-md rounded-xl border text-left transition-all ${
+                  done
+                    ? "bg-surface-container-lowest border-outline-variant/20 text-on-surface-variant"
+                    : "bg-surface-container-lowest border-primary/30 hover:border-primary/60 hover:shadow-md text-on-surface"
+                }`}
+              >
+                {done ? (
+                  <CheckCircle size={20} weight="fill" className="text-success-accent shrink-0" />
+                ) : (
+                  <Circle size={20} className="text-primary shrink-0" />
+                )}
+                <span className={`text-label-md ${done ? "line-through" : ""}`}>{label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Key Metrics Bento Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">

@@ -505,13 +505,20 @@ export default function JDIndexPage() {
           )}
         </div>
 
-        {/* Extracted Insights — full width */}
+        {/* Quick Scan — full width. Plain keyword matching against the JD
+            text, not an AI call — labeled accordingly so it doesn't read
+            as equally authoritative as the ATS score above, which is. */}
         {hasResults && insights && (
           <div className="lg:col-span-4 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
-            <h2 className="text-headline-md text-on-surface flex items-center gap-sm mb-md font-semibold">
-              <Lightbulb size={24} className="text-primary" />
-              Extracted Job Insights
-            </h2>
+            <div className="flex items-center justify-between mb-md">
+              <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
+                <Lightbulb size={24} className="text-primary" />
+                Quick Scan
+              </h2>
+              <span className="text-caption text-on-surface-variant uppercase tracking-wider">
+                Keyword-based, not AI-verified
+              </span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md">
               <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
                 <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">

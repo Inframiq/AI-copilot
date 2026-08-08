@@ -17,12 +17,7 @@ export default function JDPage({
 
   const { data: jd } = useQuery<JobDescription>({
     queryKey: ["jd", jdId],
-    queryFn: async () => {
-      const jds = await apiClient.getJds();
-      const found = jds.find((j) => j.id === jdId);
-      if (!found) throw new Error("JD not found");
-      return found;
-    },
+    queryFn: () => apiClient.getJd(jdId),
   });
 
   const { data: resumes = [] } = useQuery({
