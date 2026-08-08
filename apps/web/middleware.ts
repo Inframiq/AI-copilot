@@ -34,7 +34,16 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/career-path", "/networking", "/analytics", "/profile"];
-  const PUBLIC_PATHS = ["/", "/login", "/register", "/callback"];
+  const PUBLIC_PATHS = [
+    "/",
+    "/login",
+    "/register",
+    "/callback",
+    "/forgot-password",
+    "/reset-password",
+    "/privacy",
+    "/terms",
+  ];
 
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||

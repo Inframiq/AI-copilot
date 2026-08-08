@@ -3,26 +3,25 @@
 import { useState } from "react";
 import { createBrowserClient } from "@/lib/supabase";
 
-export default function RegisterPage() {
-  const [name, setName] = useState("");
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [sent, setSent] = useState(false);
   const supabase = createBrowserClient();
 
-  async function handleRegister(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-      },
+    // Requires this exact URL (or a matching wildcard, e.g. `${origin}/**`)
+    // to be listed under Supabase Dashboard → Authentication → URL
+    // Configuration → Redirect URLs, for both this origin and the production
+    // domain — otherwise Supabase silently redirects to the bare Site URL
+    // instead, and the reset link goes nowhere useful.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/callback?next=/reset-password`,
     });
 
     setLoading(false);
@@ -31,11 +30,10 @@ export default function RegisterPage() {
       setError(error.message);
       return;
     }
-
-    setSuccess(true);
+    setSent(true);
   }
 
-  if (success) {
+  if (sent) {
     return (
       <div className="min-h-screen flex items-center justify-center p-gutter">
         <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl text-center max-w-[28rem] w-full">
@@ -44,15 +42,13 @@ export default function RegisterPage() {
           </div>
           <p className="text-headline-md text-on-surface font-bold mb-sm">Check your email</p>
           <p className="text-body-md text-on-surface-variant">
-            We sent a confirmation link to{" "}
-            <strong className="text-on-surface">{email}</strong>.
+            If an account exists for <strong className="text-on-surface">{email}</strong>, we sent a
+            password reset link to it.
           </p>
           <p className="text-body-sm text-on-surface-variant mt-md">
-            After confirming,{" "}
             <a href="/login" className="text-primary font-semibold hover:underline">
-              sign in here
+              Back to sign in
             </a>
-            .
           </p>
         </div>
       </div>
@@ -62,7 +58,6 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-gutter">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-[28rem]">
-        {/* Logo */}
         <div className="flex items-center gap-md mb-xl">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
             <span className="text-on-primary text-lg font-bold">C</span>
@@ -70,7 +65,10 @@ export default function RegisterPage() {
           <span className="text-headline-md text-on-surface font-bold">Career Copilot</span>
         </div>
 
-        <h1 className="text-headline-lg text-on-surface mb-md">Create account</h1>
+        <h1 className="text-headline-lg text-on-surface mb-sm">Reset your password</h1>
+        <p className="text-body-sm text-on-surface-variant mb-md">
+          Enter the email on your account and we&apos;ll send you a reset link.
+        </p>
 
         {error && (
           <div className="mb-md p-md rounded-lg bg-error-container text-on-error-container text-body-sm">
@@ -78,15 +76,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleRegister} className="flex flex-col gap-md">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Full name"
-            required
-            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-md">
           <input
             type="email"
             value={email}
@@ -95,36 +85,19 @@ export default function RegisterPage() {
             required
             className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
           />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password (min 8 characters)"
-            minLength={8}
-            required
-            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
-          />
           <button
             type="submit"
             disabled={loading}
             className="w-full py-md rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:bg-primary-container transition-colors disabled:opacity-60"
           >
-            {loading ? "Creating account…" : "Create Account"}
+            {loading ? "Sending…" : "Send reset link"}
           </button>
         </form>
 
         <p className="text-body-sm text-on-surface-variant mt-lg text-center">
-          Already have an account?{" "}
           <a href="/login" className="text-primary font-semibold hover:underline">
-            Sign in
+            Back to sign in
           </a>
-        </p>
-
-        <p className="text-caption text-on-surface-variant mt-md text-center">
-          By continuing, you agree to our{" "}
-          <a href="/terms" className="text-primary hover:underline">Terms</a>{" "}
-          and{" "}
-          <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>.
         </p>
       </div>
     </div>
