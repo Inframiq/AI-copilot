@@ -2,11 +2,35 @@
 import io
 import re
 import json
+import zipfile
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 
 _MAX_PDF_PAGES = 50
 _MAX_TEXT_CHARS = 100_000
+
+# DOCX files are zip archives — a maliciously crafted archive can advertise a
+# tiny compressed size but expand to gigabytes ("zip bomb"), exhausting memory
+# before python-docx ever gets to text extraction. Bound both the total
+# decompressed size and the per-entry compression ratio before handing the
+# archive to python-docx.
+_MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB of decompressed XML is already generous
+_MAX_DOCX_COMPRESSION_RATIO = 100  # legitimate docx XML rarely exceeds ~20:1
+
+
+def _check_docx_zip_safety(file_bytes: bytes) -> None:
+    """Raise ValueError if the docx zip looks like a decompression bomb or is corrupt."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+            total_uncompressed = 0
+            for info in zf.infolist():
+                total_uncompressed += info.file_size
+                if total_uncompressed > _MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise ValueError("DOCX file exceeds the maximum allowed decompressed size.")
+                if info.compress_size > 0 and (info.file_size / info.compress_size) > _MAX_DOCX_COMPRESSION_RATIO:
+                    raise ValueError("DOCX file failed safety validation (suspicious compression ratio).")
+    except zipfile.BadZipFile:
+        raise ValueError("Invalid DOCX file — not a valid archive.")
 
 
 class ParsedResume(BaseModel):
@@ -34,6 +58,7 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
+    _check_docx_zip_safety(file_bytes)
     try:
         import docx  # type: ignore
         doc = docx.Document(io.BytesIO(file_bytes))
