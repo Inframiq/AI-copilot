@@ -41,6 +41,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Baseline security headers. This API is called via fetch/XHR from a
+    separate frontend origin and never server-renders HTML, so most
+    browser-facing headers (CSP, HSTS) belong on the Next.js app instead.
+    These two are cheap, universally safe, and defend even non-browser or
+    misconfigured clients:
+      - nosniff: stops browsers from MIME-sniffing JSON/PDF responses into
+        something executable.
+      - DENY: this API serves no HTML, so it should never be framed.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
 app.include_router(resumes.router)
 app.include_router(jd.router)
 app.include_router(ai.router)
