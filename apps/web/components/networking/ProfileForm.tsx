@@ -3,9 +3,11 @@ import { useState, useEffect } from "react";
 import { DownloadSimple } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import type { Profile, ProfileInput } from "@/lib/networking-client";
+import type { CareerProfile } from "@/lib/career-profile-client";
 
 interface Props {
   initial: Profile | null;
+  careerProfile?: CareerProfile | null;
   onSave: (input: ProfileInput) => Promise<void>;
   isSaving: boolean;
   error: string | null;
@@ -36,7 +38,7 @@ function parseSkills(text: string): string[] {
     .filter(Boolean);
 }
 
-export function ProfileForm({ initial, onSave, isSaving, error }: Props) {
+export function ProfileForm({ initial, careerProfile, onSave, isSaving, error }: Props) {
   const resumeContent = useResumeStore((s) => s.content);
   const [form, setForm] = useState<ProfileInput>(
     initial ? { ...EMPTY, ...initial } : EMPTY
@@ -68,6 +70,21 @@ export function ProfileForm({ initial, onSave, isSaving, error }: Props) {
     setSkillsText(skills.join(", "));
   }
 
+  function handleImportFromCareerProfile() {
+    if (!careerProfile) return;
+    const skills = careerProfile.skills ?? [];
+    setForm((f) => ({
+      ...f,
+      display_name: careerProfile.contact?.name || f.display_name,
+      headline: careerProfile.headline || f.headline,
+      location: careerProfile.contact?.location || f.location,
+      linkedin_url: careerProfile.contact?.linkedin || f.linkedin_url,
+      github_url: careerProfile.contact?.github || f.github_url,
+      skills,
+    }));
+    setSkillsText(skills.join(", "));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     await onSave({ ...form, skills: parseSkills(skillsText) });
@@ -77,16 +94,30 @@ export function ProfileForm({ initial, onSave, isSaving, error }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-md">
-      {/* Import from Resume */}
-      {resumeContent && (
-        <button
-          type="button"
-          onClick={handleImportFromResume}
-          className="flex items-center gap-sm self-start px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-primary hover:bg-surface-container transition-all"
-        >
-          <DownloadSimple size={16} />
-          Import name &amp; skills from Resume
-        </button>
+      {/* Import from existing profile data */}
+      {(careerProfile || resumeContent) && (
+        <div className="flex flex-wrap gap-sm">
+          {careerProfile && (
+            <button
+              type="button"
+              onClick={handleImportFromCareerProfile}
+              className="flex items-center gap-sm self-start px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-primary hover:bg-surface-container transition-all"
+            >
+              <DownloadSimple size={16} />
+              Import from Career Profile
+            </button>
+          )}
+          {resumeContent && (
+            <button
+              type="button"
+              onClick={handleImportFromResume}
+              className="flex items-center gap-sm self-start px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-primary hover:bg-surface-container transition-all"
+            >
+              <DownloadSimple size={16} />
+              Import name &amp; skills from Resume
+            </button>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-md">

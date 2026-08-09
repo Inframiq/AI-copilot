@@ -33,6 +33,7 @@ import { ProfileForm } from "@/components/networking/ProfileForm";
 import { ProfileCard } from "@/components/networking/ProfileCard";
 import { ConnectionDrawer } from "@/components/networking/ConnectionDrawer";
 import { apiClient } from "@/lib/api-client";
+import { getCareerProfile } from "@/lib/career-profile-client";
 import type { ExternalContact } from "@career-copilot/types";
 
 // ── External contact tracker (people not on the platform) ───────────────────
@@ -117,6 +118,13 @@ export default function NetworkingPage() {
     queryKey: ["myProfile"],
     queryFn: getMyProfile,
     staleTime: 60_000,
+  });
+
+  const { data: careerProfile = null } = useQuery({
+    queryKey: ["careerProfile"],
+    queryFn: getCareerProfile,
+    staleTime: 60_000,
+    enabled: activeTab === "profile",
   });
 
   const {
@@ -379,6 +387,7 @@ export default function NetworkingPage() {
               )}
               <ProfileForm
                 initial={editingProfile ? myProfile : null}
+                careerProfile={careerProfile}
                 onSave={async (input: ProfileInput) => {
                   await saveMutation.mutateAsync(input);
                 }}
