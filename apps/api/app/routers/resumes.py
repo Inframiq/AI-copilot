@@ -107,7 +107,9 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
 
 
 @router.post("/{resume_id}/pdf")
+@limiter.limit("10/minute")
 async def generate_resume_pdf(
+    request: Request,
     resume_id: uuid.UUID,
     body: PdfGenerateRequest | None = None,
     user=Depends(get_current_user),
