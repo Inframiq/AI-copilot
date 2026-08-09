@@ -52,7 +52,7 @@ async def test_health_is_public():
 async def test_list_resumes_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/resumes")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -211,7 +211,7 @@ async def test_list_jds_returns_200_with_valid_token():
 async def test_list_jds_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/jd")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -307,7 +307,7 @@ async def test_update_jd_status_404_when_not_owned():
 async def test_get_questions_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get(f"/ai/sessions/{uuid.uuid4()}/questions")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio

@@ -104,7 +104,7 @@ async def test_update_resume_404_when_not_found():
 async def test_update_resume_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.patch(f"/resumes/{uuid.uuid4()}", json={"title": "X"})
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 # ── POST /resumes/{id}/pdf ───────────────────────────────────────────────────
@@ -298,4 +298,4 @@ async def test_parse_upload_requires_auth():
             "/resumes/parse-upload",
             files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
         )
-    assert r.status_code == 403
+    assert r.status_code == 401

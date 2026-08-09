@@ -79,7 +79,7 @@ async def test_add_learning_item_returns_201():
 async def test_list_learning_items_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/learning")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio

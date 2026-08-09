@@ -89,7 +89,7 @@ async def test_create_jd_returns_201():
 async def test_create_jd_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post("/jd", json={"raw_text": "Some JD text"})
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 # ── POST /ai/tailor ───────────────────────────────────────────────────────────
@@ -214,4 +214,4 @@ async def test_tailor_resume_requires_auth():
             "/ai/tailor",
             json={"resume_id": str(uuid.uuid4()), "jd_id": str(uuid.uuid4()), "humanize_level": 50},
         )
-    assert r.status_code == 403
+    assert r.status_code == 401
