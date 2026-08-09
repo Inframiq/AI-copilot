@@ -2,10 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
+/** Only allow same-origin relative paths, e.g. "/dashboard" — rejects
+ * absolute/protocol-relative URLs like "https://evil.com" or "//evil.com"
+ * that `new URL(next, request.url)` would otherwise resolve off-site. */
+export function safeNextPath(next: string | null): string {
+  if (next && /^\/(?!\/|\\)/.test(next)) {
+    return next;
+  }
+  return "/dashboard";
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = safeNextPath(searchParams.get("next"));
 
   if (code) {
     const cookieStore = await cookies();
