@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   SquaresFour,
   FileDashed,
@@ -29,6 +30,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createBrowserClient();
+  const queryClient = useQueryClient();
 
   async function signOut() {
     try {
@@ -36,6 +38,10 @@ export function Sidebar() {
     } catch {
       // ignore sign-out errors — treat as signed out
     }
+    // Drop any cached query results (resumes, dashboard stats, etc.) so the
+    // next person to sign in on this browser/tab doesn't see this user's
+    // data before their own fetches land.
+    queryClient.clear();
     router.push("/login");
   }
 
