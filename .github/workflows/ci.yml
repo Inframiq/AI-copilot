@@ -64,10 +64,13 @@ jobs:
 
       - name: Dependency audit
         working-directory: apps/api
-        # Informational for now: pypdf/weasyprint/starlette have known CVEs
-        # pending a coordinated, tested major-version upgrade (tracked
-        # separately). Flip to blocking once that upgrade lands.
-        continue-on-error: true
+        # Blocking, with two accepted/tracked exceptions:
+        #   PYSEC-2026-3412 (weasyprint) — no fix version published yet.
+        #   PYSEC-2026-1805 (protobuf)   — fix requires protobuf>=5.0, which
+        #     google-ai-generativelanguage (pulled in by google-generativeai
+        #     0.7.2) hard-pins below; needs a coordinated google-generativeai
+        #     upgrade, tracked separately.
+        # Any other new finding fails the build.
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-3412 --ignore-vuln PYSEC-2026-1805
