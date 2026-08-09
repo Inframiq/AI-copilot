@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,8 @@ from supabase import create_client
 from app.core.config import settings
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
+
+_PARSE_TIMEOUT_SECONDS = 15
 
 # Singleton Supabase service-role client — one connection pool per process
 _sb_client = None
@@ -166,10 +169,19 @@ async def parse_and_create_resume(
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
 
     try:
-        raw_text = extract_text(raw_bytes, content_type or file.filename or "")
+        # Run off the event loop with a hard deadline — a pathologically
+        # crafted PDF/DOCX can make parsing take a long time, and this call
+        # is synchronous CPU work that would otherwise block every other
+        # concurrent request on this worker for its duration.
+        raw_text = await asyncio.wait_for(
+            asyncio.to_thread(extract_text, raw_bytes, content_type or file.filename or ""),
+            timeout=_PARSE_TIMEOUT_SECONDS,
+        )
     except ValueError as exc:
         # Surface user-facing constraint violations (e.g. page count exceeded)
         raise HTTPException(status_code=422, detail=str(exc))
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=422, detail="File took too long to process.")
     except Exception:
         raise HTTPException(status_code=422, detail="Could not extract text from the file.")
 

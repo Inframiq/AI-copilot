@@ -263,6 +263,35 @@ async def test_parse_upload_rejects_unsupported_extension():
 
 
 @pytest.mark.asyncio
+async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch):
+    """A pathological file that makes extract_text hang must not hang the request."""
+    import time
+    from app.routers import resumes as resumes_module
+
+    monkeypatch.setattr(resumes_module, "_PARSE_TIMEOUT_SECONDS", 0.05)
+
+    def slow_extract_text(*args, **kwargs):
+        time.sleep(1)
+        return "should never get here"
+
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes.extract_text", side_effect=slow_extract_text):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 422
+        assert "too long" in r.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_parse_upload_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(
