@@ -28,6 +28,9 @@ jobs:
         working-directory: apps/web
         run: npm test
 
+      - name: Dependency audit
+        run: npm audit --omit=dev
+
   api:
     name: API (test)
     runs-on: ubuntu-latest
@@ -58,3 +61,13 @@ jobs:
       - name: Test
         working-directory: apps/api
         run: pytest -q
+
+      - name: Dependency audit
+        working-directory: apps/api
+        # Informational for now: pypdf/weasyprint/starlette have known CVEs
+        # pending a coordinated, tested major-version upgrade (tracked
+        # separately). Flip to blocking once that upgrade lands.
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
