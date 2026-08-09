@@ -2,10 +2,28 @@
 
 import { useState } from "react";
 import { createBrowserClient } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
   const supabase = createBrowserClient();
+
+  async function handleEmailLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    router.push("/dashboard");
+  }
 
   async function handleGoogleSignIn() {
     setError("");
@@ -37,9 +55,50 @@ export default function LoginPage() {
           </div>
         )}
 
+        <form onSubmit={handleEmailLogin} className="flex flex-col gap-md mb-lg">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            required
+            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            required
+            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <a
+            href="/forgot-password"
+            className="text-body-sm text-primary font-semibold hover:underline self-end -mt-sm"
+          >
+            Forgot password?
+          </a>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-md rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:bg-primary-container transition-colors disabled:opacity-60"
+          >
+            {loading ? "Signing in…" : "Sign in with Email"}
+          </button>
+        </form>
+
+        <div className="relative mb-lg">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-outline-variant" />
+          </div>
+          <div className="relative flex justify-center text-body-sm">
+            <span className="bg-surface-container-lowest px-sm text-on-surface-variant">or continue with</span>
+          </div>
+        </div>
+
         <button
           onClick={handleGoogleSignIn}
-          className="w-full py-md rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:bg-primary-container transition-colors"
+          className="w-full py-md rounded-lg border border-outline-variant text-on-surface text-label-md hover:bg-surface-container-low transition-colors"
         >
           Continue with Google
         </button>
