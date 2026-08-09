@@ -102,6 +102,32 @@ def test_generate_pdf_invalid_template_raises():
 
 
 # ---------------------------------------------------------------------------
+# SSRF protection: contact.photo_url must not trigger server-side fetches
+# to untrusted hosts (e.g. cloud metadata endpoints, internal services).
+# ---------------------------------------------------------------------------
+
+
+def test_generate_pdf_strips_untrusted_photo_url():
+    """A photo_url pointing at an internal/metadata host must not be fetched."""
+    malicious_resume = {
+        **SAMPLE_RESUME,
+        "contact": {**SAMPLE_RESUME["contact"], "photo_url": "http://169.254.169.254/secret"},
+    }
+    # Must not raise and must not attempt to fetch the untrusted URL.
+    pdf = generate_pdf(malicious_resume, "ats_sidebar")
+    assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_strips_file_scheme_photo_url():
+    malicious_resume = {
+        **SAMPLE_RESUME,
+        "contact": {**SAMPLE_RESUME["contact"], "photo_url": "file:///etc/passwd"},
+    }
+    pdf = generate_pdf(malicious_resume, "ats_professional")
+    assert pdf[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
 # upload_pdf tests (Supabase mocked)
 # ---------------------------------------------------------------------------
 
