@@ -19,6 +19,8 @@ import {
   Brain,
   UploadSimple,
   X,
+  Sparkle,
+  Calendar,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
@@ -85,12 +87,18 @@ export default function JDIndexPage() {
   const [error, setError] = useState<string | null>(null);
 
   const setJd = useTailoringStore((s) => s.setJd);
+  const runAnalysis = useTailoringStore((s) => s.runAnalysis);
   const runTailoring = useTailoringStore((s) => s.runTailoring);
+  const isAnalyzing = useTailoringStore((s) => s.isAnalyzing);
+  const isTailoring = useTailoringStore((s) => s.isLoading);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
+  const sessionId = useTailoringStore((s) => s.sessionId);
   const storedJdText = useTailoringStore((s) => s.jdText);
   const storeResumeId = useResumeStore((s) => s.resumeId);
+  const [tailorError, setTailorError] = useState<string | null>(null);
+  const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
 
   // Override: user wants to use a different resume for this analysis
   const [overrideMode, setOverrideMode] = useState<"none" | "upload" | "pick">("none");
@@ -108,11 +116,21 @@ export default function JDIndexPage() {
   });
 
   async function handleJdStatusChange(id: string, status: JDStatus) {
+    const jd = jds.find((j) => j.id === id);
     queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
-      list?.map((jd) => (jd.id === id ? { ...jd, status } : jd))
+      list?.map((j) => (j.id === id ? { ...j, status } : j))
     );
     try {
       await apiClient.updateJdStatus(id, status);
+      // Only surface the "prepare for interview?" prompt on the transition
+      // into Interview status, and only if there's actually a tailored
+      // resume for this JD to prep from.
+      if (status === "interview") {
+        const { session_id } = await apiClient.getLatestJdSession(id);
+        if (session_id) {
+          setInterviewPrompt({ jdTitle: jd?.title ?? "this role", sessionId: session_id });
+        }
+      }
     } catch (err) {
       console.error("Failed to update JD status:", err);
       queryClient.invalidateQueries({ queryKey: ["jds"] });
@@ -173,13 +191,17 @@ export default function JDIndexPage() {
     if (!jdText.trim()) return;
     setIsSubmitting(true);
     setError(null);
+    setTailorError(null);
     try {
       const firstLine = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
       const jd = await apiClient.createJd({ title: firstLine, raw_text: jdText });
       // Use the local jdText we sent — don't rely on the backend echoing it back
       setJd(jd.id, jdText);
       if (activeResumeId) {
-        await runTailoring(activeResumeId);
+        // Read-only analysis only — this does NOT touch the resume. Tailoring
+        // (which rewrites bullets and regenerates the PDF) is a separate,
+        // explicit action via the "Tailor Resume" button once results are in.
+        await runAnalysis(activeResumeId);
       } else {
         setError("Set up your profile first so we can compute your ATS match score.");
       }
@@ -188,6 +210,14 @@ export default function JDIndexPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleTailor() {
+    if (!activeResumeId) return;
+    setTailorError(null);
+    await runTailoring(activeResumeId);
+    const err = useTailoringStore.getState().error;
+    if (err) setTailorError(err);
   }
 
   const hasResults = atsScore !== null;
@@ -365,6 +395,26 @@ export default function JDIndexPage() {
               {isSubmitting ? "Analyzing…" : "Analyze Description"}
             </button>
           </form>
+
+          {hasResults && (
+            <div className="flex flex-col gap-xs">
+              {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
+              <button
+                type="button"
+                onClick={handleTailor}
+                disabled={isTailoring || !activeResumeId}
+                className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-success-accent to-success-accent/80 shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              >
+                <Sparkle size={20} />
+                {isTailoring ? "Tailoring resume…" : sessionId ? "Re-tailor Resume" : "Tailor Resume"}
+              </button>
+              {sessionId && !isTailoring && (
+                <p className="text-caption text-on-surface-variant text-center">
+                  Resume tailored and saved — check Resume Builder for the updated PDF.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Match Gauge — 1 col */}
@@ -604,6 +654,38 @@ export default function JDIndexPage() {
           <div>
             <p className="text-body-md text-on-surface font-medium mb-xs">No analyses yet</p>
             <p className="text-body-sm text-on-surface-variant">Paste a job description above to get started.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Prompted only on the transition into Interview status — not on every
+          tailoring run — since that's the moment prep actually becomes relevant. */}
+      {interviewPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-gutter">
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
+            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+              <Calendar size={28} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-headline-md text-on-surface font-bold mb-xs">You&rsquo;re in! 🎉</p>
+              <p className="text-body-sm text-on-surface-variant">
+                {interviewPrompt.jdTitle} moved to Interview. Want to prepare now?
+              </p>
+            </div>
+            <div className="flex gap-sm w-full">
+              <button
+                onClick={() => setInterviewPrompt(null)}
+                className="flex-1 py-sm rounded-xl text-label-md text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors"
+              >
+                Later
+              </button>
+              <button
+                onClick={() => router.push(`/interview/${interviewPrompt.sessionId}`)}
+                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+              >
+                Prepare Now
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import type {
   JobDescription,
   JDStatus,
   TailorOut,
+  AnalyzeOut,
   PrepQuestionOut,
   ResumeContent,
   LearningItem,
@@ -108,6 +109,9 @@ export const apiClient = {
   updateJdStatus: (id: string, status: JDStatus): Promise<JobDescription> =>
     request<JobDescription>("PATCH", `/jd/${id}/status`, { status }),
 
+  getLatestJdSession: (id: string): Promise<{ session_id: string | null }> =>
+    request<{ session_id: string | null }>("GET", `/jd/${id}/latest-session`),
+
   // ── External Contacts ───────────────────────────────────────────────────────
   getContacts: (): Promise<ExternalContact[]> =>
     request<ExternalContact[]>("GET", "/contacts"),
@@ -132,6 +136,17 @@ export const apiClient = {
     request<void>("DELETE", `/contacts/${id}`),
 
   // ── AI ────────────────────────────────────────────────────────────────────
+  analyzeJd: (
+    resumeId: string,
+    jdId: string,
+    companyName?: string,
+  ): Promise<AnalyzeOut> =>
+    request<AnalyzeOut>("POST", "/ai/analyze", {
+      resume_id: resumeId,
+      jd_id: jdId,
+      ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
+    }),
+
   tailorResume: (
     resumeId: string,
     jdId: string,

@@ -10,6 +10,19 @@ class TailorRequest(BaseModel):
     company_name: str | None = Field(default=None, max_length=200)
 
 
+class AnalyzeRequest(BaseModel):
+    resume_id: uuid.UUID
+    jd_id: uuid.UUID
+    company_name: str | None = Field(default=None, max_length=200)
+
+
+class AnalyzeOut(BaseModel):
+    ats_score: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+    company_keywords: list[str] = []
+
+
 class PrepQuestionOut(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID

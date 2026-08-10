@@ -80,6 +80,13 @@ export interface TailorOut {
   company_keywords: string[];
 }
 
+export interface AnalyzeOut {
+  ats_score: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  company_keywords: string[];
+}
+
 export interface PrepQuestionOut {
   id: string;
   session_id: string;

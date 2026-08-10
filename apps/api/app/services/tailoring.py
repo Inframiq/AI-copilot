@@ -419,7 +419,17 @@ async def generate_prep_questions(
     return wrapper.questions
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# ── Public entry points ───────────────────────────────────────────────────────
+
+@dataclass
+class JDMatchAnalysis:
+    """Result of the cheap, read-only analyze step — no resume mutation."""
+    jd_analysis: JDAnalysis
+    matched_skills: list[str]
+    missing_skills: list[str]
+    ats_score: int
+    company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
+
 
 @dataclass
 class TailoringResult:
@@ -431,27 +441,22 @@ class TailoringResult:
     company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
 
 
-async def run_tailoring_pipeline(
+async def analyze_jd_match(
     resume_content: dict,
     jd_text: str,
-    humanize_level: int,
     provider: AIProvider,
     company_name: str | None = None,
-) -> TailoringResult:
+) -> JDMatchAnalysis:
     """
-    Full 4-agent pipeline:
-
-    Agent 0 (fast)  ─── company intel (optional, runs in parallel with Agent 1)
+    Agent 0 (fast)  ─── company intel (optional)
     Agent 1 (fast)  ─── parse JD into structured analysis (enriched by company intel)
          │
-         ├── compute_delta (local, no AI) ── matched / missing / ats_score
-         │
-    Agent 2 (pro)   ─── semantic mapping of JD → resume bullets
-         │
-         ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
-         └── prep questions (pro)                           ┘
+         └── compute_delta (local, no AI) ── matched / missing / ats_score
+
+    This is the "Analyze Description" step — read-only, doesn't touch the
+    resume. run_tailoring_pipeline (the "Tailor Resume" step) continues on
+    from here into the resume-rewriting agents.
     """
-    # ── Step 1: company intel, then JD parse enriched with it ─────────────────
     if company_name and company_name.strip():
         company_intel = await _agent0_company_intel(company_name.strip(), provider)
         jd_analysis = await _agent1_parse_jd(jd_text, provider, company_intel)
@@ -472,28 +477,9 @@ async def run_tailoring_pipeline(
             seen_lower.add(key)
             all_jd_skills.append(skill)
 
-    # ── Step 2: compute match delta locally ──────────────────────────────────
     resume_text = json.dumps(resume_content)
     delta = compute_delta(all_jd_skills, resume_text)
 
-    # ── Step 3: assign bullet IDs, build indexed resume for Agent 2 ──────────
-    indexed_resume, _ = _index_bullets(resume_content)
-
-    # ── Step 4: Agent 2 — semantic mapping (pro model) ───────────────────────
-    mapping_plan = await _agent2_semantic_map(jd_analysis, indexed_resume, provider)
-
-    # ── Step 5: Agent 3 + prep questions in parallel (both pro model) ────────
-    original_skills = resume_content.get("skills", [])
-
-    tailored_raw, questions = await asyncio.gather(
-        _agent3_write(mapping_plan, original_skills, humanize_level, provider),
-        generate_prep_questions(delta.missing, resume_content, provider),
-    )
-
-    # ── Step 6: patch rewritten bullets back into the original structure ──────
-    tailored_content = _apply_writer_output(indexed_resume, tailored_raw)
-
-    # Collect all company-specific keywords to surface to the frontend
     company_keywords: list[str] = []
     if company_intel and not company_intel.known_not_found:
         seen_ck: set[str] = set()
@@ -508,13 +494,57 @@ async def run_tailoring_pipeline(
                 seen_ck.add(k.lower())
                 company_keywords.append(k)
 
-    return TailoringResult(
-        tailored_content=tailored_content,
+    return JDMatchAnalysis(
+        jd_analysis=jd_analysis,
         matched_skills=delta.matched,
         missing_skills=delta.missing,
         ats_score=delta.ats_score,
-        prep_questions=questions,
         company_keywords=company_keywords,
+    )
+
+
+async def run_tailoring_pipeline(
+    resume_content: dict,
+    jd_text: str,
+    humanize_level: int,
+    provider: AIProvider,
+    company_name: str | None = None,
+) -> TailoringResult:
+    """
+    Full pipeline — the "Tailor Resume" step. Re-runs analyze_jd_match (cheap,
+    fast-model calls) and continues into the resume-rewriting agents:
+
+    Agent 2 (pro)   ─── semantic mapping of JD → resume bullets
+         │
+         ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
+         └── prep questions (pro)                           ┘
+    """
+    analysis = await analyze_jd_match(resume_content, jd_text, provider, company_name)
+
+    # ── assign bullet IDs, build indexed resume for Agent 2 ──────────────────
+    indexed_resume, _ = _index_bullets(resume_content)
+
+    # ── Agent 2 — semantic mapping (pro model) ────────────────────────────────
+    mapping_plan = await _agent2_semantic_map(analysis.jd_analysis, indexed_resume, provider)
+
+    # ── Agent 3 + prep questions in parallel (both pro model) ────────────────
+    original_skills = resume_content.get("skills", [])
+
+    tailored_raw, questions = await asyncio.gather(
+        _agent3_write(mapping_plan, original_skills, humanize_level, provider),
+        generate_prep_questions(analysis.missing_skills, resume_content, provider),
+    )
+
+    # ── patch rewritten bullets back into the original structure ─────────────
+    tailored_content = _apply_writer_output(indexed_resume, tailored_raw)
+
+    return TailoringResult(
+        tailored_content=tailored_content,
+        matched_skills=analysis.matched_skills,
+        missing_skills=analysis.missing_skills,
+        ats_score=analysis.ats_score,
+        prep_questions=questions,
+        company_keywords=analysis.company_keywords,
     )
 
 

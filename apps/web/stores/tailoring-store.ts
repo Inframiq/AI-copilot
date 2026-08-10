@@ -13,11 +13,13 @@ interface TailoringState {
   companyKeywords: string[];
   humanizeLevel: number;
   isLoading: boolean;
+  isAnalyzing: boolean;
   error: string | null;
 
   setJd: (id: string, text: string) => void;
   setCompanyName: (name: string) => void;
   setHumanizeLevel: (n: number) => void;
+  runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
   resetStore: () => void;
 }
@@ -33,11 +35,62 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   companyKeywords: [],
   humanizeLevel: 50,
   isLoading: false,
+  isAnalyzing: false,
   error: null,
 
   setJd: (id, text) => set({ jdId: id, jdText: text }),
   setCompanyName: (name) => set({ companyName: name }),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
+
+  // Read-only "Analyze Description" step — computes ATS score / matched /
+  // missing skills without touching the resume. Tailoring (which rewrites
+  // the resume and regenerates the PDF) only happens when the user
+  // explicitly clicks "Tailor Resume" afterward, via runTailoring below.
+  runAnalysis: async (resumeId: string) => {
+    let { jdId } = get();
+    const { jdText, companyName } = get();
+
+    if (!jdId) {
+      if (!jdText.trim()) {
+        set({ error: "No job description selected" });
+        return;
+      }
+      try {
+        const title = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
+        const jd = await apiClient.createJd({ title, raw_text: jdText });
+        jdId = jd.id;
+        set({ jdId });
+      } catch (e: unknown) {
+        set({ error: e instanceof Error ? e.message : "Failed to save job description" });
+        return;
+      }
+    }
+
+    set({
+      isAnalyzing: true,
+      error: null,
+      atsScore: null,
+      matchedSkills: [],
+      missingSkills: [],
+      companyKeywords: [],
+      sessionId: null,
+    });
+    try {
+      const result = await apiClient.analyzeJd(resumeId, jdId, companyName || undefined);
+      set({
+        atsScore: result.ats_score,
+        matchedSkills: result.matched_skills,
+        missingSkills: result.missing_skills,
+        companyKeywords: result.company_keywords ?? [],
+        isAnalyzing: false,
+      });
+    } catch (e: unknown) {
+      set({
+        error: e instanceof Error ? e.message : "Analysis failed",
+        isAnalyzing: false,
+      });
+    }
+  },
 
   runTailoring: async (resumeId: string) => {
     let { jdId } = get();
@@ -128,6 +181,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       companyKeywords: [],
       humanizeLevel: 50,
       isLoading: false,
+      isAnalyzing: false,
       error: null,
     }),
 }));

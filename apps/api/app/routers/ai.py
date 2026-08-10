@@ -7,11 +7,48 @@ from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut
+from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut
 from app.services.ai_engine.factory import get_ai_provider
-from app.services.tailoring import run_tailoring_pipeline
+from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.post("/analyze", response_model=AnalyzeOut)
+@limiter.limit("20/minute")
+async def analyze_jd(
+    request: Request,
+    body: AnalyzeRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only JD match analysis — the "Analyze Description" step. Does not
+    touch the resume, create a tailoring session, or generate prep questions;
+    that only happens when the user explicitly clicks "Tailor Resume"."""
+    uid = uuid.UUID(user["sub"])
+    resume_row = (
+        await db.execute(select(Resume).where(Resume.id == body.resume_id, Resume.user_id == uid))
+    ).scalar_one_or_none()
+    jd_row = (
+        await db.execute(select(JobDescription).where(JobDescription.id == body.jd_id, JobDescription.user_id == uid))
+    ).scalar_one_or_none()
+    if not resume_row or not jd_row:
+        raise HTTPException(status_code=404, detail="Resume or JD not found")
+
+    provider = get_ai_provider()
+    analysis = await analyze_jd_match(
+        resume_row.content,
+        jd_row.raw_text,
+        provider,
+        company_name=body.company_name,
+    )
+
+    return AnalyzeOut(
+        ats_score=analysis.ats_score,
+        matched_skills=analysis.matched_skills,
+        missing_skills=analysis.missing_skills,
+        company_keywords=analysis.company_keywords,
+    )
 
 
 @router.post("/tailor", response_model=TailorOut)
