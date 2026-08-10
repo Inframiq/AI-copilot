@@ -7,6 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import resumes, jd, ai, learning, contacts
 from app.core.rate_limit import limiter
+from app.core.config import settings
 
 logger = logging.getLogger("app")
 
@@ -29,12 +30,20 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 # CORS — explicit origins only; wildcard glob strings are not supported by
 # the CORSMiddleware and would silently allow all origins. Use allow_origin_regex
-# for dynamic Vercel preview URLs.
+# for dynamic Vercel preview URLs. Production custom domains (which don't match
+# the Vercel regex) go in CORS_EXTRA_ORIGINS so they don't require a code change.
 _VERCEL_ORIGIN_RE = re.compile(r"https://[\w-]+\.vercel\.app")
+
+_extra_origins = [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://resumebuilder.inframiq.com",
+        *_extra_origins,
+    ],
     allow_origin_regex=r"https://[\w-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],

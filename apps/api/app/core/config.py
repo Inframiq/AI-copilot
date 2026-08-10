@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     openai_api_key: str = ""
     openai_max_output_tokens: int = 4096
+    cors_extra_origins: str = ""  # comma-separated additional allowed origins
 
     class Config:
         env_file = ".env"
