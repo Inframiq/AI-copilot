@@ -696,35 +696,18 @@ export default function JDIndexPage() {
                 key={jd.id}
                 className="p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-sm relative"
               >
-                {/* Three-dots menu button */}
+                {/* Delete menu */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === jd.id ? null : jd.id); setEditingTitleId(null); }}
-                  className="absolute top-sm right-sm p-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all"
+                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === jd.id ? null : jd.id); }}
+                  className="absolute top-sm right-sm p-xs rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container-high transition-all"
                   aria-label="More options"
                 >
                   <DotsThreeVertical size={16} weight="bold" />
                 </button>
-
-                {/* Dropdown menu */}
                 {openMenuId === jd.id && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                    <div className="absolute top-8 right-sm z-20 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-lg overflow-hidden min-w-[150px]">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); startRenameJd(jd); }}
-                        className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-on-surface hover:bg-surface-container transition-colors"
-                      >
-                        <PencilSimple size={14} />
-                        Rename
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleRerunAnalysis(jd); }}
-                        className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-on-surface hover:bg-surface-container transition-colors"
-                      >
-                        <ArrowCounterClockwise size={14} />
-                        Re-analyze
-                      </button>
-                      <div className="h-px bg-outline-variant/20 mx-sm" />
+                    <div className="absolute top-8 right-sm z-20 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-lg overflow-hidden min-w-[110px]">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteJd(jd.id); }}
                         className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-error hover:bg-error/10 transition-colors"
@@ -736,56 +719,69 @@ export default function JDIndexPage() {
                   </>
                 )}
 
-                {/* Title — inline editable when renaming */}
-                {editingTitleId === jd.id ? (
-                  <div className="flex items-center gap-xs pr-lg">
-                    <input
-                      autoFocus
-                      value={editTitleValue}
-                      onChange={(e) => setEditTitleValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveRenameJd(jd.id);
-                        if (e.key === "Escape") setEditingTitleId(null);
-                      }}
-                      className="flex-1 text-label-md text-on-surface bg-surface-container border border-primary/40 rounded-lg px-sm py-xs outline-none focus:ring-2 focus:ring-primary/30 min-w-0"
-                    />
-                    <button
-                      onClick={() => saveRenameJd(jd.id)}
-                      disabled={!editTitleValue.trim()}
-                      className="p-xs rounded-lg bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
-                      aria-label="Save"
-                    >
-                      <Check size={14} weight="bold" />
-                    </button>
-                    <button
-                      onClick={() => setEditingTitleId(null)}
-                      className="p-xs rounded-lg text-on-surface-variant hover:text-error transition-colors shrink-0"
-                      aria-label="Cancel"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => router.push(`/jd/${jd.id}`)} className="text-left pr-lg">
-                    <p className="text-label-md text-on-surface truncate">{jd.title}</p>
-                    <p className="text-caption text-on-surface-variant mt-xs">
-                      {new Date(jd.created_at).toLocaleDateString()} · Click to view analysis
-                    </p>
+                {/* Rename field — always visible */}
+                <div className="flex items-center gap-xs pr-lg">
+                  <input
+                    value={editingTitleId === jd.id ? editTitleValue : jd.title}
+                    onFocus={() => { setEditingTitleId(jd.id); setEditTitleValue(jd.title); }}
+                    onChange={(e) => setEditTitleValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveRenameJd(jd.id);
+                      if (e.key === "Escape") setEditingTitleId(null);
+                    }}
+                    className={`flex-1 text-label-md text-on-surface bg-transparent border rounded-lg px-sm py-xs outline-none min-w-0 transition-all ${
+                      editingTitleId === jd.id
+                        ? "border-primary/50 bg-surface-container focus:ring-2 focus:ring-primary/30"
+                        : "border-transparent hover:border-outline-variant/40"
+                    }`}
+                  />
+                  {editingTitleId === jd.id && (
+                    <>
+                      <button
+                        onClick={() => saveRenameJd(jd.id)}
+                        disabled={!editTitleValue.trim()}
+                        className="p-xs rounded-lg bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+                        aria-label="Save"
+                      >
+                        <Check size={13} weight="bold" />
+                      </button>
+                      <button
+                        onClick={() => setEditingTitleId(null)}
+                        className="p-xs rounded-lg text-on-surface-variant hover:text-error transition-colors shrink-0"
+                        aria-label="Cancel"
+                      >
+                        <X size={13} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <p className="text-caption text-on-surface-variant -mt-xs px-xs">
+                  {new Date(jd.created_at).toLocaleDateString()} ·{" "}
+                  <button onClick={() => router.push(`/jd/${jd.id}`)} className="hover:text-primary transition-colors">
+                    View analysis →
                   </button>
-                )}
+                </p>
 
                 <select
                   value={jd.status}
-                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => handleJdStatusChange(jd.id, e.target.value as JDStatus)}
                   className="w-full px-sm py-xs rounded-lg text-caption font-semibold bg-surface-container border border-outline-variant/30 text-on-surface-variant cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   {STATUS_ORDER.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABEL[s]}
-                    </option>
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
                   ))}
                 </select>
+
+                {/* Re-analyze button — always visible */}
+                <button
+                  onClick={() => handleRerunAnalysis(jd)}
+                  disabled={isSubmitting || isAnalyzing}
+                  className="w-full flex items-center justify-center gap-xs py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowCounterClockwise size={13} />
+                  Re-analyze
+                </button>
               </div>
             ))}
           </div>
