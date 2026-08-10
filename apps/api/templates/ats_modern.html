@@ -16,7 +16,8 @@
   .company { font-size: 9.5pt; color: #454651; }
   .dates { font-size: 9.5pt; color: #666; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
-  li { margin-bottom: 2px; font-size: 10pt; }
+  li { margin-bottom: 2px; font-size: 10pt; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .kw { font-weight: 700; }
   .skills { font-size: 10pt; margin: 4px 0 6px; }
   p.summary { font-size: 10pt; margin: 4px 0 8px; }
 </style>
@@ -38,7 +39,7 @@
   <div><span class="job-title">{{ job.title }}</span> &nbsp;·&nbsp; <span class="company">{{ job.company }}</span></div>
   <span class="dates">{{ job.start }} – {{ job.end or "Present" }}</span>
 </div>
-<ul>{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+<ul>{% for b in job.bullets %}<li>{{ b | highlight(skills) }}</li>{% endfor %}</ul>
 {% endfor %}
 {% endif %}
 

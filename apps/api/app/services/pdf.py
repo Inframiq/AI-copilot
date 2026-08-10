@@ -1,16 +1,51 @@
 """PDF generation service using WeasyPrint and Jinja2 templates."""
 
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
 from jinja2 import Environment, FileSystemLoader
+from markupsafe import Markup, escape
 
 from app.core.config import settings
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 ALLOWED_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
 
+
+def _highlight_keywords(text: str, keywords: list) -> Markup:
+    """Wrap any keyword found in *text* in a <strong class="kw"> tag.
+
+    Steps:
+    1. HTML-escape the raw text so user content can never inject tags.
+    2. Apply the keyword regex on the escaped string and insert our own
+       controlled <strong> tags.
+    3. Return Markup so Jinja2 does not escape the result a second time.
+    """
+    if not keywords or not text:
+        return Markup(escape(text or ""))
+
+    safe_text = str(escape(text))
+    # Sort longest first so "Machine learning" matches before "learning"
+    sorted_kw = sorted(
+        (str(k) for k in keywords if str(k).strip()),
+        key=len,
+        reverse=True,
+    )
+    if not sorted_kw:
+        return Markup(safe_text)
+
+    pattern = "|".join(re.escape(k) for k in sorted_kw)
+    highlighted = re.sub(
+        f"(?i)({pattern})",
+        r'<strong class="kw">\1</strong>',
+        safe_text,
+    )
+    return Markup(highlighted)
+
+
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
+_jinja_env.filters["highlight"] = _highlight_keywords
 
 
 def _sanitize_resume_content(resume_content: dict) -> dict:
