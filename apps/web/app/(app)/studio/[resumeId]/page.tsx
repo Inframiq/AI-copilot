@@ -240,18 +240,8 @@ export default function StudioPage({
         </section>
 
         {/* Right Pane: Live Preview */}
-        <section className="hidden lg:flex w-1/2 h-full bg-surface-container-high relative justify-center items-start overflow-y-auto p-12">
-          {/* Dot-grid background */}
-          <div
-            className="absolute inset-0 opacity-20 pointer-events-none"
-            style={{
-              backgroundImage: "radial-gradient(#767682 1px, transparent 1px)",
-              backgroundSize: "20px 20px",
-            }}
-          />
-          <div className="relative z-10 w-full">
-            <PreviewPanel />
-          </div>
+        <section className="hidden lg:flex flex-col w-1/2 h-full overflow-hidden">
+          <PreviewPanel />
         </section>
 
         {/* Mobile: Preview below editor */}

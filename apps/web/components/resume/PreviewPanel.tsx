@@ -86,17 +86,17 @@ export function PreviewPanel() {
           }}
         />
 
-        <div className="relative z-10 flex justify-center items-start p-xl min-h-full">
+        <div className="relative z-10 flex justify-center items-start p-md min-h-full">
           {pdfSignedUrl ? (
             <iframe
               src={pdfSignedUrl}
-              className="w-full max-w-2xl rounded-xl border border-outline-variant/20 shadow-xl bg-white"
-              style={{ aspectRatio: "1 / 1.414", minHeight: "600px" }}
+              className="w-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
+              style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}
               title="Resume Preview"
             />
           ) : (
-            <div className="w-full max-w-2xl rounded-xl border-2 border-dashed border-outline-variant/50 flex items-center justify-center bg-white/70"
-              style={{ aspectRatio: "1 / 1.414", minHeight: "600px" }}
+            <div className="w-full rounded-xl border-2 border-dashed border-outline-variant/50 flex items-center justify-center bg-white/70"
+              style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}
             >
               <div className="text-center px-lg">
                 <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto mb-md">
