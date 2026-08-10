@@ -27,7 +27,7 @@ const SAMPLE_CONTENT = {
   headline: "Senior Engineer",
   experience: [],
   education: [],
-  skills: [],
+  skills: ["React"],
 };
 
 describe("EditorPanel", () => {
@@ -49,6 +49,19 @@ describe("EditorPanel", () => {
     render(<EditorPanel />);
     expect(screen.getByText("Content Editor")).toBeInTheDocument();
     expect(screen.getByText(/Choose the layout/)).toBeInTheDocument();
+  });
+
+  it("hides JD tailoring until the resume has experience, education, or skills", () => {
+    useResumeStore.getState().setResume("resume-1", {
+      contact: { name: "Jane Doe", email: "jane@example.com" },
+      headline: "",
+      experience: [],
+      education: [],
+      skills: [],
+    }, "ats_clean");
+    render(<EditorPanel />);
+    expect(screen.queryByText("Tailor to JD")).not.toBeInTheDocument();
+    expect(screen.getByText(/unlock AI tailoring/)).toBeInTheDocument();
   });
 
   it("editing a contact field on the Contact tab updates the resume store", async () => {

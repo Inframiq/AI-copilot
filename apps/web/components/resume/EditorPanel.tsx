@@ -54,6 +54,11 @@ export function EditorPanel() {
     );
   }
 
+  // Substantive content — either typed in by hand across the tabs, or
+  // already there from an uploaded/parsed resume — not just a blank scaffold.
+  const hasResumeContent =
+    content.experience.length > 0 || content.education.length > 0 || content.skills.length > 0;
+
   return (
     <div className="flex flex-col gap-lg h-full overflow-y-auto p-lg">
       {/* Header */}
@@ -532,7 +537,10 @@ export function EditorPanel() {
         </Tabs.Content>
       </Tabs.Root>
 
-      {/* JD Context + AI Tailoring */}
+      {/* JD Context + AI Tailoring — only once there's an actual resume to
+          tailor (either filled in by hand across the tabs above, or already
+          populated by an uploaded/parsed resume), not on a blank scaffold. */}
+      {hasResumeContent ? (
       <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
         <p className="text-label-md text-on-surface-variant uppercase tracking-wider">JD Context</p>
 
@@ -598,6 +606,16 @@ export function EditorPanel() {
 
         <SkillsDelta />
       </div>
+      ) : (
+        <div className="border-t border-outline-variant/20 pt-lg">
+          <div className="rounded-xl border border-dashed border-outline-variant/40 p-lg text-center">
+            <p className="text-body-sm text-on-surface-variant">
+              Fill in your experience, education, or skills above — or upload a resume from Profile —
+              to unlock AI tailoring against a job description.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
