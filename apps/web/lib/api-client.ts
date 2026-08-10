@@ -135,12 +135,14 @@ export const apiClient = {
   tailorResume: (
     resumeId: string,
     jdId: string,
-    humanizeLevel: number
+    humanizeLevel: number,
+    companyName?: string,
   ): Promise<TailorOut> =>
     request<TailorOut>("POST", "/ai/tailor", {
       resume_id: resumeId,
       jd_id: jdId,
       humanize_level: humanizeLevel,
+      ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
     }),
 
   getQuestions: (sessionId: string): Promise<PrepQuestionOut[]> =>

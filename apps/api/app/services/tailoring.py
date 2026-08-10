@@ -1,7 +1,10 @@
 """
-3-Agent ATS Tailoring Pipeline
+4-Agent ATS Tailoring Pipeline
 ================================
-Agent 1 — JD Deconstructor  : Parses the JD into structured semantic categories.
+Agent 0 — Company Intel     : (Optional) Extracts company-specific ATS keywords,
+                              culture language, and terminology for a named company.
+Agent 1 — JD Deconstructor  : Parses the JD into structured semantic categories,
+                              enriched by company intel when available.
 Agent 2 — Semantic Mapper   : Maps each JD requirement to specific resume bullets
                               with zero hallucination (mapping plan).
 Agent 3 — Precision Writer  : Rewrites each bullet exactly per the mapping plan,
@@ -20,6 +23,16 @@ from app.services.ats import compute_delta
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
+
+class CompanyIntel(BaseModel):
+    """Output of Agent 0 — company-specific ATS intelligence."""
+    company_name: str
+    culture_keywords: list[str]          # values/mission language used in job posts
+    tech_stack_preferences: list[str]    # technologies this company is known to use
+    ats_filter_phrases: list[str]        # verbatim multi-word phrases this company embeds in JDs
+    terminology_preferences: list[str]  # how the company names roles/concepts (e.g. "Staff Eng" vs "Principal")
+    known_not_found: bool = False        # True when the company is too obscure for reliable intel
+
 
 class JDAnalysis(BaseModel):
     """Output of Agent 1 — structured deconstruction of the JD."""
@@ -66,15 +79,6 @@ class PrepQuestionData(BaseModel):
 
 class PrepQuestionsWrapper(BaseModel):
     questions: list[PrepQuestionData]
-
-
-@dataclass
-class TailoringResult:
-    tailored_content: dict
-    matched_skills: list[str]
-    missing_skills: list[str]
-    ats_score: int
-    prep_questions: list[PrepQuestionData]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -147,6 +151,60 @@ def _apply_writer_output(resume_content: dict, writer: WriterOutput) -> dict:
     return content
 
 
+# ── Agent 0: Company Intelligence ────────────────────────────────────────────
+
+_AGENT0_SYSTEM = """\
+<system_role>
+You are a senior talent intelligence analyst with deep knowledge of how \
+Fortune 500 companies, top tech firms, and high-growth startups screen resumes. \
+Your task is to produce company-specific ATS intelligence for a named company.
+</system_role>
+
+<rules>
+1. Draw on your knowledge of the company's public job postings, engineering blog, \
+culture docs, and known hiring practices.
+2. culture_keywords: The exact values/mission language this company injects into \
+every job description (e.g., Amazon: "customer obsession", "ownership", "bias \
+for action"; Google: "impact at scale", "data-driven"; Meta: "move fast", \
+"growth mindset").
+3. tech_stack_preferences: Technologies this company is publicly known to use \
+and therefore prefer in candidates (e.g., Google: Go, Spanner, Borg; \
+Stripe: Ruby, Go, Postgres; Netflix: Java, Kafka, Cassandra).
+4. ats_filter_phrases: Multi-word verbatim phrases this company's ATS \
+commonly filters for — these often come from the company's own internal \
+terminology or industry niche (e.g., "distributed systems at scale", \
+"cross-functional collaboration", "zero-to-one product development").
+5. terminology_preferences: How this company specifically refers to roles and \
+concepts that differ from industry norms \
+(e.g., Amazon calls senior ICs "Principals", not "Staff Engineers"; \
+Apple calls PMs "Product Marketing Managers"; Shopify calls teams "Pods").
+6. If the company is genuinely too obscure or too new for reliable intel, \
+set known_not_found=true and return empty lists — do not hallucinate.
+7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+</rules>
+
+<output_schema>
+{
+  "company_name": "string",
+  "culture_keywords": ["string"],
+  "tech_stack_preferences": ["string"],
+  "ats_filter_phrases": ["string"],
+  "terminology_preferences": ["string"],
+  "known_not_found": false
+}
+</output_schema>"""
+
+
+async def _agent0_company_intel(company_name: str, provider: AIProvider) -> CompanyIntel:
+    safe_name = re.sub(r"[\x00-\x1f\x7f]", "", company_name)[:200]
+    return await provider.complete_structured(
+        _AGENT0_SYSTEM,
+        f"Company: {safe_name}",
+        CompanyIntel,
+        model_tier="fast",
+    )
+
+
 # ── Agent 1: JD Deconstructor ─────────────────────────────────────────────────
 
 _AGENT1_SYSTEM = """\
@@ -181,9 +239,23 @@ growth").
 </output_schema>"""
 
 
-async def _agent1_parse_jd(jd_text: str, provider: AIProvider) -> JDAnalysis:
+async def _agent1_parse_jd(
+    jd_text: str, provider: AIProvider, company_intel: CompanyIntel | None = None
+) -> JDAnalysis:
+    user_msg = jd_text
+    if company_intel and not company_intel.known_not_found:
+        intel_block = json.dumps({
+            "company_culture_keywords": company_intel.culture_keywords,
+            "company_tech_stack": company_intel.tech_stack_preferences,
+            "company_ats_phrases": company_intel.ats_filter_phrases,
+            "company_terminology": company_intel.terminology_preferences,
+        })
+        user_msg = (
+            f"<company_intelligence>\n{intel_block}\n</company_intelligence>\n\n"
+            f"<job_description>\n{jd_text}\n</job_description>"
+        )
     return await provider.complete_structured(
-        _AGENT1_SYSTEM, jd_text, JDAnalysis, model_tier="fast"
+        _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast"
     )
 
 
@@ -349,13 +421,28 @@ async def generate_prep_questions(
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
+@dataclass
+class TailoringResult:
+    tailored_content: dict
+    matched_skills: list[str]
+    missing_skills: list[str]
+    ats_score: int
+    prep_questions: list[PrepQuestionData]
+    company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
+
+
 async def run_tailoring_pipeline(
-    resume_content: dict, jd_text: str, humanize_level: int, provider: AIProvider
+    resume_content: dict,
+    jd_text: str,
+    humanize_level: int,
+    provider: AIProvider,
+    company_name: str | None = None,
 ) -> TailoringResult:
     """
-    Full 3-agent pipeline:
+    Full 4-agent pipeline:
 
-    Agent 1 (fast)  ─── parse JD into structured analysis
+    Agent 0 (fast)  ─── company intel (optional, runs in parallel with Agent 1)
+    Agent 1 (fast)  ─── parse JD into structured analysis (enriched by company intel)
          │
          ├── compute_delta (local, no AI) ── matched / missing / ats_score
          │
@@ -364,8 +451,17 @@ async def run_tailoring_pipeline(
          ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
          └── prep questions (pro)                           ┘
     """
-    # ── Step 1: parse JD (fast model) ────────────────────────────────────────
-    jd_analysis = await _agent1_parse_jd(jd_text, provider)
+    # ── Step 1: company intel + JD parse in parallel when company_name given ─
+    if company_name and company_name.strip():
+        company_intel, jd_analysis_raw = await asyncio.gather(
+            _agent0_company_intel(company_name.strip(), provider),
+            _agent1_parse_jd(jd_text, provider),  # parse without intel first (fast)
+        )
+        # Re-run Agent 1 with intel injected (cheap — fast model)
+        jd_analysis = await _agent1_parse_jd(jd_text, provider, company_intel)
+    else:
+        company_intel = None
+        jd_analysis = await _agent1_parse_jd(jd_text, provider)
 
     # Flatten all skills for delta computation
     all_jd_skills: list[str] = []
@@ -401,12 +497,28 @@ async def run_tailoring_pipeline(
     # ── Step 6: patch rewritten bullets back into the original structure ──────
     tailored_content = _apply_writer_output(indexed_resume, tailored_raw)
 
+    # Collect all company-specific keywords to surface to the frontend
+    company_keywords: list[str] = []
+    if company_intel and not company_intel.known_not_found:
+        seen_ck: set[str] = set()
+        for kw in (
+            company_intel.culture_keywords
+            + company_intel.tech_stack_preferences
+            + company_intel.ats_filter_phrases
+            + company_intel.terminology_preferences
+        ):
+            k = kw.strip()
+            if k and k.lower() not in seen_ck:
+                seen_ck.add(k.lower())
+                company_keywords.append(k)
+
     return TailoringResult(
         tailored_content=tailored_content,
         matched_skills=delta.matched,
         missing_skills=delta.missing,
         ats_score=delta.ats_score,
         prep_questions=questions,
+        company_keywords=company_keywords,
     )
 
 

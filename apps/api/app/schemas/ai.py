@@ -7,6 +7,7 @@ class TailorRequest(BaseModel):
     resume_id: uuid.UUID
     jd_id: uuid.UUID
     humanize_level: int = Field(default=50, ge=0, le=100)
+    company_name: str | None = Field(default=None, max_length=200)
 
 
 class PrepQuestionOut(BaseModel):
@@ -42,3 +43,4 @@ class TailorOut(BaseModel):
     missing_skills: list[str]
     tailored_content: dict
     questions: list[PrepQuestionOut]
+    company_keywords: list[str] = []

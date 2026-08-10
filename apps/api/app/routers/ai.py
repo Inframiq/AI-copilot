@@ -33,7 +33,13 @@ async def tailor_resume(
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
     provider = get_ai_provider()
-    result = await run_tailoring_pipeline(resume_row.content, jd_row.raw_text, body.humanize_level, provider)
+    result = await run_tailoring_pipeline(
+        resume_row.content,
+        jd_row.raw_text,
+        body.humanize_level,
+        provider,
+        company_name=body.company_name,
+    )
 
     session = TailoringSession(
         user_id=uid,
@@ -70,6 +76,7 @@ async def tailor_resume(
         missing_skills=result.missing_skills,
         tailored_content=result.tailored_content,
         questions=[PrepQuestionOut.model_validate(q) for q in questions],
+        company_keywords=result.company_keywords,
     )
 
 

@@ -5,15 +5,18 @@ import { useResumeStore } from "@/stores/resume-store";
 interface TailoringState {
   jdId: string | null;
   jdText: string;
+  companyName: string;
   sessionId: string | null;
   atsScore: number | null;
   matchedSkills: string[];
   missingSkills: string[];
+  companyKeywords: string[];
   humanizeLevel: number;
   isLoading: boolean;
   error: string | null;
 
   setJd: (id: string, text: string) => void;
+  setCompanyName: (name: string) => void;
   setHumanizeLevel: (n: number) => void;
   runTailoring: (resumeId: string) => Promise<void>;
   resetStore: () => void;
@@ -22,21 +25,23 @@ interface TailoringState {
 export const useTailoringStore = create<TailoringState>((set, get) => ({
   jdId: null,
   jdText: "",
+  companyName: "",
   sessionId: null,
   atsScore: null,
   matchedSkills: [],
   missingSkills: [],
+  companyKeywords: [],
   humanizeLevel: 50,
   isLoading: false,
   error: null,
 
   setJd: (id, text) => set({ jdId: id, jdText: text }),
-
+  setCompanyName: (name) => set({ companyName: name }),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
 
   runTailoring: async (resumeId: string) => {
     let { jdId } = get();
-    const { jdText, humanizeLevel } = get();
+    const { jdText, humanizeLevel, companyName } = get();
 
     // The editor's "paste a JD" box only has raw text, no id — setJd("", text)
     // leaves jdId empty. Create the JD record here instead of requiring the
@@ -63,13 +68,15 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsScore: null,
       matchedSkills: [],
       missingSkills: [],
+      companyKeywords: [],
       sessionId: null,
     });
     try {
       const result = await apiClient.tailorResume(
         resumeId,
         jdId,
-        humanizeLevel
+        humanizeLevel,
+        companyName || undefined,
       );
 
       set({
@@ -77,6 +84,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         atsScore: result.ats_score,
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
+        companyKeywords: result.company_keywords ?? [],
         isLoading: false,
       });
 
@@ -112,10 +120,12 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set({
       jdId: null,
       jdText: "",
+      companyName: "",
       sessionId: null,
       atsScore: null,
       matchedSkills: [],
       missingSkills: [],
+      companyKeywords: [],
       humanizeLevel: 50,
       isLoading: false,
       error: null,
