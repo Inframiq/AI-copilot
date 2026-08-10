@@ -34,8 +34,8 @@ class JobDescription(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     parsed: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    # applied -> interview -> final_round -> offer -> accepted, or rejected at any point
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="applied")
+    # not_applied -> applied -> interview -> final_round -> offer -> accepted, or rejected at any point
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_applied")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="jd", cascade="all, delete-orphan")

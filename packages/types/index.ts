@@ -45,7 +45,7 @@ export interface Resume {
   updated_at: string;
 }
 
-export type JDStatus = "applied" | "interview" | "final_round" | "offer" | "accepted" | "rejected";
+export type JDStatus = "not_applied" | "applied" | "interview" | "final_round" | "offer" | "accepted" | "rejected";
 
 export interface JobDescription {
   id: string;

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, computed_field
 
-JDStatus = Literal["applied", "interview", "final_round", "offer", "accepted", "rejected"]
+JDStatus = Literal["not_applied", "applied", "interview", "final_round", "offer", "accepted", "rejected"]
 
 
 class JDCreate(BaseModel):

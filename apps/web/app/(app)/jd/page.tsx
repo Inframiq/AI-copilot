@@ -29,6 +29,7 @@ import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-clien
 import type { JobDescription, JDStatus, Resume, LearningItem } from "@career-copilot/types";
 
 const STATUS_LABEL: Record<JDStatus, string> = {
+  not_applied: "Not Applied",
   applied: "Applied",
   interview: "Interview",
   final_round: "Final Round",
@@ -37,7 +38,7 @@ const STATUS_LABEL: Record<JDStatus, string> = {
   rejected: "Rejected",
 };
 
-const STATUS_ORDER: JDStatus[] = ["applied", "interview", "final_round", "offer", "accepted", "rejected"];
+const STATUS_ORDER: JDStatus[] = ["not_applied", "applied", "interview", "final_round", "offer", "accepted", "rejected"];
 
 function extractInsights(text: string) {
   const lower = text.toLowerCase();
