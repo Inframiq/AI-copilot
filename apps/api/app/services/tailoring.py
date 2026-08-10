@@ -15,11 +15,14 @@ prep_questions runs in parallel with Agent 3 once the mapping plan is ready.
 import re
 import json
 import asyncio
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import compute_delta
+
+logger = logging.getLogger("app")
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -129,16 +132,30 @@ def _apply_writer_output(resume_content: dict, writer: WriterOutput) -> dict:
     content = deepcopy(resume_content)
     rewrite_map = {r.bullet_id: r.rewritten_text for r in writer.rewritten_bullets}
 
+    missing_ids: list[str] = []
     for exp in content.get("experience", []):
         patched = []
         for bullet in exp.get("bullets", []):
             if isinstance(bullet, dict):
                 bid = bullet.get("bullet_id", "")
+                if bid and bid not in rewrite_map:
+                    missing_ids.append(bid)
                 text = rewrite_map.get(bid, bullet.get("text", ""))
                 patched.append(text)
             else:
                 patched.append(bullet)
         exp["bullets"] = patched
+
+    if missing_ids:
+        # Agent 3 is instructed to cover every bullet_id, even SKIPped ones —
+        # this means it didn't, and those bullets silently kept their
+        # original text instead of getting a real rewrite (or an explicit
+        # SKIP echo). Surfacing this so it's visible in production logs
+        # rather than only showing up as "nothing changed but the skills".
+        logger.warning(
+            "Agent 3 omitted %d bullet(s) from rewritten_bullets: %s",
+            len(missing_ids), missing_ids,
+        )
 
     # Merge updated skills (dedupe, preserve order)
     existing = content.get("skills", [])
@@ -284,10 +301,15 @@ the JD requirement without fabricating new facts.
    - INJECT: add a specific JD keyword that is factually supported by the bullet \
 context.
    - SKIP: bullet has no reasonable mapping to any JD requirement — leave as-is.
-4. plausible_skills_to_add: only list skills the candidate could genuinely claim \
+4. COMPLETE COVERAGE — MANDATORY: original_resume contains every bullet the \
+candidate has, each with a bullet_id. mapping_plan MUST contain exactly one \
+entry per bullet_id present in original_resume — do not omit any bullet, even \
+ones you assign SKIP. A mapping_plan that covers only some bullets is an \
+incomplete, incorrect response.
+5. plausible_skills_to_add: only list skills the candidate could genuinely claim \
 based on their existing stack (e.g., if they use React, they plausibly know \
 JavaScript). Never add skills with no foundation in their history.
-5. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -357,11 +379,18 @@ rewritten bullet. Do not round, estimate, or omit any metric.
 (e.g., Architected, Spearheaded, Engineered, Reduced, Drove). \
 Format: [Action Verb] + [Method/Tool with JD keyword] + [Quantified Impact].
 4. SKIP BULLETS: If strategic_instruction is "SKIP", copy the original_text \
-unchanged into rewritten_text.
-5. SKILLS: updated_skills must be the complete final skills list — merge the \
+unchanged into rewritten_text — but you must still include it in \
+rewritten_bullets.
+5. COMPLETE COVERAGE — MANDATORY: rewritten_bullets MUST contain exactly one \
+entry per bullet_id that appears in the mapping_plan input — every single \
+one, with no omissions, even bullets you left unchanged under rule 4. A \
+response that rewrites only some of the bullets and silently drops the rest \
+is incomplete and incorrect — the candidate would see no real change to most \
+of their resume, only their skills list updating, which is not acceptable.
+6. SKILLS: updated_skills must be the complete final skills list — merge the \
 original skills with plausible_skills_to_add, deduplicated.
-6. TONE: {tone}
-7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+7. TONE: {tone}
+8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
