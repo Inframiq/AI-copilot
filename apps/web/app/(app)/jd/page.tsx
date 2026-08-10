@@ -99,6 +99,7 @@ export default function JDIndexPage() {
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const [tailorError, setTailorError] = useState<string | null>(null);
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
+  const [navigatingToStudio, setNavigatingToStudio] = useState(false);
 
   // Override: user wants to use a different resume for this analysis
   const [overrideMode, setOverrideMode] = useState<"none" | "upload" | "pick">("none");
@@ -215,10 +216,15 @@ export default function JDIndexPage() {
   async function handleTailor() {
     if (!activeResumeId) return;
     setTailorError(null);
+    // Covers the whole wait (AI rewrite + the moment of route transition)
+    // with a blurred overlay so the pause reads as an intentional "doing
+    // something smart" beat rather than a stuck button.
+    setNavigatingToStudio(true);
     await runTailoring(activeResumeId);
     const err = useTailoringStore.getState().error;
     if (err) {
       setTailorError(err);
+      setNavigatingToStudio(false);
       return;
     }
     // The tailored content + regenerated PDF are already sitting in the
@@ -687,6 +693,28 @@ export default function JDIndexPage() {
               >
                 Prepare Now
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bridges the tailoring wait + route transition into Resume Builder
+          with one continuous beat instead of a stuck button then a jump cut. */}
+      {navigatingToStudio && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 backdrop-blur-md">
+          <div className="flex flex-col items-center gap-md text-center px-lg">
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+              <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Sparkle size={22} weight="fill" className="text-primary" />
+              </div>
+            </div>
+            <div>
+              <p className="text-headline-md text-on-surface font-bold">Tailoring your resume…</p>
+              <p className="text-body-sm text-on-surface-variant mt-xs">
+                Matching your bullets to the job description — just a moment.
+              </p>
             </div>
           </div>
         </div>
