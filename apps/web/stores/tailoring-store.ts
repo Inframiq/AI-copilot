@@ -1,6 +1,20 @@
 import { create } from "zustand";
 import { apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
+import type { ResumeContent } from "@career-copilot/types";
+
+// 'accept' = use tailored version, 'reject' = keep original
+export type BulletDecision = "accept" | "reject";
+
+export interface BulletChange {
+  key: string; // e.g. "exp0_b2" or "skills"
+  jobIdx: number; // -1 for skills
+  bulletIdx: number; // -1 for skills
+  jobTitle: string;
+  company: string;
+  original: string;
+  tailored: string;
+}
 
 interface TailoringState {
   jdId: string | null;
@@ -14,13 +28,22 @@ interface TailoringState {
   humanizeLevel: number;
   isLoading: boolean;
   isAnalyzing: boolean;
+  isApplying: boolean;
   error: string | null;
+
+  // Pending review state — populated after tailoring, cleared after apply/discard
+  pendingContent: ResumeContent | null;
+  bulletDecisions: Record<string, BulletDecision>;
 
   setJd: (id: string, text: string) => void;
   setCompanyName: (name: string) => void;
   setHumanizeLevel: (n: number) => void;
+  setBulletDecision: (key: string, decision: BulletDecision) => void;
+  setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
+  applyDecisions: (resumeId: string) => Promise<void>;
+  discardPending: () => void;
   resetStore: () => void;
 }
 
@@ -36,11 +59,21 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   humanizeLevel: 50,
   isLoading: false,
   isAnalyzing: false,
+  isApplying: false,
   error: null,
+  pendingContent: null,
+  bulletDecisions: {},
 
   setJd: (id, text) => set({ jdId: id, jdText: text }),
   setCompanyName: (name) => set({ companyName: name }),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
+  setBulletDecision: (key, decision) =>
+    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision } })),
+  setAllBulletDecisions: (changes, decision) => {
+    const decisions: Record<string, BulletDecision> = {};
+    for (const c of changes) decisions[c.key] = decision;
+    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions } }));
+  },
 
   // Read-only "Analyze Description" step — computes ATS score / matched /
   // missing skills without touching the resume. Tailoring (which rewrites
@@ -96,9 +129,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     let { jdId } = get();
     const { jdText, humanizeLevel, companyName } = get();
 
-    // The editor's "paste a JD" box only has raw text, no id — setJd("", text)
-    // leaves jdId empty. Create the JD record here instead of requiring the
-    // caller to have gone through the JD Analyzer flow first.
     if (!jdId) {
       if (!jdText.trim()) {
         set({ error: "No job description selected" });
@@ -123,6 +153,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       missingSkills: [],
       companyKeywords: [],
       sessionId: null,
+      pendingContent: null,
+      bulletDecisions: {},
     });
     try {
       const result = await apiClient.tailorResume(
@@ -132,35 +164,38 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         companyName || undefined,
       );
 
+      // Build initial bullet decisions — all changed bullets default to 'accept'.
+      // We compare against the current resume content to find what changed.
+      const initialDecisions: Record<string, BulletDecision> = {};
+      if (result.tailored_content) {
+        const originalContent = useResumeStore.getState().content;
+        if (originalContent) {
+          result.tailored_content.experience.forEach((job, jobIdx) => {
+            const origJob = originalContent.experience[jobIdx];
+            job.bullets.forEach((bullet, bulletIdx) => {
+              const origBullet = origJob?.bullets[bulletIdx] ?? "";
+              if (bullet !== origBullet) {
+                initialDecisions[`exp${jobIdx}_b${bulletIdx}`] = "accept";
+              }
+            });
+          });
+          // Skills delta
+          if (result.tailored_content.skills.join(",") !== originalContent.skills.join(",")) {
+            initialDecisions["skills"] = "accept";
+          }
+        }
+      }
+
       set({
         sessionId: result.session_id,
         atsScore: result.ats_score,
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
         companyKeywords: result.company_keywords ?? [],
+        pendingContent: result.tailored_content ?? null,
+        bulletDecisions: initialDecisions,
         isLoading: false,
       });
-
-      // Hydrate the resume store with the tailored content, then regenerate
-      // the PDF preview immediately instead of leaving the stale one on
-      // screen until the user clicks "Generate PDF" themselves.
-      if (result.tailored_content) {
-        const resumeStore = useResumeStore.getState();
-        resumeStore.updateContent(result.tailored_content);
-        try {
-          // saveNow bypasses the auto-save debounce — the PDF endpoint reads
-          // content from the DB, so the tailored content must be persisted
-          // before we ask it to render, not just sitting in local state.
-          await resumeStore.saveNow();
-          const { signed_url } = await apiClient.generatePdf(
-            resumeId,
-            useResumeStore.getState().templateId
-          );
-          useResumeStore.getState().setPdfSignedUrl(signed_url);
-        } catch (err) {
-          console.error("Post-tailoring PDF refresh failed:", err);
-        }
-      }
     } catch (e: unknown) {
       set({
         error: e instanceof Error ? e.message : "Tailoring failed",
@@ -168,6 +203,55 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       });
     }
   },
+
+  // Apply accepted bullet decisions to the resume store, save, and regenerate PDF.
+  applyDecisions: async (resumeId: string) => {
+    const { pendingContent, bulletDecisions } = get();
+    const resumeStore = useResumeStore.getState();
+    const originalContent = resumeStore.content;
+    if (!pendingContent || !originalContent) return;
+
+    // Merge: use tailored bullet unless user rejected it.
+    const mergedExperience = pendingContent.experience.map((job, jobIdx) => {
+      const origJob = originalContent.experience[jobIdx];
+      const mergedBullets = job.bullets.map((bullet, bulletIdx) => {
+        const key = `exp${jobIdx}_b${bulletIdx}`;
+        const origBullet = origJob?.bullets[bulletIdx] ?? "";
+        const decision = bulletDecisions[key] ?? "accept";
+        return decision === "reject" ? origBullet : bullet;
+      });
+      return { ...job, bullets: mergedBullets };
+    });
+
+    const mergedSkills =
+      (bulletDecisions["skills"] ?? "accept") === "reject"
+        ? originalContent.skills
+        : pendingContent.skills;
+
+    const mergedContent = {
+      ...pendingContent,
+      experience: mergedExperience,
+      skills: mergedSkills,
+    };
+
+    set({ isApplying: true, error: null });
+    try {
+      resumeStore.updateContent(mergedContent);
+      await resumeStore.saveNow();
+      const { signed_url } = await apiClient.generatePdf(
+        resumeId,
+        useResumeStore.getState().templateId,
+      );
+      useResumeStore.getState().setPdfSignedUrl(signed_url);
+      // Clear pending state after successful apply
+      set({ pendingContent: null, bulletDecisions: {}, isApplying: false });
+    } catch (err) {
+      console.error("Apply decisions failed:", err);
+      set({ error: "Failed to apply changes", isApplying: false });
+    }
+  },
+
+  discardPending: () => set({ pendingContent: null, bulletDecisions: {} }),
 
   resetStore: () =>
     set({
@@ -182,6 +266,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       humanizeLevel: 50,
       isLoading: false,
       isAnalyzing: false,
+      isApplying: false,
       error: null,
+      pendingContent: null,
+      bulletDecisions: {},
     }),
 }));

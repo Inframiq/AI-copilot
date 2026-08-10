@@ -5,6 +5,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
 import { SkillsDelta } from "./SkillsDelta";
+import { BulletReviewPanel } from "./BulletReviewPanel";
 import { uploadResumePhoto } from "@/lib/photo-upload";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 import { CheckCircle } from "@phosphor-icons/react";
@@ -28,7 +29,12 @@ export function EditorPanel() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
-  const { jdText, setJd, companyName, setCompanyName, companyKeywords, runTailoring, isLoading } = useTailoringStore();
+  const {
+    jdText, setJd,
+    companyName, setCompanyName,
+    runTailoring, isLoading,
+    pendingContent,
+  } = useTailoringStore();
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -541,71 +547,67 @@ export function EditorPanel() {
           tailor (either filled in by hand across the tabs above, or already
           populated by an uploaded/parsed resume), not on a blank scaffold. */}
       {hasResumeContent ? (
-      <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
-        <p className="text-label-md text-on-surface-variant uppercase tracking-wider">JD Context</p>
+        <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
+          {pendingContent ? (
+            /* ── Review step: show after tailoring runs ── */
+            <BulletReviewPanel />
+          ) : (
+            /* ── Input step: paste JD and run tailoring ── */
+            <>
+              <p className="text-label-md text-on-surface-variant uppercase tracking-wider">
+                Tailor to Job Description
+              </p>
 
-        {/* Company Name — optional, enables company-specific ATS intelligence */}
-        <div className="flex flex-col gap-xs">
-          <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
-            Target Company
-            <span className="text-caption bg-secondary-container text-primary px-xs py-0.5 rounded-full">optional</span>
-          </label>
-          <input
-            type="text"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="e.g. Google, Stripe, Amazon…"
-            maxLength={200}
-            className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-          />
-          {companyName.trim() && (
-            <p className="text-caption text-on-surface-variant">
-              AI will extract {companyName.trim()}'s culture keywords, tech preferences, and ATS filter phrases to further optimise your resume.
-            </p>
+              {/* Target Company — optional */}
+              <div className="flex flex-col gap-xs">
+                <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
+                  Target Company
+                  <span className="text-caption bg-secondary-container text-primary px-xs py-0.5 rounded-full">
+                    optional
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="e.g. Google, Stripe, Amazon…"
+                  maxLength={200}
+                  className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                />
+                {companyName.trim() && (
+                  <p className="text-caption text-on-surface-variant">
+                    AI will extract {companyName.trim()}&apos;s culture keywords, tech preferences, and ATS
+                    filter phrases to further optimise your resume.
+                  </p>
+                )}
+              </div>
+
+              <textarea
+                value={jdText}
+                onChange={(e) => setJd("", e.target.value)}
+                placeholder="Paste the job description here — AI will rewrite your bullets to match it…"
+                rows={5}
+                className="w-full px-md py-md rounded-lg border border-outline-variant/50 bg-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+
+              <HumanizeSlider />
+
+              <button
+                onClick={() => resumeId && runTailoring(resumeId)}
+                disabled={isLoading || !jdText.trim() || !resumeId}
+                className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "Tailoring your resume…" : "Tailor Resume"}
+              </button>
+
+              {isLoading && (
+                <p className="text-caption text-on-surface-variant text-center">
+                  AI is rewriting your bullets — this takes 15–30 seconds…
+                </p>
+              )}
+            </>
           )}
         </div>
-
-        <textarea
-          value={jdText}
-          onChange={(e) => setJd("", e.target.value)}
-          placeholder="Paste job description here to tailor your resume with AI…"
-          rows={4}
-          className="w-full px-md py-md rounded-lg border border-outline-variant/50 bg-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-        />
-        <HumanizeSlider />
-        <button
-          onClick={() => resumeId && runTailoring(resumeId)}
-          disabled={isLoading || !jdText || !resumeId}
-          className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? "Tailoring…" : "Tailor to JD"}
-        </button>
-
-        {/* Company Keywords panel — shown after tailoring when company_name was used */}
-        {companyKeywords.length > 0 && (
-          <div className="rounded-xl border border-primary/20 bg-primary-container/20 p-md flex flex-col gap-sm">
-            <p className="text-label-sm font-bold text-primary flex items-center gap-xs">
-              <span>🏢</span>
-              {companyName} ATS Keywords
-            </p>
-            <p className="text-caption text-on-surface-variant">
-              These are company-specific keywords injected into your resume to pass {companyName}'s ATS filters.
-            </p>
-            <div className="flex flex-wrap gap-xs">
-              {companyKeywords.map((kw) => (
-                <span
-                  key={kw}
-                  className="px-sm py-0.5 rounded-full bg-primary/10 text-primary text-caption font-medium border border-primary/20"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <SkillsDelta />
-      </div>
       ) : (
         <div className="border-t border-outline-variant/20 pt-lg">
           <div className="rounded-xl border border-dashed border-outline-variant/40 p-lg text-center">
