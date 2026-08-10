@@ -22,9 +22,9 @@
   ul.skills-grid li:before { content: "· "; color: #4c6178; font-weight: bold; }
   .job { margin-bottom: 7px; }
   .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 7px; }
-  .job-title-line { font-size: 10pt; }
+  .job-title-line { font-size: 10pt; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .job-title-line .title { font-weight: 700; font-size: 10.5pt; }
-  .job-title-line .dates { float: right; font-weight: 400; color: #444; }
+  .job-title-line .dates { font-weight: 400; color: #444; white-space: nowrap; }
   .job-company { font-weight: 700; font-style: italic; font-size: 9.5pt; margin-bottom: 2px; }
   ul.bullets { margin: 2px 0 0 16px; padding: 0; font-size: 9.5pt; }
   ul.bullets li { margin-bottom: 2px; }
@@ -74,7 +74,10 @@
     <div class="section-body">
       {% for job in experience %}
       <div class="job">
-        <div class="job-title-line"><span class="title">{{ job.title }}</span>, {{ job.start }} – {{ job.end or "Current" }}</div>
+        <div class="job-title-line">
+          <span class="title">{{ job.title }}</span>
+          <span class="dates">{{ job.start }} – {{ job.end or "Current" }}</span>
+        </div>
         <div class="job-company">{{ job.company }}</div>
         <ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
       </div>
