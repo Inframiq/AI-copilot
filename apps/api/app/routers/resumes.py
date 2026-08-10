@@ -129,7 +129,10 @@ async def generate_resume_pdf(
         raise HTTPException(status_code=400, detail="Invalid template_id.")
     if template_id != resume.template_id:
         resume.template_id = template_id
-    pdf_bytes = generate_pdf(resume.content, template_id)
+    # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
+    # doesn't block every other concurrent request (including autosave PATCHes)
+    # on this worker for the duration of rendering.
+    pdf_bytes = await asyncio.to_thread(generate_pdf, resume.content, template_id)
     sb = _supabase()
     path = await upload_pdf(pdf_bytes, str(user["sub"]), str(resume_id), sb)
     resume.pdf_url = path

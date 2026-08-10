@@ -451,13 +451,9 @@ async def run_tailoring_pipeline(
          ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
          └── prep questions (pro)                           ┘
     """
-    # ── Step 1: company intel + JD parse in parallel when company_name given ─
+    # ── Step 1: company intel, then JD parse enriched with it ─────────────────
     if company_name and company_name.strip():
-        company_intel, jd_analysis_raw = await asyncio.gather(
-            _agent0_company_intel(company_name.strip(), provider),
-            _agent1_parse_jd(jd_text, provider),  # parse without intel first (fast)
-        )
-        # Re-run Agent 1 with intel injected (cheap — fast model)
+        company_intel = await _agent0_company_intel(company_name.strip(), provider)
         jd_analysis = await _agent1_parse_jd(jd_text, provider, company_intel)
     else:
         company_intel = None
