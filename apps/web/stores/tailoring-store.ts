@@ -179,9 +179,14 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
               }
             });
           });
-          // Skills delta
-          if (result.tailored_content.skills.join(",") !== originalContent.skills.join(",")) {
-            initialDecisions["skills"] = "accept";
+          // Per-skill decisions: added skills default to "accept", removed skills default to "reject"
+          const originalSkillsSet = new Set(originalContent.skills);
+          const tailoredSkillsSet = new Set(result.tailored_content.skills);
+          for (const s of result.tailored_content.skills) {
+            if (!originalSkillsSet.has(s)) initialDecisions[`skill_add:${s}`] = "accept";
+          }
+          for (const s of originalContent.skills) {
+            if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
           }
         }
       }
@@ -223,10 +228,17 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       return { ...job, bullets: mergedBullets };
     });
 
-    const mergedSkills =
-      (bulletDecisions["skills"] ?? "accept") === "reject"
-        ? originalContent.skills
-        : pendingContent.skills;
+    // Per-skill merge: kept (unchanged) + accepted adds + restored removes
+    const originalSkillsSet = new Set(originalContent.skills);
+    const tailoredSkillsSet = new Set(pendingContent.skills);
+    const kept = pendingContent.skills.filter((s) => originalSkillsSet.has(s));
+    const added = pendingContent.skills.filter(
+      (s) => !originalSkillsSet.has(s) && (bulletDecisions[`skill_add:${s}`] ?? "accept") === "accept",
+    );
+    const restored = originalContent.skills.filter(
+      (s) => !tailoredSkillsSet.has(s) && (bulletDecisions[`skill_rm:${s}`] ?? "reject") === "accept",
+    );
+    const mergedSkills = [...kept, ...added, ...restored];
 
     const mergedContent = {
       ...pendingContent,
