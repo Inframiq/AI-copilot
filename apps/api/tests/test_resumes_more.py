@@ -39,6 +39,30 @@ def make_mock_db():
     return _override, mock_session
 
 
+class _FakeSessionContextManager:
+    """Mimics `async with AsyncSessionLocal() as session`."""
+
+    def __init__(self, session):
+        self._session = session
+
+    async def __aenter__(self):
+        return self._session
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+def make_mock_session_factory(resume):
+    """Fake replacement for AsyncSessionLocal used by the background PDF-persist task."""
+    session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    session.execute = AsyncMock(return_value=mock_result)
+    session.commit = AsyncMock()
+    factory = MagicMock(side_effect=lambda: _FakeSessionContextManager(session))
+    return factory, session
+
+
 def make_resume(**overrides):
     defaults = dict(
         id=uuid.uuid4(),
@@ -112,19 +136,22 @@ async def test_update_resume_requires_auth():
 
 @pytest.mark.asyncio
 async def test_generate_pdf_returns_signed_url():
+    import base64
+
     override, mock_session = make_mock_db()
     resume = make_resume()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = resume
     mock_session.execute.return_value = mock_result
+    session_factory, background_session = make_mock_session_factory(resume)
 
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen, patch(
             "app.routers.resumes.upload_pdf", new=AsyncMock(return_value="resumes/user/resume.pdf")
         ) as mock_upload, patch(
-            "app.routers.resumes.get_signed_url", return_value="https://signed.example.com/resume.pdf"
-        ) as mock_signed, patch(
+            "app.routers.resumes.AsyncSessionLocal", new=session_factory
+        ), patch(
             "app.routers.resumes._supabase", return_value=MagicMock()
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -135,11 +162,14 @@ async def test_generate_pdf_returns_signed_url():
                 )
         assert r.status_code == 200
         body = r.json()
-        assert body["signed_url"] == "https://signed.example.com/resume.pdf"
-        assert body["expires_in"] == 3600
+        assert body["signed_url"] == "data:application/pdf;base64," + base64.b64encode(b"%PDF-fake").decode()
+        assert body["expires_in"] is None
         mock_gen.assert_called_once()
         assert resume.template_id == "ats_modern"
+        # Storage persistence happens in a background task, after the response is sent.
+        mock_upload.assert_called_once()
         assert resume.pdf_url == "resumes/user/resume.pdf"
+        background_session.commit.assert_called_once()
     finally:
         app.dependency_overrides.pop(get_db, None)
 

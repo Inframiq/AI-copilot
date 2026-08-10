@@ -1,14 +1,15 @@
 import asyncio
+import base64
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest
-from app.services.pdf import generate_pdf, upload_pdf, get_signed_url
+from app.services.pdf import generate_pdf, upload_pdf
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.ai_engine.factory import get_ai_provider
 from supabase import create_client
@@ -109,11 +110,29 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
     await db.commit()
 
 
+async def _persist_pdf_to_storage(pdf_bytes: bytes, user_id: str, resume_id: uuid.UUID) -> None:
+    """Upload the rendered PDF and record its storage path, off the request path.
+
+    Runs as a FastAPI background task after the response has already been sent,
+    so it uses its own DB session rather than the (possibly closed) request-scoped
+    one from get_db().
+    """
+    sb = _supabase()
+    path = await upload_pdf(pdf_bytes, user_id, str(resume_id), sb)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Resume).where(Resume.id == resume_id))
+        resume = result.scalar_one_or_none()
+        if resume:
+            resume.pdf_url = path
+            await session.commit()
+
+
 @router.post("/{resume_id}/pdf")
 @limiter.limit("10/minute")
 async def generate_resume_pdf(
     request: Request,
     resume_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     body: PdfGenerateRequest | None = None,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -129,16 +148,18 @@ async def generate_resume_pdf(
         raise HTTPException(status_code=400, detail="Invalid template_id.")
     if template_id != resume.template_id:
         resume.template_id = template_id
+        await db.commit()
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
     pdf_bytes = await asyncio.to_thread(generate_pdf, resume.content, template_id)
-    sb = _supabase()
-    path = await upload_pdf(pdf_bytes, str(user["sub"]), str(resume_id), sb)
-    resume.pdf_url = path
-    await db.commit()
-    signed_url = get_signed_url(path, sb)
-    return {"signed_url": signed_url, "expires_in": 3600}
+    # Hand the bytes straight back as a data URI so the browser can render the
+    # preview immediately — the client no longer waits on a Supabase upload +
+    # signed-URL round trip before it can show anything. Storage persistence
+    # (for future re-download without re-rendering) happens after the response.
+    background_tasks.add_task(_persist_pdf_to_storage, pdf_bytes, str(user["sub"]), resume_id)
+    data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
+    return {"signed_url": data_url, "expires_in": None}
 
 
 @router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
