@@ -15,7 +15,8 @@ export function safeNextPath(next: string | null): string {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeNextPath(searchParams.get("next"));
+  const rawNext = searchParams.get("next");
+  const next = safeNextPath(rawNext);
 
   if (code) {
     const cookieStore = await cookies();
@@ -37,6 +38,24 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      // Only the plain login/register flow (no explicit `next`, e.g. password
+      // reset's next=/reset-password) should ever land on onboarding — first
+      // sign-in for an account with no career_profiles row yet.
+      if (rawNext === null) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("career_profiles")
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (!profile) {
+            return NextResponse.redirect(new URL("/onboarding", request.url));
+          }
+        }
+      }
       return NextResponse.redirect(new URL(next, request.url));
     }
   }

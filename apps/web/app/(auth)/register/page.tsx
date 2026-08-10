@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +33,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -43,6 +45,16 @@ export default function RegisterPage() {
 
     if (error) {
       setError(error.message);
+      return;
+    }
+
+    // Email confirmation is disabled, so signUp() already returns a live
+    // session — go straight into onboarding instead of telling the user to
+    // check an email that will never arrive. The "check your email" screen
+    // below is a fallback for environments where confirmation IS required
+    // (signUp() then returns no session).
+    if (data.session) {
+      router.push("/onboarding");
       return;
     }
 

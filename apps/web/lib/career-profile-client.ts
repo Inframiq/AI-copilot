@@ -1,5 +1,6 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
+import type { ResumeContent } from "@career-copilot/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,57 @@ export async function setProfileMasterResume(resumeId: string): Promise<void> {
     .from("career_profiles")
     .upsert({ user_id: me, master_resume_id: resumeId }, { onConflict: "user_id" });
   if (error) throw new Error(error.message);
+}
+
+/** Convert a parsed/uploaded resume's content into a CareerProfileInput, so an
+ * uploaded resume can seed the career profile (used by onboarding and the
+ * profile page's "upload resume" flow). */
+export function resumeContentToCareerProfileInput(
+  c: ResumeContent,
+  masterResumeId: string | null
+): CareerProfileInput {
+  return {
+    master_resume_id: masterResumeId,
+    contact: {
+      name: c.contact?.name ?? "",
+      email: c.contact?.email ?? "",
+      phone: c.contact?.phone ?? "",
+      location: c.contact?.location ?? "",
+      linkedin: c.contact?.linkedin ?? "",
+      github: c.contact?.github ?? "",
+    },
+    headline: c.headline ?? null,
+    skills: Array.isArray(c.skills) ? c.skills : [],
+    experience: Array.isArray(c.experience)
+      ? c.experience.map((e) => ({
+          id: crypto.randomUUID(),
+          type: "full-time" as ExpType,
+          company: e.company,
+          title: e.title,
+          start: e.start,
+          end: e.end || "Present",
+          current: !e.end || e.end === "Present",
+          responsibilities: (e.bullets ?? []).join("; "),
+          achievements: "",
+          projects: "",
+          impact: "",
+        }))
+      : [],
+    education: Array.isArray(c.education)
+      ? c.education.map((e) => ({
+          id: crypto.randomUUID(),
+          institution: e.institution,
+          degree: e.degree,
+          field: "",
+          year: e.year,
+          gpa: "",
+          honors: "",
+        }))
+      : [],
+    certifications: Array.isArray(c.certifications)
+      ? c.certifications.map((name) => ({ id: crypto.randomUUID(), name, issuer: "", year: "" }))
+      : [],
+  };
 }
 
 /** Convert a CareerProfile into a ResumeContent-compatible object for tailoring. */
