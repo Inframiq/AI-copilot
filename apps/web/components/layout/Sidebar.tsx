@@ -20,8 +20,8 @@ const NAV = [
   { href: "/profile", icon: IdentificationCard, label: "My Profile", disabled: false },
   { href: "/career-path", icon: Path, label: "Career Path", disabled: false },
   { href: "/jd", icon: FileDashed, label: "JD Analyzer", disabled: false },
-  { href: "/interview", icon: MicrophoneStage, label: "Interview Center", disabled: false },
   { href: "/studio", icon: FileText, label: "Resume Builder", disabled: false },
+  { href: "/interview", icon: MicrophoneStage, label: "Interview Center", disabled: false },
   { href: "/networking", icon: Users, label: "Networking", disabled: false },
   { href: "/analytics", icon: ChartLineUp, label: "Analytics", disabled: false },
 ];

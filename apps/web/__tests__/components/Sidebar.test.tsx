@@ -30,8 +30,8 @@ describe("Sidebar", () => {
       "My Profile",
       "Career Path",
       "JD Analyzer",
-      "Interview Center",
       "Resume Builder",
+      "Interview Center",
       "Networking",
       "Analytics",
     ]) {
