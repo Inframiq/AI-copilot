@@ -21,6 +21,11 @@ import {
   X,
   Sparkle,
   Calendar,
+  DotsThreeVertical,
+  Trash,
+  PencilSimple,
+  ArrowCounterClockwise,
+  Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
@@ -101,6 +106,9 @@ export default function JDIndexPage() {
   const [tailorError, setTailorError] = useState<string | null>(null);
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
   const [navigatingToStudio, setNavigatingToStudio] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editTitleValue, setEditTitleValue] = useState("");
 
   // Override: user wants to use a different resume for this analysis
   const [overrideMode, setOverrideMode] = useState<"none" | "upload" | "pick">("none");
@@ -146,6 +154,60 @@ export default function JDIndexPage() {
       queryClient.setQueryData<LearningItem[]>(["learning"], (list) => [item, ...(list ?? [])]);
     } catch (err) {
       console.error("Failed to add to learning path:", err);
+    }
+  }
+
+  async function handleDeleteJd(id: string) {
+    setOpenMenuId(null);
+    queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
+      list?.filter((j) => j.id !== id)
+    );
+    try {
+      await apiClient.deleteJd(id);
+    } catch (err) {
+      console.error("Failed to delete JD:", err);
+      queryClient.invalidateQueries({ queryKey: ["jds"] });
+    }
+  }
+
+  function startRenameJd(jd: JobDescription) {
+    setOpenMenuId(null);
+    setEditingTitleId(jd.id);
+    setEditTitleValue(jd.title);
+  }
+
+  async function saveRenameJd(id: string) {
+    const trimmed = editTitleValue.trim();
+    if (!trimmed) return;
+    setEditingTitleId(null);
+    queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
+      list?.map((j) => (j.id === id ? { ...j, title: trimmed } : j))
+    );
+    try {
+      await apiClient.updateJdTitle(id, trimmed);
+    } catch (err) {
+      console.error("Failed to rename JD:", err);
+      queryClient.invalidateQueries({ queryKey: ["jds"] });
+    }
+  }
+
+  async function handleRerunAnalysis(jd: JobDescription) {
+    setOpenMenuId(null);
+    if (!activeResumeId) {
+      setError("Set up your profile first so we can compute your ATS match score.");
+      return;
+    }
+    setJdText(jd.raw_text);
+    setJd(jd.id, jd.raw_text);
+    setIsSubmitting(true);
+    setError(null);
+    setTailorError(null);
+    try {
+      await runAnalysis(activeResumeId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -632,14 +694,86 @@ export default function JDIndexPage() {
             {jds.map((jd) => (
               <div
                 key={jd.id}
-                className="p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-sm"
+                className="p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-sm relative"
               >
-                <button onClick={() => router.push(`/jd/${jd.id}`)} className="text-left">
-                  <p className="text-label-md text-on-surface truncate">{jd.title}</p>
-                  <p className="text-caption text-on-surface-variant mt-xs">
-                    {new Date(jd.created_at).toLocaleDateString()} · Click to view analysis
-                  </p>
+                {/* Three-dots menu button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === jd.id ? null : jd.id); setEditingTitleId(null); }}
+                  className="absolute top-sm right-sm p-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all"
+                  aria-label="More options"
+                >
+                  <DotsThreeVertical size={16} weight="bold" />
                 </button>
+
+                {/* Dropdown menu */}
+                {openMenuId === jd.id && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                    <div className="absolute top-8 right-sm z-20 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-lg overflow-hidden min-w-[150px]">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startRenameJd(jd); }}
+                        className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-on-surface hover:bg-surface-container transition-colors"
+                      >
+                        <PencilSimple size={14} />
+                        Rename
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRerunAnalysis(jd); }}
+                        className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-on-surface hover:bg-surface-container transition-colors"
+                      >
+                        <ArrowCounterClockwise size={14} />
+                        Re-analyze
+                      </button>
+                      <div className="h-px bg-outline-variant/20 mx-sm" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteJd(jd.id); }}
+                        className="w-full flex items-center gap-sm px-md py-sm text-label-sm text-error hover:bg-error/10 transition-colors"
+                      >
+                        <Trash size={14} />
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Title — inline editable when renaming */}
+                {editingTitleId === jd.id ? (
+                  <div className="flex items-center gap-xs pr-lg">
+                    <input
+                      autoFocus
+                      value={editTitleValue}
+                      onChange={(e) => setEditTitleValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveRenameJd(jd.id);
+                        if (e.key === "Escape") setEditingTitleId(null);
+                      }}
+                      className="flex-1 text-label-md text-on-surface bg-surface-container border border-primary/40 rounded-lg px-sm py-xs outline-none focus:ring-2 focus:ring-primary/30 min-w-0"
+                    />
+                    <button
+                      onClick={() => saveRenameJd(jd.id)}
+                      disabled={!editTitleValue.trim()}
+                      className="p-xs rounded-lg bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+                      aria-label="Save"
+                    >
+                      <Check size={14} weight="bold" />
+                    </button>
+                    <button
+                      onClick={() => setEditingTitleId(null)}
+                      className="p-xs rounded-lg text-on-surface-variant hover:text-error transition-colors shrink-0"
+                      aria-label="Cancel"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => router.push(`/jd/${jd.id}`)} className="text-left pr-lg">
+                    <p className="text-label-md text-on-surface truncate">{jd.title}</p>
+                    <p className="text-caption text-on-surface-variant mt-xs">
+                      {new Date(jd.created_at).toLocaleDateString()} · Click to view analysis
+                    </p>
+                  </button>
+                )}
+
                 <select
                   value={jd.status}
                   onClick={(e) => e.stopPropagation()}

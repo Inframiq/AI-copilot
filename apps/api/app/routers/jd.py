@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.db.models import JobDescription, TailoringSession
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate
+from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import extract_jd_skills
 
@@ -76,6 +76,47 @@ async def get_latest_session(jd_id: uuid.UUID, user=Depends(get_current_user), d
     )
     session_id = result.scalar_one_or_none()
     return {"session_id": str(session_id) if session_id else None}
+
+
+@router.delete("/{jd_id}", status_code=204)
+async def delete_jd(
+    jd_id: uuid.UUID,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobDescription).where(
+            JobDescription.id == jd_id,
+            JobDescription.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    jd = result.scalar_one_or_none()
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD not found")
+    await db.delete(jd)
+    await db.commit()
+
+
+@router.patch("/{jd_id}/title", response_model=JDOut)
+async def update_jd_title(
+    jd_id: uuid.UUID,
+    body: JDTitleUpdate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobDescription).where(
+            JobDescription.id == jd_id,
+            JobDescription.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    jd = result.scalar_one_or_none()
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD not found")
+    jd.title = body.title
+    await db.commit()
+    await db.refresh(jd)
+    return jd
 
 
 @router.patch("/{jd_id}/status", response_model=JDOut)

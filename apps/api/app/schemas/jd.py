@@ -15,6 +15,10 @@ class JDStatusUpdate(BaseModel):
     status: JDStatus
 
 
+class JDTitleUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
 class JDOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

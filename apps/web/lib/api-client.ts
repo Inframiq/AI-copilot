@@ -109,8 +109,14 @@ export const apiClient = {
   updateJdStatus: (id: string, status: JDStatus): Promise<JobDescription> =>
     request<JobDescription>("PATCH", `/jd/${id}/status`, { status }),
 
+  updateJdTitle: (id: string, title: string): Promise<JobDescription> =>
+    request<JobDescription>("PATCH", `/jd/${id}/title`, { title }),
+
   getLatestJdSession: (id: string): Promise<{ session_id: string | null }> =>
     request<{ session_id: string | null }>("GET", `/jd/${id}/latest-session`),
+
+  deleteJd: (id: string): Promise<void> =>
+    request<void>("DELETE", `/jd/${id}`),
 
   // ── External Contacts ───────────────────────────────────────────────────────
   getContacts: (): Promise<ExternalContact[]> =>
