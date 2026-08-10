@@ -773,15 +773,6 @@ export default function JDIndexPage() {
                   ))}
                 </select>
 
-                {/* Re-analyze button — always visible */}
-                <button
-                  onClick={() => handleRerunAnalysis(jd)}
-                  disabled={isSubmitting || isAnalyzing}
-                  className="w-full flex items-center justify-center gap-xs py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ArrowCounterClockwise size={13} />
-                  Re-analyze
-                </button>
               </div>
             ))}
           </div>
