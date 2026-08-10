@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { JobDescription, Resume } from "@career-copilot/types";
-import { CheckCircle, ArrowLeft, Sparkle, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { CheckCircle, ArrowLeft, Sparkle, ArrowCounterClockwise, FolderOpen } from "@phosphor-icons/react";
 
 export default function JDPage({
   params,
@@ -15,7 +16,7 @@ export default function JDPage({
 }) {
   const { jdId } = use(params);
   const router = useRouter();
-  const [tailoringResumeId, setTailoringResumeId] = useState<string | null>(null);
+  const [isTailoring, setIsTailoring] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
 
   const setJd = useTailoringStore((s) => s.setJd);
@@ -26,24 +27,34 @@ export default function JDPage({
     queryFn: () => apiClient.getJd(jdId),
   });
 
+  const { data: careerProfile } = useQuery<CareerProfile | null>({
+    queryKey: ["careerProfile"],
+    queryFn: () => getCareerProfile(),
+  });
+
   const { data: resumes = [] } = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
   });
 
-  async function handleTailor(resume: Resume) {
-    if (!jd) return;
-    setTailoringResumeId(resume.id);
+  // Only show the master resume; fall back to first resume if no profile set
+  const masterResume = resumes.find((r) => r.id === careerProfile?.master_resume_id)
+    ?? resumes[0]
+    ?? null;
+
+  async function handleTailor() {
+    if (!jd || !masterResume) return;
+    setIsTailoring(true);
     setTailorError(null);
     setJd(jdId, jd.raw_text);
-    await runTailoring(resume.id);
+    await runTailoring(masterResume.id);
     const err = useTailoringStore.getState().error;
     if (err) {
       setTailorError(err);
-      setTailoringResumeId(null);
+      setIsTailoring(false);
       return;
     }
-    router.push(`/studio/${resume.id}`);
+    router.push(`/studio/${masterResume.id}`);
   }
 
   return (
@@ -96,41 +107,52 @@ export default function JDPage({
         {/* Re-run Resume Builder panel */}
         <Card className="lg:col-span-2 flex flex-col gap-md">
           <div>
-            <h2 className="text-headline-md text-on-surface font-semibold">Re-run Resume Builder</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">Resume Builder</h2>
             <p className="text-caption text-on-surface-variant mt-xs">
-              Pick a resume — AI will tailor it to this job description and open it in the studio.
+              Tailor your resume to this job description, or open it as-is in the studio.
             </p>
           </div>
 
-          {resumes.length === 0 ? (
-            <p className="text-body-sm text-on-surface-variant">No resumes yet. Create one first.</p>
+          {!masterResume ? (
+            <p className="text-body-sm text-on-surface-variant">No resume found. Create one first.</p>
           ) : (
             <div className="flex flex-col gap-sm flex-1">
-              {resumes.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-sm px-md py-sm rounded-xl border border-outline-variant/20 hover:border-primary/30 hover:bg-surface-container transition-all"
+              {/* Resume row */}
+              <div className="px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+                <p className="text-label-md text-on-surface font-semibold truncate">{masterResume.title}</p>
+                <p className="text-caption text-on-surface-variant mt-xs">
+                  Updated {new Date(masterResume.updated_at).toLocaleDateString()}
+                </p>
+              </div>
+
+              {/* Two action buttons */}
+              <div className="flex gap-sm mt-xs">
+                <button
+                  onClick={handleTailor}
+                  disabled={isTailoring}
+                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
                 >
-                  <p className="text-label-sm text-on-surface flex-1 truncate">{r.title}</p>
-                  <button
-                    onClick={() => handleTailor(r)}
-                    disabled={tailoringResumeId !== null}
-                    className="flex items-center gap-xs px-md py-xs rounded-lg text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-sm hover:shadow-md hover:scale-[0.97] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 shrink-0"
-                  >
-                    {tailoringResumeId === r.id ? (
-                      <>
-                        <ArrowCounterClockwise size={13} className="animate-spin" />
-                        Tailoring…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkle size={13} />
-                        Tailor &amp; Open
-                      </>
-                    )}
-                  </button>
-                </div>
-              ))}
+                  {isTailoring ? (
+                    <>
+                      <ArrowCounterClockwise size={14} className="animate-spin" />
+                      Tailoring…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkle size={14} />
+                      Tailor
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => router.push(`/studio/${masterResume.id}`)}
+                  disabled={isTailoring}
+                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-surface border border-outline-variant/40 hover:bg-surface-container hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FolderOpen size={14} />
+                  Open
+                </button>
+              </div>
             </div>
           )}
 
@@ -156,7 +178,7 @@ export default function JDPage({
       </div>
 
       {/* Full-screen tailoring overlay */}
-      {tailoringResumeId && (
+      {isTailoring && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-md">
           <div className="flex flex-col items-center gap-md text-center px-lg">
             <div className="relative w-16 h-16">
