@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { JobDescription, Resume } from "@career-copilot/types";
 import { CheckCircle, ArrowLeft, Sparkle, ArrowCounterClockwise, FolderOpen } from "@phosphor-icons/react";
@@ -17,10 +18,12 @@ export default function JDPage({
   const { jdId } = use(params);
   const router = useRouter();
   const [isTailoring, setIsTailoring] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
 
   const setJd = useTailoringStore((s) => s.setJd);
   const runTailoring = useTailoringStore((s) => s.runTailoring);
+  const setResume = useResumeStore((s) => s.setResume);
 
   const { data: jd } = useQuery<JobDescription>({
     queryKey: ["jd", jdId],
@@ -55,6 +58,31 @@ export default function JDPage({
       return;
     }
     router.push(`/studio/${masterResume.id}`);
+  }
+
+  async function handleOpen() {
+    if (!masterResume) return;
+    setIsOpening(true);
+    setTailorError(null);
+    try {
+      // Load the latest tailoring session for this JD
+      const { session_id } = await apiClient.getLatestJdSession(jdId);
+      if (session_id) {
+        const session = await apiClient.getSession(session_id);
+        if (session.tailored_content) {
+          // Hydrate the resume store with the previously tailored content
+          setResume(session.resume_id, session.tailored_content, masterResume.template_id);
+          router.push(`/studio/${session.resume_id}`);
+          return;
+        }
+      }
+      // No tailored session — just open the base resume
+      router.push(`/studio/${masterResume.id}`);
+    } catch {
+      router.push(`/studio/${masterResume.id}`);
+    } finally {
+      setIsOpening(false);
+    }
   }
 
   return (
@@ -145,11 +173,15 @@ export default function JDPage({
                   )}
                 </button>
                 <button
-                  onClick={() => router.push(`/studio/${masterResume.id}`)}
-                  disabled={isTailoring}
+                  onClick={handleOpen}
+                  disabled={isTailoring || isOpening}
                   className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-surface border border-outline-variant/40 hover:bg-surface-container hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <FolderOpen size={14} />
+                  {isOpening ? (
+                    <ArrowCounterClockwise size={14} className="animate-spin" />
+                  ) : (
+                    <FolderOpen size={14} />
+                  )}
                   Open
                 </button>
               </div>

@@ -117,6 +117,30 @@ async def tailor_resume(
     )
 
 
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Return a tailoring session's stored output so the frontend can reload a
+    previous tailored resume without re-running the AI."""
+    result = await db.execute(
+        select(TailoringSession).where(
+            TailoringSession.id == session_id,
+            TailoringSession.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "session_id": str(session.id),
+        "resume_id": str(session.resume_id),
+        "jd_id": str(session.jd_id),
+        "tailored_content": session.tailored_content,
+        "ats_score": session.ats_score,
+        "matched_skills": session.matched_skills,
+        "missing_skills": session.missing_skills,
+    }
+
+
 @router.get("/sessions/{session_id}/questions", response_model=list[PrepQuestionOut])
 async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(

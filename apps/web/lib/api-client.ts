@@ -166,6 +166,16 @@ export const apiClient = {
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
     }),
 
+  getSession: (sessionId: string): Promise<{
+    session_id: string;
+    resume_id: string;
+    jd_id: string;
+    tailored_content: ResumeContent | null;
+    ats_score: number | null;
+    matched_skills: string[];
+    missing_skills: string[];
+  }> => request("GET", `/ai/sessions/${sessionId}`),
+
   getQuestions: (sessionId: string): Promise<PrepQuestionOut[]> =>
     request<PrepQuestionOut[]>(
       "GET",
