@@ -217,7 +217,14 @@ export default function JDIndexPage() {
     setTailorError(null);
     await runTailoring(activeResumeId);
     const err = useTailoringStore.getState().error;
-    if (err) setTailorError(err);
+    if (err) {
+      setTailorError(err);
+      return;
+    }
+    // The tailored content + regenerated PDF are already sitting in the
+    // resume store (runTailoring hydrates it) — jump straight into Resume
+    // Builder to preview it instead of leaving the user to go find it.
+    router.push(`/studio/${activeResumeId}`);
   }
 
   const hasResults = atsScore !== null;
@@ -408,11 +415,6 @@ export default function JDIndexPage() {
                 <Sparkle size={20} />
                 {isTailoring ? "Tailoring resume…" : sessionId ? "Re-tailor Resume" : "Tailor Resume"}
               </button>
-              {sessionId && !isTailoring && (
-                <p className="text-caption text-on-surface-variant text-center">
-                  Resume tailored and saved — check Resume Builder for the updated PDF.
-                </p>
-              )}
             </div>
           )}
         </div>

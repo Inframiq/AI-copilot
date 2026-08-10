@@ -44,10 +44,16 @@ export default function StudioPage({
   });
 
   useEffect(() => {
-    if (resume) {
+    // Skip if the store is already hydrated for this exact resume — e.g. we
+    // just navigated here right after AI tailoring, which already wrote the
+    // tailored content and a fresh PDF preview into the store. Re-applying
+    // the (possibly stale, since tailoring's save doesn't invalidate this
+    // query) fetched copy would blow away that preview, including resetting
+    // pdfSignedUrl to null.
+    if (resume && resume.id !== storeResumeId) {
       setResume(resume.id, resume.content, resume.template_id);
     }
-  }, [resume, setResume]);
+  }, [resume, storeResumeId, setResume]);
 
   function startEditingTitle() {
     setTitleDraft(resume?.title ?? "");
