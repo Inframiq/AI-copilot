@@ -506,8 +506,7 @@ async def analyze_jd_match(
             seen_lower.add(key)
             all_jd_skills.append(skill)
 
-    resume_text = json.dumps(resume_content)
-    delta = compute_delta(all_jd_skills, resume_text)
+    delta = compute_delta(all_jd_skills, resume_content)
 
     company_keywords: list[str] = []
     if company_intel and not company_intel.known_not_found:
