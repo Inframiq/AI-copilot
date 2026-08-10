@@ -24,6 +24,7 @@ const mockTailorResult: TailorOut = {
     skills: ["TypeScript", "React"],
   },
   questions: [],
+  company_keywords: [],
 };
 
 import { useTailoringStore } from "../stores/tailoring-store";
