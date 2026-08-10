@@ -47,6 +47,8 @@ export interface CertEntry {
   year: string;
 }
 
+export type RoleStatus = "working" | "student";
+
 export interface CareerProfile {
   user_id: string;
   master_resume_id: string | null;
@@ -56,6 +58,7 @@ export interface CareerProfile {
   skills: string[];
   certifications: CertEntry[];
   headline: string | null;
+  role_status: RoleStatus | null;
   created_at: string;
   updated_at: string;
 }
@@ -154,6 +157,7 @@ export function resumeContentToCareerProfileInput(
     certifications: Array.isArray(c.certifications)
       ? c.certifications.map((name) => ({ id: crypto.randomUUID(), name, issuer: "", year: "" }))
       : [],
+    role_status: null,
   };
 }
 

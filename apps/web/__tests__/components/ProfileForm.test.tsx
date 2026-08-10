@@ -71,6 +71,7 @@ describe("ProfileForm", () => {
       skills: ["Kotlin"],
       certifications: [],
       headline: "Staff Engineer",
+      role_status: null,
       created_at: "",
       updated_at: "",
     };
@@ -88,6 +89,7 @@ describe("ProfileForm", () => {
       skills: ["Kotlin", "Swift"],
       certifications: [],
       headline: "Staff Engineer",
+      role_status: null,
       created_at: "",
       updated_at: "",
     };

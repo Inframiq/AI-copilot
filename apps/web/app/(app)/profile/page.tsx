@@ -33,6 +33,7 @@ import {
   type EducationEntry,
   type CertEntry,
   type ExpType,
+  type RoleStatus,
 } from "@/lib/career-profile-client";
 import { apiClient } from "@/lib/api-client";
 
@@ -96,6 +97,7 @@ export default function ProfilePage() {
 
   // ── form state ─────────────────────────────────────────────────────────────
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
+  const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
   const [skills, setSkills] = useState("");
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([]);
@@ -118,6 +120,7 @@ export default function ProfilePage() {
 
   function hydrate(profile: CareerProfile) {
     setContact({ ...emptyContact(), ...profile.contact });
+    setRoleStatus(profile.role_status ?? "");
     setHeadline(profile.headline ?? "");
     setSkills(profile.skills.join(", "));
     setExperiences(profile.experience);
@@ -145,6 +148,7 @@ export default function ProfilePage() {
         education,
         skills: skillArr,
         certifications,
+        role_status: roleStatus || null,
       });
       // Invalidate resumes cache so Resume Builder sees the latest, and
       // careerProfile so JD Analyzer / Networking pick up the change too
@@ -359,6 +363,15 @@ export default function ProfilePage() {
             <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><MapPin size={14} /> Location</label>
             <input value={contact.location ?? ""} onChange={e => setContact(p => ({ ...p, location: e.target.value }))}
               placeholder="San Francisco, CA" className={inputCls} />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Briefcase size={14} /> Job Role</label>
+            <select value={roleStatus} onChange={e => setRoleStatus(e.target.value as RoleStatus | "")}
+              className={inputCls}>
+              <option value="">Select…</option>
+              <option value="working">Working Professional</option>
+              <option value="student">Student</option>
+            </select>
           </div>
           <div className="flex flex-col gap-xs md:col-span-2">
             <label className="text-label-sm text-on-surface-variant">Headline / Title</label>
