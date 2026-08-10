@@ -20,6 +20,7 @@ export default function StudioPage({
   const setResume = useResumeStore((s) => s.setResume);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
+  const templateId = useResumeStore((s) => s.templateId);
   const [showAIPanel, setShowAIPanel] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -115,8 +116,20 @@ export default function StudioPage({
     setIsGeneratingPdf(true);
     setPdfError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(storeResumeId, "ats_clean");
+      const { signed_url } = await apiClient.generatePdf(storeResumeId, templateId);
+      // Update the in-app preview too
       setPdfSignedUrl(signed_url);
+      // Fetch as a blob so we can force a real file download regardless of CORS
+      const response = await fetch(signed_url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${resume?.title ?? "resume"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : "PDF generation failed");
     } finally {

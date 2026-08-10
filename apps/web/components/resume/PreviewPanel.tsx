@@ -1,9 +1,10 @@
 "use client";
+import { useState } from "react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
-import { ArrowSquareOut, DownloadSimple } from "@phosphor-icons/react";
+import { ArrowSquareOut, DownloadSimple, SpinnerGap } from "@phosphor-icons/react";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
 export function PreviewPanel() {
@@ -13,17 +14,40 @@ export function PreviewPanel() {
   const isDirty = useResumeStore((s) => s.isDirty);
   const setTemplateId = useResumeStore((s) => s.setTemplateId);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const { sessionId } = useTailoringStore();
   const router = useRouter();
 
+  // Switch template and immediately re-render the preview if one exists.
+  async function handleTemplateChange(id: string) {
+    setTemplateId(id);
+    if (!resumeId || !pdfSignedUrl) return; // no preview yet — user must click Generate PDF
+    setIsGenerating(true);
+    setGenError(null);
+    try {
+      const { signed_url } = await apiClient.generatePdf(resumeId, id);
+      setPdfSignedUrl(signed_url);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Re-render failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  // Generate preview and update the iframe.
   async function handleGeneratePdf() {
     if (!resumeId) return;
+    setIsGenerating(true);
+    setGenError(null);
     try {
       const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
       setPdfSignedUrl(signed_url);
     } catch (err) {
-      console.error("PDF generation failed:", err);
+      setGenError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setIsGenerating(false);
     }
   }
 
@@ -36,8 +60,9 @@ export function PreviewPanel() {
           {RESUME_TEMPLATES.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTemplateId(t.id)}
-              className={`px-sm py-xs rounded-lg text-label-sm transition-colors ${
+              onClick={() => handleTemplateChange(t.id)}
+              disabled={isGenerating}
+              className={`px-sm py-xs rounded-lg text-label-sm transition-colors disabled:opacity-60 ${
                 templateId === t.id
                   ? "bg-secondary-container text-primary font-bold"
                   : "text-on-surface-variant hover:bg-surface-container-low"
@@ -55,13 +80,18 @@ export function PreviewPanel() {
               Saving…
             </span>
           )}
+          {genError && (
+            <span className="text-label-sm text-error">{genError}</span>
+          )}
           <button
             onClick={handleGeneratePdf}
-            disabled={!resumeId}
+            disabled={!resumeId || isGenerating}
             className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <DownloadSimple size={16} />
-            Generate PDF
+            {isGenerating
+              ? <SpinnerGap size={16} className="animate-spin" />
+              : <DownloadSimple size={16} />}
+            {isGenerating ? "Generating…" : "Generate PDF"}
           </button>
           {sessionId && (
             <button
