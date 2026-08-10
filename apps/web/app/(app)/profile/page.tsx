@@ -146,8 +146,11 @@ export default function ProfilePage() {
         skills: skillArr,
         certifications,
       });
-      // Invalidate resumes cache so Resume Builder sees the latest
+      // Invalidate resumes cache so Resume Builder sees the latest, and
+      // careerProfile so JD Analyzer / Networking pick up the change too
+      // instead of showing stale data until a hard refresh.
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
       setSaveOk(true);
       setTimeout(() => setSaveOk(false), 3000);
     } catch (e) {
@@ -207,6 +210,7 @@ export default function ProfilePage() {
       setMasterResumeId(resume.id);
       await setProfileMasterResume(resume.id);
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {

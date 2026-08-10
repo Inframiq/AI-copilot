@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -92,10 +92,6 @@ export default function JDIndexPage() {
   const storedJdText = useTailoringStore((s) => s.jdText);
   const storeResumeId = useResumeStore((s) => s.resumeId);
 
-  // Career profile loaded from DB
-  const [careerProfile, setCareerProfile] = useState<CareerProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-
   // Override: user wants to use a different resume for this analysis
   const [overrideMode, setOverrideMode] = useState<"none" | "upload" | "pick">("none");
   const [overrideResumeId, setOverrideResumeId] = useState<string | null>(null);
@@ -145,12 +141,13 @@ export default function JDIndexPage() {
     queryFn: () => apiClient.getJds(),
   });
 
-  useEffect(() => {
-    getCareerProfile()
-      .then(p => setCareerProfile(p))
-      .catch(console.error)
-      .finally(() => setProfileLoading(false));
-  }, []);
+  // Career profile — same query key as the profile page and Networking so a
+  // profile save (which invalidates ["careerProfile"]) is reflected here too,
+  // instead of this page only ever seeing what was loaded on mount.
+  const { data: careerProfile, isLoading: profileLoading } = useQuery<CareerProfile | null>({
+    queryKey: ["careerProfile"],
+    queryFn: () => getCareerProfile(),
+  });
 
   // Priority: manual override > career profile master resume > store resume
   const activeResumeId = overrideResumeId ?? careerProfile?.master_resume_id ?? storeResumeId;
