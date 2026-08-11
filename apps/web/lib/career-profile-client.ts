@@ -30,6 +30,16 @@ export interface ExperienceEntry {
   impact: string;
 }
 
+export interface ProjectEntry {
+  id: string;
+  name: string;
+  techStack: string;
+  link?: string;
+  start: string;
+  end: string;
+  description: string;
+}
+
 export interface EducationEntry {
   id: string;
   institution: string;
@@ -54,6 +64,7 @@ export interface CareerProfile {
   master_resume_id: string | null;
   contact: ContactInfo;
   experience: ExperienceEntry[];
+  projects: ProjectEntry[];
   education: EducationEntry[];
   skills: string[];
   certifications: CertEntry[];
@@ -143,6 +154,17 @@ export function resumeContentToCareerProfileInput(
           impact: "",
         }))
       : [],
+    projects: Array.isArray(c.projects)
+      ? c.projects.map((p) => ({
+          id: crypto.randomUUID(),
+          name: p.name,
+          techStack: p.tech_stack ?? "",
+          link: p.link ?? "",
+          start: p.start ?? "",
+          end: p.end ?? "",
+          description: (p.bullets ?? []).join("; "),
+        }))
+      : [],
     education: Array.isArray(c.education)
       ? c.education.map((e) => ({
           id: crypto.randomUUID(),
@@ -178,6 +200,16 @@ export function profileToResumeContent(profile: CareerProfileInput): ResumeConte
         e.projects && `Projects: ${e.projects}`,
         e.impact && `Impact: ${e.impact}`,
       ].filter(Boolean),
+    })),
+    projects: profile.projects.map(p => ({
+      name: p.name,
+      tech_stack: p.techStack || undefined,
+      link: p.link || undefined,
+      start: p.start || undefined,
+      end: p.end || undefined,
+      bullets: p.description
+        ? p.description.split(/\n|;/).map(s => s.trim()).filter(Boolean)
+        : [],
     })),
     education: profile.education.map(e => ({
       institution: e.institution,

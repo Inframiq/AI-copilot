@@ -19,6 +19,14 @@ export interface ResumeContent {
     end?: string;
     bullets: string[];
   }>;
+  projects?: Array<{
+    name: string;
+    tech_stack?: string;
+    link?: string;
+    start?: string;
+    end?: string;
+    bullets: string[];
+  }>;
   education: Array<{
     institution: string;
     degree: string;

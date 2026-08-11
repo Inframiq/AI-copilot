@@ -87,6 +87,24 @@
   </div>
   {% endif %}
 
+  {% if projects %}
+  <div class="section">
+    <div class="section-label">Projects</div>
+    <div class="section-body">
+      {% for p in projects %}
+      <div class="job">
+        <div class="job-title-line">
+          <span class="title">{{ p.name }}</span>
+          <span class="dates">{% if p.start %}{{ p.start }} – {{ p.end or "Current" }}{% endif %}</span>
+        </div>
+        {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link }}</div>{% endif %}
+        <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if education %}
   <div class="section">
     <div class="section-label">Education and Training</div>

@@ -24,6 +24,8 @@ import {
   MapPin,
   Eye,
   ArrowSquareOut,
+  Code,
+  Link as LinkIcon,
 } from "@phosphor-icons/react";
 import {
   getCareerProfile,
@@ -32,6 +34,7 @@ import {
   type CareerProfileInput,
   type ContactInfo,
   type ExperienceEntry,
+  type ProjectEntry,
   type EducationEntry,
   type CertEntry,
   type ExpType,
@@ -59,6 +62,10 @@ const emptyEdu = (): EducationEntry => ({
 });
 
 const emptyCert = (): CertEntry => ({ id: newId(), name: "", issuer: "", year: "" });
+
+const emptyProject = (): ProjectEntry => ({
+  id: newId(), name: "", techStack: "", link: "", start: "", end: "", description: "",
+});
 
 // ── Section header ─────────────────────────────────────────────────────────────
 function SectionHeader({ icon: Icon, title, onAdd, addLabel }: {
@@ -106,6 +113,7 @@ export default function ProfilePage() {
   const [headline, setHeadline] = useState("");
   const [skills, setSkills] = useState("");
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([]);
+  const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [education, setEducation] = useState<EducationEntry[]>([]);
   const [certifications, setCertifications] = useState<CertEntry[]>([]);
   const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
@@ -115,6 +123,7 @@ export default function ProfilePage() {
 
   // collapsed state per entry
   const [collapsedExp, setCollapsedExp] = useState<Record<string, boolean>>({});
+  const [collapsedProj, setCollapsedProj] = useState<Record<string, boolean>>({});
   const [collapsedEdu, setCollapsedEdu] = useState<Record<string, boolean>>({});
   const [collapsedCert, setCollapsedCert] = useState<Record<string, boolean>>({});
 
@@ -131,6 +140,7 @@ export default function ProfilePage() {
     setHeadline(profile.headline ?? "");
     setSkills(profile.skills.join(", "));
     setExperiences(profile.experience);
+    setProjects(profile.projects ?? []);
     setEducation(profile.education);
     setCertifications(profile.certifications);
     setMasterResumeId(profile.master_resume_id);
@@ -154,6 +164,7 @@ export default function ProfilePage() {
         contact,
         headline: headline || null,
         experience: experiences,
+        projects,
         education,
         skills: skillArr,
         certifications,
@@ -224,6 +235,13 @@ export default function ProfilePage() {
             achievements: "", projects: "", impact: "",
           }))
         : [];
+      const newProjects: ProjectEntry[] = Array.isArray(c.projects)
+        ? (c.projects as Array<{name:string;tech_stack?:string;link?:string;start?:string;end?:string;bullets?:string[]}>).map(p => ({
+            id: newId(), name: p.name, techStack: p.tech_stack ?? "", link: p.link ?? "",
+            start: p.start ?? "", end: p.end ?? "",
+            description: (p.bullets ?? []).join("; "),
+          }))
+        : [];
       const newEducation: EducationEntry[] = Array.isArray(c.education)
         ? (c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
             id: newId(), institution: e.institution, degree: e.degree,
@@ -238,6 +256,7 @@ export default function ProfilePage() {
       setHeadline(newHeadline);
       setSkills(newSkills.join(", "));
       setExperiences(newExperiences);
+      setProjects(newProjects);
       setEducation(newEducation);
       setCertifications(newCertifications);
       setMasterResumeId(resume.id);
@@ -252,6 +271,7 @@ export default function ProfilePage() {
         contact: newContact,
         headline: newHeadline || null,
         experience: newExperiences,
+        projects: newProjects,
         education: newEducation,
         skills: newSkills,
         certifications: newCertifications,
@@ -275,6 +295,16 @@ export default function ProfilePage() {
     const e = emptyExp();
     setExperiences(prev => [...prev, e]);
     setCollapsedExp(prev => ({ ...prev, [e.id]: false }));
+  };
+
+  // ── project helpers ────────────────────────────────────────────────────────
+  const updateProj = (id: string, field: keyof ProjectEntry, value: string) =>
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const removeProj = (id: string) => setProjects(prev => prev.filter(p => p.id !== id));
+  const addProj = () => {
+    const p = emptyProject();
+    setProjects(prev => [...prev, p]);
+    setCollapsedProj(prev => ({ ...prev, [p.id]: false }));
   };
 
   // ── education helpers ──────────────────────────────────────────────────────
@@ -315,7 +345,7 @@ export default function ProfilePage() {
           My Profile
         </h1>
         <p className="text-body-md text-on-surface-variant mt-xs">
-          Source of truth for your career — used by JD Analyzer, Resume Builder, and Networking.
+          Source of truth for your career — used by JD Analyzer and Resume Builder.
         </p>
       </div>
 
@@ -574,6 +604,85 @@ export default function ProfilePage() {
                           <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
                             rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
                         </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Projects ───────────────────────────────────────────────────────── */}
+      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+        <SectionHeader icon={Code} title="Projects" onAdd={addProj} addLabel="Add Project" />
+        <p className="text-caption text-on-surface-variant -mt-sm mb-md">
+          {roleStatus === "student"
+            ? "Since you may not have work experience yet, this is often the most important section on your resume."
+            : "Personal, open-source, or side projects worth showing alongside your work experience."}
+        </p>
+        {projects.length === 0 ? (
+          <button type="button" onClick={addProj}
+            className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
+            <Plus size={24} weight="bold" />
+            <span className="text-label-sm">Add your first project</span>
+          </button>
+        ) : (
+          <div className="flex flex-col gap-sm">
+            {projects.map((proj, idx) => {
+              const collapsed = collapsedProj[proj.id] ?? false;
+              return (
+                <div key={proj.id} className="rounded-xl border border-outline-variant/30 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container">
+                    <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                    {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
+                    <div className="flex items-center gap-xs ml-auto shrink-0">
+                      <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
+                        className="p-xs rounded text-on-surface-variant hover:text-primary transition-colors">
+                        <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                      </button>
+                      <button type="button" onClick={() => removeProj(proj.id)}
+                        className="p-xs rounded text-on-surface-variant hover:text-error transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Fields */}
+                  {!collapsed && (
+                    <div className="p-md flex flex-col gap-sm bg-surface-container-lowest">
+                      <div className="grid grid-cols-2 gap-sm">
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">Project Name *</label>
+                          <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
+                            placeholder="Campus Marketplace" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">Tech Stack</label>
+                          <input value={proj.techStack ?? ""} onChange={e => updateProj(proj.id, "techStack", e.target.value)}
+                            placeholder="React, Node.js, PostgreSQL" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">Start</label>
+                          <input value={proj.start ?? ""} onChange={e => updateProj(proj.id, "start", e.target.value)}
+                            placeholder="Jan 2024" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">End</label>
+                          <input value={proj.end ?? ""} onChange={e => updateProj(proj.id, "end", e.target.value)}
+                            placeholder="May 2024 or Present" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs col-span-2">
+                          <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Link (optional)</label>
+                          <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
+                            placeholder="https://github.com/you/project" className={inputCls} />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-xs">
+                        <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
+                        <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
+                          rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
                       </div>
                     </div>
                   )}

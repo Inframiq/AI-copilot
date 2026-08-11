@@ -50,6 +50,18 @@
 {% endfor %}
 {% endif %}
 
+{% if projects %}
+<h2>Projects</h2>
+{% for p in projects %}
+<div class="job-row">
+  <span class="job-title">{{ p.name }}{% if p.tech_stack %} &mdash; {{ p.tech_stack }}{% endif %}</span>
+  <span class="job-dates">{% if p.start %}{{ p.start }} - {{ p.end or "Present" }}{% endif %}</span>
+</div>
+{% if p.link %}<div class="edu-institution">{{ p.link }}</div>{% endif %}
+<table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+{% endfor %}
+{% endif %}
+
 {% if education %}
 <h2>Education</h2>
 {% for edu in education %}

@@ -34,6 +34,16 @@ SAMPLE_RESUME = {
             "bullets": ["Built APIs", "Led team of 3"],
         }
     ],
+    "projects": [
+        {
+            "name": "Campus Marketplace",
+            "tech_stack": "React, Supabase",
+            "link": "https://github.com/jane/campus-marketplace",
+            "start": "2024-01",
+            "end": "2024-05",
+            "bullets": ["Built a full-stack listings app", "Reached 200 active users"],
+        }
+    ],
     "education": [
         {
             "institution": "MIT",
@@ -81,6 +91,34 @@ def test_generate_pdf_returns_bytes_ats_minimal():
     pdf = generate_pdf(SAMPLE_RESUME, "ats_minimal")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_renders_projects_section_on_every_template():
+    """Projects is a standalone section (separate from experience) — students
+    without work history typically have projects instead."""
+    for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
+        pdf = generate_pdf(SAMPLE_RESUME, template_id)
+        assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_works_with_projects_but_no_experience():
+    """The exact student scenario: no work experience, only projects."""
+    student_resume = {
+        "contact": {"name": "Alex Student", "email": "alex@example.com"},
+        "experience": [],
+        "projects": [
+            {
+                "name": "Hackathon Winner App",
+                "tech_stack": "Python, Flask",
+                "bullets": ["Built in 24 hours", "Won 1st place among 40 teams"],
+            }
+        ],
+        "education": [{"institution": "State University", "degree": "B.S. CS", "year": "2026"}],
+        "skills": ["Python", "Flask"],
+    }
+    for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
+        pdf = generate_pdf(student_resume, template_id)
+        assert pdf[:4] == b"%PDF"
 
 
 def test_generate_pdf_new_templates_work_without_optional_fields():

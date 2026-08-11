@@ -59,6 +59,17 @@ const SAMPLE_PROFILE: CareerProfile = {
       impact: "",
     },
   ],
+  projects: [
+    {
+      id: "p1",
+      name: "Campus Marketplace",
+      techStack: "React, Supabase",
+      link: "https://github.com/jane/campus-marketplace",
+      start: "2024-01",
+      end: "2024-05",
+      description: "Built a full-stack listings app; Reached 200 active users",
+    },
+  ],
   education: [
     { id: "ed1", institution: "MIT", degree: "BSc", field: "CS", year: "2025" },
   ],
@@ -150,6 +161,34 @@ describe("career-profile-client", () => {
       const result = profileToResumeContent(SAMPLE_PROFILE) as any;
       expect(result.education[0]).toEqual({ institution: "MIT", degree: "BSc in CS", year: "2025" });
       expect(result.certifications).toEqual(["AWS SAA — AWS"]);
+    });
+
+    it("maps projects, splitting the description into bullets", () => {
+      const result = profileToResumeContent(SAMPLE_PROFILE) as any;
+      expect(result.projects[0]).toEqual({
+        name: "Campus Marketplace",
+        tech_stack: "React, Supabase",
+        link: "https://github.com/jane/campus-marketplace",
+        start: "2024-01",
+        end: "2024-05",
+        bullets: ["Built a full-stack listings app", "Reached 200 active users"],
+      });
+    });
+
+    it("omits empty project fields rather than emitting empty strings", () => {
+      const profile = {
+        ...SAMPLE_PROFILE,
+        projects: [{ id: "p2", name: "Solo Script", techStack: "", link: "", start: "", end: "", description: "" }],
+      };
+      const result = profileToResumeContent(profile) as any;
+      expect(result.projects[0]).toEqual({
+        name: "Solo Script",
+        tech_stack: undefined,
+        link: undefined,
+        start: undefined,
+        end: undefined,
+        bullets: [],
+      });
     });
   });
 });

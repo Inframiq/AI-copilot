@@ -38,6 +38,7 @@ class ParsedResume(BaseModel):
     headline: str | None = None
     summary: str | None = None
     experience: list[dict]
+    projects: list[dict] | None = None
     education: list[dict]
     skills: list[str]
     languages: list[dict] | None = None
@@ -110,6 +111,16 @@ Return a JSON object with EXACTLY this shape:
       "bullets": ["bullet 1", "bullet 2"]
     }
   ],
+  "projects": [
+    {
+      "name": "Project Name",
+      "tech_stack": "e.g. React, Node.js, PostgreSQL — if present",
+      "link": "GitHub/demo URL if present",
+      "start": "Mon YYYY or YYYY, if present",
+      "end": "Mon YYYY, YYYY, or 'Present', if present",
+      "bullets": ["bullet 1", "bullet 2"]
+    }
+  ],
   "education": [
     {
       "institution": "University Name",
@@ -127,6 +138,9 @@ Rules:
 - Keep all original bullet text verbatim — do not rewrite.
 - If a field is not found, use null for strings and [] for arrays.
 - skills must be a flat list of individual skill strings.
+- "projects" is for personal/academic/hackathon projects listed under a
+  "Projects" (or similar) heading — do NOT duplicate work performed under
+  an employer, which belongs in "experience" instead.
 """
 
 
@@ -140,12 +154,14 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
         data = {
             "contact": {"name": "", "email": ""},
             "experience": [],
+            "projects": [],
             "education": [],
             "skills": [],
         }
     # Ensure required keys exist
     data.setdefault("contact", {"name": "", "email": ""})
     data.setdefault("experience", [])
+    data.setdefault("projects", [])
     data.setdefault("education", [])
     data.setdefault("skills", [])
     return data

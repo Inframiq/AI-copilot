@@ -49,6 +49,7 @@ export default function OnboardingPage() {
         contact: { name: name.trim(), email: email.trim(), phone: phone.trim() },
         headline: null,
         experience: [],
+        projects: [],
         education: [],
         skills: [],
         certifications: [],
