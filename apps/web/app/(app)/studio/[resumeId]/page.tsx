@@ -6,6 +6,7 @@ import { ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Trash, X 
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { useResumeStore } from "@/stores/resume-store";
+import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import type { Resume } from "@career-copilot/types";
 
@@ -21,6 +22,10 @@ export default function StudioPage({
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
+  // A tailoring session already exists once the user has come from
+  // "Tailor Resume" on either JD page — nagging them to go tailor again
+  // right after they just did is the bug being fixed here.
+  const hasTailoringSession = useTailoringStore((s) => s.sessionId !== null);
   const [showAIPanel, setShowAIPanel] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -263,8 +268,10 @@ export default function StudioPage({
         </section>
       </div>
 
-      {/* Floating AI Assistant */}
-      {showAIPanel && (
+      {/* Floating AI Assistant — only nag to tailor if there's no tailoring
+          session yet for this resume; otherwise the user just did exactly
+          what this panel is suggesting. */}
+      {showAIPanel && !hasTailoringSession && (
         <div className="absolute bottom-6 right-6 z-50">
           <div
             className="p-4 rounded-2xl shadow-xl shadow-on-surface/10 flex flex-col border border-primary-container/30"
