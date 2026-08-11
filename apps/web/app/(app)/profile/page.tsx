@@ -28,7 +28,6 @@ import {
 import {
   getCareerProfile,
   upsertCareerProfile,
-  setProfileMasterResume,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -204,7 +203,7 @@ export default function ProfilePage() {
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.
       const c = resume.content;
-      setContact({
+      const newContact: ContactInfo = {
         ...emptyContact(),
         name: (c.contact?.name as string) ?? "",
         email: (c.contact?.email as string) ?? "",
@@ -212,38 +211,52 @@ export default function ProfilePage() {
         location: (c.contact?.location as string) ?? "",
         linkedin: (c.contact?.linkedin as string) ?? "",
         github: (c.contact?.github as string) ?? "",
-      });
-      setHeadline((c.headline as string) ?? "");
-      setSkills(Array.isArray(c.skills) ? (c.skills as string[]).join(", ") : "");
-      setExperiences(
-        Array.isArray(c.experience)
-          ? (c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
-              id: newId(), type: "full-time" as ExpType,
-              company: e.company, title: e.title,
-              start: e.start, end: e.end || "Present",
-              current: !e.end || e.end === "Present",
-              responsibilities: (e.bullets ?? []).join("; "),
-              achievements: "", projects: "", impact: "",
-            }))
-          : []
-      );
-      setEducation(
-        Array.isArray(c.education)
-          ? (c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
-              id: newId(), institution: e.institution, degree: e.degree,
-              field: "", year: e.year, gpa: "", honors: "",
-            }))
-          : []
-      );
-      setCertifications(
-        Array.isArray(c.certifications)
-          ? (c.certifications as string[]).map(name => ({ id: newId(), name, issuer: "", year: "" }))
-          : []
-      );
+      };
+      const newHeadline = (c.headline as string) ?? "";
+      const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
+      const newExperiences: ExperienceEntry[] = Array.isArray(c.experience)
+        ? (c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
+            id: newId(), type: "full-time" as ExpType,
+            company: e.company, title: e.title,
+            start: e.start, end: e.end || "Present",
+            current: !e.end || e.end === "Present",
+            responsibilities: (e.bullets ?? []).join("; "),
+            achievements: "", projects: "", impact: "",
+          }))
+        : [];
+      const newEducation: EducationEntry[] = Array.isArray(c.education)
+        ? (c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
+            id: newId(), institution: e.institution, degree: e.degree,
+            field: "", year: e.year, gpa: "", honors: "",
+          }))
+        : [];
+      const newCertifications: CertEntry[] = Array.isArray(c.certifications)
+        ? (c.certifications as string[]).map(name => ({ id: newId(), name, issuer: "", year: "" }))
+        : [];
+
+      setContact(newContact);
+      setHeadline(newHeadline);
+      setSkills(newSkills.join(", "));
+      setExperiences(newExperiences);
+      setEducation(newEducation);
+      setCertifications(newCertifications);
       setMasterResumeId(resume.id);
       setMasterResumeTitle(resume.title);
       setMasterResumeTemplateId(resume.template_id);
-      await setProfileMasterResume(resume.id);
+
+      // Persist immediately — replacing the resume should update the saved
+      // career profile right away, not just the on-screen form until the
+      // user remembers to click "Save Profile" separately.
+      await upsertCareerProfile({
+        master_resume_id: resume.id,
+        contact: newContact,
+        headline: newHeadline || null,
+        experience: newExperiences,
+        education: newEducation,
+        skills: newSkills,
+        certifications: newCertifications,
+        role_status: roleStatus || null,
+      });
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
       await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
