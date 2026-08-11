@@ -8,6 +8,7 @@
   @page { margin: 0.5in; }
   body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.25; margin: 0; color: #111; }
   h1 { font-size: 16pt; font-weight: 700; margin: 0 0 3px; line-height: 1.1; }
+  .headline { font-size: 10.5pt; color: #333; margin-bottom: 3px; }
   .contact { font-size: 9.5pt; color: #333; margin-bottom: 10px; }
   h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid #111; margin: 13px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
   .job-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 5px; }
@@ -20,68 +21,140 @@
   .kw { font-weight: 700; }
   .skills { margin: 4px 0 6px; }
   p.summary { margin: 4px 0 8px; }
+  ul.plain { margin: 4px 0 8px 18px; padding: 0; }
 </style>
 </head>
 <body>
 <h1>{{ contact.name }}</h1>
+{% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
 <div class="contact">{{ contact.email }} | {{ contact.phone }} | {{ contact.location }}</div>
 
-{% if summary %}
-<h2>Summary</h2>
-<p class="summary">{{ summary }}</p>
-{% endif %}
+{% macro render_summary_or_objective() %}
+  {% if summary %}
+  <h2>Summary</h2>
+  <p class="summary">{{ summary }}</p>
+  {% elif objective %}
+  <h2>Objective</h2>
+  <p class="summary">{{ objective }}</p>
+  {% endif %}
+{% endmacro %}
 
-{% if experience %}
-<h2>Experience</h2>
-{% for job in experience %}
-<div class="job-row">
-  <span><span class="job-title">{{ job.title }}</span>, <b>{{ job.company }}</b></span>
-  <span class="dates">{{ job.start }} – {{ job.end or "Present" }}</span>
-</div>
-<table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+{% macro render_experience() %}
+  {% if experience %}
+  <h2>Experience</h2>
+  {% for job in experience %}
+  <div class="job-row">
+    <span><span class="job-title">{{ job.title }}</span>, <b>{{ job.company }}</b></span>
+    <span class="dates">{{ job.start }} – {{ job.end or "Present" }}</span>
+  </div>
+  <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_projects() %}
+  {% if projects %}
+  <h2>Projects</h2>
+  {% for p in projects %}
+  <div class="job-row">
+    <span><span class="job-title">{{ p.name }}</span>{% if p.tech_stack %} — {{ p.tech_stack }}{% endif %}</span>
+    <span class="dates">{% if p.start %}{{ p.start }} – {{ p.end or "Present" }}{% endif %}</span>
+  </div>
+  {% if p.link %}<div class="company">{{ p.link }}</div>{% endif %}
+  <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_education() %}
+  {% if education %}
+  <h2>Education</h2>
+  {% for edu in education %}
+  <div class="job-row">
+    <span><span class="job-title">{{ edu.degree }}</span>, {{ edu.institution }}</span>
+    <span class="dates">{{ edu.year }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_skills() %}
+  {% if skills %}
+  <h2>Skills</h2>
+  {% if skills is mapping %}
+    {% for category, items in skills.items() %}
+    <div class="skills"><b>{{ category }}:</b> {{ items | join(", ") }}</div>
+    {% endfor %}
+  {% else %}
+  <div class="skills">{{ skills | join(", ") }}</div>
+  {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_languages() %}
+  {% if languages %}
+  <h2>Languages</h2>
+  <div class="skills">{% for l in languages %}{{ l.name }} ({{ l.level }}){% if not loop.last %}, {% endif %}{% endfor %}</div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_certifications() %}
+  {% if certifications %}
+  <h2>Certifications</h2>
+  <ul class="plain">{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_awards() %}
+  {% if awards %}
+  <h2>Awards</h2>
+  <ul class="plain">{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_achievements() %}
+  {% if achievements %}
+  <h2>Achievements</h2>
+  <ul class="plain">{% for a in achievements %}<li>{{ a }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_leadership() %}
+  {% if leadership %}
+  <h2>Leadership</h2>
+  <ul class="plain">{% for l in leadership %}<li>{{ l }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_volunteer() %}
+  {% if volunteer %}
+  <h2>Volunteer</h2>
+  <ul class="plain">{% for v in volunteer %}<li>{{ v }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_links() %}
+  {% if contact.website %}
+  <h2>Links</h2>
+  <div class="skills">{{ contact.website }}</div>
+  {% endif %}
+{% endmacro %}
+
+{% set default_order = ["summary_or_objective", "experience", "projects", "education", "skills", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer"] %}
+{% for section in (section_order or default_order) %}
+  {% if section == "summary_or_objective" %}{{ render_summary_or_objective() }}
+  {% elif section == "experience" %}{{ render_experience() }}
+  {% elif section == "projects" %}{{ render_projects() }}
+  {% elif section == "education" %}{{ render_education() }}
+  {% elif section == "skills" %}{{ render_skills() }}
+  {% elif section == "languages" %}{{ render_languages() }}
+  {% elif section == "certifications" %}{{ render_certifications() }}
+  {% elif section == "awards" %}{{ render_awards() }}
+  {% elif section == "achievements" %}{{ render_achievements() }}
+  {% elif section == "leadership" %}{{ render_leadership() }}
+  {% elif section == "volunteer" %}{{ render_volunteer() }}
+  {% elif section == "links" %}{{ render_links() }}
+  {% endif %}
 {% endfor %}
-{% endif %}
-
-{% if projects %}
-<h2>Projects</h2>
-{% for p in projects %}
-<div class="job-row">
-  <span><span class="job-title">{{ p.name }}</span>{% if p.tech_stack %} — {{ p.tech_stack }}{% endif %}</span>
-  <span class="dates">{% if p.start %}{{ p.start }} – {{ p.end or "Present" }}{% endif %}</span>
-</div>
-{% if p.link %}<div class="company">{{ p.link }}</div>{% endif %}
-<table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
-{% endfor %}
-{% endif %}
-
-{% if education %}
-<h2>Education</h2>
-{% for edu in education %}
-<div class="job-row">
-  <span><span class="job-title">{{ edu.degree }}</span>, {{ edu.institution }}</span>
-  <span class="dates">{{ edu.year }}</span>
-</div>
-{% endfor %}
-{% endif %}
-
-{% if skills %}
-<h2>Skills</h2>
-<div class="skills">{{ skills | join(", ") }}</div>
-{% endif %}
-
-{% if languages %}
-<h2>Languages</h2>
-<div class="skills">{% for l in languages %}{{ l.name }} ({{ l.level }}){% if not loop.last %}, {% endif %}{% endfor %}</div>
-{% endif %}
-
-{% if certifications %}
-<h2>Certifications</h2>
-<ul>{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul>
-{% endif %}
-
-{% if awards %}
-<h2>Awards</h2>
-<ul>{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul>
-{% endif %}
 </body>
 </html>

@@ -7,7 +7,9 @@ from app.services.tailoring import (
     analyze_jd_match, JDMatchAnalysis,
     JDAnalysis, MappingPlan, BulletMapping,
     WriterOutput, RewrittenBullet, PrepQuestionsWrapper,
+    _build_agent3_system,
 )
+from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 
 
 def make_mock_provider(structured_return=None, complete_return=""):
@@ -59,6 +61,25 @@ async def test_generate_prep_questions_returns_list():
     result = await generate_prep_questions(["AWS"], {"experience": []}, provider)
     assert len(result) >= 1
     assert result[0].topic == "AWS"
+
+
+def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():
+    """Agent 3's prompt is the only place bullet prose length is actually
+    decided — this locks in the fix for "generated resumes are vague,
+    overly verbose" without needing a real LLM call."""
+    prompt = _build_agent3_system(50)
+    bw = HARD_LIMITS["bullet_words"]
+    assert str(bw["prefer_min"]) in prompt
+    assert str(bw["prefer_max"]) in prompt
+    assert str(bw["max"]) in prompt
+    assert "hard maximum" in prompt.lower()
+    for phrase in BANNED_GENERIC_PHRASES:
+        assert phrase in prompt
+    assert "NEVER FABRICATE" in prompt
+    assert "do not invent" in prompt.lower()
+    # No stray literal newline mid-sentence from a missing line-continuation.
+    assert "should have — \nbullet-count" not in prompt
+    assert "should have — bullet-count" in prompt
 
 
 @pytest.mark.asyncio

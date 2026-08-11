@@ -1,8 +1,10 @@
+import json
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 _MAX_PRIORITY_SKILLS = 20
+_MAX_PROFILE_JSON_BYTES = 200_000
 
 
 class TailorRequest(BaseModel):
@@ -81,3 +83,32 @@ class TailorOut(BaseModel):
     questions: list[PrepQuestionOut]
     company_keywords: list[str] = []
     suggested_skills: list[str] = []
+
+
+class GenerateResumeRequest(BaseModel):
+    candidate_type: str = Field(pattern="^(fresher|experienced)$")
+    # Raw, unbounded candidate profile — same general shape as resume content
+    # (contact/experience/projects/education/skills/...) but with no per-
+    # section caps; the generator selects the strongest subset itself.
+    profile: dict
+    target_role: str = Field(default="", max_length=200)
+    jd_text: str | None = Field(default=None, max_length=20000)
+    template_id: str = Field(default="ats_clean")
+    # When set, overwrites this existing resume row instead of creating a new one.
+    resume_id: uuid.UUID | None = None
+    title: str | None = Field(default=None, max_length=255)
+
+    @field_validator("profile")
+    @classmethod
+    def _cap_profile_size(cls, value: dict) -> dict:
+        if len(json.dumps(value)) > _MAX_PROFILE_JSON_BYTES:
+            raise ValueError(f"profile exceeds the maximum allowed size of {_MAX_PROFILE_JSON_BYTES} bytes")
+        return value
+
+
+class GenerateResumeOut(BaseModel):
+    resume_id: uuid.UUID
+    content: dict
+    template_id: str
+    valid: bool
+    violations: list[dict]

@@ -12,6 +12,7 @@ export interface ResumeContent {
   };
   headline?: string;
   summary?: string;
+  objective?: string;
   experience: Array<{
     company: string;
     title: string;
@@ -39,6 +40,13 @@ export interface ResumeContent {
   }>;
   certifications?: string[];
   awards?: string[];
+  achievements?: string[];
+  leadership?: string[];
+  volunteer?: string[];
+  /** Server-computed, content-aware section order for this resume — see
+   * apps/api/app/services/resume_spec.py::resolve_section_order. Optional:
+   * when absent, PDF templates fall back to their default order. */
+  section_order?: string[];
 }
 
 export interface Resume {

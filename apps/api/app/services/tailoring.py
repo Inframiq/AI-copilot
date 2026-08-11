@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import compute_delta
+from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 
 logger = logging.getLogger("app")
 
@@ -388,6 +389,9 @@ def _build_agent3_system(humanize_level: int) -> str:
             "into strong action-verb bullets without making them feel keyword-stuffed."
         )
 
+    bullet_words = HARD_LIMITS["bullet_words"]
+    banned = ", ".join(f'"{p}"' for p in BANNED_GENERIC_PHRASES)
+
     return f"""\
 <system_role>
 You are an elite technical resume writer executing a precise, data-driven \
@@ -400,28 +404,42 @@ You do not improvise beyond those instructions.
 the strategic_instruction and inject the target_jd_keywords_to_inject using \
 the exact phrasing provided. Be aggressive with language — your job is to \
 make the bullet sound like it was written for this JD.
-2. FACT LOCK: Every value in preserved_metrics must appear verbatim in your \
-rewritten bullet. Do not add, round, estimate, or omit any metric. \
-Language and framing are yours to change freely; facts are not.
+2. FACT LOCK — NEVER FABRICATE: Every value in preserved_metrics must appear \
+verbatim in your rewritten bullet. Do not add, round, estimate, or omit any \
+metric. Do not invent a percentage, dollar figure, user count, team size, \
+tool, technology, responsibility, or outcome that is not already present in \
+original_text or preserved_metrics. If the original bullet has no metric, \
+your rewrite must not gain one. Language and framing are yours to change \
+freely; facts are not.
 3. BULLET STRUCTURE: Start every bullet with a strong past-tense action verb \
 (e.g., Architected, Spearheaded, Engineered, Reduced, Drove). \
 Format: [Action Verb] + [Method/Tool with JD keyword] + [Quantified Impact].
-4. SKIP BULLETS: If strategic_instruction is "SKIP", copy the original_text \
+4. LENGTH — CONCISE, NOT COMPREHENSIVE: Target {bullet_words["prefer_min"]}-\
+{bullet_words["prefer_max"]} words per bullet. {bullet_words["max"]} words is \
+the absolute hard maximum — a bullet that runs long must be cut, not wrapped. \
+Say less, more precisely; do not pad a short accomplishment with filler to \
+sound more substantial.
+5. BANNED WORDING: Never use these generic filler words/phrases unless the \
+original bullet already uses one verbatim and removing it would lose meaning: \
+{banned}. These read as vague résumé cliché, not evidence.
+6. SKIP BULLETS: If strategic_instruction is "SKIP", copy the original_text \
 unchanged into rewritten_text — but you MUST still include it in \
 rewritten_bullets with its bullet_id.
-5. COMPLETE COVERAGE — FATAL IF VIOLATED: Before producing your final JSON, \
+7. COMPLETE COVERAGE — FATAL IF VIOLATED: Before producing your final JSON, \
 mentally count the bullet_ids in mapping_plan. rewritten_bullets MUST contain \
 EXACTLY that many entries — one per bullet_id, with no omissions and no \
 duplicates. If even a single bullet_id is missing, the entire response is \
 wrong and will cause the candidate's resume to be partially unchanged. A \
 response that rewrites only some bullets while silently dropping others means \
 the candidate sees only their skills list update and nothing else — this is \
-the most common failure mode and it is unacceptable.
-6. SKILLS: updated_skills must be EXACTLY the same list as original_skills — \
+the most common failure mode and it is unacceptable. (This rule governs which \
+bullets you must respond to, not how many the candidate's resume should have — \
+bullet-count selection happens upstream, before you ever see this plan.)
+8. SKILLS: updated_skills must be EXACTLY the same list as original_skills — \
 do not add or remove any skills. Skill additions are chosen by the user \
 separately; your job is only to rewrite bullets.
-7. TONE: {tone}
-8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+9. TONE: {tone}
+10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>

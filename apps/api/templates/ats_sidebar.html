@@ -9,6 +9,7 @@
   .header { display: flex; align-items: flex-start; gap: 16px; padding: 12px 36px 4px; }
   .photo { width: 80px; height: 80px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
   .name { font-size: 19pt; font-weight: 800; color: #2b2b2b; margin: 2px 0 4px; letter-spacing: 0.02em; line-height: 1.1; }
+  .headline { font-size: 10.5pt; color: #454651; margin: 0 0 4px; }
   .contact-line { font-size: 9pt; color: #333; margin-bottom: 2px; }
   .contact-line .marker { color: #4c6178; font-weight: bold; margin-right: 6px; }
   .body { padding: 3px 36px 16px; }
@@ -20,6 +21,7 @@
   ul.skills-grid { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 24px; font-size: 9.5pt; }
   ul.skills-grid li { margin-bottom: 2px; }
   ul.skills-grid li:before { content: "· "; color: #4c6178; font-weight: bold; }
+  .skills-category { font-size: 9.5pt; font-weight: 700; margin: 4px 0 2px; }
   .job { margin-bottom: 7px; }
   .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 7px; }
   .job-title-line { font-size: 10pt; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -46,6 +48,7 @@
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
   <div>
     <div class="name">{{ contact.name | upper }}</div>
+    {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
     {% if contact.location %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.location }}</div>{% endif %}
     {% if contact.phone %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.phone }}</div>{% endif %}
     <div class="contact-line"><span class="marker">&#9679;</span>{{ contact.email }}</div>
@@ -53,22 +56,40 @@
 </div>
 
 <div class="body">
+
+{% macro render_summary_or_objective() %}
   {% if summary %}
   <div class="section">
     <div class="section-label">Summary</div>
     <div class="section-body"><p class="summary">{{ summary }}</p></div>
   </div>
+  {% elif objective %}
+  <div class="section">
+    <div class="section-label">Objective</div>
+    <div class="section-body"><p class="summary">{{ objective }}</p></div>
+  </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_skills() %}
   {% if skills %}
   <div class="section">
     <div class="section-label">Skills</div>
     <div class="section-body">
+      {% if skills is mapping %}
+        {% for category, items in skills.items() %}
+        <div class="skills-category">{{ category }}</div>
+        <ul class="skills-grid">{% for s in items %}<li>{{ s }}</li>{% endfor %}</ul>
+        {% endfor %}
+      {% else %}
       <ul class="skills-grid">{% for s in skills %}<li>{{ s }}</li>{% endfor %}</ul>
+      {% endif %}
     </div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_experience() %}
   {% if experience %}
   <div class="section">
     <div class="section-label">Experience</div>
@@ -86,7 +107,9 @@
     </div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_projects() %}
   {% if projects %}
   <div class="section">
     <div class="section-label">Projects</div>
@@ -104,7 +127,9 @@
     </div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_education() %}
   {% if education %}
   <div class="section">
     <div class="section-label">Education and Training</div>
@@ -118,7 +143,9 @@
     </div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_languages() %}
   {% if languages %}
   <div class="section">
     <div class="section-label">Languages</div>
@@ -136,20 +163,78 @@
     </div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_certifications() %}
   {% if certifications %}
   <div class="section">
     <div class="section-label">Certifications</div>
     <div class="section-body"><ul class="plain">{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
+{% endmacro %}
 
+{% macro render_awards() %}
   {% if awards %}
   <div class="section">
     <div class="section-label">Awards</div>
     <div class="section-body"><ul class="plain">{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
+{% endmacro %}
+
+{% macro render_achievements() %}
+  {% if achievements %}
+  <div class="section">
+    <div class="section-label">Achievements</div>
+    <div class="section-body"><ul class="plain">{% for a in achievements %}<li>{{ a }}</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_leadership() %}
+  {% if leadership %}
+  <div class="section">
+    <div class="section-label">Leadership</div>
+    <div class="section-body"><ul class="plain">{% for l in leadership %}<li>{{ l }}</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_volunteer() %}
+  {% if volunteer %}
+  <div class="section">
+    <div class="section-label">Volunteer</div>
+    <div class="section-body"><ul class="plain">{% for v in volunteer %}<li>{{ v }}</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_links() %}
+  {% if contact.website %}
+  <div class="section">
+    <div class="section-label">Links</div>
+    <div class="section-body">{{ contact.website }}</div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% set default_order = ["summary_or_objective", "skills", "experience", "projects", "education", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer"] %}
+{% for section in (section_order or default_order) %}
+  {% if section == "summary_or_objective" %}{{ render_summary_or_objective() }}
+  {% elif section == "experience" %}{{ render_experience() }}
+  {% elif section == "projects" %}{{ render_projects() }}
+  {% elif section == "education" %}{{ render_education() }}
+  {% elif section == "skills" %}{{ render_skills() }}
+  {% elif section == "languages" %}{{ render_languages() }}
+  {% elif section == "certifications" %}{{ render_certifications() }}
+  {% elif section == "awards" %}{{ render_awards() }}
+  {% elif section == "achievements" %}{{ render_achievements() }}
+  {% elif section == "leadership" %}{{ render_leadership() }}
+  {% elif section == "volunteer" %}{{ render_volunteer() }}
+  {% elif section == "links" %}{{ render_links() }}
+  {% endif %}
+{% endfor %}
 </div>
 </body>
 </html>

@@ -69,6 +69,21 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     return resume_content
 
 
+def _render_html(resume_content: dict, template_id: str) -> str:
+    """Validate template_id and render resume_content to an HTML string.
+
+    Shared by generate_pdf (→ bytes) and count_pdf_pages (→ int), so both
+    always render from the exact same template + sanitization path.
+    """
+    if template_id not in ALLOWED_TEMPLATES:
+        raise ValueError(
+            f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
+        )
+    resume_content = _sanitize_resume_content(resume_content)
+    template = _jinja_env.get_template(f"{template_id}.html")
+    return template.render(**resume_content)
+
+
 def generate_pdf(resume_content: dict, template_id: str) -> bytes:
     """Render resume_content with the named template and return PDF bytes.
 
@@ -84,14 +99,23 @@ def generate_pdf(resume_content: dict, template_id: str) -> bytes:
     """
     import weasyprint  # deferred so import errors surface as ImportError, not module-level
 
-    if template_id not in ALLOWED_TEMPLATES:
-        raise ValueError(
-            f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
-        )
-    resume_content = _sanitize_resume_content(resume_content)
-    template = _jinja_env.get_template(f"{template_id}.html")
-    html = template.render(**resume_content)
+    html = _render_html(resume_content, template_id)
     return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
+
+
+def count_pdf_pages(resume_content: dict, template_id: str) -> int:
+    """Render resume_content and return the actual number of PDF pages.
+
+    Uses WeasyPrint's render() (not write_pdf()) so we get a Document with
+    a real .pages list instead of guessing page count from word/line counts —
+    the only way to know if content fits the page-count budget is to lay it
+    out exactly as the real renderer would.
+    """
+    import weasyprint  # deferred, same reason as generate_pdf
+
+    html = _render_html(resume_content, template_id)
+    document = weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).render()
+    return len(document.pages)
 
 
 def _blocked_url_fetcher(url: str, *args, **kwargs):

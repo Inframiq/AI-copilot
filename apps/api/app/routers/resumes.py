@@ -9,8 +9,10 @@ from app.db.models import Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest
+from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import generate_pdf, upload_pdf
 from app.services.resume_parser import extract_text, parse_resume_text
+from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
 from supabase import create_client
 from app.core.config import settings
@@ -166,6 +168,71 @@ async def generate_resume_pdf(
         background_tasks.add_task(_persist_pdf_to_storage, pdf_bytes, str(user["sub"]), resume_id)
     data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
     return {"signed_url": data_url, "expires_in": None}
+
+
+@router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def generate_resume_endpoint(
+    request: Request,
+    response: Response,
+    body: GenerateResumeRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a full, spec-compliant resume from a raw candidate profile —
+    relevance-filtered, evidence-bound, and validated/compressed against the
+    hard content limits in resume_spec.py. See services/resume_generator.py."""
+    if body.template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+
+    existing: Resume | None = None
+    if body.resume_id is not None:
+        result = await db.execute(
+            select(Resume).where(Resume.id == body.resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+        )
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Resume not found")
+
+    provider = get_ai_provider()
+    generated = await generate_resume(
+        body.profile,
+        body.candidate_type,
+        provider,
+        target_role=body.target_role,
+        jd_text=body.jd_text,
+        template_id=body.template_id,
+    )
+
+    name = (generated.resume_content.get("contact") or {}).get("name", "").strip()
+    title = body.title or (f"{name}'s Resume" if name else "Generated Resume")
+
+    if existing is not None:
+        existing.title = title[:255]
+        existing.template_id = body.template_id
+        existing.content = generated.resume_content
+        await db.commit()
+        await db.refresh(existing)
+        resume = existing
+        response.status_code = status.HTTP_200_OK
+    else:
+        resume = Resume(
+            user_id=uuid.UUID(user["sub"]),
+            title=title[:255],
+            template_id=body.template_id,
+            content=generated.resume_content,
+        )
+        db.add(resume)
+        await db.commit()
+        await db.refresh(resume)
+
+    return GenerateResumeOut(
+        resume_id=resume.id,
+        content=generated.resume_content,
+        template_id=body.template_id,
+        valid=generated.validation.valid,
+        violations=generated.validation.to_dict()["violations"],
+    )
 
 
 @router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
