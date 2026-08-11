@@ -125,6 +125,19 @@ export default function StudioIndexPage() {
 
         {error && <p className="text-body-sm text-error text-center">{error}</p>}
 
+        <button
+          onClick={() => setShowPrompt(false)}
+          className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
+        >
+          Create a new resume
+        </button>
+
+        <div className="flex items-center gap-md w-full">
+          <div className="flex-1 h-px bg-outline-variant/30" />
+          <span className="text-caption text-on-surface-variant">or</span>
+          <div className="flex-1 h-px bg-outline-variant/30" />
+        </div>
+
         {/* Existing resumes list */}
         <div className="w-full flex flex-col gap-sm">
           {existingResumes.map((r) => (
@@ -165,19 +178,6 @@ export default function StudioIndexPage() {
             </div>
           ))}
         </div>
-
-        <div className="flex items-center gap-md w-full">
-          <div className="flex-1 h-px bg-outline-variant/30" />
-          <span className="text-caption text-on-surface-variant">or</span>
-          <div className="flex-1 h-px bg-outline-variant/30" />
-        </div>
-
-        <button
-          onClick={() => setShowPrompt(false)}
-          className="w-full py-md rounded-xl text-label-md text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-        >
-          Create a new resume
-        </button>
       </div>
     );
   }
