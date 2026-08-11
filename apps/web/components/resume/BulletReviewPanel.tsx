@@ -1,8 +1,9 @@
 "use client";
-import { useMemo } from "react";
-import { Check, X, ArrowCounterClockwise, Plus } from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import { Check, X, ArrowCounterClockwise, Plus, FilePdf } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
+import { apiClient } from "@/lib/api-client";
 import { SkillsDelta } from "./SkillsDelta";
 
 export function BulletReviewPanel() {
@@ -16,8 +17,14 @@ export function BulletReviewPanel() {
   const companyKeywords = useTailoringStore((s) => s.companyKeywords);
   const companyName = useTailoringStore((s) => s.companyName);
   const atsScore = useTailoringStore((s) => s.atsScore);
+
   const resumeId = useResumeStore((s) => s.resumeId);
+  const templateId = useResumeStore((s) => s.templateId);
+  const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const originalContent = useResumeStore((s) => s.content);
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   // ── Bullet changes (experience only) ────────────────────────────────────
   const bulletChanges = useMemo<BulletChange[]>(() => {
@@ -56,18 +63,33 @@ export function BulletReviewPanel() {
 
   const hasSkillChanges = addedSkills.length > 0 || removedSkills.length > 0;
 
-  // ── Accepted counts ──────────────────────────────────────────────────────
   const acceptedBullets = bulletChanges.filter(
     (c) => (bulletDecisions[c.key] ?? "accept") === "accept",
   ).length;
-  const acceptedAdded = addedSkills.filter(
-    (s) => (bulletDecisions[`skill_add:${s}`] ?? "accept") === "accept",
-  ).length;
-  const restoredRemoved = removedSkills.filter(
-    (s) => (bulletDecisions[`skill_rm:${s}`] ?? "reject") === "accept",
-  ).length;
-  const totalAccepted = acceptedBullets + acceptedAdded + restoredRemoved;
   const totalChanges = bulletChanges.length + addedSkills.length + removedSkills.length;
+
+  // All bullets have been explicitly decided (Accept or Keep original clicked)
+  const allDecided = bulletChanges.length === 0 ||
+    bulletChanges.every((c) => c.key in bulletDecisions);
+
+  async function handleAcceptAll() {
+    setAllBulletDecisions(bulletChanges, "accept");
+  }
+
+  async function handleGeneratePdf() {
+    if (!resumeId) return;
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      await applyDecisions(resumeId);
+      const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
+      setPdfSignedUrl(signed_url);
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "PDF generation failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   if (!pendingContent) return null;
 
@@ -108,29 +130,22 @@ export function BulletReviewPanel() {
 
   return (
     <div className="flex flex-col gap-md">
-      {/* Header */}
+      {/* Header — no bulk action buttons here */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-label-md font-bold text-on-surface">Review AI Changes</p>
           <p className="text-caption text-on-surface-variant">
-            {totalAccepted} of {totalChanges} change{totalChanges !== 1 ? "s" : ""} accepted
+            {acceptedBullets} of {bulletChanges.length} bullet{bulletChanges.length !== 1 ? "s" : ""} accepted
             {atsScore !== null && ` · ATS Score: ${atsScore}%`}
           </p>
         </div>
-        <div className="flex gap-xs">
-          <button
-            onClick={() => setAllBulletDecisions(bulletChanges, "accept")}
-            className="px-sm py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-colors"
-          >
-            Accept all
-          </button>
-          <button
-            onClick={() => setAllBulletDecisions(bulletChanges, "reject")}
-            className="px-sm py-xs rounded-lg text-caption text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container-low transition-colors"
-          >
-            Reject all
-          </button>
-        </div>
+        <button
+          onClick={discardPending}
+          className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container-low transition-colors"
+        >
+          <ArrowCounterClockwise size={13} />
+          Discard
+        </button>
       </div>
 
       {/* Company keywords */}
@@ -157,7 +172,6 @@ export function BulletReviewPanel() {
             AI Tailored · Skills
           </p>
 
-          {/* Added skills — default accepted, click to reject */}
           {addedSkills.length > 0 && (
             <div className="flex flex-col gap-xs">
               <span className="text-caption text-primary font-bold uppercase tracking-wider">
@@ -195,7 +209,6 @@ export function BulletReviewPanel() {
             </div>
           )}
 
-          {/* Removed skills — default rejected (AI removed them), click to restore */}
           {removedSkills.length > 0 && (
             <div className="flex flex-col gap-xs">
               <span className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">
@@ -246,11 +259,14 @@ export function BulletReviewPanel() {
           </p>
           {group.changes.map((change) => {
             const isAccepted = (bulletDecisions[change.key] ?? "accept") === "accept";
+            const isDecided = change.key in bulletDecisions;
             return (
               <div
                 key={change.key}
                 className={`rounded-xl border p-md flex flex-col gap-sm transition-all ${
-                  isAccepted
+                  !isDecided
+                    ? "border-outline-variant/40 bg-surface"
+                    : isAccepted
                     ? "border-primary/25 bg-primary/5"
                     : "border-outline-variant/20 bg-surface opacity-60"
                 }`}
@@ -273,23 +289,23 @@ export function BulletReviewPanel() {
                   <button
                     onClick={() => setBulletDecision(change.key, "accept")}
                     className={`flex items-center gap-xs px-md py-xs rounded-lg text-label-sm transition-all ${
-                      isAccepted
+                      isAccepted && isDecided
                         ? "bg-primary text-on-primary shadow-sm"
                         : "border border-outline-variant/40 text-on-surface-variant hover:border-primary hover:text-primary"
                     }`}
                   >
-                    <Check size={14} weight={isAccepted ? "bold" : "regular"} />
+                    <Check size={14} weight={isAccepted && isDecided ? "bold" : "regular"} />
                     Accept
                   </button>
                   <button
                     onClick={() => setBulletDecision(change.key, "reject")}
                     className={`flex items-center gap-xs px-md py-xs rounded-lg text-label-sm transition-all ${
-                      !isAccepted
+                      !isAccepted && isDecided
                         ? "bg-error text-on-error shadow-sm"
                         : "border border-outline-variant/40 text-on-surface-variant hover:border-error hover:text-error"
                     }`}
                   >
-                    <X size={14} weight={!isAccepted ? "bold" : "regular"} />
+                    <X size={14} weight={!isAccepted && isDecided ? "bold" : "regular"} />
                     Keep original
                   </button>
                 </div>
@@ -301,26 +317,32 @@ export function BulletReviewPanel() {
 
       <SkillsDelta />
 
-      {/* Action buttons */}
-      <div className="flex gap-sm pt-xs">
-        <button
-          onClick={discardPending}
-          className="flex items-center justify-center gap-xs px-md py-sm rounded-xl border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors"
-        >
-          <ArrowCounterClockwise size={16} />
-          Discard
-        </button>
-        <button
-          onClick={() => resumeId && applyDecisions(resumeId)}
-          disabled={isApplying || !resumeId || totalAccepted === 0}
-          className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isApplying
-            ? "Applying…"
-            : totalAccepted === 0
-            ? "Nothing to apply"
-            : `Apply ${totalAccepted} Change${totalAccepted !== 1 ? "s" : ""}`}
-        </button>
+      {/* ── Bottom action area ── */}
+      <div className="flex flex-col gap-sm pt-xs border-t border-outline-variant/20 mt-xs">
+        {/* Accept All — always visible until all decided */}
+        {!allDecided && (
+          <button
+            onClick={handleAcceptAll}
+            className="w-full py-sm rounded-xl text-label-md text-primary border border-primary/40 hover:bg-primary/5 transition-all"
+          >
+            Accept All
+          </button>
+        )}
+
+        {/* Generate PDF — only after all decisions made */}
+        {allDecided && (
+          <>
+            {generateError && <p className="text-caption text-error">{generateError}</p>}
+            <button
+              onClick={handleGeneratePdf}
+              disabled={isApplying || isGenerating || !resumeId}
+              className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+            >
+              <FilePdf size={18} />
+              {isGenerating ? "Generating PDF…" : isApplying ? "Applying…" : "Generate PDF"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
