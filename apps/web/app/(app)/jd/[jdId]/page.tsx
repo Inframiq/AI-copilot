@@ -7,8 +7,16 @@ import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { JobDescription, Resume } from "@career-copilot/types";
-import { CheckCircle, ArrowLeft, Sparkle, ArrowCounterClockwise, FolderOpen } from "@phosphor-icons/react";
+import type { AnalyzeOut, JobDescription, Resume } from "@career-copilot/types";
+import {
+  CheckCircle,
+  WarningCircle,
+  ArrowLeft,
+  Sparkle,
+  ArrowCounterClockwise,
+  FolderOpen,
+  Target,
+} from "@phosphor-icons/react";
 
 export default function JDPage({
   params,
@@ -45,11 +53,38 @@ export default function JDPage({
     ?? resumes[0]
     ?? null;
 
+  // Read-only match analysis for this specific JD/resume pair — does not
+  // touch the resume, same semantics as the JD Analyzer index page's
+  // "Analyze Description" step.
+  const { data: analysis, isLoading: isAnalyzing } = useQuery<AnalyzeOut>({
+    queryKey: ["jdAnalysis", jdId, masterResume?.id],
+    queryFn: () => apiClient.analyzeJd(masterResume!.id, jdId),
+    enabled: !!masterResume,
+  });
+
+  // User's explicit picks from the "Not Matched" list — sent through to
+  // tailoring as skills to prioritize. Empty means "let the AI decide",
+  // unchanged from before this feature existed.
+  const [selectedPriority, setSelectedPriority] = useState<Set<string>>(new Set());
+
+  function togglePriority(skill: string) {
+    setSelectedPriority((prev) => {
+      const next = new Set(prev);
+      if (next.has(skill)) next.delete(skill);
+      else next.add(skill);
+      return next;
+    });
+  }
+
+  const matchedSkills = analysis?.matched_skills ?? [];
+  const missingSkills = analysis?.missing_skills ?? [];
+
   async function handleTailor() {
     if (!jd || !masterResume) return;
     setIsTailoring(true);
     setTailorError(null);
     setJd(jdId, jd.raw_text);
+    useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
     await runTailoring(masterResume.id);
     const err = useTailoringStore.getState().error;
     if (err) {
@@ -129,6 +164,97 @@ export default function JDPage({
             <p className="text-body-sm text-on-surface-variant">
               {jd ? "No parsed skills available." : "Loading…"}
             </p>
+          )}
+        </Card>
+
+        {/* Matched / Not Matched — same color convention as the JD Analyzer
+            index page (success = matched, error = not matched). Not Matched
+            chips are selectable — picks are sent to Tailor as priority skills. */}
+        <Card className="lg:col-span-2 flex flex-col gap-md">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
+            <Target size={20} className="text-primary" />
+            Keywords — Matched &amp; Not Matched
+          </h2>
+
+          {!masterResume ? (
+            <p className="text-body-sm text-on-surface-variant">No resume found. Create one first.</p>
+          ) : isAnalyzing ? (
+            <p className="text-body-sm text-on-surface-variant">Analyzing…</p>
+          ) : matchedSkills.length === 0 && missingSkills.length === 0 ? (
+            <p className="text-body-sm text-on-surface-variant">No keyword data available.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+              <div className="rounded-xl border border-success/25 bg-success-container/25 p-sm flex flex-col gap-xs min-w-0">
+                <h3 className="text-label-sm font-bold text-on-success-container flex items-center gap-xs">
+                  <CheckCircle size={15} weight="fill" className="text-success shrink-0" />
+                  <span>Matched</span>
+                  <span className="ml-auto shrink-0 text-caption font-bold px-xs rounded-full bg-success text-on-success">
+                    {matchedSkills.length}
+                  </span>
+                </h3>
+                {matchedSkills.length > 0 ? (
+                  <div className="flex flex-wrap gap-xs max-h-40 overflow-y-auto">
+                    {matchedSkills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="flex items-center gap-xs px-xs py-0.5 bg-success/10 text-on-success-container text-caption font-medium rounded-md border border-success/30"
+                      >
+                        <CheckCircle size={11} weight="fill" className="text-success shrink-0" />
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-caption text-on-surface-variant italic">None yet.</p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-error/25 bg-error-container/20 p-sm flex flex-col gap-xs min-w-0">
+                <h3 className="text-label-sm font-bold text-on-error-container flex items-center gap-xs">
+                  <WarningCircle size={15} weight="fill" className="text-error shrink-0" />
+                  <span>Not Matched</span>
+                  <span className="ml-auto shrink-0 text-caption font-bold px-xs rounded-full bg-error text-on-error">
+                    {missingSkills.length}
+                  </span>
+                </h3>
+                {missingSkills.length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap gap-xs max-h-40 overflow-y-auto">
+                      {missingSkills.map((skill) => {
+                        const selected = selectedPriority.has(skill);
+                        return (
+                          <button
+                            key={skill}
+                            type="button"
+                            onClick={() => togglePriority(skill)}
+                            aria-pressed={selected}
+                            className={`flex items-center gap-xs px-xs py-0.5 text-caption font-medium rounded-md border transition-all ${
+                              selected
+                                ? "bg-error text-on-error border-error"
+                                : "bg-error-container/40 text-on-error-container border-error/30 hover:border-error"
+                            }`}
+                          >
+                            {selected ? (
+                              <CheckCircle size={11} weight="fill" className="shrink-0" />
+                            ) : (
+                              <WarningCircle size={11} weight="fill" className="text-error shrink-0" />
+                            )}
+                            {skill}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-caption text-on-surface-variant mt-xs italic">
+                      {selectedPriority.size > 0
+                        ? `${selectedPriority.size} selected — Tailor will prioritize weaving these in.`
+                        : "Click any keyword to prioritize it, or leave unselected and let AI decide."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-caption text-on-surface-variant italic">None — full coverage.</p>
+                )}
+              </div>
+            </div>
           )}
         </Card>
 
