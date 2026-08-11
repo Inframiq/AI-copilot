@@ -78,6 +78,7 @@ export interface TailorOut {
   tailored_content: ResumeContent;
   questions: PrepQuestionOut[];
   company_keywords: string[];
+  suggested_skills: string[];
 }
 
 export interface AnalyzeOut {

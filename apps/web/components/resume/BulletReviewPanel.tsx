@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Check,
   X,
@@ -8,18 +9,24 @@ import {
   FilePdf,
   ArrowsClockwise,
   Sparkle,
+  DownloadSimple,
+  FloppyDisk,
+  Copy,
 } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
 
 export function BulletReviewPanel() {
+  const router = useRouter();
   const pendingContent = useTailoringStore((s) => s.pendingContent);
   const bulletDecisions = useTailoringStore((s) => s.bulletDecisions);
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
   const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
-  const applyDecisions = useTailoringStore((s) => s.applyDecisions);
+  const generatePreview = useTailoringStore((s) => s.generatePreview);
+  const saveTailoredResume = useTailoringStore((s) => s.saveTailoredResume);
+  const previewPdfUrl = useTailoringStore((s) => s.previewPdfUrl);
   const discardPending = useTailoringStore((s) => s.discardPending);
   const isApplying = useTailoringStore((s) => s.isApplying);
   const companyKeywords = useTailoringStore((s) => s.companyKeywords);
@@ -35,6 +42,10 @@ export function BulletReviewPanel() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [showSaveChoice, setShowSaveChoice] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
 
@@ -91,16 +102,45 @@ export function BulletReviewPanel() {
     }
   }
 
-  async function handleGeneratePdf() {
+  async function handleGeneratePreview() {
     if (!resumeId) return;
     setIsGenerating(true);
     setGenerateError(null);
     try {
-      await applyDecisions(resumeId);
+      await generatePreview(resumeId);
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "PDF generation failed");
+      setGenerateError(err instanceof Error ? err.message : "Preview generation failed");
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function handleDownload() {
+    if (!previewPdfUrl) return;
+    const response = await fetch(previewPdfUrl);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = "tailored-resume.pdf";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  async function handleSave(mode: "update" | "new") {
+    if (!resumeId) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const targetId = await saveTailoredResume(resumeId, mode, newTitle);
+      setShowSaveChoice(false);
+      if (mode === "new") router.push(`/studio/${targetId}`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -344,20 +384,97 @@ export function BulletReviewPanel() {
           </button>
         )}
 
-        {allDecided && (
+        {allDecided && !previewPdfUrl && (
           <>
             {generateError && (
               <p className="text-caption text-error">{generateError}</p>
             )}
             <button
-              onClick={handleGeneratePdf}
+              onClick={handleGeneratePreview}
               disabled={isApplying || isGenerating || !resumeId}
               className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <FilePdf size={18} />
-              {isGenerating ? "Generating PDF…" : isApplying ? "Applying…" : "Generate PDF"}
+              {isGenerating ? "Rendering preview…" : "Preview Tailored Resume"}
             </button>
+            <p className="text-caption text-on-surface-variant text-center">
+              This only renders a preview — your saved resume is not changed yet.
+            </p>
           </>
+        )}
+
+        {previewPdfUrl && (
+          <div className="flex flex-col gap-sm">
+            <p className="text-caption text-on-surface-variant text-center">
+              Preview generated — nothing has been saved yet.
+            </p>
+            <iframe
+              src={previewPdfUrl}
+              className="w-full rounded-xl border border-outline-variant/20 shadow-md bg-white"
+              style={{ aspectRatio: "1 / 1.414", minHeight: "420px" }}
+              title="Tailored Resume Preview"
+            />
+            <div className="flex gap-sm">
+              <button
+                onClick={handleDownload}
+                className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-md text-on-surface border border-outline-variant/40 hover:bg-surface-container-low transition-all"
+              >
+                <DownloadSimple size={16} />
+                Download
+              </button>
+              <button
+                onClick={() => setShowSaveChoice(true)}
+                className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+              >
+                <FloppyDisk size={16} />
+                Save…
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showSaveChoice && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-md flex flex-col gap-sm">
+            <p className="text-label-sm font-bold text-on-surface">Save tailored resume</p>
+            {saveError && <p className="text-caption text-error">{saveError}</p>}
+            <button
+              onClick={() => handleSave("update")}
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-xs py-sm rounded-lg text-label-sm text-on-primary bg-primary hover:bg-primary-container transition-all disabled:opacity-50"
+            >
+              <FloppyDisk size={14} />
+              {isSaving ? "Saving…" : "Update my resume"}
+            </button>
+            <p className="text-caption text-on-surface-variant px-xs">
+              Overwrites your current resume with this tailored version.
+            </p>
+            <div className="flex items-center gap-sm">
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder={companyName.trim() ? `Resume — ${companyName.trim()}` : "Tailored Resume"}
+                className="flex-1 px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <button
+                onClick={() => handleSave("new")}
+                disabled={isSaving}
+                className="flex items-center gap-xs px-md py-xs rounded-lg text-label-sm text-primary border border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-50"
+              >
+                <Copy size={14} />
+                {isSaving ? "Saving…" : "Save as new"}
+              </button>
+            </div>
+            <p className="text-caption text-on-surface-variant px-xs">
+              Keeps your current resume untouched and creates a separate copy for this job.
+            </p>
+            <button
+              onClick={() => setShowSaveChoice(false)}
+              className="text-caption text-on-surface-variant hover:underline self-end"
+            >
+              Cancel
+            </button>
+          </div>
         )}
       </div>
     </div>

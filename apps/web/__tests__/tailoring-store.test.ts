@@ -7,6 +7,7 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     tailorResume: vi.fn(),
     updateResume: vi.fn().mockResolvedValue({}),
+    createResume: vi.fn(),
     generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/tailored.pdf" }),
     createJd: vi.fn(),
   },
@@ -25,6 +26,7 @@ const mockTailorResult: TailorOut = {
   },
   questions: [],
   company_keywords: [],
+  suggested_skills: [],
 };
 
 import { useTailoringStore } from "../stores/tailoring-store";
@@ -97,7 +99,8 @@ describe("useTailoringStore", () => {
     expect(apiClient.tailorResume).toHaveBeenCalledWith(
       "resume-abc",
       "jd-001",
-      50
+      50,
+      undefined
     );
 
     const state = useTailoringStore.getState();
@@ -134,7 +137,8 @@ describe("useTailoringStore", () => {
     expect(apiClient.tailorResume).toHaveBeenCalledWith(
       "resume-abc",
       "jd-created-001",
-      50
+      50,
+      undefined
     );
     const state = useTailoringStore.getState();
     expect(state.jdId).toBe("jd-created-001");
@@ -156,7 +160,7 @@ describe("useTailoringStore", () => {
     expect(useTailoringStore.getState().isLoading).toBe(false);
   });
 
-  it("runTailoring hydrates resume store content with tailored_content", async () => {
+  it("runTailoring populates pendingContent for review, without touching the resume store or backend", async () => {
     useResumeStore
       .getState()
       .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
@@ -164,44 +168,103 @@ describe("useTailoringStore", () => {
 
     await useTailoringStore.getState().runTailoring("resume-abc");
 
-    // Resume store should now reflect the tailored content
-    const content = useResumeStore.getState().content;
-    expect(content?.skills).toEqual(["TypeScript", "React"]);
+    // Tailored content is staged for review, not written into the resume store.
+    expect(useTailoringStore.getState().pendingContent?.skills).toEqual([
+      "TypeScript",
+      "React",
+    ]);
+    expect(useResumeStore.getState().content).toEqual(SAMPLE_CONTENT);
+    expect(apiClient.updateResume).not.toHaveBeenCalled();
+    expect(apiClient.generatePdf).not.toHaveBeenCalled();
   });
 
-  it("runTailoring persists tailored content and refreshes the PDF preview", async () => {
-    useResumeStore
-      .getState()
-      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+  it("generatePreview merges accepted bullets and renders a preview without persisting", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
-
+    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
+      ...mockTailorResult,
+      tailored_content: {
+        ...mockTailorResult.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
     await useTailoringStore.getState().runTailoring("resume-abc");
 
-    // Content is saved immediately (not left to the debounce) before the
-    // PDF is regenerated, since the PDF endpoint reads from the DB.
-    expect(apiClient.updateResume).toHaveBeenCalledWith(
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    expect(apiClient.generatePdf).toHaveBeenCalledWith(
       "resume-abc",
-      expect.objectContaining({ content: expect.any(Object) })
+      "ats_clean",
+      expect.objectContaining({
+        experience: [expect.objectContaining({ bullets: ["Did stuff, tailored"] })],
+      })
     );
-    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-abc", "ats_clean");
-    expect(useResumeStore.getState().pdfSignedUrl).toBe(
+    // Nothing persisted, and the original resume is untouched.
+    expect(apiClient.updateResume).not.toHaveBeenCalled();
+    expect(useResumeStore.getState().content).toEqual(original);
+    expect(useTailoringStore.getState().previewPdfUrl).toBe(
       "https://example.com/tailored.pdf"
     );
   });
 
-  it("runTailoring surfaces tailoring success even if the PDF refresh fails", async () => {
+  it("saveTailoredResume('update') persists the merged content to the same resume", async () => {
     useResumeStore
       .getState()
       .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
-    vi.mocked(apiClient.generatePdf).mockRejectedValueOnce(new Error("render failed"));
-
     await useTailoringStore.getState().runTailoring("resume-abc");
+    await useTailoringStore.getState().generatePreview("resume-abc");
 
-    const state = useTailoringStore.getState();
-    expect(state.error).toBeNull();
-    expect(state.sessionId).toBe("session-xyz");
-    expect(useResumeStore.getState().pdfSignedUrl).toBeNull();
+    const targetId = await useTailoringStore.getState().saveTailoredResume("resume-abc", "update");
+
+    expect(targetId).toBe("resume-abc");
+    expect(apiClient.updateResume).toHaveBeenCalledWith(
+      "resume-abc",
+      expect.objectContaining({ content: expect.any(Object) })
+    );
+    // Skills are opt-in via the suggested-skills chips, not a blind copy of
+    // the AI's full tailored skill list — none were accepted here, so the
+    // original (empty) skill list carries through unchanged.
+    expect(useResumeStore.getState().content?.skills).toEqual([]);
+    expect(useTailoringStore.getState().previewPdfUrl).toBeNull();
+    expect(useTailoringStore.getState().pendingContent).toBeNull();
+  });
+
+  it("saveTailoredResume('new') creates a separate resume and leaves the original untouched", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.createResume).mockResolvedValueOnce({
+      id: "resume-new",
+      user_id: "user-1",
+      title: "Tailored Resume",
+      content: SAMPLE_CONTENT,
+      template_id: "ats_clean",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    const targetId = await useTailoringStore.getState().saveTailoredResume(
+      "resume-abc",
+      "new",
+      "Resume — Acme"
+    );
+
+    expect(targetId).toBe("resume-new");
+    expect(apiClient.createResume).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Resume — Acme", content: expect.any(Object) })
+    );
+    expect(apiClient.updateResume).not.toHaveBeenCalled();
+    // The original resume in the store is untouched.
+    expect(useResumeStore.getState().resumeId).toBe("resume-abc");
+    expect(useResumeStore.getState().content).toEqual(SAMPLE_CONTENT);
   });
 
   it("runTailoring handles API errors gracefully", async () => {

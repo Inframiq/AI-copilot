@@ -32,9 +32,14 @@ interface TailoringState {
   isApplying: boolean;
   error: string | null;
 
-  // Pending review state — populated after tailoring, cleared after apply/discard
+  // Pending review state — populated after tailoring, cleared after save/discard
   pendingContent: ResumeContent | null;
   bulletDecisions: Record<string, BulletDecision>;
+  // The merged (accepted-bullets-applied) content behind the current preview —
+  // this is what a later "Save" would persist. Never written to the resume
+  // store or backend until the user explicitly saves.
+  mergedContent: ResumeContent | null;
+  previewPdfUrl: string | null;
 
   setJd: (id: string, text: string) => void;
   setCompanyName: (name: string) => void;
@@ -44,7 +49,18 @@ interface TailoringState {
   updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
-  applyDecisions: (resumeId: string) => Promise<void>;
+  /** Renders a PDF preview of the accepted changes. Does NOT touch the
+   * resume store or persist anything — the original resume is untouched
+   * until saveTailoredResume is explicitly called. */
+  generatePreview: (resumeId: string) => Promise<void>;
+  /** Persists the previewed content — either overwriting the original resume
+   * ("update") or creating a brand-new resume record ("new"), the user's
+   * explicit choice. Returns the id of the resume the content now lives in. */
+  saveTailoredResume: (
+    resumeId: string,
+    mode: "update" | "new",
+    newTitle?: string
+  ) => Promise<string>;
   discardPending: () => void;
   resetStore: () => void;
 }
@@ -66,6 +82,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   error: null,
   pendingContent: null,
   bulletDecisions: {},
+  mergedContent: null,
+  previewPdfUrl: null,
 
   setJd: (id, text) => set({ jdId: id, jdText: text }),
   setCompanyName: (name) => set({ companyName: name }),
@@ -170,6 +188,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       sessionId: null,
       pendingContent: null,
       bulletDecisions: {},
+      mergedContent: null,
+      previewPdfUrl: null,
     });
     try {
       const result = await apiClient.tailorResume(
@@ -225,11 +245,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     }
   },
 
-  // Apply accepted bullet decisions to the resume store, save, and regenerate PDF.
-  applyDecisions: async (resumeId: string) => {
+  // Merge accepted bullet decisions into the original content and render a
+  // preview PDF from that merged content. This never writes to the resume
+  // store or the backend — the original resume stays exactly as it was
+  // until the user explicitly calls saveTailoredResume.
+  generatePreview: async (resumeId: string) => {
     const { pendingContent, bulletDecisions, suggestedSkills } = get();
-    const resumeStore = useResumeStore.getState();
-    const originalContent = resumeStore.content;
+    const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent) return;
 
     // Merge: use tailored bullet unless user rejected it.
@@ -260,25 +282,72 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       skills: mergedSkills,
     };
 
-    set({ isApplying: true, error: null });
+    set({ isApplying: true, error: null, mergedContent });
     try {
-      resumeStore.updateContent(mergedContent);
-      await resumeStore.saveNow();
       const { signed_url } = await apiClient.generatePdf(
         resumeId,
         useResumeStore.getState().templateId,
+        mergedContent,
       );
-      useResumeStore.getState().setPdfSignedUrl(signed_url);
-      // Clear pending state after successful apply
-      set({ pendingContent: null, bulletDecisions: {}, isApplying: false });
+      set({ previewPdfUrl: signed_url, isApplying: false });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to apply changes";
+      const msg = err instanceof Error ? err.message : "Failed to generate preview";
       set({ error: msg, isApplying: false });
       throw new Error(msg);
     }
   },
 
-  discardPending: () => set({ pendingContent: null, bulletDecisions: {}, suggestedSkills: [] }),
+  // Explicit, user-initiated persistence of the previewed content. "update"
+  // overwrites the original resume; "new" creates a separate resume record
+  // so the original is never touched. Only ever called from a save
+  // confirmation the user clicked — never automatically.
+  saveTailoredResume: async (resumeId, mode, newTitle) => {
+    const { mergedContent } = get();
+    const resumeStore = useResumeStore.getState();
+    if (!mergedContent) throw new Error("No previewed content to save");
+
+    set({ isApplying: true, error: null });
+    try {
+      let targetId = resumeId;
+      if (mode === "update") {
+        await apiClient.updateResume(resumeId, {
+          content: mergedContent,
+          template_id: resumeStore.templateId,
+        });
+        resumeStore.setResume(resumeId, mergedContent, resumeStore.templateId);
+      } else {
+        const created = await apiClient.createResume({
+          title: newTitle?.trim() || "Tailored Resume",
+          template_id: resumeStore.templateId,
+          content: mergedContent,
+        });
+        targetId = created.id;
+      }
+      const { signed_url } = await apiClient.generatePdf(targetId, resumeStore.templateId);
+      if (mode === "update") useResumeStore.getState().setPdfSignedUrl(signed_url);
+      set({
+        pendingContent: null,
+        bulletDecisions: {},
+        mergedContent: null,
+        previewPdfUrl: null,
+        isApplying: false,
+      });
+      return targetId;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save resume";
+      set({ error: msg, isApplying: false });
+      throw new Error(msg);
+    }
+  },
+
+  discardPending: () =>
+    set({
+      pendingContent: null,
+      bulletDecisions: {},
+      suggestedSkills: [],
+      mergedContent: null,
+      previewPdfUrl: null,
+    }),
 
   resetStore: () =>
     set({
@@ -298,5 +367,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       error: null,
       pendingContent: null,
       bulletDecisions: {},
+      mergedContent: null,
+      previewPdfUrl: null,
     }),
 }));
