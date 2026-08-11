@@ -317,6 +317,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         mergedContent,
       );
       set({ previewPdfUrl: signed_url, isApplying: false });
+      // Also drive the Studio page's dedicated PDF Preview panel — it reads
+      // its own pdfSignedUrl from the resume store, so without this the
+      // "Preview Tailored Resume" render would only ever show up inline
+      // under the bullet list, never in the preview pane it's supposed to
+      // occupy. This does NOT persist anything (setPdfSignedUrl is just
+      // display state); saveTailoredResume is still the only write path.
+      useResumeStore.getState().setPdfSignedUrl(signed_url);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to generate preview";
       set({ error: msg, isApplying: false });

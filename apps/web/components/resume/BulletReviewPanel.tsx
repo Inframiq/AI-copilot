@@ -409,14 +409,8 @@ export function BulletReviewPanel() {
         {previewPdfUrl && (
           <div className="flex flex-col gap-sm">
             <p className="text-caption text-on-surface-variant text-center">
-              Preview generated — nothing has been saved yet.
+              Preview updated in the panel on the right — nothing has been saved yet.
             </p>
-            <iframe
-              src={previewPdfUrl}
-              className="w-full rounded-xl border border-outline-variant/20 shadow-md bg-white"
-              style={{ aspectRatio: "1 / 1.414", minHeight: "420px" }}
-              title="Tailored Resume Preview"
-            />
             <div className="flex gap-sm">
               <button
                 onClick={handleDownload}

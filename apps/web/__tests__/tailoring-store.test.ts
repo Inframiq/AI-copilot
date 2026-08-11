@@ -211,6 +211,13 @@ describe("useTailoringStore", () => {
     expect(useTailoringStore.getState().previewPdfUrl).toBe(
       "https://example.com/tailored.pdf"
     );
+    // The Studio page's dedicated PDF Preview panel reads pdfSignedUrl off
+    // the resume store, not previewPdfUrl off the tailoring store — without
+    // this, "Preview Tailored Resume" would only ever render inline under
+    // the bullet list, never in the panel it's supposed to occupy.
+    expect(useResumeStore.getState().pdfSignedUrl).toBe(
+      "https://example.com/tailored.pdf"
+    );
   });
 
   it("saveTailoredResume('update') persists the merged content to the same resume", async () => {
