@@ -127,10 +127,26 @@ def _index_bullets(resume_content: dict) -> tuple[dict, dict[str, str]]:
     return content, bullet_index
 
 
-def _apply_writer_output(resume_content: dict, writer: WriterOutput) -> dict:
-    """Patch rewritten bullets back into resume_content in-place."""
+def _apply_writer_output(
+    resume_content: dict,
+    writer: WriterOutput,
+    mapping_plan: "MappingPlan | None" = None,
+) -> dict:
+    """Patch rewritten bullets back into resume_content in-place.
+
+    Fallback priority when a bullet_id is absent from writer.rewritten_bullets:
+      1. mapping_plan.original_text for that bullet_id (preserves the exact
+         original text Agent 2 saw, which is the most reliable source)
+      2. bullet["text"] from the indexed resume dict (same value, different path)
+    """
     content = deepcopy(resume_content)
     rewrite_map = {r.bullet_id: r.rewritten_text for r in writer.rewritten_bullets}
+
+    # Build a secondary fallback from the mapping plan's original_text
+    plan_originals: dict[str, str] = {}
+    if mapping_plan:
+        for entry in mapping_plan.mapping_plan:
+            plan_originals[entry.original_bullet_id] = entry.original_text
 
     missing_ids: list[str] = []
     for exp in content.get("experience", []):
@@ -140,20 +156,19 @@ def _apply_writer_output(resume_content: dict, writer: WriterOutput) -> dict:
                 bid = bullet.get("bullet_id", "")
                 if bid and bid not in rewrite_map:
                     missing_ids.append(bid)
-                text = rewrite_map.get(bid, bullet.get("text", ""))
+                # Fallback chain: rewrite → mapping plan original → indexed dict text
+                text = rewrite_map.get(
+                    bid,
+                    plan_originals.get(bid, bullet.get("text", ""))
+                )
                 patched.append(text)
             else:
                 patched.append(bullet)
         exp["bullets"] = patched
 
     if missing_ids:
-        # Agent 3 is instructed to cover every bullet_id, even SKIPped ones —
-        # this means it didn't, and those bullets silently kept their
-        # original text instead of getting a real rewrite (or an explicit
-        # SKIP echo). Surfacing this so it's visible in production logs
-        # rather than only showing up as "nothing changed but the skills".
         logger.warning(
-            "Agent 3 omitted %d bullet(s) from rewritten_bullets: %s",
+            "Agent 3 omitted %d bullet(s) from rewritten_bullets (original text used): %s",
             len(missing_ids), missing_ids,
         )
 
@@ -280,32 +295,32 @@ async def _agent1_parse_jd(
 
 _AGENT2_SYSTEM = """\
 <system_role>
-You are a strict Data Integrity Auditor and Executive Resume Strategist. \
-Your job is Semantic ATS Mapping: identify exactly where the requirements of a \
-Job Description intersect with a candidate's actual history, then produce a \
-precise rewrite plan.
+You are an Executive Resume Strategist and ATS Optimisation Specialist. \
+Your job is Semantic ATS Mapping: produce a precise rewrite plan that aligns \
+every resume bullet with the Job Description as strongly as the candidate's \
+real experience allows.
 </system_role>
 
 <rules>
-1. ZERO HALLUCINATION POLICY: You may only map a JD requirement to a resume \
-bullet if the candidate's original text logically supports that experience. \
-If there is no supporting evidence, do not force the mapping.
-2. METRIC PRESERVATION: You must capture every number, percentage, dollar figure, \
-and date from the original bullet in preserved_metrics. The writer must never \
-alter these.
-3. TRANSFORMATION TYPES — for each bullet choose the right instruction:
-   - REINFORCE: candidate already demonstrates this skill; rephrase to use JD-exact \
-terminology.
-   - REFRAME: candidate has adjacent experience; shift the framing to align with \
-the JD requirement without fabricating new facts.
-   - INJECT: add a specific JD keyword that is factually supported by the bullet \
-context.
-   - SKIP: bullet has no reasonable mapping to any JD requirement — leave as-is.
-4. COMPLETE COVERAGE — MANDATORY: original_resume contains every bullet the \
-candidate has, each with a bullet_id. mapping_plan MUST contain exactly one \
-entry per bullet_id present in original_resume — do not omit any bullet, even \
-ones you assign SKIP. A mapping_plan that covers only some bullets is an \
-incomplete, incorrect response.
+1. NO FABRICATION: You may only introduce JD keywords that the candidate's \
+original bullet plausibly supports. Do not invent new jobs, projects, or skills \
+that have no basis in the original text.
+2. METRIC PRESERVATION: Capture every number, percentage, dollar figure, and date \
+from the original bullet in preserved_metrics. The writer must never alter these.
+3. TRANSFORMATION TYPES — apply the most aggressive instruction the evidence \
+supports. Default to REINFORCE or REFRAME; reserve SKIP only as a last resort:
+   - REINFORCE: candidate already demonstrates this skill — rephrase using \
+JD-exact terminology and keywords.
+   - REFRAME: candidate has adjacent or transferable experience — shift the \
+framing to highlight JD relevance without adding new facts.
+   - INJECT: the bullet context plausibly supports a specific JD keyword that is \
+absent — add it.
+   - SKIP: the bullet has absolutely no connection to any JD requirement and \
+cannot be meaningfully improved — use this sparingly. Most bullets can at \
+least be REINFORCEd or REFRAMEd.
+4. COMPLETE COVERAGE — MANDATORY: mapping_plan MUST contain exactly one entry \
+per bullet_id present in original_resume — do not omit any bullet, even \
+ones assigned SKIP. A mapping_plan that covers only some bullets is incorrect.
 5. plausible_skills_to_add: only list skills the candidate could genuinely claim \
 based on their existing stack (e.g., if they use React, they plausibly know \
 JavaScript). Never add skills with no foundation in their history.
@@ -379,14 +394,16 @@ rewritten bullet. Do not round, estimate, or omit any metric.
 (e.g., Architected, Spearheaded, Engineered, Reduced, Drove). \
 Format: [Action Verb] + [Method/Tool with JD keyword] + [Quantified Impact].
 4. SKIP BULLETS: If strategic_instruction is "SKIP", copy the original_text \
-unchanged into rewritten_text — but you must still include it in \
-rewritten_bullets.
-5. COMPLETE COVERAGE — MANDATORY: rewritten_bullets MUST contain exactly one \
-entry per bullet_id that appears in the mapping_plan input — every single \
-one, with no omissions, even bullets you left unchanged under rule 4. A \
-response that rewrites only some of the bullets and silently drops the rest \
-is incomplete and incorrect — the candidate would see no real change to most \
-of their resume, only their skills list updating, which is not acceptable.
+unchanged into rewritten_text — but you MUST still include it in \
+rewritten_bullets with its bullet_id.
+5. COMPLETE COVERAGE — FATAL IF VIOLATED: Before producing your final JSON, \
+mentally count the bullet_ids in mapping_plan. rewritten_bullets MUST contain \
+EXACTLY that many entries — one per bullet_id, with no omissions and no \
+duplicates. If even a single bullet_id is missing, the entire response is \
+wrong and will cause the candidate's resume to be partially unchanged. A \
+response that rewrites only some bullets while silently dropping others means \
+the candidate sees only their skills list update and nothing else — this is \
+the most common failure mode and it is unacceptable.
 6. SKILLS: updated_skills must be the complete final skills list — merge the \
 original skills with plausible_skills_to_add, deduplicated.
 7. TONE: {tone}
@@ -564,7 +581,7 @@ async def run_tailoring_pipeline(
     )
 
     # ── patch rewritten bullets back into the original structure ─────────────
-    tailored_content = _apply_writer_output(indexed_resume, tailored_raw)
+    tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)
 
     return TailoringResult(
         tailored_content=tailored_content,
