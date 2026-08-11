@@ -324,9 +324,12 @@ of bullets should be SKIPped for a typical role.
 4. COMPLETE COVERAGE — MANDATORY: mapping_plan MUST contain exactly one entry \
 per bullet_id present in original_resume — do not omit any bullet, even \
 ones assigned SKIP. A mapping_plan that covers only some bullets is incorrect.
-5. plausible_skills_to_add: list skills the candidate's existing stack implies \
-(e.g., React → JavaScript, AWS Lambda → serverless architecture). Be \
-generous — if the stack plausibly produces the skill, include it.
+5. plausible_skills_to_add: list ONLY skills that are (a) explicitly mentioned \
+in the JD AND (b) directly evidenced by the candidate's existing stack \
+(e.g., if they use AWS Lambda and the JD says "serverless", add "Serverless \
+Architecture"; if the JD never mentions JavaScript, do not add it just because \
+they use React). Limit to at most 6 skills. Do not dump transitive or \
+implied skills — only add what the JD is clearly testing for.
 6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
@@ -409,8 +412,11 @@ wrong and will cause the candidate's resume to be partially unchanged. A \
 response that rewrites only some bullets while silently dropping others means \
 the candidate sees only their skills list update and nothing else — this is \
 the most common failure mode and it is unacceptable.
-6. SKILLS: updated_skills must be the complete final skills list — merge the \
-original skills with plausible_skills_to_add, deduplicated.
+6. SKILLS: updated_skills must be the complete final skills list — start with \
+original_skills, then add only the plausible_skills_to_add entries that are \
+explicitly required or strongly preferred in the JD. Add at most 5 new skills \
+total. Do not inflate the list with every keyword from the JD — only add skills \
+the candidate's background genuinely supports and the JD clearly demands.
 7. TONE: {tone}
 8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
