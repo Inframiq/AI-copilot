@@ -7,6 +7,14 @@ vi.mock("@/lib/photo-upload", () => ({
   uploadResumePhoto: vi.fn(),
 }));
 
+// A successful tailor run populates pendingContent, which makes EditorPanel
+// render BulletReviewPanel — and that component calls useRouter() (added
+// alongside the tailoring preview/save flow), which throws outside a real
+// Next.js App Router context unless mocked here.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     updateResume: vi.fn().mockResolvedValue({}),
@@ -60,7 +68,7 @@ describe("EditorPanel", () => {
       skills: [],
     }, "ats_clean");
     render(<EditorPanel />);
-    expect(screen.queryByText("Tailor to JD")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tailor Resume")).not.toBeInTheDocument();
     expect(screen.getByText(/unlock AI tailoring/)).toBeInTheDocument();
   });
 
@@ -108,13 +116,13 @@ describe("EditorPanel", () => {
     expect(await screen.findByText("Upload failed: too large")).toBeInTheDocument();
   });
 
-  it("Tailor to JD is disabled until JD text is entered", () => {
+  it("Tailor Resume is disabled until JD text is entered", () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     render(<EditorPanel />);
-    expect(screen.getByText("Tailor to JD").closest("button")).toBeDisabled();
+    expect(screen.getByText("Tailor Resume").closest("button")).toBeDisabled();
   });
 
-  it("typing JD text and clicking Tailor to JD triggers the tailoring flow", async () => {
+  it("typing JD text and clicking Tailor Resume triggers the tailoring flow", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     vi.mocked(apiClient.createJd).mockResolvedValue({
       id: "jd-1",
@@ -132,17 +140,19 @@ describe("EditorPanel", () => {
       missing_skills: [],
       tailored_content: SAMPLE_CONTENT,
       questions: [],
+      company_keywords: [],
+      suggested_skills: [],
     } as any);
 
     render(<EditorPanel />);
     await userEvent.type(
-      screen.getByPlaceholderText(/Paste job description/),
+      screen.getByPlaceholderText(/Paste the job description/),
       "Senior Backend Engineer role"
     );
-    await userEvent.click(screen.getByText("Tailor to JD"));
+    await userEvent.click(screen.getByText("Tailor Resume"));
 
     await waitFor(() => {
-      expect(apiClient.tailorResume).toHaveBeenCalledWith("resume-1", "jd-1", 50);
+      expect(apiClient.tailorResume).toHaveBeenCalledWith("resume-1", "jd-1", 50, undefined, []);
     });
     await waitFor(() => {
       expect(useTailoringStore.getState().sessionId).toBe("session-1");

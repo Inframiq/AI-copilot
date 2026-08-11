@@ -1,18 +1,47 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from pydantic import BaseModel
 from app.services.tailoring import (
     extract_jd_skills, ParsedJD,
-    rewrite_bullets,
     generate_prep_questions, PrepQuestionData,
     run_tailoring_pipeline, TailoringResult,
+    analyze_jd_match, JDMatchAnalysis,
+    JDAnalysis, MappingPlan, BulletMapping,
+    WriterOutput, RewrittenBullet, PrepQuestionsWrapper,
 )
+
 
 def make_mock_provider(structured_return=None, complete_return=""):
     provider = MagicMock()
     provider.complete_structured = AsyncMock(return_value=structured_return)
     provider.complete = AsyncMock(return_value=complete_return)
     return provider
+
+
+def make_provider_dispatching_by_schema(responses: dict[type, object]):
+    """Real code calls provider.complete_structured(system, user, schema, model_tier=...)
+    positionally for `schema` — dispatch on that instead of call order, since
+    Agent 3 and generate_prep_questions run concurrently via asyncio.gather
+    and their relative call order isn't guaranteed."""
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+        return responses[schema]
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    return provider
+
+
+def make_jd_analysis(**overrides) -> JDAnalysis:
+    defaults = dict(
+        exact_technical_tools=["Python"],
+        methodologies_and_frameworks=[],
+        domain_expertise_themes=[],
+        seniority_indicators=[],
+        ats_filter_phrases=[],
+    )
+    defaults.update(overrides)
+    return JDAnalysis(**defaults)
+
 
 @pytest.mark.asyncio
 async def test_extract_jd_skills_returns_parsed_jd():
@@ -22,12 +51,6 @@ async def test_extract_jd_skills_returns_parsed_jd():
     assert isinstance(result, ParsedJD)
     assert "Python" in result.required
 
-@pytest.mark.asyncio
-async def test_rewrite_bullets_returns_dict():
-    provider = make_mock_provider(complete_return='{"experience": [{"title": "Engineer", "bullets": ["Built APIs"]}]}')
-    resume = {"experience": [{"title": "Engineer", "bullets": ["Built stuff"]}]}
-    result = await rewrite_bullets(resume, ["Python"], ["AWS"], ["Python", "AWS"], 50, provider)
-    assert isinstance(result, dict)
 
 @pytest.mark.asyncio
 async def test_generate_prep_questions_returns_list():
@@ -37,30 +60,77 @@ async def test_generate_prep_questions_returns_list():
     assert len(result) >= 1
     assert result[0].topic == "AWS"
 
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_dedupes_overlapping_skills():
+    # "Python" appears in both exact_technical_tools and ats_filter_phrases
+    # (different casing) — must not be double-counted in the ats_score
+    # denominator or matched/missing lists.
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python", "AWS"],
+        ats_filter_phrases=["python"],
+    )
+    provider = make_mock_provider(structured_return=jd_analysis)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "Need Python and AWS.", provider)
+
+    assert isinstance(result, JDMatchAnalysis)
+    assert result.matched_skills.count("Python") == 1
+    assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3
+
+
 @pytest.mark.asyncio
 async def test_run_tailoring_pipeline_returns_result():
-    parsed_jd = ParsedJD(required=["Python"], nice_to_have=[])
-    questions_wrapper = MagicMock(questions=[
-        PrepQuestionData(topic="AWS", question="Q?", answer_framework="A", is_gap_based=True, order_index=0)
-    ])
-    provider = MagicMock()
-    provider.complete_structured = AsyncMock(side_effect=[parsed_jd, questions_wrapper])
-    provider.complete = AsyncMock(return_value='{"experience": []}')
+    responses = {
+        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[
+                BulletMapping(
+                    original_bullet_id="exp0_b0",
+                    original_text="Used Python",
+                    target_jd_keywords_to_inject=["Python"],
+                    preserved_metrics=[],
+                    strategic_instruction="REINFORCE",
+                )
+            ],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
+            updated_skills=["Python"],
+        ),
+        PrepQuestionsWrapper: PrepQuestionsWrapper(
+            questions=[PrepQuestionData(topic="AWS", question="Q?", answer_framework="A", is_gap_based=True, order_index=0)]
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
     result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider)
+
     assert isinstance(result, TailoringResult)
     assert result.ats_score >= 0
+    assert result.tailored_content["experience"][0]["bullets"] == ["Leveraged Python extensively"]
+
 
 @pytest.mark.asyncio
 async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
-    # "Python" appears in both required and nice_to_have — must not be
-    # double-counted in the ats_score denominator or matched/missing lists
-    parsed_jd = ParsedJD(required=["Python", "AWS"], nice_to_have=["python"])
-    questions_wrapper = MagicMock(questions=[])
-    provider = MagicMock()
-    provider.complete_structured = AsyncMock(side_effect=[parsed_jd, questions_wrapper])
-    provider.complete = AsyncMock(return_value='{"experience": []}')
+    # Same dedup guarantee as the analyze-only test above, but exercised
+    # through the full tailoring pipeline.
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Python", "AWS"],
+            ats_filter_phrases=["python"],
+        ),
+        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
+        WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
+        PrepQuestionsWrapper: PrepQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}]}
+
     result = await run_tailoring_pipeline(resume, "Need Python and AWS.", 50, provider)
+
     assert result.matched_skills.count("Python") == 1
     assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3
