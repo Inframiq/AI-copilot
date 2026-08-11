@@ -7,23 +7,22 @@ import {
   FileDashed,
   FileText,
   RocketLaunch,
-  Path,
-  Users,
   ChartLineUp,
   MicrophoneStage,
   IdentificationCard,
 } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
 
+// Phase 1 nav — Career Path (/career-path) and Networking (/networking) are
+// intentionally excluded. Their pages and backend code are intact in git
+// and will be re-enabled in Phase 2.
 const NAV = [
-  { href: "/dashboard", icon: SquaresFour, label: "Dashboard", disabled: false },
-  { href: "/profile", icon: IdentificationCard, label: "My Profile", disabled: false },
-  { href: "/career-path", icon: Path, label: "Career Path", disabled: false },
-  { href: "/jd", icon: FileDashed, label: "JD Analyzer", disabled: false },
-  { href: "/studio", icon: FileText, label: "Resume Builder", disabled: false },
-  { href: "/interview", icon: MicrophoneStage, label: "Interview Center", disabled: false },
-  { href: "/networking", icon: Users, label: "Networking", disabled: false },
-  { href: "/analytics", icon: ChartLineUp, label: "Analytics", disabled: false },
+  { href: "/dashboard", icon: SquaresFour, label: "Dashboard" },
+  { href: "/profile", icon: IdentificationCard, label: "My Profile" },
+  { href: "/jd", icon: FileDashed, label: "JD Analyzer" },
+  { href: "/studio", icon: FileText, label: "Resume Builder" },
+  { href: "/interview", icon: MicrophoneStage, label: "Interview Center" },
+  { href: "/analytics", icon: ChartLineUp, label: "Analytics" },
 ];
 
 export function Sidebar() {
@@ -45,8 +44,7 @@ export function Sidebar() {
     router.push("/login");
   }
 
-  function isActive(href: string, disabled: boolean) {
-    if (disabled) return false;
+  function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname === href || pathname.startsWith(href + "/");
   }
@@ -66,8 +64,8 @@ export function Sidebar() {
 
       {/* Nav Items */}
       <nav className="flex-1 flex flex-col gap-sm">
-        {NAV.map(({ href, icon: Icon, label, disabled }) => {
-          const active = isActive(href, disabled);
+        {NAV.map(({ href, icon: Icon, label }) => {
+          const active = isActive(href);
           return (
             <Link
               key={label}
