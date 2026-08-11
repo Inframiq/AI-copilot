@@ -272,8 +272,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       // Clear pending state after successful apply
       set({ pendingContent: null, bulletDecisions: {}, isApplying: false });
     } catch (err) {
-      console.error("Apply decisions failed:", err);
-      set({ error: "Failed to apply changes", isApplying: false });
+      const msg = err instanceof Error ? err.message : "Failed to apply changes";
+      set({ error: msg, isApplying: false });
+      throw new Error(msg);
     }
   },
 

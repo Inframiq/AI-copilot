@@ -31,7 +31,6 @@ export function BulletReviewPanel() {
   const jdText = useTailoringStore((s) => s.jdText);
 
   const resumeId = useResumeStore((s) => s.resumeId);
-  const templateId = useResumeStore((s) => s.templateId);
   const originalContent = useResumeStore((s) => s.content);
 
   const [isGenerating, setIsGenerating] = useState(false);
