@@ -4,11 +4,10 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
-import { SkillsDelta } from "./SkillsDelta";
 import { BulletReviewPanel } from "./BulletReviewPanel";
 import { uploadResumePhoto } from "@/lib/photo-upload";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
-import { CheckCircle } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CheckCircle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -35,6 +34,11 @@ export function EditorPanel() {
     runTailoring, isLoading,
     pendingContent,
   } = useTailoringStore();
+
+  // In tailoring mode the BulletReviewPanel is the focus — collapse the content
+  // editor by default so the user immediately sees the AI-suggested changes.
+  const isTailoringMode = pendingContent !== null;
+  const [editorOpen, setEditorOpen] = useState(!isTailoringMode);
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -67,12 +71,34 @@ export function EditorPanel() {
 
   return (
     <div className="flex flex-col gap-lg h-full overflow-y-auto p-lg">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header — collapsible in tailoring mode */}
+      <button
+        onClick={() => setEditorOpen((o) => !o)}
+        className={`flex items-center justify-between w-full text-left ${
+          isTailoringMode ? "cursor-pointer group" : "cursor-default"
+        }`}
+        disabled={!isTailoringMode}
+      >
         <h3 className="text-headline-md font-bold text-primary">Content Editor</h3>
-      </div>
+        {isTailoringMode && (
+          <span className="flex items-center gap-xs text-label-sm text-on-surface-variant group-hover:text-primary transition-colors">
+            {editorOpen ? (
+              <>
+                <CaretDown size={16} />
+                Hide
+              </>
+            ) : (
+              <>
+                <CaretRight size={16} />
+                Expand to edit
+              </>
+            )}
+          </span>
+        )}
+      </button>
 
-      <Tabs.Root defaultValue="template">
+      {/* Content editor tabs — hidden when collapsed in tailoring mode, always visible otherwise */}
+      {(!isTailoringMode || editorOpen) && <Tabs.Root defaultValue="template">
         <Tabs.List className="flex gap-xs mb-lg border-b border-outline-variant/20 pb-sm overflow-x-auto">
           {(["template", "contact", "summary", "experience", "education", "skills", "languages", "certifications"] as const).map((tab) => (
             <Tabs.Trigger
@@ -541,7 +567,7 @@ export function EditorPanel() {
             </div>
           </div>
         </Tabs.Content>
-      </Tabs.Root>
+      </Tabs.Root>}
 
       {/* JD Context + AI Tailoring — only once there's an actual resume to
           tailor (either filled in by hand across the tabs above, or already

@@ -17,7 +17,8 @@ export function PreviewPanel() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
-  const { sessionId } = useTailoringStore();
+  const { sessionId, pendingContent } = useTailoringStore();
+  const isTailoringMode = pendingContent !== null;
   const router = useRouter();
 
   // Switch template and immediately re-render the preview if one exists.
@@ -55,23 +56,39 @@ export function PreviewPanel() {
     <div className="flex flex-col h-full">
       {/* Controls Bar */}
       <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/20 flex-shrink-0 bg-surface-container-lowest flex-wrap gap-sm">
-        {/* Template Switcher */}
-        <div className="flex items-center gap-xs flex-wrap">
-          {RESUME_TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => handleTemplateChange(t.id)}
+        {/* Template Switcher — dropdown in tailoring mode, pills otherwise */}
+        {isTailoringMode ? (
+          <div className="flex items-center gap-sm">
+            <span className="text-label-sm text-on-surface-variant">Template:</span>
+            <select
+              value={templateId}
+              onChange={(e) => handleTemplateChange(e.target.value)}
               disabled={isGenerating}
-              className={`px-sm py-xs rounded-lg text-label-sm transition-colors disabled:opacity-60 ${
-                templateId === t.id
-                  ? "bg-secondary-container text-primary font-bold"
-                  : "text-on-surface-variant hover:bg-surface-container-low"
-              }`}
+              className="px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer"
             >
-              {t.label}
-            </button>
-          ))}
-        </div>
+              {RESUME_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-xs flex-wrap">
+            {RESUME_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => handleTemplateChange(t.id)}
+                disabled={isGenerating}
+                className={`px-sm py-xs rounded-lg text-label-sm transition-colors disabled:opacity-60 ${
+                  templateId === t.id
+                    ? "bg-secondary-container text-primary font-bold"
+                    : "text-on-surface-variant hover:bg-surface-container-low"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center gap-sm">
@@ -83,16 +100,19 @@ export function PreviewPanel() {
           {genError && (
             <span className="text-label-sm text-error">{genError}</span>
           )}
-          <button
-            onClick={handleGeneratePdf}
-            disabled={!resumeId || isGenerating}
-            className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isGenerating
-              ? <SpinnerGap size={16} className="animate-spin" />
-              : <DownloadSimple size={16} />}
-            {isGenerating ? "Generating…" : "Generate PDF"}
-          </button>
+          {/* Hide Generate PDF in tailoring mode — the BulletReviewPanel owns that flow */}
+          {!isTailoringMode && (
+            <button
+              onClick={handleGeneratePdf}
+              disabled={!resumeId || isGenerating}
+              className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGenerating
+                ? <SpinnerGap size={16} className="animate-spin" />
+                : <DownloadSimple size={16} />}
+              {isGenerating ? "Generating…" : "Generate PDF"}
+            </button>
+          )}
           {sessionId && (
             <button
               onClick={() => router.push(`/interview/${sessionId}`)}
