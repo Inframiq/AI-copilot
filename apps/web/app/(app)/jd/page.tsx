@@ -107,6 +107,20 @@ export default function JDIndexPage() {
   const storedJdText = useTailoringStore((s) => s.jdText);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const [tailorError, setTailorError] = useState<string | null>(null);
+  // User's explicit picks from the "Not Matched" list — sent through to
+  // tailoring as skills to prioritize. Empty means "let the AI decide",
+  // unchanged from before this feature existed. Cleared whenever a fresh
+  // analysis runs, since the missing-skills list it refers to just changed.
+  const [selectedPriority, setSelectedPriority] = useState<Set<string>>(new Set());
+
+  function togglePriority(skill: string) {
+    setSelectedPriority((prev) => {
+      const next = new Set(prev);
+      if (next.has(skill)) next.delete(skill);
+      else next.add(skill);
+      return next;
+    });
+  }
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
   const [navigatingToStudio, setNavigatingToStudio] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -205,6 +219,7 @@ export default function JDIndexPage() {
     setIsSubmitting(true);
     setError(null);
     setTailorError(null);
+    setSelectedPriority(new Set());
     try {
       await runAnalysis(activeResumeId);
     } catch (e: unknown) {
@@ -259,6 +274,7 @@ export default function JDIndexPage() {
     setIsSubmitting(true);
     setError(null);
     setTailorError(null);
+    setSelectedPriority(new Set());
     try {
       const firstLine = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
       const jd = await apiClient.createJd({ title: firstLine, raw_text: jdText });
@@ -282,6 +298,7 @@ export default function JDIndexPage() {
   async function handleTailor() {
     if (!activeResumeId) return;
     setTailorError(null);
+    useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
     // Covers the whole wait (AI rewrite + the moment of route transition)
     // with a blurred overlay so the pause reads as an intentional "doing
     // something smart" beat rather than a stuck button.
@@ -574,7 +591,9 @@ export default function JDIndexPage() {
                   )}
                 </div>
 
-                {/* Not Matched — red, unmistakably a gap */}
+                {/* Not Matched — red, unmistakably a gap. Clicking a chip
+                    (anywhere but the +/learning-path button) toggles it as
+                    a priority skill for the next Tailor run. */}
                 <div className="rounded-xl border border-error/25 bg-error-container/20 p-sm flex flex-col gap-xs min-w-0">
                   <h3 className="text-label-sm font-bold text-on-error-container flex items-center gap-xs">
                     <WarningCircle size={15} weight="fill" className="text-error shrink-0" />
@@ -584,35 +603,57 @@ export default function JDIndexPage() {
                     </span>
                   </h3>
                   {missingSkills.length > 0 ? (
-                    <div className="flex flex-wrap gap-xs max-h-32 overflow-y-auto">
-                      {missingSkills.map((skill) => {
-                        const alreadyAdded = learningItems.some(
-                          (li) => li.skill.toLowerCase() === skill.toLowerCase()
-                        );
-                        return (
-                          <span
-                            key={skill}
-                            className="px-xs py-0.5 bg-error-container/40 text-on-error-container text-caption font-medium rounded-md border border-error/30 flex items-center gap-xs"
-                          >
-                            <WarningCircle size={11} weight="fill" className="text-error shrink-0" />
-                            {skill}
-                            <button
-                              type="button"
-                              onClick={() => !alreadyAdded && handleAddToLearningPath(skill)}
-                              disabled={alreadyAdded}
-                              aria-label={alreadyAdded ? "Already in learning path" : "Add to learning path"}
-                              className="flex items-center"
+                    <>
+                      <div className="flex flex-wrap gap-xs max-h-32 overflow-y-auto">
+                        {missingSkills.map((skill) => {
+                          const alreadyAdded = learningItems.some(
+                            (li) => li.skill.toLowerCase() === skill.toLowerCase()
+                          );
+                          const selected = selectedPriority.has(skill);
+                          return (
+                            <span
+                              key={skill}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => togglePriority(skill)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") togglePriority(skill);
+                              }}
+                              aria-pressed={selected}
+                              className={`px-xs py-0.5 text-caption font-medium rounded-md border flex items-center gap-xs cursor-pointer transition-all ${
+                                selected
+                                  ? "bg-error text-on-error border-error"
+                                  : "bg-error-container/40 text-on-error-container border-error/30 hover:border-error"
+                              }`}
                             >
-                              {alreadyAdded ? (
-                                <CheckCircle size={12} className="text-success" />
-                              ) : (
-                                <PlusCircle size={12} className="cursor-pointer hover:text-error/70" />
-                              )}
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
+                              <WarningCircle size={11} weight="fill" className={selected ? "shrink-0" : "text-error shrink-0"} />
+                              {skill}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!alreadyAdded) handleAddToLearningPath(skill);
+                                }}
+                                disabled={alreadyAdded}
+                                aria-label={alreadyAdded ? "Already in learning path" : "Add to learning path"}
+                                className="flex items-center"
+                              >
+                                {alreadyAdded ? (
+                                  <CheckCircle size={12} className="text-success" />
+                                ) : (
+                                  <PlusCircle size={12} className="cursor-pointer hover:text-error/70" />
+                                )}
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <p className="text-caption text-on-surface-variant mt-xs italic">
+                        {selectedPriority.size > 0
+                          ? `${selectedPriority.size} selected — Tailor will prioritize weaving these in.`
+                          : "Click a keyword to prioritize it, or leave unselected and let AI decide."}
+                      </p>
+                    </>
                   ) : (
                     <p className="text-caption text-on-surface-variant italic">None — full coverage.</p>
                   )}
