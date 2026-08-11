@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_MAX_PRIORITY_SKILLS = 20
 
 
 class TailorRequest(BaseModel):
@@ -8,6 +10,16 @@ class TailorRequest(BaseModel):
     jd_id: uuid.UUID
     humanize_level: int = Field(default=50, ge=0, le=100)
     company_name: str | None = Field(default=None, max_length=200)
+    # Keywords the user explicitly picked from the JD's "Not Matched" list —
+    # these take precedence over the AI's own plausible_skills_to_add logic.
+    # Empty by default: the AI decides on its own, same as before this field existed.
+    priority_skills: list[str] = Field(default_factory=list)
+
+    @field_validator("priority_skills")
+    @classmethod
+    def _cap_priority_skills(cls, value: list[str]) -> list[str]:
+        cleaned = [s.strip()[:200] for s in value if s and s.strip()]
+        return cleaned[:_MAX_PRIORITY_SKILLS]
 
 
 class AnalyzeRequest(BaseModel):

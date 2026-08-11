@@ -120,6 +120,22 @@ def make_jd():
     )
 
 
+def test_tailor_request_caps_and_defaults_priority_skills():
+    from app.schemas.ai import TailorRequest
+
+    req = TailorRequest(
+        resume_id=uuid.uuid4(),
+        jd_id=uuid.uuid4(),
+        priority_skills=[f"skill-{i}" for i in range(25)] + ["  padded  ", "", "   "],
+    )
+    # Capped to 20, trimmed, blanks dropped
+    assert len(req.priority_skills) == 20
+    assert req.priority_skills[0] == "skill-0"
+
+    req_default = TailorRequest(resume_id=uuid.uuid4(), jd_id=uuid.uuid4())
+    assert req_default.priority_skills == []
+
+
 @pytest.mark.asyncio
 async def test_tailor_resume_returns_200_and_creates_session():
     from app.services.tailoring import TailoringResult, PrepQuestionData
