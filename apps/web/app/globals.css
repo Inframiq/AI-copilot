@@ -46,6 +46,10 @@
   --color-surface-variant: #dae2fc;
   --color-outline: #767682;
   --color-success-accent: #4b57aa;
+  --color-success: #146c2e;
+  --color-success-container: #c6f6d0;
+  --color-on-success-container: #002106;
+  --color-on-success: #ffffff;
   --color-tertiary: #151819;
   --color-on-secondary-container: #56657c;
   --color-secondary-fixed: #d4e3ff;

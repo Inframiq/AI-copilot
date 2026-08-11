@@ -8,7 +8,6 @@ import {
   ListDashes,
   MagnifyingGlass,
   Target,
-  ListChecks,
   CheckCircle,
   WarningCircle,
   PlusCircle,
@@ -88,7 +87,11 @@ function extractInsights(text: string) {
 
 export default function JDIndexPage() {
   const router = useRouter();
-  const [jdText, setJdText] = useState("");
+  // Seed from the store's jdText, not a blank string — otherwise navigating
+  // away (e.g. to Studio after Tailor) and back remounts this page with an
+  // empty textarea while the analysis results below it (which read from the
+  // same store) are still populated, which reads as broken/half-blank.
+  const [jdText, setJdText] = useState(() => useTailoringStore.getState().jdText);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -306,7 +309,7 @@ export default function JDIndexPage() {
   return (
     <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
       {/* Page Header */}
-      <section className="pt-xl pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+      <section className="pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
         <div>
           <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
             JD Analyzer
@@ -440,7 +443,7 @@ export default function JDIndexPage() {
       )}
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter items-start">
         {/* Input Area — 2 cols */}
         <div className="lg:col-span-2 flex flex-col gap-md bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden">
           <div className="flex justify-between items-center mb-xs">
@@ -488,35 +491,39 @@ export default function JDIndexPage() {
           )}
         </div>
 
-        {/* Match Gauge — 1 col */}
-        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col items-center justify-center gap-md relative overflow-hidden">
-          <div className="absolute top-lg left-lg">
-            <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
-              <Target size={24} className="text-primary" />
-              Profile Match
-            </h2>
-          </div>
-          <div className="relative w-48 h-48 mt-xl">
-            <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
-              <circle cx="50" cy="50" fill="none" r="45" stroke="#eaedff" strokeWidth="8" />
-              <circle
-                cx="50"
-                cy="50"
-                fill="none"
-                r="45"
-                stroke="#000a56"
-                strokeLinecap="round"
-                strokeWidth="8"
-                strokeDasharray="283"
-                strokeDashoffset={gaugeOffset}
-                style={{ transition: "stroke-dashoffset 1.5s ease-out" }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-headline-xl text-primary font-bold">
-                {hasResults ? `${atsScore}%` : "—"}
-              </span>
-              <span className="text-label-sm text-on-surface-variant uppercase tracking-wider">
+        {/* Profile Match + Keywords — 2 cols, beside the Input card in the same row */}
+        <div className="lg:col-span-2 bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-sm relative overflow-hidden">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
+            <Target size={24} className="text-primary" />
+            Profile Match &amp; Keywords
+          </h2>
+
+          <div className="flex flex-col sm:flex-row gap-sm">
+            {/* Compact gauge */}
+            <div className="flex sm:flex-col items-center gap-sm shrink-0 sm:w-24">
+              <div className="relative w-20 h-20 shrink-0">
+                <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" fill="none" r="45" stroke="#eaedff" strokeWidth="10" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    fill="none"
+                    r="45"
+                    stroke="#000a56"
+                    strokeLinecap="round"
+                    strokeWidth="10"
+                    strokeDasharray="283"
+                    strokeDashoffset={gaugeOffset}
+                    style={{ transition: "stroke-dashoffset 1.5s ease-out" }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-label-md text-primary font-bold">
+                    {hasResults ? `${atsScore}%` : "—"}
+                  </span>
+                </div>
+              </div>
+              <span className="text-caption text-on-surface-variant uppercase tracking-wider text-center leading-tight">
                 {hasResults
                   ? atsScore >= 80
                     ? "Strong Fit"
@@ -526,101 +533,93 @@ export default function JDIndexPage() {
                   : "Paste JD"}
               </span>
             </div>
-          </div>
-          <p className="text-body-sm text-on-surface-variant text-center px-md mt-sm">
-            {hasResults
-              ? "Your profile aligns with the core requirements. Focus on bridging the skill gaps."
-              : "Paste a job description and analyze to see your match score."}
-          </p>
-        </div>
 
-        {/* Skill Breakdown — 3 cols */}
-        <div className="lg:col-span-3 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-md relative overflow-hidden">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm mb-xs font-semibold">
-            <ListChecks size={24} className="text-primary" />
-            Skill Breakdown
-          </h2>
-
-          {hasResults ? (
-            <>
-              {matchedSkills.length > 0 && (
-                <div className="flex flex-col gap-sm">
-                  <h3 className="text-label-md text-on-surface-variant flex items-center gap-xs">
-                    <CheckCircle size={16} className="text-success-accent" />
-                    Matched Skills ({matchedSkills.length})
+            {!hasResults ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-body-sm text-on-surface-variant text-center px-md">
+                  Analyze a job description to see your match score and keyword breakdown.
+                </p>
+              </div>
+            ) : matchedSkills.length === 0 && missingSkills.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-body-sm text-on-surface-variant text-center">
+                  No keyword data returned from the analysis.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm flex-1 min-w-0">
+                {/* Matched — green, unmistakably positive */}
+                <div className="rounded-xl border border-success/25 bg-success-container/25 p-sm flex flex-col gap-xs min-w-0">
+                  <h3 className="text-label-sm font-bold text-on-success-container flex items-center gap-xs">
+                    <CheckCircle size={15} weight="fill" className="text-success shrink-0" />
+                    <span className="truncate">Matched</span>
+                    <span className="ml-auto shrink-0 text-caption font-bold px-xs rounded-full bg-success text-on-success">
+                      {matchedSkills.length}
+                    </span>
                   </h3>
-                  <div className="flex flex-wrap gap-xs">
-                    {matchedSkills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="px-sm py-xs bg-surface-container text-on-surface text-label-sm rounded-md border border-outline-variant/30"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {matchedSkills.length > 0 && missingSkills.length > 0 && (
-                <div className="w-full h-px bg-outline-variant/30 my-sm" />
-              )}
-
-              {missingSkills.length > 0 && (
-                <div className="flex flex-col gap-sm">
-                  <h3 className="text-label-md text-on-surface-variant flex items-center gap-xs">
-                    <WarningCircle size={16} className="text-error" />
-                    Missing Skills ({missingSkills.length})
-                  </h3>
-                  <div className="flex flex-wrap gap-xs">
-                    {missingSkills.map((skill) => {
-                      const alreadyAdded = learningItems.some(
-                        (li) => li.skill.toLowerCase() === skill.toLowerCase()
-                      );
-                      return (
+                  {matchedSkills.length > 0 ? (
+                    <div className="flex flex-wrap gap-xs max-h-32 overflow-y-auto">
+                      {matchedSkills.map((skill) => (
                         <span
                           key={skill}
-                          className="px-sm py-xs bg-error-container/30 text-error text-label-sm rounded-md border border-error/20 flex items-center gap-xs"
+                          className="flex items-center gap-xs px-xs py-0.5 bg-success/10 text-on-success-container text-caption font-medium rounded-md border border-success/30"
                         >
+                          <CheckCircle size={11} weight="fill" className="text-success shrink-0" />
                           {skill}
-                          <button
-                            type="button"
-                            onClick={() => !alreadyAdded && handleAddToLearningPath(skill)}
-                            disabled={alreadyAdded}
-                            aria-label={alreadyAdded ? "Already in learning path" : "Add to learning path"}
-                            className="flex items-center"
-                          >
-                            {alreadyAdded ? (
-                              <CheckCircle size={14} className="text-success-accent" />
-                            ) : (
-                              <PlusCircle size={14} className="cursor-pointer hover:text-error/70" />
-                            )}
-                          </button>
                         </span>
-                      );
-                    })}
-                  </div>
-                  <p className="text-caption text-on-surface-variant mt-xs italic">
-                    Tip: Click &apos;+&apos; to add missing skills to your Learning Path.
-                  </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-caption text-on-surface-variant italic">None yet.</p>
+                  )}
                 </div>
-              )}
 
-              {matchedSkills.length === 0 && missingSkills.length === 0 && (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-body-sm text-on-surface-variant text-center">
-                    No skill data returned from the analysis.
-                  </p>
+                {/* Not Matched — red, unmistakably a gap */}
+                <div className="rounded-xl border border-error/25 bg-error-container/20 p-sm flex flex-col gap-xs min-w-0">
+                  <h3 className="text-label-sm font-bold text-on-error-container flex items-center gap-xs">
+                    <WarningCircle size={15} weight="fill" className="text-error shrink-0" />
+                    <span className="truncate">Not Matched</span>
+                    <span className="ml-auto shrink-0 text-caption font-bold px-xs rounded-full bg-error text-on-error">
+                      {missingSkills.length}
+                    </span>
+                  </h3>
+                  {missingSkills.length > 0 ? (
+                    <div className="flex flex-wrap gap-xs max-h-32 overflow-y-auto">
+                      {missingSkills.map((skill) => {
+                        const alreadyAdded = learningItems.some(
+                          (li) => li.skill.toLowerCase() === skill.toLowerCase()
+                        );
+                        return (
+                          <span
+                            key={skill}
+                            className="px-xs py-0.5 bg-error-container/40 text-on-error-container text-caption font-medium rounded-md border border-error/30 flex items-center gap-xs"
+                          >
+                            <WarningCircle size={11} weight="fill" className="text-error shrink-0" />
+                            {skill}
+                            <button
+                              type="button"
+                              onClick={() => !alreadyAdded && handleAddToLearningPath(skill)}
+                              disabled={alreadyAdded}
+                              aria-label={alreadyAdded ? "Already in learning path" : "Add to learning path"}
+                              className="flex items-center"
+                            >
+                              {alreadyAdded ? (
+                                <CheckCircle size={12} className="text-success" />
+                              ) : (
+                                <PlusCircle size={12} className="cursor-pointer hover:text-error/70" />
+                              )}
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-caption text-on-surface-variant italic">None — full coverage.</p>
+                  )}
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-body-sm text-on-surface-variant text-center">
-                Analyze a job description to see matched and missing skills.
-              </p>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Scan — full width. Plain keyword matching against the JD
