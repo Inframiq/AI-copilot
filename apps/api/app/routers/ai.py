@@ -114,6 +114,7 @@ async def tailor_resume(
         tailored_content=result.tailored_content,
         questions=[PrepQuestionOut.model_validate(q) for q in questions],
         company_keywords=result.company_keywords,
+        suggested_skills=result.suggested_skills,
     )
 
 

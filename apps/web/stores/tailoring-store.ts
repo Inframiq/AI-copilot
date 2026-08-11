@@ -25,6 +25,7 @@ interface TailoringState {
   matchedSkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
+  suggestedSkills: string[];  // skills Agent 2 suggests — user opts in per chip
   humanizeLevel: number;
   isLoading: boolean;
   isAnalyzing: boolean;
@@ -56,6 +57,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   matchedSkills: [],
   missingSkills: [],
   companyKeywords: [],
+  suggestedSkills: [],
   humanizeLevel: 50,
   isLoading: false,
   isAnalyzing: false,
@@ -152,6 +154,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
+      suggestedSkills: [],
       sessionId: null,
       pendingContent: null,
       bulletDecisions: {},
@@ -197,6 +200,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
         companyKeywords: result.company_keywords ?? [],
+        suggestedSkills: result.suggested_skills ?? [],
         pendingContent: result.tailored_content ?? null,
         bulletDecisions: initialDecisions,
         isLoading: false,
@@ -211,7 +215,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
   // Apply accepted bullet decisions to the resume store, save, and regenerate PDF.
   applyDecisions: async (resumeId: string) => {
-    const { pendingContent, bulletDecisions } = get();
+    const { pendingContent, bulletDecisions, suggestedSkills } = get();
     const resumeStore = useResumeStore.getState();
     const originalContent = resumeStore.content;
     if (!pendingContent || !originalContent) return;
@@ -228,17 +232,15 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       return { ...job, bullets: mergedBullets };
     });
 
-    // Per-skill merge: kept (unchanged) + accepted adds + restored removes
+    // Skills: start with original, add only user-selected suggested skills
     const originalSkillsSet = new Set(originalContent.skills);
-    const tailoredSkillsSet = new Set(pendingContent.skills);
-    const kept = pendingContent.skills.filter((s) => originalSkillsSet.has(s));
-    const added = pendingContent.skills.filter(
-      (s) => !originalSkillsSet.has(s) && (bulletDecisions[`skill_add:${s}`] ?? "accept") === "accept",
+    const userSelectedSkills = suggestedSkills.filter(
+      (s) => bulletDecisions[`skill_add:${s}`] === "accept",
     );
-    const restored = originalContent.skills.filter(
-      (s) => !tailoredSkillsSet.has(s) && (bulletDecisions[`skill_rm:${s}`] ?? "reject") === "accept",
-    );
-    const mergedSkills = [...kept, ...added, ...restored];
+    const mergedSkills = [
+      ...originalContent.skills,
+      ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)),
+    ];
 
     const mergedContent = {
       ...pendingContent,
@@ -263,7 +265,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     }
   },
 
-  discardPending: () => set({ pendingContent: null, bulletDecisions: {} }),
+  discardPending: () => set({ pendingContent: null, bulletDecisions: {}, suggestedSkills: [] }),
 
   resetStore: () =>
     set({
@@ -275,6 +277,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
+      suggestedSkills: [],
       humanizeLevel: 50,
       isLoading: false,
       isAnalyzing: false,

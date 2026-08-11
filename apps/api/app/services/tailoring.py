@@ -172,14 +172,8 @@ def _apply_writer_output(
             len(missing_ids), missing_ids,
         )
 
-    # Merge updated skills (dedupe, preserve order)
-    existing = content.get("skills", [])
-    seen = {s.lower() for s in existing}
-    for skill in writer.updated_skills:
-        if skill.lower() not in seen:
-            existing.append(skill)
-            seen.add(skill.lower())
-    content["skills"] = existing
+    # Skills are NOT modified here — the user selects which suggested skills
+    # to add via the UI. Keep original skills unchanged.
     return content
 
 
@@ -412,11 +406,9 @@ wrong and will cause the candidate's resume to be partially unchanged. A \
 response that rewrites only some bullets while silently dropping others means \
 the candidate sees only their skills list update and nothing else — this is \
 the most common failure mode and it is unacceptable.
-6. SKILLS: updated_skills must be the complete final skills list — start with \
-original_skills, then add only the plausible_skills_to_add entries that are \
-explicitly required or strongly preferred in the JD. Add at most 5 new skills \
-total. Do not inflate the list with every keyword from the JD — only add skills \
-the candidate's background genuinely supports and the JD clearly demands.
+6. SKILLS: updated_skills must be EXACTLY the same list as original_skills — \
+do not add or remove any skills. Skill additions are chosen by the user \
+separately; your job is only to rewrite bullets.
 7. TONE: {tone}
 8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
@@ -496,6 +488,7 @@ class TailoringResult:
     ats_score: int
     prep_questions: list[PrepQuestionData]
     company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
+    suggested_skills: list[str]  # skills Agent 2 suggests adding — user opts in via UI
 
 
 async def analyze_jd_match(
@@ -601,6 +594,7 @@ async def run_tailoring_pipeline(
         ats_score=analysis.ats_score,
         prep_questions=questions,
         company_keywords=analysis.company_keywords,
+        suggested_skills=_sanitize_skill_list(mapping_plan.plausible_skills_to_add),
     )
 
 

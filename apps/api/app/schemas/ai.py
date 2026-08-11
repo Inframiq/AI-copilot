@@ -57,3 +57,4 @@ class TailorOut(BaseModel):
     tailored_content: dict
     questions: list[PrepQuestionOut]
     company_keywords: list[str] = []
+    suggested_skills: list[str] = []

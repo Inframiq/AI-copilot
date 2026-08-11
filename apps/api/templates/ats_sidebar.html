@@ -26,8 +26,9 @@
   .job-title-line .title { font-weight: 700; font-size: 10.5pt; }
   .job-title-line .dates { font-weight: 400; color: #444; white-space: nowrap; }
   .job-company { font-weight: 700; font-style: italic; font-size: 9.5pt; margin-bottom: 2px; }
-  ul.bullets { list-style-type: disc; list-style-position: outside; margin: 2px 0 10px 16px; padding: 0; font-size: 9.5pt; }
-  ul.bullets li { margin-bottom: 3px; text-align: justify; max-height: 3.75em; overflow: hidden; }
+  table.bullets { width: 100%; border-collapse: collapse; margin: 2px 0 10px 0; font-size: 9.5pt; }
+  .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
+  .btxt { padding: 0 0 3px 0; text-align: justify; max-height: 3.75em; overflow: hidden; }
   .edu-item { font-size: 9.5pt; margin-bottom: 3px; }
   .edu-item .school { font-style: italic; }
   .edu-item .degree { font-weight: 700; font-size: 10pt; display: block; }
@@ -79,7 +80,7 @@
           <span class="dates">{{ job.start }} – {{ job.end or "Current" }}</span>
         </div>
         <div class="job-company">{{ job.company }}</div>
-        <ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+        <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>
       {% endfor %}
     </div>
