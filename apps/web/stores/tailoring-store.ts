@@ -26,6 +26,7 @@ interface TailoringState {
   missingSkills: string[];
   companyKeywords: string[];
   suggestedSkills: string[];  // skills Agent 2 suggests — user opts in per chip
+  prioritySkills: string[];  // user-picked "not matched" keywords to prioritize — set from the JD detail page before calling runTailoring
   humanizeLevel: number;
   isLoading: boolean;
   isAnalyzing: boolean;
@@ -43,6 +44,8 @@ interface TailoringState {
 
   setJd: (id: string, text: string) => void;
   setCompanyName: (name: string) => void;
+  setPrioritySkills: (skills: string[]) => void;
+  togglePrioritySkill: (skill: string) => void;
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
@@ -75,6 +78,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   missingSkills: [],
   companyKeywords: [],
   suggestedSkills: [],
+  prioritySkills: [],
   humanizeLevel: 50,
   isLoading: false,
   isAnalyzing: false,
@@ -87,6 +91,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
   setJd: (id, text) => set({ jdId: id, jdText: text }),
   setCompanyName: (name) => set({ companyName: name }),
+  setPrioritySkills: (skills) => set({ prioritySkills: skills }),
+  togglePrioritySkill: (skill) =>
+    set((s) => ({
+      prioritySkills: s.prioritySkills.includes(skill)
+        ? s.prioritySkills.filter((s2) => s2 !== skill)
+        : [...s.prioritySkills, skill],
+    })),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
   setBulletDecision: (key, decision) =>
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision } })),
@@ -159,7 +170,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
   runTailoring: async (resumeId: string) => {
     let { jdId } = get();
-    const { jdText, humanizeLevel, companyName } = get();
+    const { jdText, humanizeLevel, companyName, prioritySkills } = get();
 
     if (!jdId) {
       if (!jdText.trim()) {
@@ -197,6 +208,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         jdId,
         humanizeLevel,
         companyName || undefined,
+        prioritySkills,
       );
 
       // Build initial bullet decisions — all changed bullets default to 'accept'.
@@ -223,6 +235,17 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           for (const s of originalContent.skills) {
             if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
           }
+        }
+      }
+
+      // Pre-accept suggested-skill chips the user explicitly asked for —
+      // saves them re-clicking what they already picked on the JD page.
+      // AI-only suggestions (not in prioritySkills) are left undecided, same
+      // as always, so the user still reviews them via the chip UI.
+      const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+      for (const s of result.suggested_skills ?? []) {
+        if (prioritySet.has(s.toLowerCase())) {
+          initialDecisions[`skill_add:${s}`] = "accept";
         }
       }
 
@@ -360,6 +383,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       missingSkills: [],
       companyKeywords: [],
       suggestedSkills: [],
+      prioritySkills: [],
       humanizeLevel: 50,
       isLoading: false,
       isAnalyzing: false,

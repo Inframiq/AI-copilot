@@ -170,12 +170,14 @@ export const apiClient = {
     jdId: string,
     humanizeLevel: number,
     companyName?: string,
+    prioritySkills?: string[],
   ): Promise<TailorOut> =>
     request<TailorOut>("POST", "/ai/tailor", {
       resume_id: resumeId,
       jd_id: jdId,
       humanize_level: humanizeLevel,
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
+      ...(prioritySkills && prioritySkills.length > 0 ? { priority_skills: prioritySkills } : {}),
     }),
 
   rewriteBullet: (payload: {
