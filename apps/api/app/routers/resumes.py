@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db, AsyncSessionLocal
@@ -146,18 +146,24 @@ async def generate_resume_pdf(
     template_id = (body.template_id if body else None) or resume.template_id
     if template_id not in _VALID_TEMPLATES:
         raise HTTPException(status_code=400, detail="Invalid template_id.")
-    if template_id != resume.template_id:
+    is_preview = body is not None and body.content is not None
+    if template_id != resume.template_id and not is_preview:
         resume.template_id = template_id
         await db.commit()
+    content = body.content if is_preview else resume.content
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
-    pdf_bytes = await asyncio.to_thread(generate_pdf, resume.content, template_id)
+    pdf_bytes = await asyncio.to_thread(generate_pdf, content, template_id)
     # Hand the bytes straight back as a data URI so the browser can render the
     # preview immediately — the client no longer waits on a Supabase upload +
     # signed-URL round trip before it can show anything. Storage persistence
-    # (for future re-download without re-rendering) happens after the response.
-    background_tasks.add_task(_persist_pdf_to_storage, pdf_bytes, str(user["sub"]), resume_id)
+    # (for future re-download without re-rendering) happens after the response,
+    # and only for the resume's actually-saved content — an unsaved preview
+    # (e.g. AI tailoring the user hasn't accepted) must never overwrite the
+    # stored pdf_url with content that isn't in resume.content yet.
+    if not is_preview:
+        background_tasks.add_task(_persist_pdf_to_storage, pdf_bytes, str(user["sub"]), resume_id)
     data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
     return {"signed_url": data_url, "expires_in": None}
 
@@ -166,14 +172,29 @@ async def generate_resume_pdf(
 @limiter.limit("5/minute")
 async def parse_and_create_resume(
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     template_id: str = Form("ats_clean"),
+    # When set (the Profile page's "Replace" flow), the parsed content
+    # overwrites this existing resume in place instead of creating a new,
+    # orphaned row — otherwise every re-upload left the old resume dangling
+    # and callers that pick "the" resume by id could keep resolving to it.
+    resume_id: uuid.UUID | None = Form(None),
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload a PDF or DOCX resume, parse it with AI, and create a new Resume row."""
+    """Upload a PDF or DOCX resume, parse it with AI, and create (or replace) a Resume row."""
     if template_id not in _VALID_TEMPLATES:
         raise HTTPException(status_code=400, detail="Invalid template_id.")
+
+    existing_resume: Resume | None = None
+    if resume_id is not None:
+        result = await db.execute(
+            select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+        )
+        existing_resume = result.scalar_one_or_none()
+        if existing_resume is None:
+            raise HTTPException(status_code=404, detail="Resume not found")
 
     content_type = file.content_type or ""
     if content_type not in _ALLOWED_MIME and not (
@@ -218,6 +239,15 @@ async def parse_and_create_resume(
     # Derive a sensible title from the candidate's name
     name = parsed.get("contact", {}).get("name", "").strip()
     title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
+
+    if existing_resume is not None:
+        existing_resume.title = title[:255]
+        existing_resume.template_id = template_id
+        existing_resume.content = parsed
+        await db.commit()
+        await db.refresh(existing_resume)
+        response.status_code = status.HTTP_200_OK
+        return existing_resume
 
     resume = Resume(
         user_id=uuid.UUID(user["sub"]),

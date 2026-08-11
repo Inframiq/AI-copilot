@@ -70,17 +70,29 @@ export const apiClient = {
 
   generatePdf: (
     id: string,
-    templateId: string
+    templateId: string,
+    /** Renders this content instead of the resume's saved content, without
+     * persisting it — used for previewing unsaved AI tailoring results. */
+    contentOverride?: ResumeContent
   ): Promise<{ signed_url: string }> =>
     request<{ signed_url: string }>("POST", `/resumes/${id}/pdf`, {
       template_id: templateId,
+      ...(contentOverride ? { content: contentOverride } : {}),
     }),
 
-  parseResumeFile: async (file: File, templateId: string): Promise<Resume> => {
+  parseResumeFile: async (
+    file: File,
+    templateId: string,
+    /** When set, overwrites this existing resume in place instead of
+     * creating a new, orphaned one — used by the Profile page's "Replace"
+     * flow so re-uploading doesn't leave the old resume dangling around. */
+    resumeId?: string
+  ): Promise<Resume> => {
     const token = await getToken();
     const form = new FormData();
     form.append("file", file);
     form.append("template_id", templateId);
+    if (resumeId) form.append("resume_id", resumeId);
     const res = await fetch(`${BASE}/resumes/parse-upload`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

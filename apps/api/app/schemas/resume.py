@@ -41,6 +41,12 @@ class ResumeUpdate(BaseModel):
 
 class PdfGenerateRequest(BaseModel):
     template_id: ValidTemplateId | None = None
+    # Optional content override for rendering an unsaved preview (e.g. AI
+    # tailoring results the user hasn't accepted yet) without persisting it
+    # to the resume row.
+    content: dict | None = None
+
+    _check_content_size = field_validator("content")(_validate_content_size)
 
 
 class ResumeOut(BaseModel):

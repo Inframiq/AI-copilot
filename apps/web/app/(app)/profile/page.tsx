@@ -22,12 +22,15 @@ import {
   Phone,
   EnvelopeSimple,
   MapPin,
+  Eye,
+  ArrowSquareOut,
 } from "@phosphor-icons/react";
 import {
   getCareerProfile,
   upsertCareerProfile,
   setProfileMasterResume,
   type CareerProfile,
+  type CareerProfileInput,
   type ContactInfo,
   type ExperienceEntry,
   type EducationEntry,
@@ -36,6 +39,8 @@ import {
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { apiClient } from "@/lib/api-client";
+import { useRouter } from "next/navigation";
+import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -86,6 +91,7 @@ const textareaCls = `${inputCls} resize-none`;
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
@@ -105,6 +111,8 @@ export default function ProfilePage() {
   const [certifications, setCertifications] = useState<CertEntry[]>([]);
   const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
+  const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
+  const [showPreview, setShowPreview] = useState(false);
 
   // collapsed state per entry
   const [collapsedExp, setCollapsedExp] = useState<Record<string, boolean>>({});
@@ -132,15 +140,17 @@ export default function ProfilePage() {
   // ── load master resume title ───────────────────────────────────────────────
   useEffect(() => {
     if (!masterResumeId) { setMasterResumeTitle(null); return; }
-    apiClient.getResume(masterResumeId).then(r => setMasterResumeTitle(r.title)).catch(() => setMasterResumeTitle(null));
+    apiClient.getResume(masterResumeId)
+      .then(r => { setMasterResumeTitle(r.title); setMasterResumeTemplateId(r.template_id); })
+      .catch(() => setMasterResumeTitle(null));
   }, [masterResumeId]);
 
   // ── save ───────────────────────────────────────────────────────────────────
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     setSaving(true); setError(null); setSaveOk(false);
     try {
       const skillArr = skills.split(",").map(s => s.trim()).filter(Boolean);
-      await upsertCareerProfile({
+      const profileInput: CareerProfileInput = {
         master_resume_id: masterResumeId,
         contact,
         headline: headline || null,
@@ -149,7 +159,15 @@ export default function ProfilePage() {
         skills: skillArr,
         certifications,
         role_status: roleStatus || null,
-      });
+      };
+      await upsertCareerProfile(profileInput);
+      // Deliberately NOT syncing this back into the resume's stored content:
+      // profileToResumeContent reconstructs bullets from the profile form's
+      // split Responsibilities/Achievements/Projects/Impact fields, which
+      // mangles the resume's real bullets into labeled text blobs. The
+      // resume (resume.content, edited in Studio) and the career profile
+      // (this page, used by JD Analyzer/tailoring) are intentionally
+      // separate — Preview/Open must show the resume exactly as stored.
       // Invalidate resumes cache so Resume Builder sees the latest, and
       // careerProfile so JD Analyzer / Networking pick up the change too
       // instead of showing stale data until a hard refresh.
@@ -157,8 +175,10 @@ export default function ProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
       setSaveOk(true);
       setTimeout(() => setSaveOk(false), 3000);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -176,45 +196,57 @@ export default function ProfilePage() {
   async function handleUpload(file: File) {
     setUploading(true); setError(null);
     try {
-      const resume = await apiClient.parseResumeFile(file, "ats_clean");
-      // Populate form from parsed resume content
+      // Replacing an existing resume overwrites that same row in place
+      // (instead of creating a new, orphaned one the rest of the app might
+      // still be pointing at).
+      const resume = await apiClient.parseResumeFile(file, "ats_clean", masterResumeId ?? undefined);
+      // Fully replace the form with the newly parsed resume — a "Replace"
+      // that only fills in fields the new file happens to have, and leaves
+      // old values sitting in everything else, isn't a replace.
       const c = resume.content;
-      setContact(prev => ({
-        ...prev,
-        name: (c.contact?.name as string) || prev.name,
-        email: (c.contact?.email as string) || prev.email,
-        phone: (c.contact?.phone as string) || prev.phone || "",
-        location: (c.contact?.location as string) || prev.location || "",
-        linkedin: (c.contact?.linkedin as string) || prev.linkedin || "",
-        github: (c.contact?.github as string) || prev.github || "",
-      }));
-      if (c.headline) setHeadline(c.headline as string);
-      if (Array.isArray(c.skills) && c.skills.length) setSkills((c.skills as string[]).join(", "));
-      if (Array.isArray(c.experience) && c.experience.length) {
-        setExperiences((c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
-          id: newId(), type: "full-time" as ExpType,
-          company: e.company, title: e.title,
-          start: e.start, end: e.end || "Present",
-          current: !e.end || e.end === "Present",
-          responsibilities: (e.bullets ?? []).join("; "),
-          achievements: "", projects: "", impact: "",
-        })));
-      }
-      if (Array.isArray(c.education) && c.education.length) {
-        setEducation((c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
-          id: newId(), institution: e.institution, degree: e.degree,
-          field: "", year: e.year, gpa: "", honors: "",
-        })));
-      }
-      if (Array.isArray(c.certifications) && c.certifications.length) {
-        setCertifications((c.certifications as string[]).map(name => ({
-          id: newId(), name, issuer: "", year: "",
-        })));
-      }
+      setContact({
+        ...emptyContact(),
+        name: (c.contact?.name as string) ?? "",
+        email: (c.contact?.email as string) ?? "",
+        phone: (c.contact?.phone as string) ?? "",
+        location: (c.contact?.location as string) ?? "",
+        linkedin: (c.contact?.linkedin as string) ?? "",
+        github: (c.contact?.github as string) ?? "",
+      });
+      setHeadline((c.headline as string) ?? "");
+      setSkills(Array.isArray(c.skills) ? (c.skills as string[]).join(", ") : "");
+      setExperiences(
+        Array.isArray(c.experience)
+          ? (c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
+              id: newId(), type: "full-time" as ExpType,
+              company: e.company, title: e.title,
+              start: e.start, end: e.end || "Present",
+              current: !e.end || e.end === "Present",
+              responsibilities: (e.bullets ?? []).join("; "),
+              achievements: "", projects: "", impact: "",
+            }))
+          : []
+      );
+      setEducation(
+        Array.isArray(c.education)
+          ? (c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
+              id: newId(), institution: e.institution, degree: e.degree,
+              field: "", year: e.year, gpa: "", honors: "",
+            }))
+          : []
+      );
+      setCertifications(
+        Array.isArray(c.certifications)
+          ? (c.certifications as string[]).map(name => ({ id: newId(), name, issuer: "", year: "" }))
+          : []
+      );
       setMasterResumeId(resume.id);
+      setMasterResumeTitle(resume.title);
+      setMasterResumeTemplateId(resume.template_id);
       await setProfileMasterResume(resume.id);
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
+      await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -265,23 +297,13 @@ export default function ProfilePage() {
   return (
     <div className="max-w-3xl mx-auto p-gutter pb-xxl flex flex-col gap-xl">
       {/* Page header */}
-      <div className="flex items-center justify-between pt-xl">
-        <div>
-          <h1 className="text-headline-xl text-on-surface font-bold" style={{ letterSpacing: "-0.02em" }}>
-            My Profile
-          </h1>
-          <p className="text-body-md text-on-surface-variant mt-xs">
-            Source of truth for your career — used by JD Analyzer, Resume Builder, and Networking.
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-sm px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-        >
-          {saving ? <Spinner size={18} className="animate-spin" /> : saveOk ? <CheckCircle size={18} weight="fill" /> : <FloppyDisk size={18} />}
-          {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}
-        </button>
+      <div className="pt-xl">
+        <h1 className="text-headline-xl text-on-surface font-bold" style={{ letterSpacing: "-0.02em" }}>
+          My Profile
+        </h1>
+        <p className="text-body-md text-on-surface-variant mt-xs">
+          Source of truth for your career — used by JD Analyzer, Resume Builder, and Networking.
+        </p>
       </div>
 
       {error && (
@@ -305,39 +327,53 @@ export default function ProfilePage() {
               <p className="text-label-md text-on-surface font-semibold truncate">{masterResumeTitle}</p>
               <p className="text-caption text-on-surface-variant">Active resume · fields auto-populated from this file</p>
             </div>
-            <button onClick={() => fileRef.current?.click()}
-              className="shrink-0 text-label-sm text-primary hover:underline">
-              Replace
-            </button>
+            <div className="flex items-center gap-md shrink-0">
+              <button
+                onClick={() => setShowPreview(true)}
+                className="flex items-center gap-xs text-label-sm text-primary hover:underline">
+                <Eye size={14} /> Preview
+              </button>
+              <button onClick={() => router.push(`/studio/${masterResumeId}`)}
+                className="flex items-center gap-xs text-label-sm text-primary hover:underline">
+                <ArrowSquareOut size={14} /> Open
+              </button>
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-xs text-label-sm text-primary hover:underline disabled:opacity-50">
+                {uploading && <Spinner size={14} className="animate-spin" />}
+                {uploading ? "Replacing…" : "Replace"}
+              </button>
+            </div>
           </div>
-        ) : null}
-
-        <div
-          onDragOver={e => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) acceptFile(f); }}
-          onClick={() => fileRef.current?.click()}
-          className={`rounded-xl border-2 border-dashed p-lg flex items-center gap-lg cursor-pointer transition-all ${
-            dragging ? "border-primary bg-primary/5" : "border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30"
-          }`}
-        >
-          {uploading ? (
-            <Spinner size={28} className="text-primary animate-spin" />
-          ) : (
-            <UploadSimple size={28} className={dragging ? "text-primary" : "text-on-surface-variant/50"} />
-          )}
-          <div className="flex-1">
-            <p className="text-label-md text-on-surface font-semibold">
-              {uploading ? "Parsing resume…" : dragging ? "Release to upload" : masterResumeId ? "Upload a new resume" : "Upload your resume"}
-            </p>
-            <p className="text-caption text-on-surface-variant mt-xs">
-              PDF or DOCX · AI extracts contact, experience, education, and skills automatically
-            </p>
+        ) : (
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) acceptFile(f); }}
+            onClick={() => fileRef.current?.click()}
+            className={`rounded-xl border-2 border-dashed p-lg flex items-center gap-lg cursor-pointer transition-all ${
+              dragging ? "border-primary bg-primary/5" : "border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30"
+            }`}
+          >
+            {uploading ? (
+              <Spinner size={28} className="text-primary animate-spin" />
+            ) : (
+              <UploadSimple size={28} className={dragging ? "text-primary" : "text-on-surface-variant/50"} />
+            )}
+            <div className="flex-1">
+              <p className="text-label-md text-on-surface font-semibold">
+                {uploading ? "Parsing resume…" : dragging ? "Release to upload" : "Upload your resume"}
+              </p>
+              <p className="text-caption text-on-surface-variant mt-xs">
+                PDF or DOCX · AI extracts contact, experience, education, and skills automatically
+              </p>
+            </div>
+            <span className="shrink-0 text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm hover:bg-primary/5 transition-all">
+              Browse
+            </span>
           </div>
-          <span className="shrink-0 text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm hover:bg-primary/5 transition-all">
-            Browse
-          </span>
-        </div>
+        )}
       </section>
 
       {/* ── Contact information ───────────────────────────────────────────── */}
@@ -346,12 +382,12 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
           <div className="flex flex-col gap-xs">
             <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><User size={14} /> Full Name</label>
-            <input value={contact.name} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
+            <input value={contact.name ?? ""} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
               placeholder="Jane Smith" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
             <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><EnvelopeSimple size={14} /> Email</label>
-            <input type="email" value={contact.email} onChange={e => setContact(p => ({ ...p, email: e.target.value }))}
+            <input type="email" value={contact.email ?? ""} onChange={e => setContact(p => ({ ...p, email: e.target.value }))}
               placeholder="jane@example.com" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
@@ -463,19 +499,19 @@ export default function ProfilePage() {
                       <div className="grid grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Company *</label>
-                          <input value={exp.company} onChange={e => updateExp(exp.id, "company", e.target.value)}
+                          <input value={exp.company ?? ""} onChange={e => updateExp(exp.id, "company", e.target.value)}
                             placeholder="Google" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Role / Title *</label>
-                          <input value={exp.title} onChange={e => updateExp(exp.id, "title", e.target.value)}
+                          <input value={exp.title ?? ""} onChange={e => updateExp(exp.id, "title", e.target.value)}
                             placeholder="Software Engineer" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
                           <div className="flex items-center h-[18px]">
                             <label className="text-caption text-on-surface-variant">Start</label>
                           </div>
-                          <input value={exp.start} onChange={e => updateExp(exp.id, "start", e.target.value)}
+                          <input value={exp.start ?? ""} onChange={e => updateExp(exp.id, "start", e.target.value)}
                             placeholder="Jan 2022" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
@@ -496,7 +532,7 @@ export default function ProfilePage() {
                             <span className="text-caption text-on-surface-variant">Current</span>
                           </div>
                           <input
-                            value={exp.current ? "Present" : exp.end}
+                            value={exp.current ? "Present" : exp.end ?? ""}
                             onChange={e => updateExp(exp.id, "end", e.target.value)}
                             disabled={exp.current}
                             placeholder="Dec 2023"
@@ -506,23 +542,23 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
-                        <textarea value={exp.responsibilities} onChange={e => updateExp(exp.id, "responsibilities", e.target.value)}
+                        <textarea value={exp.responsibilities ?? ""} onChange={e => updateExp(exp.id, "responsibilities", e.target.value)}
                           rows={2} placeholder="Led backend API development, mentored junior engineers…" className={textareaCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Achievements</label>
-                        <textarea value={exp.achievements} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
+                        <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
                           rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
                       </div>
                       <div className="grid grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Projects completed</label>
-                          <textarea value={exp.projects} onChange={e => updateExp(exp.id, "projects", e.target.value)}
+                          <textarea value={exp.projects ?? ""} onChange={e => updateExp(exp.id, "projects", e.target.value)}
                             rows={2} placeholder="Payment gateway v2, Search re-index…" className={textareaCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Impact</label>
-                          <textarea value={exp.impact} onChange={e => updateExp(exp.id, "impact", e.target.value)}
+                          <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
                             rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
                         </div>
                       </div>
@@ -572,22 +608,22 @@ export default function ProfilePage() {
                     <div className="p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
                       <div className="flex flex-col gap-xs col-span-2">
                         <label className="text-caption text-on-surface-variant">Institution *</label>
-                        <input value={edu.institution} onChange={e => updateEdu(edu.id, "institution", e.target.value)}
+                        <input value={edu.institution ?? ""} onChange={e => updateEdu(edu.id, "institution", e.target.value)}
                           placeholder="Stanford University" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Degree</label>
-                        <input value={edu.degree} onChange={e => updateEdu(edu.id, "degree", e.target.value)}
+                        <input value={edu.degree ?? ""} onChange={e => updateEdu(edu.id, "degree", e.target.value)}
                           placeholder="B.S. / M.S. / Ph.D." className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Field of Study</label>
-                        <input value={edu.field} onChange={e => updateEdu(edu.id, "field", e.target.value)}
+                        <input value={edu.field ?? ""} onChange={e => updateEdu(edu.id, "field", e.target.value)}
                           placeholder="Computer Science" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Graduation Year</label>
-                        <input value={edu.year} onChange={e => updateEdu(edu.id, "year", e.target.value)}
+                        <input value={edu.year ?? ""} onChange={e => updateEdu(edu.id, "year", e.target.value)}
                           placeholder="2020" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
@@ -642,17 +678,17 @@ export default function ProfilePage() {
                     <div className="p-md grid grid-cols-3 gap-sm bg-surface-container-lowest">
                       <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
                         <label className="text-caption text-on-surface-variant">Certification Name *</label>
-                        <input value={cert.name} onChange={e => updateCert(cert.id, "name", e.target.value)}
+                        <input value={cert.name ?? ""} onChange={e => updateCert(cert.id, "name", e.target.value)}
                           placeholder="AWS Solutions Architect" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
                         <label className="text-caption text-on-surface-variant">Issuing Organisation</label>
-                        <input value={cert.issuer} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
+                        <input value={cert.issuer ?? ""} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
                           placeholder="Amazon Web Services" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs col-span-1">
                         <label className="text-caption text-on-surface-variant">Year</label>
-                        <input value={cert.year} onChange={e => updateCert(cert.id, "year", e.target.value)}
+                        <input value={cert.year ?? ""} onChange={e => updateCert(cert.id, "year", e.target.value)}
                           placeholder="2023" className={inputCls} />
                       </div>
                     </div>
@@ -675,6 +711,15 @@ export default function ProfilePage() {
           {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}
         </button>
       </div>
+
+      {showPreview && masterResumeId && (
+        <ResumePreviewModal
+          resumeId={masterResumeId}
+          templateId={masterResumeTemplateId}
+          title={masterResumeTitle ?? "Resume"}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }

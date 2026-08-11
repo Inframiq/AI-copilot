@@ -161,11 +161,12 @@ export function resumeContentToCareerProfileInput(
   };
 }
 
-/** Convert a CareerProfile into a ResumeContent-compatible object for tailoring. */
-export function profileToResumeContent(profile: CareerProfile): object {
+/** Convert a CareerProfile into a ResumeContent-compatible object for tailoring
+ * and for keeping the master resume's stored content in sync with profile edits. */
+export function profileToResumeContent(profile: CareerProfileInput): ResumeContent {
   return {
     contact: profile.contact,
-    headline: profile.headline,
+    headline: profile.headline ?? undefined,
     experience: profile.experience.map(e => ({
       company: `${e.company}${e.type === "internship" ? " (Internship)" : ""}`,
       title: e.title,
