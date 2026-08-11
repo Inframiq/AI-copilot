@@ -324,7 +324,16 @@ in the JD AND (b) directly evidenced by the candidate's existing stack \
 Architecture"; if the JD never mentions JavaScript, do not add it just because \
 they use React). Limit to at most 6 skills. Do not dump transitive or \
 implied skills — only add what the JD is clearly testing for.
-6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+6. PRIORITY SKILLS OVERRIDE: if priority_skills_from_user (in the payload) is \
+non-empty, the user has explicitly confirmed they have every skill listed there \
+and wants it highlighted — always include all of them in plausible_skills_to_add \
+verbatim, bypassing the evidence filter in rule 5 for these specific skills only \
+(they do not count toward the 6-skill cap in rule 5). Additionally, for any \
+bullet whose work could plausibly demonstrate a priority skill, prefer INJECT to \
+weave it in naturally — but never fabricate metrics or experience just to force \
+the connection; it's fine for a priority skill to surface only in \
+plausible_skills_to_add if no bullet fits.
+7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -347,10 +356,12 @@ async def _agent2_semantic_map(
     jd_analysis: JDAnalysis,
     indexed_resume: dict,
     provider: AIProvider,
+    priority_skills: list[str] | None = None,
 ) -> MappingPlan:
     payload = {
         "jd_analysis": jd_analysis.model_dump(),
         "original_resume": indexed_resume,
+        "priority_skills_from_user": priority_skills or [],
     }
     return await provider.complete_structured(
         _AGENT2_SYSTEM, json.dumps(payload), MappingPlan, model_tier="pro"
@@ -558,6 +569,7 @@ async def run_tailoring_pipeline(
     humanize_level: int,
     provider: AIProvider,
     company_name: str | None = None,
+    priority_skills: list[str] | None = None,
 ) -> TailoringResult:
     """
     Full pipeline — the "Tailor Resume" step. Re-runs analyze_jd_match (cheap,
@@ -567,6 +579,12 @@ async def run_tailoring_pipeline(
          │
          ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
          └── prep questions (pro)                           ┘
+
+    priority_skills — keywords the user explicitly picked (e.g. from the JD
+    Analyzer's "Not Matched" list) that they want the tailoring to prioritize.
+    Passed to Agent 2 as a hint to weave them into bullets where plausible;
+    guaranteed to appear in the returned suggested_skills regardless of
+    whether Agent 2's prompt-following holds, via the merge below.
     """
     analysis = await analyze_jd_match(resume_content, jd_text, provider, company_name)
 
@@ -574,7 +592,9 @@ async def run_tailoring_pipeline(
     indexed_resume, _ = _index_bullets(resume_content)
 
     # ── Agent 2 — semantic mapping (pro model) ────────────────────────────────
-    mapping_plan = await _agent2_semantic_map(analysis.jd_analysis, indexed_resume, provider)
+    mapping_plan = await _agent2_semantic_map(
+        analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
+    )
 
     # ── Agent 3 + prep questions in parallel (both pro model) ────────────────
     original_skills = resume_content.get("skills", [])
@@ -587,6 +607,16 @@ async def run_tailoring_pipeline(
     # ── patch rewritten bullets back into the original structure ─────────────
     tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)
 
+    # ── merge in the user's priority skills — a code-level guarantee, not
+    #    just a prompt instruction, that they show up for review ─────────────
+    suggested = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
+    if priority_skills:
+        seen_lower = {s.lower() for s in suggested}
+        for skill in _sanitize_skill_list(priority_skills):
+            if skill.lower() not in seen_lower:
+                suggested.append(skill)
+                seen_lower.add(skill.lower())
+
     return TailoringResult(
         tailored_content=tailored_content,
         matched_skills=analysis.matched_skills,
@@ -594,7 +624,7 @@ async def run_tailoring_pipeline(
         ats_score=analysis.ats_score,
         prep_questions=questions,
         company_keywords=analysis.company_keywords,
-        suggested_skills=_sanitize_skill_list(mapping_plan.plausible_skills_to_add),
+        suggested_skills=suggested,
     )
 
 

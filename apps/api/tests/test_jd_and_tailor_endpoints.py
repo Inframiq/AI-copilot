@@ -178,6 +178,8 @@ async def test_tailor_resume_returns_200_and_creates_session():
                 topic="AWS", question="How would you use AWS?", answer_framework="STAR", order_index=1
             )
         ],
+        company_keywords=[],
+        suggested_skills=[],
     )
 
     app.dependency_overrides[get_db] = override
@@ -199,6 +201,68 @@ async def test_tailor_resume_returns_200_and_creates_session():
         assert len(body["questions"]) == 1
         mock_session.add.assert_called_once()  # the TailoringSession
         mock_session.add_all.assert_called_once()  # the PrepQuestion rows
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_tailor_resume_forwards_priority_skills_to_pipeline():
+    from app.services.tailoring import TailoringResult, PrepQuestionData
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+
+    from app.db.models import TailoringSession, PrepQuestion
+
+    def fake_add(obj):
+        if isinstance(obj, TailoringSession) and obj.id is None:
+            obj.id = uuid.uuid4()
+
+    def fake_add_all(objs):
+        for obj in objs:
+            if isinstance(obj, PrepQuestion) and obj.id is None:
+                obj.id = uuid.uuid4()
+
+    mock_session.add = MagicMock(side_effect=fake_add)
+    mock_session.add_all = MagicMock(side_effect=fake_add_all)
+
+    fake_result = TailoringResult(
+        tailored_content={"experience": []},
+        matched_skills=["Python"],
+        missing_skills=["AWS"],
+        ats_score=50,
+        prep_questions=[],
+        company_keywords=[],
+        suggested_skills=["Kubernetes"],
+    )
+    pipeline_mock = AsyncMock(return_value=fake_result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.run_tailoring_pipeline", new=pipeline_mock):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/tailor",
+                    json={
+                        "resume_id": str(resume.id),
+                        "jd_id": str(jd.id),
+                        "humanize_level": 50,
+                        "priority_skills": ["Kubernetes", "Terraform"],
+                    },
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["suggested_skills"] == ["Kubernetes"]
+        # The router must forward the user's picks into the pipeline call.
+        _, kwargs = pipeline_mock.call_args
+        assert kwargs["priority_skills"] == ["Kubernetes", "Terraform"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 

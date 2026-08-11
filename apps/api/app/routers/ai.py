@@ -76,6 +76,7 @@ async def tailor_resume(
         body.humanize_level,
         provider,
         company_name=body.company_name,
+        priority_skills=body.priority_skills,
     )
 
     session = TailoringSession(
