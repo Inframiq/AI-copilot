@@ -27,6 +27,11 @@ class GeminiProvider(AIProvider):
     async def complete(self, system: str, user: str, model_tier: str = "fast") -> str:
         prompt = f"{system}\n\n{user}"
         response = await self._model(model_tier).generate_content_async(prompt)
+        # response.usage_metadata (prompt/candidates/total token counts) is
+        # available here but not captured — no token-usage telemetry exists
+        # anywhere in this codebase today. See docs/ai-pipeline.md. (Also
+        # note: this provider is currently unused — AI_PROVIDER=openai in
+        # .env — so this path isn't exercised in production right now.)
         return response.text
 
     async def complete_structured(
@@ -38,4 +43,5 @@ class GeminiProvider(AIProvider):
         )
         response = await self._model(model_tier).generate_content_async(prompt)
         text = _strip_fence(response.text)
+        # Same unused response.usage_metadata as above.
         return schema.model_validate(json.loads(text))

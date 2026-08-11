@@ -15,6 +15,13 @@ class OpenAIProvider(AIProvider):
         self._client = AsyncOpenAI(api_key=api_key)
         self._max_output_tokens = max_output_tokens
 
+    # `model_tier` is accepted (to satisfy the AIProvider interface) but
+    # deliberately unused below — this provider only has the one budget
+    # model. Every caller in tailoring.py passes "fast" or "pro" as if it
+    # mattered; here it doesn't. See docs/ai-pipeline.md for the full
+    # implication (all agents share one model + one output-token ceiling)
+    # and the risk that follows (Agent 3's 4096-token cap vs. the 16384
+    # GeminiProvider uses for the same, output-heavy call).
     async def complete(self, system: str, user: str, model_tier: str = "fast") -> str:
         response = await self._client.responses.create(
             model=_MODEL,
@@ -22,6 +29,9 @@ class OpenAIProvider(AIProvider):
             input=user,
             max_output_tokens=self._max_output_tokens,
         )
+        # response.usage (input/output/total tokens) is available here but
+        # not captured — no token-usage telemetry exists anywhere in this
+        # codebase today. See docs/ai-pipeline.md.
         return response.output_text
 
     async def complete_structured(
@@ -34,4 +44,5 @@ class OpenAIProvider(AIProvider):
             text_format=schema,
             max_output_tokens=self._max_output_tokens,
         )
+        # Same unused response.usage as above.
         return response.output_parsed
