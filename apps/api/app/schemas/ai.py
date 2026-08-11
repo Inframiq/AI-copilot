@@ -49,6 +49,17 @@ class LearningItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RewriteBulletRequest(BaseModel):
+    bullet_text: str = Field(max_length=3000)
+    mode: str = Field(pattern="^(rewrite|humanize)$")
+    jd_context: str = Field(default="", max_length=8000)
+    humanize_level: int = Field(default=50, ge=0, le=100)
+
+
+class RewriteBulletOut(BaseModel):
+    rewritten_text: str
+
+
 class TailorOut(BaseModel):
     session_id: uuid.UUID
     ats_score: int

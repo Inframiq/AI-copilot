@@ -166,6 +166,14 @@ export const apiClient = {
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
     }),
 
+  rewriteBullet: (payload: {
+    bullet_text: string;
+    mode: "rewrite" | "humanize";
+    jd_context?: string;
+    humanize_level?: number;
+  }): Promise<{ rewritten_text: string }> =>
+    request<{ rewritten_text: string }>("POST", "/ai/rewrite-bullet", payload),
+
   getSession: (sessionId: string): Promise<{
     session_id: string;
     resume_id: string;

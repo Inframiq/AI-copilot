@@ -41,6 +41,7 @@ interface TailoringState {
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
+  updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
   applyDecisions: (resumeId: string) => Promise<void>;
@@ -75,6 +76,17 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const decisions: Record<string, BulletDecision> = {};
     for (const c of changes) decisions[c.key] = decision;
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions } }));
+  },
+
+  updatePendingBullet: (jobIdx, bulletIdx, text) => {
+    const { pendingContent } = get();
+    if (!pendingContent) return;
+    const newExp = pendingContent.experience.map((job, ji) => {
+      if (ji !== jobIdx) return job;
+      const newBullets = job.bullets.map((b, bi) => (bi === bulletIdx ? text : b));
+      return { ...job, bullets: newBullets };
+    });
+    set({ pendingContent: { ...pendingContent, experience: newExp } });
   },
 
   // Read-only "Analyze Description" step — computes ATS score / matched /

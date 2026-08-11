@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut
+from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut, RewriteBulletRequest, RewriteBulletOut
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match
 
@@ -116,6 +116,46 @@ async def tailor_resume(
         company_keywords=result.company_keywords,
         suggested_skills=result.suggested_skills,
     )
+
+
+@router.post("/rewrite-bullet", response_model=RewriteBulletOut)
+@limiter.limit("30/minute")
+async def rewrite_bullet(
+    request: Request,
+    body: RewriteBulletRequest,
+    user=Depends(get_current_user),
+):
+    """Rewrite or humanize a single bullet point using AI."""
+    provider = get_ai_provider()
+
+    if body.mode == "humanize":
+        tone = (
+            "Make this bullet sound natural and human. Reduce keyword density while keeping "
+            "the meaning, metrics, and impact intact. The reader should feel it was written "
+            "by a person, not an ATS optimiser."
+            if body.humanize_level < 50
+            else "Rewrite this bullet in fluent, confident prose — strong action verb, clear impact, "
+            "reads like a senior professional wrote it naturally."
+        )
+        system = (
+            f"You are an expert resume writer. {tone} "
+            "Return ONLY the rewritten bullet — no quotes, no preamble, no explanation."
+        )
+        user_msg = f"Bullet:\n{body.bullet_text}"
+    else:  # rewrite — re-optimize for the JD
+        system = (
+            "You are an elite ATS resume writer. Rewrite the bullet to better match the job "
+            "description below. Inject relevant keywords naturally, lead with a strong action "
+            "verb, and keep all metrics verbatim. "
+            "Return ONLY the rewritten bullet — no quotes, no preamble."
+        )
+        jd_block = f"\nJob Description context:\n{body.jd_context}" if body.jd_context else ""
+        user_msg = f"Bullet:\n{body.bullet_text}{jd_block}"
+
+    rewritten = await provider.complete(system, user_msg, model_tier="fast")
+    # Strip surrounding quotes if the model wrapped the output
+    rewritten = rewritten.strip().strip('"').strip("'").strip()
+    return RewriteBulletOut(rewritten_text=rewritten)
 
 
 @router.get("/sessions/{session_id}")

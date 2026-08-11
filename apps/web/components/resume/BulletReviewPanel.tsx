@@ -1,6 +1,14 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Check, X, ArrowCounterClockwise, Plus, FilePdf } from "@phosphor-icons/react";
+import {
+  Check,
+  X,
+  ArrowCounterClockwise,
+  Plus,
+  FilePdf,
+  ArrowsClockwise,
+  Sparkle,
+} from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
@@ -10,6 +18,7 @@ export function BulletReviewPanel() {
   const bulletDecisions = useTailoringStore((s) => s.bulletDecisions);
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
   const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
+  const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
   const applyDecisions = useTailoringStore((s) => s.applyDecisions);
   const discardPending = useTailoringStore((s) => s.discardPending);
   const isApplying = useTailoringStore((s) => s.isApplying);
@@ -17,16 +26,20 @@ export function BulletReviewPanel() {
   const companyName = useTailoringStore((s) => s.companyName);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
+  const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
+  const setHumanizeLevel = useTailoringStore((s) => s.setHumanizeLevel);
+  const jdText = useTailoringStore((s) => s.jdText);
 
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
-  const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const originalContent = useResumeStore((s) => s.content);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // Per-bullet loading: key → "rewrite" | "humanize" | null
+  const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
 
-  // ── Bullet changes (experience only) ────────────────────────────────────
+  // ── Bullet changes (experience only) ─────────────────────────────────────
   const bulletChanges = useMemo<BulletChange[]>(() => {
     if (!pendingContent || !originalContent) return [];
     const out: BulletChange[] = [];
@@ -53,14 +66,30 @@ export function BulletReviewPanel() {
   const acceptedBullets = bulletChanges.filter(
     (c) => (bulletDecisions[c.key] ?? "accept") === "accept",
   ).length;
-  const totalChanges = bulletChanges.length;
 
-  // All bullets have been explicitly decided (Accept or Keep original clicked)
-  const allDecided = bulletChanges.length === 0 ||
-    bulletChanges.every((c) => c.key in bulletDecisions);
+  const allDecided =
+    bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
 
-  async function handleAcceptAll() {
-    setAllBulletDecisions(bulletChanges, "accept");
+  async function handleRewriteBullet(
+    change: BulletChange,
+    mode: "rewrite" | "humanize",
+  ) {
+    setBulletLoading((prev) => ({ ...prev, [change.key]: mode }));
+    try {
+      const { rewritten_text } = await apiClient.rewriteBullet({
+        bullet_text: change.tailored,
+        mode,
+        jd_context: mode === "rewrite" ? jdText : undefined,
+        humanize_level: humanizeLevel,
+      });
+      updatePendingBullet(change.jobIdx, change.bulletIdx, rewritten_text);
+      // Auto-accept the updated version
+      setBulletDecision(change.key, "accept");
+    } catch {
+      // silently fail — original tailored text stays
+    } finally {
+      setBulletLoading((prev) => ({ ...prev, [change.key]: null }));
+    }
   }
 
   async function handleGeneratePdf() {
@@ -69,8 +98,6 @@ export function BulletReviewPanel() {
     setGenerateError(null);
     try {
       await applyDecisions(resumeId);
-      const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
-      setPdfSignedUrl(signed_url);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "PDF generation failed");
     } finally {
@@ -80,23 +107,27 @@ export function BulletReviewPanel() {
 
   if (!pendingContent) return null;
 
-  // ── Group bullets by job ─────────────────────────────────────────────────
-  const groups = bulletChanges.reduce<Record<string, { label: string; changes: BulletChange[] }>>(
-    (acc, change) => {
-      const groupKey = `${change.jobTitle}||${change.company}`;
-      if (!acc[groupKey]) {
-        acc[groupKey] = {
-          label: change.company ? `${change.jobTitle} · ${change.company}` : change.jobTitle,
-          changes: [],
-        };
-      }
-      acc[groupKey].changes.push(change);
-      return acc;
-    },
-    {},
-  );
+  // ── Group bullets by job ──────────────────────────────────────────────────
+  const groups = bulletChanges.reduce<
+    Record<string, { label: string; changes: BulletChange[] }>
+  >((acc, change) => {
+    const groupKey = `${change.jobTitle}||${change.company}`;
+    if (!acc[groupKey]) {
+      acc[groupKey] = {
+        label: change.company
+          ? `${change.jobTitle} · ${change.company}`
+          : change.jobTitle,
+        changes: [],
+      };
+    }
+    acc[groupKey].changes.push(change);
+    return acc;
+  }, {});
 
-  if (totalChanges === 0) {
+  const humanizeLabel =
+    humanizeLevel < 30 ? "Natural" : humanizeLevel > 70 ? "ATS Max" : "Balanced";
+
+  if (bulletChanges.length === 0) {
     return (
       <div className="flex flex-col gap-md">
         <div className="rounded-xl border border-outline-variant/20 p-lg text-center bg-surface">
@@ -104,6 +135,12 @@ export function BulletReviewPanel() {
             No changes to review — your resume is already well-aligned with this JD.
           </p>
         </div>
+        {/* Skills + generate still shown */}
+        <SkillsBlock
+          suggestedSkills={suggestedSkills}
+          bulletDecisions={bulletDecisions}
+          setBulletDecision={setBulletDecision}
+        />
         <button
           onClick={discardPending}
           className="w-full py-sm rounded-xl border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors"
@@ -116,12 +153,13 @@ export function BulletReviewPanel() {
 
   return (
     <div className="flex flex-col gap-md">
-      {/* Header — no bulk action buttons here */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-label-md font-bold text-on-surface">Review AI Changes</p>
           <p className="text-caption text-on-surface-variant">
-            {acceptedBullets} of {bulletChanges.length} bullet{bulletChanges.length !== 1 ? "s" : ""} accepted
+            {acceptedBullets} of {bulletChanges.length} bullet
+            {bulletChanges.length !== 1 ? "s" : ""} accepted
             {atsScore !== null && ` · ATS Score: ${atsScore}%`}
           </p>
         </div>
@@ -134,10 +172,12 @@ export function BulletReviewPanel() {
         </button>
       </div>
 
-      {/* Company keywords */}
+      {/* ── Company keywords ── */}
       {companyKeywords.length > 0 && (
         <div className="rounded-xl border border-primary/20 bg-primary-container/20 p-md flex flex-col gap-sm">
-          <p className="text-label-sm font-bold text-primary">{companyName} ATS Keywords Injected</p>
+          <p className="text-label-sm font-bold text-primary">
+            {companyName} ATS Keywords Injected
+          </p>
           <div className="flex flex-wrap gap-xs">
             {companyKeywords.map((kw) => (
               <span
@@ -151,42 +191,7 @@ export function BulletReviewPanel() {
         </div>
       )}
 
-      {/* ── Suggested skills: user opts in per chip ── */}
-      {suggestedSkills.length > 0 && (
-        <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
-          <div>
-            <p className="text-label-sm text-on-surface font-bold">Suggested Skills to Add</p>
-            <p className="text-caption text-on-surface-variant">Click a skill to add it to your resume</p>
-          </div>
-          <div className="flex flex-wrap gap-xs">
-            {suggestedSkills.map((skill) => {
-              const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
-              return (
-                <button
-                  key={skill}
-                  onClick={() =>
-                    setBulletDecision(`skill_add:${skill}`, selected ? "reject" : "accept")
-                  }
-                  className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
-                    selected
-                      ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
-                      : "bg-surface-container text-on-surface-variant border-outline-variant/40 hover:border-primary/40 hover:text-primary"
-                  }`}
-                >
-                  {selected ? (
-                    <Check size={11} weight="bold" />
-                  ) : (
-                    <Plus size={11} weight="bold" />
-                  )}
-                  {skill}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Bullet changes grouped by job ── */}
+      {/* ── Bullet groups ── */}
       {Object.entries(groups).map(([groupKey, group]) => (
         <div key={groupKey} className="flex flex-col gap-sm">
           <p className="text-label-sm text-on-surface-variant font-bold uppercase tracking-wider">
@@ -195,6 +200,8 @@ export function BulletReviewPanel() {
           {group.changes.map((change) => {
             const isAccepted = (bulletDecisions[change.key] ?? "accept") === "accept";
             const isDecided = change.key in bulletDecisions;
+            const loading = bulletLoading[change.key];
+
             return (
               <div
                 key={change.key}
@@ -206,21 +213,31 @@ export function BulletReviewPanel() {
                     : "border-outline-variant/20 bg-surface opacity-60"
                 }`}
               >
+                {/* Original */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-on-surface-variant uppercase tracking-wider">
                     Original
                   </span>
                   <p className="text-body-sm text-on-surface-variant line-through leading-relaxed">
-                    {change.original || <em className="not-italic opacity-50">— empty —</em>}
+                    {change.original || (
+                      <em className="not-italic opacity-50">— empty —</em>
+                    )}
                   </p>
                 </div>
+
+                {/* AI Tailored */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-primary uppercase tracking-wider font-bold">
                     AI Tailored
                   </span>
-                  <p className="text-body-sm text-on-surface leading-relaxed">{change.tailored}</p>
+                  <p className="text-body-sm text-on-surface leading-relaxed">
+                    {change.tailored}
+                  </p>
                 </div>
-                <div className="flex gap-xs pt-xs">
+
+                {/* Actions row */}
+                <div className="flex items-center gap-xs pt-xs flex-wrap">
+                  {/* Accept / Keep */}
                   <button
                     onClick={() => setBulletDecision(change.key, "accept")}
                     className={`flex items-center gap-xs px-md py-xs rounded-lg text-label-sm transition-all ${
@@ -243,6 +260,37 @@ export function BulletReviewPanel() {
                     <X size={14} weight={!isAccepted && isDecided ? "bold" : "regular"} />
                     Keep original
                   </button>
+
+                  {/* Divider */}
+                  <span className="text-outline-variant/40 select-none">|</span>
+
+                  {/* Rewrite */}
+                  <button
+                    disabled={!!loading}
+                    onClick={() => handleRewriteBullet(change, "rewrite")}
+                    title="Re-optimize this bullet for the JD"
+                    className="flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm border border-outline-variant/40 text-on-surface-variant hover:border-secondary hover:text-secondary transition-all disabled:opacity-40"
+                  >
+                    <ArrowsClockwise
+                      size={13}
+                      className={loading === "rewrite" ? "animate-spin" : ""}
+                    />
+                    {loading === "rewrite" ? "Rewriting…" : "Rewrite"}
+                  </button>
+
+                  {/* Humanize */}
+                  <button
+                    disabled={!!loading}
+                    onClick={() => handleRewriteBullet(change, "humanize")}
+                    title="Make this bullet sound more natural"
+                    className="flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm border border-outline-variant/40 text-on-surface-variant hover:border-tertiary hover:text-tertiary transition-all disabled:opacity-40"
+                  >
+                    <Sparkle
+                      size={13}
+                      className={loading === "humanize" ? "animate-pulse" : ""}
+                    />
+                    {loading === "humanize" ? "Humanizing…" : "Humanize"}
+                  </button>
                 </div>
               </div>
             );
@@ -250,24 +298,58 @@ export function BulletReviewPanel() {
         </div>
       ))}
 
-      <SkillsDelta />
-
       {/* ── Bottom action area ── */}
       <div className="flex flex-col gap-sm pt-xs border-t border-outline-variant/20 mt-xs">
-        {/* Accept All — always visible until all decided */}
+
+        {/* 1. Suggested skills */}
+        <SkillsBlock
+          suggestedSkills={suggestedSkills}
+          bulletDecisions={bulletDecisions}
+          setBulletDecision={setBulletDecision}
+        />
+
+        {/* 2. Humanize level */}
+        <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-label-sm font-bold text-on-surface">Writing Style</p>
+              <p className="text-caption text-on-surface-variant">
+                Affects per-bullet Rewrite &amp; Humanize
+              </p>
+            </div>
+            <span className="text-label-sm font-bold text-primary px-sm py-xs rounded-lg bg-primary/10">
+              {humanizeLabel}
+            </span>
+          </div>
+          <div className="flex items-center gap-sm">
+            <span className="text-caption text-on-surface-variant w-12">Natural</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={humanizeLevel}
+              onChange={(e) => setHumanizeLevel(Number(e.target.value))}
+              className="flex-1 accent-primary h-1.5 rounded-full cursor-pointer"
+            />
+            <span className="text-caption text-on-surface-variant w-12 text-right">ATS Max</span>
+          </div>
+        </div>
+
+        {/* 3. Accept All / Generate PDF */}
         {!allDecided && (
           <button
-            onClick={handleAcceptAll}
+            onClick={() => setAllBulletDecisions(bulletChanges, "accept")}
             className="w-full py-sm rounded-xl text-label-md text-primary border border-primary/40 hover:bg-primary/5 transition-all"
           >
             Accept All
           </button>
         )}
 
-        {/* Generate PDF — only after all decisions made */}
         {allDecided && (
           <>
-            {generateError && <p className="text-caption text-error">{generateError}</p>}
+            {generateError && (
+              <p className="text-caption text-error">{generateError}</p>
+            )}
             <button
               onClick={handleGeneratePdf}
               disabled={isApplying || isGenerating || !resumeId}
@@ -278,6 +360,57 @@ export function BulletReviewPanel() {
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Suggested skills sub-component ───────────────────────────────────────────
+function SkillsBlock({
+  suggestedSkills,
+  bulletDecisions,
+  setBulletDecision,
+}: {
+  suggestedSkills: string[];
+  bulletDecisions: Record<string, string>;
+  setBulletDecision: (key: string, d: "accept" | "reject") => void;
+}) {
+  if (suggestedSkills.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
+      <div>
+        <p className="text-label-sm text-on-surface font-bold">Suggested Skills to Add</p>
+        <p className="text-caption text-on-surface-variant">
+          Click a skill to include it in your resume
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-xs">
+        {suggestedSkills.map((skill) => {
+          const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
+          return (
+            <button
+              key={skill}
+              onClick={() =>
+                setBulletDecision(
+                  `skill_add:${skill}`,
+                  selected ? "reject" : "accept",
+                )
+              }
+              className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+                selected
+                  ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+                  : "bg-surface-container text-on-surface-variant border-outline-variant/40 hover:border-primary/40 hover:text-primary"
+              }`}
+            >
+              {selected ? (
+                <Check size={11} weight="bold" />
+              ) : (
+                <Plus size={11} weight="bold" />
+              )}
+              {skill}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
