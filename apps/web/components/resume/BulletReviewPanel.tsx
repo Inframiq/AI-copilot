@@ -33,6 +33,7 @@ export function BulletReviewPanel() {
   const companyName = useTailoringStore((s) => s.companyName);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
+  const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
   const setHumanizeLevel = useTailoringStore((s) => s.setHumanizeLevel);
   const jdText = useTailoringStore((s) => s.jdText);
@@ -177,6 +178,7 @@ export function BulletReviewPanel() {
         {/* Skills + generate still shown */}
         <SkillsBlock
           suggestedSkills={suggestedSkills}
+          prioritySkills={prioritySkills}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
         />
@@ -343,6 +345,7 @@ export function BulletReviewPanel() {
         {/* 1. Suggested skills */}
         <SkillsBlock
           suggestedSkills={suggestedSkills}
+          prioritySkills={prioritySkills}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
         />
@@ -484,25 +487,30 @@ export function BulletReviewPanel() {
 // ── Suggested skills sub-component ───────────────────────────────────────────
 function SkillsBlock({
   suggestedSkills,
+  prioritySkills,
   bulletDecisions,
   setBulletDecision,
 }: {
   suggestedSkills: string[];
+  prioritySkills: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
 }) {
   if (suggestedSkills.length === 0) return null;
+  const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
       <div>
         <p className="text-label-sm text-on-surface font-bold">Suggested Skills to Add</p>
         <p className="text-caption text-on-surface-variant">
           Click a skill to include it in your resume
+          {prioritySkills.length > 0 && " — ★ marks the keywords you picked on the JD page"}
         </p>
       </div>
       <div className="flex flex-wrap gap-xs">
         {suggestedSkills.map((skill) => {
           const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
+          const isPriority = prioritySet.has(skill.toLowerCase());
           return (
             <button
               key={skill}
@@ -523,6 +531,7 @@ function SkillsBlock({
               ) : (
                 <Plus size={11} weight="bold" />
               )}
+              {isPriority && <span aria-label="You picked this keyword">★</span>}
               {skill}
             </button>
           );
