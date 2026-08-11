@@ -89,7 +89,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   mergedContent: null,
   previewPdfUrl: null,
 
-  setJd: (id, text) => set({ jdId: id, jdText: text }),
+  // Changing the JD invalidates any priority-skill picks made for the
+  // previous one — EditorPanel's own JD-context textarea calls this too,
+  // and unlike the two JD pages, it never explicitly sets prioritySkills
+  // itself, so this is the one place that must clear it for everyone.
+  setJd: (id, text) => set({ jdId: id, jdText: text, prioritySkills: [] }),
   setCompanyName: (name) => set({ companyName: name }),
   setPrioritySkills: (skills) => set({ prioritySkills: skills }),
   togglePrioritySkill: (skill) =>

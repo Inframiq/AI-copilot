@@ -1,5 +1,5 @@
 "use client";
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
@@ -56,16 +56,28 @@ export default function JDPage({
   // Read-only match analysis for this specific JD/resume pair — does not
   // touch the resume, same semantics as the JD Analyzer index page's
   // "Analyze Description" step.
-  const { data: analysis, isLoading: isAnalyzing } = useQuery<AnalyzeOut>({
+  const { data: analysis, isLoading: isAnalyzing, isError: isAnalysisError, refetch: refetchAnalysis } = useQuery<AnalyzeOut>({
     queryKey: ["jdAnalysis", jdId, masterResume?.id],
     queryFn: () => apiClient.analyzeJd(masterResume!.id, jdId),
     enabled: !!masterResume,
+    // This calls a multi-LLM-call, rate-limited backend endpoint — not a
+    // cheap read. Cache aggressively so revisiting this page doesn't
+    // re-bill the analysis on every visit past the app's default 60s
+    // staleTime.
+    staleTime: 10 * 60 * 1000,
   });
 
   // User's explicit picks from the "Not Matched" list — sent through to
   // tailoring as skills to prioritize. Empty means "let the AI decide",
-  // unchanged from before this feature existed.
+  // unchanged from before this feature existed. Cleared whenever the
+  // analysis data actually changes (fresh fetch or retry) since the
+  // missing-skills list it refers to just changed — same guard the JD
+  // Analyzer index page applies on every fresh analysis run.
   const [selectedPriority, setSelectedPriority] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setSelectedPriority(new Set());
+  }, [analysis]);
 
   function togglePriority(skill: string) {
     setSelectedPriority((prev) => {
@@ -180,6 +192,17 @@ export default function JDPage({
             <p className="text-body-sm text-on-surface-variant">No resume found. Create one first.</p>
           ) : isAnalyzing ? (
             <p className="text-body-sm text-on-surface-variant">Analyzing…</p>
+          ) : isAnalysisError ? (
+            <div className="flex flex-col items-start gap-xs">
+              <p className="text-body-sm text-error">Failed to analyze this job description.</p>
+              <button
+                type="button"
+                onClick={() => refetchAnalysis()}
+                className="text-label-sm text-primary hover:underline"
+              >
+                Retry
+              </button>
+            </div>
           ) : matchedSkills.length === 0 && missingSkills.length === 0 ? (
             <p className="text-body-sm text-on-surface-variant">No keyword data available.</p>
           ) : (
