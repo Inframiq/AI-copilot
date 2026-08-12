@@ -127,15 +127,6 @@ export function PreviewPanel() {
 
       {/* PDF Preview Area */}
       <div className="flex-1 bg-surface-container overflow-y-auto relative">
-        {/* Dot-grid background pattern */}
-        <div
-          className="absolute inset-0 opacity-20 pointer-events-none"
-          style={{
-            backgroundImage: "radial-gradient(#767682 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-          }}
-        />
-
         <div className="relative z-10 flex justify-center items-start p-md min-h-full">
           {pdfSignedUrl ? (
             <iframe

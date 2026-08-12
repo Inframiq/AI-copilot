@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { CursorGlow } from "@/components/CursorGlow";
 
 const hanken = Hanken_Grotesk({
   subsets: ["latin"],
@@ -19,8 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={hanken.variable}>
       <body className="bg-background text-on-background font-sans antialiased">
-        {/* Canvas sits at z:0 in the ROOT stacking context — behind everything */}
-        <CursorGlow />
+        {/* No background effect here — each route group (marketing, auth,
+            app, legal) mounts its own via its own layout, since the root
+            layout can't tell landing apart from everything else. */}
         <Providers>{children}</Providers>
       </body>
     </html>
