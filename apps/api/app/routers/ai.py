@@ -9,7 +9,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut, RewriteBulletRequest, RewriteBulletOut
 from app.services.ai_engine.factory import get_ai_provider
-from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match
+from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -36,12 +36,35 @@ async def analyze_jd(
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
     provider = get_ai_provider()
+
+    # Reuse a previously cached Agent 1 parse when no company name is given —
+    # the JD text hasn't changed, so re-parsing it produces the same logical
+    # output but with random LLM variation.  Company-name analyses are always
+    # re-run because company intel can be time-sensitive.
+    cached_jd_analysis: JDAnalysis | None = None
+    if not body.company_name:
+        raw_cached = (jd_row.parsed or {}).get("agent1")
+        if raw_cached:
+            try:
+                cached_jd_analysis = JDAnalysis(**raw_cached)
+            except Exception:
+                cached_jd_analysis = None  # corrupt cache — fall back to re-parsing
+
     analysis = await analyze_jd_match(
         resume_row.content,
         jd_row.raw_text,
         provider,
         company_name=body.company_name,
+        cached_jd_analysis=cached_jd_analysis,
     )
+
+    # Persist the Agent 1 result on the first call so all future no-company
+    # analyses are deterministic (same JD text → same skill list → same score).
+    if not body.company_name and not cached_jd_analysis:
+        existing = dict(jd_row.parsed) if jd_row.parsed else {}
+        existing["agent1"] = analysis.jd_analysis.model_dump()
+        jd_row.parsed = existing
+        await db.commit()
 
     return AnalyzeOut(
         ats_score=analysis.ats_score,
@@ -70,6 +93,18 @@ async def tailor_resume(
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
     provider = get_ai_provider()
+
+    # Reuse cached Agent 1 output (same logic as /analyze) so tailoring uses
+    # the same skill list as a prior analysis — consistent ATS score throughout.
+    cached_for_tailor: JDAnalysis | None = None
+    if not body.company_name:
+        raw_cached = (jd_row.parsed or {}).get("agent1")
+        if raw_cached:
+            try:
+                cached_for_tailor = JDAnalysis(**raw_cached)
+            except Exception:
+                cached_for_tailor = None
+
     result = await run_tailoring_pipeline(
         resume_row.content,
         jd_row.raw_text,
@@ -77,6 +112,7 @@ async def tailor_resume(
         provider,
         company_name=body.company_name,
         priority_skills=body.priority_skills,
+        cached_jd_analysis=cached_for_tailor,
     )
 
     session = TailoringSession(

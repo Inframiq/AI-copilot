@@ -525,6 +525,7 @@ async def analyze_jd_match(
     jd_text: str,
     provider: AIProvider,
     company_name: str | None = None,
+    cached_jd_analysis: "JDAnalysis | None" = None,
 ) -> JDMatchAnalysis:
     """
     Agent 0 (fast)  ─── company intel (optional)
@@ -535,8 +536,17 @@ async def analyze_jd_match(
     This is the "Analyze Description" step — read-only, doesn't touch the
     resume. run_tailoring_pipeline (the "Tailor Resume" step) continues on
     from here into the resume-rewriting agents.
+
+    cached_jd_analysis — pass a previously stored JDAnalysis (no-company-name
+    variant) to skip Agent 1 entirely.  The caller is responsible for only
+    passing this when company_name is absent, since company intel changes the
+    Agent 1 output.
     """
-    if company_name and company_name.strip():
+    if cached_jd_analysis:
+        # Use the pre-computed JD analysis — deterministic, no LLM call.
+        company_intel = None
+        jd_analysis = cached_jd_analysis
+    elif company_name and company_name.strip():
         company_intel = await _agent0_company_intel(company_name.strip(), provider)
         jd_analysis = await _agent1_parse_jd(jd_text, provider, company_intel)
     else:
@@ -588,6 +598,7 @@ async def run_tailoring_pipeline(
     provider: AIProvider,
     company_name: str | None = None,
     priority_skills: list[str] | None = None,
+    cached_jd_analysis: "JDAnalysis | None" = None,
 ) -> TailoringResult:
     """
     Full pipeline — the "Tailor Resume" step. Re-runs analyze_jd_match (cheap,
@@ -603,8 +614,14 @@ async def run_tailoring_pipeline(
     Passed to Agent 2 as a hint to weave them into bullets where plausible;
     guaranteed to appear in the returned suggested_skills regardless of
     whether Agent 2's prompt-following holds, via the merge below.
+
+    cached_jd_analysis — pass a pre-computed JDAnalysis (no company-name
+    variant) to skip Agent 1 and get a consistent skill list / ATS score.
     """
-    analysis = await analyze_jd_match(resume_content, jd_text, provider, company_name)
+    analysis = await analyze_jd_match(
+        resume_content, jd_text, provider, company_name,
+        cached_jd_analysis=cached_jd_analysis,
+    )
 
     # ── assign bullet IDs, build indexed resume for Agent 2 ──────────────────
     indexed_resume, _ = _index_bullets(resume_content)
