@@ -27,6 +27,7 @@ import {
   Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { SaveAnalysisModal } from "@/components/jd/SaveAnalysisModal";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
@@ -120,6 +121,9 @@ export default function JDIndexPage() {
     });
   }
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
+  // Pending "Save As" — set when the user submits new JD text, cleared once
+  // they confirm a name (or cancel) in SaveAnalysisModal.
+  const [pendingSaveText, setPendingSaveText] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState("");
@@ -265,26 +269,37 @@ export default function JDIndexPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!jdText.trim()) return;
-    setIsSubmitting(true);
+    if (!activeResumeId) {
+      setError("Set up your profile first so we can compute your ATS match score.");
+      return;
+    }
     setError(null);
     setTailorError(null);
+    // Opens SaveAnalysisModal — the actual create+analyze happens in
+    // handleConfirmSaveAs once the user names it (and resolves any
+    // name conflict), same as a file manager's Save As.
+    setPendingSaveText(jdText);
+  }
+
+  async function handleConfirmSaveAs(name: string, replaceId?: string) {
+    const text = pendingSaveText;
+    setPendingSaveText(null);
+    if (!text || !activeResumeId) return;
+    setIsSubmitting(true);
     setSelectedPriority(new Set());
     try {
-      const firstLine = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
-      const jd = await apiClient.createJd({ title: firstLine, raw_text: jdText });
+      if (replaceId) await apiClient.deleteJd(replaceId);
+      const jd = await apiClient.createJd({ title: name, raw_text: text });
       // Use the local jdText we sent — don't rely on the backend echoing it back
-      setJd(jd.id, jdText);
-      if (activeResumeId) {
-        // Read-only analysis only — this does NOT touch the resume. Tailoring
-        // (which rewrites bullets and regenerates the PDF) is a separate,
-        // explicit action via the "Tailor Resume" button once results are in.
-        await runAnalysis(activeResumeId);
-      } else {
-        setError("Set up your profile first so we can compute your ATS match score.");
-      }
+      setJd(jd.id, text);
+      // Read-only analysis only — this does NOT touch the resume. Tailoring
+      // (which rewrites bullets and regenerates the PDF) is a separate,
+      // explicit action via the "Tailor Resume" button once results are in.
+      await runAnalysis(activeResumeId);
+      await queryClient.invalidateQueries({ queryKey: ["jds"] });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -848,6 +863,15 @@ export default function JDIndexPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {pendingSaveText && (
+        <SaveAnalysisModal
+          defaultName={pendingSaveText.trim().split("\n")[0].slice(0, 120) || "Untitled JD"}
+          existingTitles={jds.map((jd) => ({ id: jd.id, title: jd.title }))}
+          onCancel={() => setPendingSaveText(null)}
+          onConfirm={handleConfirmSaveAs}
+        />
       )}
 
     </div>
