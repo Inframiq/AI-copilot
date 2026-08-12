@@ -7,7 +7,8 @@ from app.services.tailoring import (
     BulletMapping,
     WriterOutput,
     RewrittenBullet,
-    PrepQuestionsWrapper,
+    SkillQuestionData,
+    SkillQuestionsWrapper,
 )
 
 
@@ -23,6 +24,16 @@ def make_provider_dispatching_by_schema(responses: dict[type, object]):
 
     provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
     return provider
+
+
+def make_mock_db_with_rows(rows):
+    session = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = rows
+    session.execute = AsyncMock(return_value=result)
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    return session
 
 
 @pytest.mark.asyncio
@@ -45,16 +56,17 @@ async def test_priority_skills_reach_agent2_payload():
             )
         if schema is WriterOutput:
             return WriterOutput(rewritten_bullets=[], updated_skills=["Python"])
-        if schema is PrepQuestionsWrapper:
-            return PrepQuestionsWrapper(questions=[])
+        if schema is SkillQuestionsWrapper:
+            return SkillQuestionsWrapper(questions=[])
         raise AssertionError(f"Unexpected schema: {schema}")
 
     provider = MagicMock()
     provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
 
     resume = {"experience": [{"title": "Eng", "bullets": ["Did Python stuff"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
     await run_tailoring_pipeline(
-        resume, "Need Python and Kubernetes.", 50, provider,
+        resume, "Need Python and Kubernetes.", 50, provider, db,
         priority_skills=["Kubernetes"],
     )
 
@@ -91,13 +103,14 @@ async def test_suggested_skills_always_includes_priority_skills_even_if_agent2_o
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Used Python")],
             updated_skills=["Python"],
         ),
-        PrepQuestionsWrapper: PrepQuestionsWrapper(questions=[]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
 
     resume = {"experience": [{"title": "Eng", "bullets": ["Did Python stuff"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
     result = await run_tailoring_pipeline(
-        resume, "Need Python, Docker, and Kubernetes.", 50, provider,
+        resume, "Need Python, Docker, and Kubernetes.", 50, provider, db,
         priority_skills=["Kubernetes", "docker"],  # lowercase "docker" — must dedupe case-insensitively against "Docker"
     )
 
@@ -136,13 +149,14 @@ async def test_no_priority_skills_falls_back_to_agent2_own_suggestions():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Used Python")],
             updated_skills=["Python"],
         ),
-        PrepQuestionsWrapper: PrepQuestionsWrapper(questions=[]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
 
     resume = {"experience": [{"title": "Eng", "bullets": ["Did Python stuff"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
     result = await run_tailoring_pipeline(
-        resume, "Need Python and Docker.", 50, provider,
+        resume, "Need Python and Docker.", 50, provider, db,
         priority_skills=None,
     )
 

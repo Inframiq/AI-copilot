@@ -112,6 +112,7 @@ async def tailor_resume(
         jd_row.raw_text,
         body.humanize_level,
         provider,
+        db=db,
         company_name=body.company_name,
         priority_skills=body.priority_skills,
         cached_jd_analysis=cached_for_tailor,

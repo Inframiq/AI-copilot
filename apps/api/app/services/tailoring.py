@@ -679,6 +679,7 @@ async def run_tailoring_pipeline(
     jd_text: str,
     humanize_level: int,
     provider: AIProvider,
+    db: AsyncSession,
     company_name: str | None = None,
     priority_skills: list[str] | None = None,
     cached_jd_analysis: "JDAnalysis | None" = None,
@@ -719,7 +720,7 @@ async def run_tailoring_pipeline(
 
     tailored_raw, questions = await asyncio.gather(
         _agent3_write(mapping_plan, original_skills, humanize_level, provider),
-        generate_prep_questions(analysis.missing_skills, resume_content, provider),
+        get_or_generate_prep_questions(analysis.missing_skills, resume_content, provider, db),
     )
 
     # ── patch rewritten bullets back into the original structure ─────────────

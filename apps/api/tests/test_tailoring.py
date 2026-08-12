@@ -142,14 +142,15 @@ async def test_run_tailoring_pipeline_returns_result():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
             updated_skills=["Python"],
         ),
-        PrepQuestionsWrapper: PrepQuestionsWrapper(
-            questions=[PrepQuestionData(topic="AWS", question="Q?", answer_framework="A", is_gap_based=True, order_index=0)]
+        SkillQuestionsWrapper: SkillQuestionsWrapper(
+            questions=[SkillQuestionData(skill="AWS", topic="Technical", question="Q?", answer_framework="A")]
         ),
     }
     provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
 
-    result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider)
+    result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider, db)
 
     assert isinstance(result, TailoringResult)
     assert result.ats_score >= 0
@@ -167,12 +168,13 @@ async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
         ),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
         WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
-        PrepQuestionsWrapper: PrepQuestionsWrapper(questions=[]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}]}
+    db = make_mock_db_with_rows([])
 
-    result = await run_tailoring_pipeline(resume, "Need Python and AWS.", 50, provider)
+    result = await run_tailoring_pipeline(resume, "Need Python and AWS.", 50, provider, db)
 
     assert result.matched_skills.count("Python") == 1
     assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3
