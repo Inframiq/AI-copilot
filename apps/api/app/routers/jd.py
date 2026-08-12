@@ -30,14 +30,23 @@ async def create_jd(
     # every duplicate starts with an empty parse cache, which defeats the
     # determinism /ai/analyze relies on (same JD → same cached skill list →
     # same score) and wastes an AI call re-parsing text we've already parsed.
+    # .first() rather than .scalar_one_or_none() — accounts that used the app
+    # before this dedup check existed can already have multiple rows with
+    # identical raw_text (every resubmission used to create a new one), and
+    # .scalar_one_or_none() throws MultipleResultsFound the moment more than
+    # one match exists. Oldest first: the earliest entry for this text is the
+    # one most likely to already carry an analyzed skill cache.
     existing = (
         await db.execute(
-            select(JobDescription).where(
+            select(JobDescription)
+            .where(
                 JobDescription.user_id == uid,
                 JobDescription.raw_text == raw_text,
             )
+            .order_by(JobDescription.created_at.asc())
+            .limit(1)
         )
-    ).scalar_one_or_none()
+    ).scalars().first()
     if existing is not None:
         response.status_code = status.HTTP_200_OK
         return existing

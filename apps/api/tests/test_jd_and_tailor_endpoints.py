@@ -65,7 +65,7 @@ async def test_create_jd_returns_201():
     mock_session.refresh = fake_refresh
     # No existing JD with this text — the dedup lookup finds nothing.
     no_match = MagicMock()
-    no_match.scalar_one_or_none.return_value = None
+    no_match.scalars.return_value.first.return_value = None
     mock_session.execute.return_value = no_match
 
     app.dependency_overrides[get_db] = override
@@ -106,7 +106,7 @@ async def test_create_jd_reuses_existing_entry_for_duplicate_text():
         created_at=datetime.now(timezone.utc),
     )
     found = MagicMock()
-    found.scalar_one_or_none.return_value = existing_jd
+    found.scalars.return_value.first.return_value = existing_jd
     mock_session.execute.return_value = found
 
     app.dependency_overrides[get_db] = override
@@ -123,6 +123,46 @@ async def test_create_jd_reuses_existing_entry_for_duplicate_text():
         # No AI call and no new row — this must be a pure lookup, not a re-parse.
         mock_extract.assert_not_called()
         mock_session.add.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_jd_handles_pre_existing_duplicate_rows():
+    """Accounts that used the app before this dedup check existed can already
+    have MULTIPLE rows with identical raw_text. The lookup must tolerate
+    that (picking one) instead of crashing — this reproduces a real
+    production bug where .scalar_one_or_none() raised MultipleResultsFound
+    and the request failed with no HTTP response at all."""
+    override, mock_session = make_mock_db()
+    older_duplicate = JobDescription(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Senior Engineer",
+        raw_text="We need a senior engineer with Python.",
+        parsed={"required": ["Python"], "nice_to_have": []},
+        status="applied",
+        created_at=datetime.now(timezone.utc),
+    )
+    found = MagicMock()
+    # first() reflects the DB-side ORDER BY created_at ASC LIMIT 1 — the mock
+    # only needs to prove the route doesn't call scalar_one_or_none() (which
+    # would raise given >1 row) and handles a single returned row correctly.
+    found.scalars.return_value.first.return_value = older_duplicate
+    mock_session.execute.return_value = found
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.extract_jd_skills", new=AsyncMock()) as mock_extract:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/jd",
+                    json={"raw_text": "We need a senior engineer with Python.", "title": "Senior Engineer"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["id"] == str(older_duplicate.id)
+        mock_extract.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
