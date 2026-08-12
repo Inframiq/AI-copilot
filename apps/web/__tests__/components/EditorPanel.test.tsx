@@ -59,6 +59,27 @@ describe("EditorPanel", () => {
     expect(screen.getByText(/Choose the layout/)).toBeInTheDocument();
   });
 
+  it("shows the full template grid on the sidebar-entry path (no JD context)", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    render(<EditorPanel />);
+    await userEvent.click(screen.getByRole("tab", { name: "template" }));
+    expect(screen.getByText("ATS Clean")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("shows a compact template dropdown instead of the grid when arriving from JD Analyzer", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-1", "Some job description text");
+    render(<EditorPanel />);
+
+    // Tailoring mode starts collapsed — expand to reach the tabs.
+    await userEvent.click(screen.getByText("Expand to edit"));
+    await userEvent.click(screen.getByRole("tab", { name: "template" }));
+
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.queryByText("ATS Clean")).not.toBeInTheDocument();
+  });
+
   it("hides JD tailoring until the resume has experience, education, or skills", () => {
     useResumeStore.getState().setResume("resume-1", {
       contact: { name: "Jane Doe", email: "jane@example.com" },
