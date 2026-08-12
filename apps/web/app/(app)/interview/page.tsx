@@ -1,63 +1,23 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
-  Code,
-  BezierCurve,
   ThumbsUp,
   TrendDown,
   Play,
   MicrophoneStage,
   ChatCircleText,
-  Handshake,
   Star,
   Users,
-  Money,
-  Heart,
   Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import type { PrepQuestionOut, Resume, JobDescription } from "@career-copilot/types";
+import type { PrepQuestionOut, Resume, JobDescription, SkillQuestionOut } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
 type Tab = (typeof TABS)[number];
-
-// Topic card definitions — no hardcoded progress (computed at runtime)
-const TOPIC_DATA: Record<Tab, Array<{ icon: typeof Code; category: string; title: string; description: string }>> = {
-  Technical: [
-    { icon: Code,       category: "Algorithms",    title: "Data Structures & Algos", description: "Practice common sorting, searching, and graph traversal problems." },
-    { icon: BezierCurve, category: "System Design", title: "System Design",          description: "Architect scalable systems, handle load balancing, and database choices." },
-  ],
-  Behavioral: [
-    { icon: Star,          category: "STAR Method",  title: "Situation & Task",           description: "Craft compelling stories using the Situation, Task, Action, Result framework." },
-    { icon: Users,         category: "Teamwork",     title: "Collaboration & Conflict",    description: "Demonstrate how you work in teams and resolve interpersonal challenges." },
-    { icon: ChatCircleText, category: "Leadership",  title: "Leadership & Initiative",     description: "Showcase examples of driving projects and leading without authority." },
-    { icon: ThumbsUp,      category: "Adaptability", title: "Handling Failure & Change",   description: "Show resilience and growth mindset when things don't go as planned." },
-  ],
-  "HR & Culture": [
-    { icon: Handshake,     category: "Negotiation",  title: "Salary Negotiation",          description: "Learn strategies to confidently negotiate your compensation package." },
-    { icon: Money,         category: "Offer",        title: "Evaluating Job Offers",        description: "Understand how to compare benefits, equity, and growth opportunities." },
-    { icon: Heart,         category: "Culture Fit",  title: "Values & Culture Alignment",   description: "Articulate your work style and identify companies that match your values." },
-    { icon: ChatCircleText, category: "HR Questions", title: "Tell Me About Yourself",      description: "Craft a compelling 2-minute professional story that sets the right tone." },
-  ],
-};
-
-// ── localStorage helpers ────────────────────────────────────────────────────
-// Session-level practice progress (answeredSet below) is real, persisted
-// server-side via PrepQuestion.practiced_at — not localStorage. This is only
-// for the generic topic-browsing cards shown before any tailoring session
-// exists, which have no backing DB row to persist against.
-const TOPIC_PROGRESS_KEY   = "career-copilot-topic-practice";
-
-function loadTopicProgress(): Record<string, number> {
-  if (typeof window === "undefined") return {};
-  try { return JSON.parse(localStorage.getItem(TOPIC_PROGRESS_KEY) || "{}"); } catch { return {}; }
-}
-function saveTopicProgress(data: Record<string, number>) {
-  localStorage.setItem(TOPIC_PROGRESS_KEY, JSON.stringify(data));
-}
 
 function classifyTopic(topic: string): Tab {
   const l = topic.toLowerCase();
@@ -74,12 +34,6 @@ export default function InterviewIndexPage() {
   const missingSkills = useTailoringStore((s) => s.missingSkills);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
-  const [topicProg, setTopicProg]     = useState<Record<string, number>>(() => loadTopicProgress());
-
-  // Re-hydrate from localStorage after mount (SSR safety)
-  useEffect(() => {
-    setTopicProg(loadTopicProgress());
-  }, []);
 
   const { data: questions = [], isLoading } = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
@@ -93,6 +47,11 @@ export default function InterviewIndexPage() {
   const { data: jds = [] } = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn:  () => apiClient.getJds(),
+  });
+  const { data: bankQuestions = [], isLoading: bankLoading } = useQuery<SkillQuestionOut[]>({
+    queryKey: ["questionBank", activeTab],
+    queryFn: () => apiClient.getQuestionBank(activeTab),
+    enabled: !sessionId,
   });
 
   // Session-level progress — real, persisted server-side (PrepQuestion.practiced_at)
@@ -147,14 +106,6 @@ export default function InterviewIndexPage() {
         list?.map((q) => (q.id === qId ? { ...q, practiced_at: null } : q))
       );
     }
-  }
-
-  // Increment localStorage progress for a topic card and navigate
-  function handleStartPractice(title: string) {
-    const updated = { ...topicProg, [title]: Math.min(100, (topicProg[title] || 0) + 20) };
-    setTopicProg(updated);
-    saveTopicProgress(updated);
-    router.push(sessionId ? `/interview/${sessionId}` : "/jd");
   }
 
   return (
@@ -278,56 +229,53 @@ export default function InterviewIndexPage() {
             )}
           </div>
         ) : (
-          /* No session — topic cards with dynamic localStorage progress */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-            {TOPIC_DATA[activeTab].map(({ icon: Icon, category, title, description }) => {
-              const progress = topicProg[title] || 0;
-              return (
+          /* No session — real, previously-generated questions from the
+             shared skill bank. Read-only (no practiced tracking): that
+             only applies to your personalized session questions. */
+          <div className="flex flex-col gap-md">
+            {bankLoading ? (
+              <div className="flex items-center justify-center py-xl">
+                <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+              </div>
+            ) : bankQuestions.length > 0 ? (
+              bankQuestions.map((q) => (
                 <div
-                  key={title}
+                  key={q.id}
                   className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
                 >
                   <div className="flex justify-between items-start mb-md">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-                      <Icon size={24} />
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-primary/10 text-primary">
+                      <MicrophoneStage size={24} />
                     </div>
                     <span className="bg-surface-container text-caption text-primary px-sm py-xs rounded-full">
-                      {category}
+                      {q.topic}
                     </span>
                   </div>
-                  <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{title}</h3>
-                  <p className="text-body-sm text-on-surface-variant mb-lg flex-1">{description}</p>
-                  <div className="flex items-center gap-sm mb-lg">
-                    <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
-                    </div>
-                    <span className="text-label-sm text-on-surface-variant">{progress}%</span>
-                  </div>
-                  <button
-                    onClick={() => handleStartPractice(title)}
-                    className="w-full py-md px-md bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
-                  >
-                    <Play size={16} weight="fill" />
-                    {progress > 0 ? "Continue Practice" : "Start Practice"}
-                  </button>
+                  <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
+                  <p className="text-body-sm text-on-surface-variant">{q.answer_framework}</p>
                 </div>
-              );
-            })}
-
-            {!sessionId && (
-              <div className="md:col-span-2 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
-                <p className="text-body-md text-on-surface font-medium">Get Personalized Questions</p>
-                <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
-                  Analyze a job description and tailor your resume to generate interview questions specific to your target role.
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-xl gap-md text-center bg-surface-container-lowest rounded-2xl border border-outline-variant/20">
+                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions yet</p>
+                <p className="text-body-sm text-on-surface-variant">
+                  This grows automatically as more candidates tailor resumes against JDs needing these skills.
                 </p>
-                <button
-                  onClick={() => router.push("/jd")}
-                  className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
-                >
-                  Go to JD Analyzer
-                </button>
               </div>
             )}
+
+            <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
+              <p className="text-body-md text-on-surface font-medium">Get Personalized Questions</p>
+              <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
+                Analyze a job description and tailor your resume to generate interview questions specific to your target role.
+              </p>
+              <button
+                onClick={() => router.push("/jd")}
+                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+              >
+                Go to JD Analyzer
+              </button>
+            </div>
           </div>
         )}
       </div>
