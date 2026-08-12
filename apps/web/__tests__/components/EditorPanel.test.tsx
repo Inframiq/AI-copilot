@@ -80,6 +80,25 @@ describe("EditorPanel", () => {
     expect(screen.queryByText("ATS Clean")).not.toBeInTheDocument();
   });
 
+  it("shows a collapsible Job Description section on the JD-analyzer path, hidden on the sidebar-entry path", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-1", "We need a senior engineer with Python.");
+    render(<EditorPanel />);
+
+    expect(screen.getByText("Job Description")).toBeInTheDocument();
+    // Collapsed by default — the text itself isn't rendered until expanded.
+    expect(screen.queryByText("We need a senior engineer with Python.")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Job Description"));
+    expect(screen.getByText("We need a senior engineer with Python.")).toBeInTheDocument();
+  });
+
+  it("does not show the Job Description section on the sidebar-entry path", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    render(<EditorPanel />);
+    expect(screen.queryByText("Job Description")).not.toBeInTheDocument();
+  });
+
   it("hides JD tailoring until the resume has experience, education, or skills", () => {
     useResumeStore.getState().setResume("resume-1", {
       contact: { name: "Jane Doe", email: "jane@example.com" },

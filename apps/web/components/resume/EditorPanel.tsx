@@ -7,7 +7,7 @@ import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
 import { uploadResumePhoto } from "@/lib/photo-upload";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
-import { CaretDown, CaretRight, CheckCircle, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CheckCircle, FileText, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -44,6 +44,9 @@ export function EditorPanel() {
   const hasJdContext = !!jdId && pendingContent === null;
   const isTailoringMode = pendingContent !== null || hasJdContext;
   const [editorOpen, setEditorOpen] = useState(!isTailoringMode);
+  // Collapsed by default — reference material, not the primary focus of
+  // this screen (the tailoring form / bullet review is).
+  const [jdSectionOpen, setJdSectionOpen] = useState(false);
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -601,6 +604,31 @@ export function EditorPanel() {
       {/* AI Tailoring section */}
       {hasResumeContent ? (
         <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
+          {/* JD-analyzer path only — the manual-paste path (jdId unset)
+              already has the JD text right there in an editable textarea. */}
+          {jdId && jdText && (
+            <div className="rounded-xl border border-outline-variant/20 bg-surface-container/40 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setJdSectionOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-md py-sm text-left"
+              >
+                <span className="flex items-center gap-xs text-label-sm font-bold text-on-surface">
+                  <FileText size={16} className="text-primary" />
+                  Job Description
+                </span>
+                {jdSectionOpen ? <CaretDown size={14} /> : <CaretRight size={14} />}
+              </button>
+              {jdSectionOpen && (
+                <div className="px-md pb-md">
+                  <p className="text-body-sm text-on-surface-variant whitespace-pre-wrap max-h-64 overflow-y-auto">
+                    {jdText}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {pendingContent ? (
             /* ── Review step: show after tailoring runs ── */
             <BulletReviewPanel />
