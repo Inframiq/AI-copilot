@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
@@ -17,17 +17,38 @@ router = APIRouter(prefix="/jd", tags=["jd"])
 @limiter.limit("20/minute")
 async def create_jd(
     request: Request,
+    response: Response,
     body: JDCreate,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    uid = uuid.UUID(user["sub"])
+    raw_text = body.raw_text.strip()
+
+    # Re-submitting the same JD text (e.g. clicking "Analyze Description"
+    # again on unchanged text) must not silently create a duplicate entry —
+    # every duplicate starts with an empty parse cache, which defeats the
+    # determinism /ai/analyze relies on (same JD → same cached skill list →
+    # same score) and wastes an AI call re-parsing text we've already parsed.
+    existing = (
+        await db.execute(
+            select(JobDescription).where(
+                JobDescription.user_id == uid,
+                JobDescription.raw_text == raw_text,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return existing
+
     provider = get_ai_provider()
-    parsed = await extract_jd_skills(body.raw_text, provider)
-    title = body.title or body.raw_text.strip().split("\n")[0][:120] or "Untitled JD"
+    parsed = await extract_jd_skills(raw_text, provider)
+    title = body.title or raw_text.split("\n")[0][:120] or "Untitled JD"
     jd = JobDescription(
-        user_id=uuid.UUID(user["sub"]),
+        user_id=uid,
         title=title,
-        raw_text=body.raw_text,
+        raw_text=raw_text,
         parsed=parsed.model_dump(),
     )
     db.add(jd)

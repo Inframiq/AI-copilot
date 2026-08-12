@@ -63,6 +63,10 @@ async def test_create_jd_returns_201():
         obj.status = created.status
 
     mock_session.refresh = fake_refresh
+    # No existing JD with this text — the dedup lookup finds nothing.
+    no_match = MagicMock()
+    no_match.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = no_match
 
     app.dependency_overrides[get_db] = override
     try:
@@ -81,6 +85,44 @@ async def test_create_jd_returns_201():
         assert body["title"] == "Senior Engineer"
         assert body["status"] == "applied"
         assert body["parsed_skills"] == ["Python"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_jd_reuses_existing_entry_for_duplicate_text():
+    """Re-submitting identical JD text (e.g. clicking Analyze again on
+    unchanged text) must return the existing entry, not create a duplicate —
+    otherwise every resubmission starts with an empty parse cache and
+    /ai/analyze's determinism guarantee (same JD -> same score) breaks."""
+    override, mock_session = make_mock_db()
+    existing_jd = JobDescription(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Senior Engineer",
+        raw_text="We need a senior engineer with Python.",
+        parsed={"required": ["Python"], "nice_to_have": []},
+        status="applied",
+        created_at=datetime.now(timezone.utc),
+    )
+    found = MagicMock()
+    found.scalar_one_or_none.return_value = existing_jd
+    mock_session.execute.return_value = found
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.extract_jd_skills", new=AsyncMock()) as mock_extract:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/jd",
+                    json={"raw_text": "We need a senior engineer with Python.", "title": "Senior Engineer"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["id"] == str(existing_jd.id)
+        # No AI call and no new row — this must be a pure lookup, not a re-parse.
+        mock_extract.assert_not_called()
+        mock_session.add.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
