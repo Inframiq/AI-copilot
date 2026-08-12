@@ -5,7 +5,6 @@ import {
   Check,
   X,
   ArrowCounterClockwise,
-  Plus,
   FilePdf,
   ArrowsClockwise,
   Sparkle,
@@ -59,6 +58,10 @@ export function BulletReviewPanel() {
   // happened, rather than silently leaving an outdated score on screen.
   const [hasHumanized, setHasHumanized] = useState(false);
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
+  // Shown on Preview Tailored Resume only if the user never touched any
+  // suggested-skill chip — an explicit choice (even a single click) is
+  // respected as-is, no prompt.
+  const [showSkillsPrompt, setShowSkillsPrompt] = useState(false);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
 
@@ -158,6 +161,32 @@ export function BulletReviewPanel() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  // Entry point for the "Preview Tailored Resume" button — interposes the
+  // top-15-skills prompt when nothing was explicitly decided.
+  function handlePreviewClick() {
+    const anySkillDecided = suggestedSkills.some((s) => `skill_add:${s}` in bulletDecisions);
+    if (suggestedSkills.length > 0 && !anySkillDecided) {
+      setShowSkillsPrompt(true);
+      return;
+    }
+    handleGeneratePreview();
+  }
+
+  function acceptTopSkills() {
+    // AI orders plausible_skills_to_add most-important-first (see Agent 2's
+    // prompt) — "top 15" is just the first 15 of that ranked list.
+    for (const skill of suggestedSkills.slice(0, 15)) {
+      setBulletDecision(`skill_add:${skill}`, "accept");
+    }
+    setShowSkillsPrompt(false);
+    handleGeneratePreview();
+  }
+
+  function skipSuggestedSkills() {
+    setShowSkillsPrompt(false);
+    handleGeneratePreview();
   }
 
   async function handleDownload() {
@@ -462,7 +491,7 @@ export function BulletReviewPanel() {
               <p className="text-caption text-error">{generateError}</p>
             )}
             <button
-              onClick={handleGeneratePreview}
+              onClick={handlePreviewClick}
               disabled={isApplying || isGenerating || !resumeId}
               className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
@@ -543,6 +572,40 @@ export function BulletReviewPanel() {
           </div>
         )}
       </div>
+
+      {/* Shown once, only when no suggested skill was ever clicked before
+          previewing — an explicit pick (even one) skips this entirely. */}
+      {showSkillsPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-gutter">
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
+            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+              <Sparkle size={28} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-headline-md text-on-surface font-bold mb-xs">Add suggested skills?</p>
+              <p className="text-body-sm text-on-surface-variant">
+                You haven&apos;t picked any of the {suggestedSkills.length} suggested skills above. Want AI to add
+                the top {Math.min(15, suggestedSkills.length)} it thinks best match this JD? Otherwise your
+                resume&apos;s original skills are used as-is.
+              </p>
+            </div>
+            <div className="flex gap-sm w-full">
+              <button
+                onClick={skipSuggestedSkills}
+                className="flex-1 py-sm rounded-xl text-label-md text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors"
+              >
+                Keep original skills
+              </button>
+              <button
+                onClick={acceptTopSkills}
+                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+              >
+                Add top {Math.min(15, suggestedSkills.length)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -586,13 +649,13 @@ function SkillsBlock({
               className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
                 selected
                   ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
-                  : "bg-surface-container text-on-surface-variant border-outline-variant/40 hover:border-primary/40 hover:text-primary"
+                  : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
               }`}
             >
               {selected ? (
                 <Check size={11} weight="bold" />
               ) : (
-                <Plus size={11} weight="bold" />
+                <X size={11} weight="bold" />
               )}
               {isPriority && <span aria-label="You picked this keyword">★</span>}
               {skill}

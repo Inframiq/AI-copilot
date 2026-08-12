@@ -270,4 +270,99 @@ describe("EditorPanel", () => {
     await waitFor(() => expect(useTailoringStore.getState().atsScore).toBe(40));
     expect(apiClient.updateResume).not.toHaveBeenCalled();
   });
+
+  it("prompts for suggested skills only when none were picked, and adding them merges into the preview", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      ats_score: 70,
+      matched_skills: ["React"],
+      missing_skills: [],
+      tailored_content: {
+        ...original,
+        experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
+      },
+      questions: [],
+      company_keywords: [],
+      suggested_skills: ["Kubernetes", "GraphQL"],
+    } as any);
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/preview.pdf" } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    // No skill chip clicked — proceeding to preview must ask first.
+    await userEvent.click(screen.getByText("Preview Tailored Resume"));
+    expect(await screen.findByText("Add suggested skills?")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Add top 2"));
+
+    await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls[0][2];
+    expect(mergedContent?.skills).toEqual(expect.arrayContaining(["Kubernetes", "GraphQL"]));
+    expect(screen.queryByText("Add suggested skills?")).not.toBeInTheDocument();
+  });
+
+  it("does not prompt for suggested skills once the user has picked one manually", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      ats_score: 70,
+      matched_skills: ["React"],
+      missing_skills: [],
+      tailored_content: {
+        ...original,
+        experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
+      },
+      questions: [],
+      company_keywords: [],
+      suggested_skills: ["Kubernetes"],
+    } as any);
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/preview.pdf" } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    await userEvent.click(screen.getByText("Kubernetes"));
+    await userEvent.click(screen.getByText("Preview Tailored Resume"));
+
+    expect(screen.queryByText("Add suggested skills?")).not.toBeInTheDocument();
+    await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
+  });
 });

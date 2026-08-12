@@ -323,8 +323,12 @@ ones assigned SKIP. A mapping_plan that covers only some bullets is incorrect.
 in the JD AND (b) directly evidenced by the candidate's existing stack \
 (e.g., if they use AWS Lambda and the JD says "serverless", add "Serverless \
 Architecture"; if the JD never mentions JavaScript, do not add it just because \
-they use React). Limit to at most 6 skills. Do not dump transitive or \
-implied skills — only add what the JD is clearly testing for.
+they use React). Limit to at most 15 skills. Do not dump transitive or \
+implied skills — only add what the JD is clearly testing for. ORDER MATTERS: \
+list them most-important-first — the skill most central to this JD and best \
+evidenced by the candidate's work goes first, the most marginal goes last. \
+The frontend offers the user a "top 15" quick-add drawn from list order, so a \
+skill's position is a real signal of priority, not incidental.
 6. PRIORITY SKILLS OVERRIDE: if priority_skills_from_user (in the payload) is \
 non-empty, the user has explicitly confirmed they have every skill listed there \
 and wants it highlighted — always include all of them in plausible_skills_to_add \
