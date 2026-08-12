@@ -405,9 +405,8 @@ from app.services.tailoring import (
     WriterOutput, RewrittenBullet,
     _build_agent3_system,
 )
+from unittest.mock import AsyncMock, MagicMock
 ```
-
-(Line 2, `from unittest.mock import AsyncMock, MagicMock`, already exists above this block and needs no change — `MagicMock`/`AsyncMock` are reused below.)
 
 Replace `test_generate_prep_questions_returns_list` (lines 57-63) with:
 
