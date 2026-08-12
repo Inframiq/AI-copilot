@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -64,6 +65,14 @@ export function BulletReviewPanel() {
   const [showSkillsPrompt, setShowSkillsPrompt] = useState(false);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
+  // Portal target readiness — document.body isn't available during SSR, and
+  // this panel's own ancestors (the page-transition wrapper's will-change/
+  // transform) turn "fixed" into "fixed relative to that ancestor" instead of
+  // the viewport, which is why this dialog was rendering clipped to the
+  // editor pane instead of covering the whole screen (PDF preview bleeding
+  // through). Portaling to <body> escapes that ancestor chain entirely.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // ── Bullet changes (experience only) ─────────────────────────────────────
   const bulletChanges = useMemo<BulletChange[]>(() => {
@@ -582,10 +591,21 @@ export function BulletReviewPanel() {
       </div>
 
       {/* Shown once, only when no suggested skill was ever clicked before
-          previewing — an explicit pick (even one) skips this entirely. */}
-      {showSkillsPrompt && (
+          previewing — an explicit pick (even one) skips this entirely.
+          Portaled to <body> so it always covers the full viewport — nested
+          under the page-transition wrapper's animation styles, "fixed"
+          here would otherwise be positioned relative to an ancestor instead
+          of the viewport, rendering clipped behind the PDF preview pane. */}
+      {showSkillsPrompt && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-gutter">
-          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
+          <div className="relative bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
+            <button
+              onClick={skipSuggestedSkills}
+              aria-label="Close"
+              className="absolute top-md right-md p-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+            >
+              <X size={18} />
+            </button>
             <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
               <Sparkle size={28} className="text-primary" />
             </div>
@@ -612,7 +632,8 @@ export function BulletReviewPanel() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
