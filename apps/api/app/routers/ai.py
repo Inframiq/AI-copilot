@@ -1,18 +1,23 @@
+import logging
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import attributes
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, SkillQuestionBank
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.ai import TailorRequest, TailorOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut, RewriteBulletRequest, RewriteBulletOut, SkillQuestionOut
+from app.schemas.ai import (
+    TailorRequest, TailorOut, TailorStartOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut,
+    RewriteBulletRequest, RewriteBulletOut, SkillQuestionOut,
+)
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+logger = logging.getLogger("app")
 
 
 @router.post("/analyze", response_model=AnalyzeOut)
@@ -76,11 +81,86 @@ async def analyze_jd(
     )
 
 
-@router.post("/tailor", response_model=TailorOut)
+async def _run_tailoring_background(
+    session_id: uuid.UUID,
+    resume_content: dict,
+    jd_text: str,
+    humanize_level: int,
+    provider,
+    company_name: str | None,
+    priority_skills: list[str],
+    cached_jd_analysis: JDAnalysis | None,
+) -> None:
+    """Runs the AI tailoring pipeline off the request path.
+
+    Render's free-tier proxy returns a response with no CORS headers if the
+    app doesn't answer within ~60s, which browsers then misreport as a CORS
+    error. This pipeline chains 3 pro-model LLM calls and routinely takes
+    30-90s+, especially on a cold start — well past that limit. POST
+    /ai/tailor returns immediately with a pending session; this function
+    does the actual work afterward and writes the result back onto it. Uses
+    its own DB session (the request-scoped one may already be closed by the
+    time this runs) — same pattern as _persist_pdf_to_storage in
+    routers/resumes.py.
+    """
+    async with AsyncSessionLocal() as session_db:
+        try:
+            result = await run_tailoring_pipeline(
+                resume_content,
+                jd_text,
+                humanize_level,
+                provider,
+                db=session_db,
+                company_name=company_name,
+                priority_skills=priority_skills,
+                cached_jd_analysis=cached_jd_analysis,
+            )
+        except Exception:
+            logger.exception("Tailoring pipeline failed for session %s", session_id)
+            row_result = await session_db.execute(
+                select(TailoringSession).where(TailoringSession.id == session_id)
+            )
+            row = row_result.scalar_one_or_none()
+            if row:
+                row.status = "failed"
+                await session_db.commit()
+            return
+
+        row_result = await session_db.execute(
+            select(TailoringSession).where(TailoringSession.id == session_id)
+        )
+        row = row_result.scalar_one_or_none()
+        if not row:
+            return  # session row is gone — nothing to update
+        row.ats_score = result.ats_score
+        row.matched_skills = result.matched_skills
+        row.missing_skills = result.missing_skills
+        row.tailored_content = result.tailored_content
+        row.company_keywords = result.company_keywords
+        row.suggested_skills = result.suggested_skills
+        row.status = "completed"
+        session_db.add_all(
+            [
+                PrepQuestion(
+                    session_id=row.id,
+                    topic=q.topic,
+                    question=q.question,
+                    answer_framework=q.answer_framework,
+                    is_gap_based=q.is_gap_based,
+                    order_index=q.order_index,
+                )
+                for q in result.prep_questions
+            ]
+        )
+        await session_db.commit()
+
+
+@router.post("/tailor", response_model=TailorStartOut, status_code=202)
 @limiter.limit("10/minute")
 async def tailor_resume(
     request: Request,
     body: TailorRequest,
+    background_tasks: BackgroundTasks,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -107,55 +187,30 @@ async def tailor_resume(
             except Exception:
                 cached_for_tailor = None
 
-    result = await run_tailoring_pipeline(
-        resume_row.content,
-        jd_row.raw_text,
-        body.humanize_level,
-        provider,
-        db=db,
-        company_name=body.company_name,
-        priority_skills=body.priority_skills,
-        cached_jd_analysis=cached_for_tailor,
-    )
-
     session = TailoringSession(
         user_id=uid,
         resume_id=body.resume_id,
         jd_id=body.jd_id,
-        ats_score=result.ats_score,
-        matched_skills=result.matched_skills,
-        missing_skills=result.missing_skills,
-        tailored_content=result.tailored_content,
         humanize_level=body.humanize_level,
+        status="pending",
     )
     db.add(session)
-    await db.flush()
-
-    questions = [
-        PrepQuestion(
-            session_id=session.id,
-            topic=q.topic,
-            question=q.question,
-            answer_framework=q.answer_framework,
-            is_gap_based=q.is_gap_based,
-            order_index=q.order_index,
-        )
-        for q in result.prep_questions
-    ]
-    db.add_all(questions)
     await db.commit()
     await db.refresh(session)
 
-    return TailorOut(
-        session_id=session.id,
-        ats_score=result.ats_score,
-        matched_skills=result.matched_skills,
-        missing_skills=result.missing_skills,
-        tailored_content=result.tailored_content,
-        questions=[PrepQuestionOut.model_validate(q) for q in questions],
-        company_keywords=result.company_keywords,
-        suggested_skills=result.suggested_skills,
+    background_tasks.add_task(
+        _run_tailoring_background,
+        session.id,
+        resume_row.content,
+        jd_row.raw_text,
+        body.humanize_level,
+        provider,
+        body.company_name,
+        body.priority_skills,
+        cached_for_tailor,
     )
+
+    return TailorStartOut(session_id=session.id, status="pending")
 
 
 @router.post("/rewrite-bullet", response_model=RewriteBulletOut)
@@ -219,7 +274,8 @@ async def browse_questions(
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Return a tailoring session's stored output so the frontend can reload a
-    previous tailored resume without re-running the AI."""
+    previous tailored resume without re-running the AI, or poll a pending one
+    started by POST /ai/tailor."""
     result = await db.execute(
         select(TailoringSession).where(
             TailoringSession.id == session_id,
@@ -233,10 +289,13 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         "session_id": str(session.id),
         "resume_id": str(session.resume_id),
         "jd_id": str(session.jd_id),
+        "status": session.status,
         "tailored_content": session.tailored_content,
         "ats_score": session.ats_score,
         "matched_skills": session.matched_skills,
         "missing_skills": session.missing_skills,
+        "company_keywords": session.company_keywords,
+        "suggested_skills": session.suggested_skills,
     }
 
 

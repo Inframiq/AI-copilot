@@ -365,77 +365,47 @@ def test_tailor_request_caps_and_defaults_priority_skills():
 
 
 @pytest.mark.asyncio
-async def test_tailor_resume_returns_200_and_creates_session():
-    from app.services.tailoring import TailoringResult, PrepQuestionData
-
+async def test_tailor_resume_returns_202_and_creates_pending_session():
     override, mock_session = make_mock_db()
     resume = make_resume()
     jd = make_jd()
 
-    # First execute() call resolves the resume lookup, second the JD lookup
     resume_result = MagicMock()
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
     mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
 
-    # A real flush/commit assigns the Python-side uuid.uuid4() default the
-    # moment each row is inserted — simulate that so PrepQuestionOut, which
-    # requires non-null id/session_id, can validate against these mocks.
-    from app.db.models import TailoringSession, PrepQuestion
+    from app.db.models import TailoringSession
 
     def fake_add(obj):
         if isinstance(obj, TailoringSession) and obj.id is None:
             obj.id = uuid.uuid4()
 
-    def fake_add_all(objs):
-        for obj in objs:
-            if isinstance(obj, PrepQuestion) and obj.id is None:
-                obj.id = uuid.uuid4()
-
     mock_session.add = MagicMock(side_effect=fake_add)
-    mock_session.add_all = MagicMock(side_effect=fake_add_all)
-
-    fake_result = TailoringResult(
-        tailored_content={"experience": [{"title": "Eng", "bullets": ["Did Python stuff"]}]},
-        matched_skills=["Python"],
-        missing_skills=["AWS"],
-        ats_score=50,
-        prep_questions=[
-            PrepQuestionData(
-                topic="AWS", question="How would you use AWS?", answer_framework="STAR", order_index=1
-            )
-        ],
-        company_keywords=[],
-        suggested_skills=[],
-    )
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch(
-            "app.routers.ai.run_tailoring_pipeline", new=AsyncMock(return_value=fake_result)
-        ):
+        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/ai/tailor",
                     json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
                     headers=make_auth_header(),
                 )
-        assert r.status_code == 200
+        assert r.status_code == 202
         body = r.json()
-        assert body["ats_score"] == 50
-        assert body["matched_skills"] == ["Python"]
-        assert body["missing_skills"] == ["AWS"]
-        assert len(body["questions"]) == 1
-        mock_session.add.assert_called_once()  # the TailoringSession
-        mock_session.add_all.assert_called_once()  # the PrepQuestion rows
+        assert body["status"] == "pending"
+        assert "session_id" in body
+        mock_session.add.assert_called_once()  # the pending TailoringSession row
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_tailor_resume_forwards_priority_skills_to_pipeline():
+async def test_tailor_resume_background_task_persists_result_and_forwards_priority_skills():
     from app.services.tailoring import TailoringResult, PrepQuestionData
+    from app.db.models import TailoringSession
 
     override, mock_session = make_mock_db()
     resume = make_resume()
@@ -447,19 +417,32 @@ async def test_tailor_resume_forwards_priority_skills_to_pipeline():
     jd_result.scalar_one_or_none.return_value = jd
     mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
 
-    from app.db.models import TailoringSession, PrepQuestion
+    created_session = TailoringSession(
+        user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
+    )
 
     def fake_add(obj):
         if isinstance(obj, TailoringSession) and obj.id is None:
             obj.id = uuid.uuid4()
-
-    def fake_add_all(objs):
-        for obj in objs:
-            if isinstance(obj, PrepQuestion) and obj.id is None:
-                obj.id = uuid.uuid4()
+            created_session.id = obj.id
 
     mock_session.add = MagicMock(side_effect=fake_add)
-    mock_session.add_all = MagicMock(side_effect=fake_add_all)
+
+    # The background task's own DB session — its execute() re-fetches the
+    # row the request handler just created.
+    bg_session = MagicMock()
+    bg_result = MagicMock()
+    bg_result.scalar_one_or_none.side_effect = lambda: created_session
+    bg_session.execute = AsyncMock(return_value=bg_result)
+    bg_session.commit = AsyncMock()
+    bg_session.add_all = MagicMock()
+
+    class _FakeSessionContextManager:
+        async def __aenter__(self):
+            return bg_session
+
+        async def __aexit__(self, *exc_info):
+            return False
 
     fake_result = TailoringResult(
         tailored_content={"experience": []},
@@ -467,14 +450,16 @@ async def test_tailor_resume_forwards_priority_skills_to_pipeline():
         missing_skills=["AWS"],
         ats_score=50,
         prep_questions=[],
-        company_keywords=[],
+        company_keywords=["Acme Corp"],
         suggested_skills=["Kubernetes"],
     )
     pipeline_mock = AsyncMock(return_value=fake_result)
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.run_tailoring_pipeline", new=pipeline_mock):
+        with patch("app.routers.ai.run_tailoring_pipeline", new=pipeline_mock), patch(
+            "app.routers.ai.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
+        ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/ai/tailor",
@@ -486,11 +471,104 @@ async def test_tailor_resume_forwards_priority_skills_to_pipeline():
                     },
                     headers=make_auth_header(),
                 )
-        assert r.status_code == 200
-        assert r.json()["suggested_skills"] == ["Kubernetes"]
-        # The router must forward the user's picks into the pipeline call.
+        assert r.status_code == 202
         _, kwargs = pipeline_mock.call_args
         assert kwargs["priority_skills"] == ["Kubernetes", "Terraform"]
+        assert created_session.status == "completed"
+        assert created_session.suggested_skills == ["Kubernetes"]
+        assert created_session.company_keywords == ["Acme Corp"]
+        bg_session.commit.assert_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_error():
+    from app.db.models import TailoringSession
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+
+    created_session = TailoringSession(
+        user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
+    )
+
+    def fake_add(obj):
+        if isinstance(obj, TailoringSession) and obj.id is None:
+            obj.id = uuid.uuid4()
+            created_session.id = obj.id
+
+    mock_session.add = MagicMock(side_effect=fake_add)
+
+    bg_session = MagicMock()
+    bg_result = MagicMock()
+    bg_result.scalar_one_or_none.side_effect = lambda: created_session
+    bg_session.execute = AsyncMock(return_value=bg_result)
+    bg_session.commit = AsyncMock()
+
+    class _FakeSessionContextManager:
+        async def __aenter__(self):
+            return bg_session
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+    pipeline_mock = AsyncMock(side_effect=RuntimeError("LLM provider timed out"))
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.run_tailoring_pipeline", new=pipeline_mock), patch(
+            "app.routers.ai.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/tailor",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 202
+        assert created_session.status == "failed"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+# ── GET /ai/sessions/{id} ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_session_includes_status_field():
+    from app.db.models import TailoringSession
+
+    override, mock_session = make_mock_db()
+    session_row = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        resume_id=uuid.uuid4(),
+        jd_id=uuid.uuid4(),
+        status="pending",
+        company_keywords=["Acme"],
+        suggested_skills=["Kubernetes"],
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = session_row
+    mock_session.execute = AsyncMock(return_value=result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{session_row.id}", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "pending"
+        assert body["company_keywords"] == ["Acme"]
+        assert body["suggested_skills"] == ["Kubernetes"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 

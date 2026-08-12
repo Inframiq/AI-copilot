@@ -91,6 +91,11 @@ class RewriteBulletOut(BaseModel):
     rewritten_text: str
 
 
+class TailorStartOut(BaseModel):
+    session_id: uuid.UUID
+    status: str
+
+
 class TailorOut(BaseModel):
     session_id: uuid.UUID
     ats_score: int
