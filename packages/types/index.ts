@@ -116,6 +116,14 @@ export interface PrepQuestionOut {
   practiced_at: string | null;
 }
 
+export interface SkillQuestionOut {
+  id: string;
+  skill: string;
+  topic: string;
+  question: string;
+  answer_framework: string;
+}
+
 export interface LearningItem {
   id: string;
   skill: string;

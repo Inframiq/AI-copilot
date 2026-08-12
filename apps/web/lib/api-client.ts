@@ -6,6 +6,7 @@ import type {
   TailorOut,
   AnalyzeOut,
   PrepQuestionOut,
+  SkillQuestionOut,
   ResumeContent,
   LearningItem,
   ExternalContact,
@@ -215,6 +216,12 @@ export const apiClient = {
     request<PrepQuestionOut[]>(
       "GET",
       `/ai/sessions/${sessionId}/questions`
+    ),
+
+  getQuestionBank: (topic?: string): Promise<SkillQuestionOut[]> =>
+    request<SkillQuestionOut[]>(
+      "GET",
+      `/ai/questions/browse${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`
     ),
 
   markQuestionPracticed: (questionId: string): Promise<PrepQuestionOut> =>

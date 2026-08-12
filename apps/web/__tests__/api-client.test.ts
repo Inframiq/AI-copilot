@@ -151,4 +151,30 @@ describe("apiClient", () => {
       );
     });
   });
+
+  describe("getQuestionBank", () => {
+    it("fetches the shared question bank, optionally filtered by topic", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        jsonResponse([
+          { id: "q-1", skill: "kubernetes", topic: "Technical", question: "...", answer_framework: "..." },
+        ])
+      );
+
+      const result = await apiClient.getQuestionBank("Technical");
+
+      const [url] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain("/ai/questions/browse?topic=Technical");
+      expect(result).toHaveLength(1);
+    });
+
+    it("omits the topic query param when not provided", async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+
+      await apiClient.getQuestionBank();
+
+      const [url] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain("/ai/questions/browse");
+      expect(url).not.toContain("topic=");
+    });
+  });
 });
