@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -12,6 +12,7 @@ import {
   DownloadSimple,
   FloppyDisk,
   Copy,
+  MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
@@ -25,6 +26,8 @@ export function BulletReviewPanel() {
   const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
   const generatePreview = useTailoringStore((s) => s.generatePreview);
+  const reanalyzePreview = useTailoringStore((s) => s.reanalyzePreview);
+  const isReanalyzing = useTailoringStore((s) => s.isReanalyzing);
   const saveTailoredResume = useTailoringStore((s) => s.saveTailoredResume);
   const previewPdfUrl = useTailoringStore((s) => s.previewPdfUrl);
   const discardPending = useTailoringStore((s) => s.discardPending);
@@ -51,6 +54,11 @@ export function BulletReviewPanel() {
   const [newTitle, setNewTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Humanize can lower keyword density, so the ATS Score shown above goes
+  // stale the moment it's used — surface a way to re-check it once that's
+  // happened, rather than silently leaving an outdated score on screen.
+  const [hasHumanized, setHasHumanized] = useState(false);
+  const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
 
@@ -109,12 +117,35 @@ export function BulletReviewPanel() {
       updatePendingBullet(change.jobIdx, change.bulletIdx, rewritten_text);
       // Auto-accept the updated version
       setBulletDecision(change.key, "accept");
+      if (mode === "humanize") setHasHumanized(true);
     } catch {
       // silently fail — original tailored text stays
     } finally {
       setBulletLoading((prev) => ({ ...prev, [change.key]: null }));
     }
   }
+
+  async function handleReanalyze() {
+    if (!resumeId) return;
+    setReanalyzeError(null);
+    try {
+      await reanalyzePreview(resumeId);
+    } catch (err) {
+      setReanalyzeError(err instanceof Error ? err.message : "Reanalyze failed");
+    }
+  }
+
+  // Unsaved review progress (accept/reject/rewrite/humanize decisions) only
+  // lives in this in-memory store — closing or navigating away without
+  // saving loses it, so warn before that happens.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   async function handleGeneratePreview() {
     if (!resumeId) return;
@@ -228,6 +259,20 @@ export function BulletReviewPanel() {
           </p>
         </div>
         <div className="flex items-center gap-xs">
+          {/* Reanalyze: only shown once Humanize has been used, since that's
+              what can make the ATS Score above stale. Scores the current
+              unsaved bullet state, doesn't persist anything. */}
+          {hasHumanized && (
+            <button
+              onClick={handleReanalyze}
+              disabled={isReanalyzing}
+              title="Re-check the ATS score against your current edits"
+              className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <MagnifyingGlass size={13} className={isReanalyzing ? "animate-pulse" : ""} />
+              {isReanalyzing ? "Reanalyzing…" : "Reanalyze"}
+            </button>
+          )}
           {/* Re-tailor: re-run AI tailoring with the same JD from within the studio */}
           {jdText.trim() && (
             <button
@@ -249,6 +294,7 @@ export function BulletReviewPanel() {
           </button>
         </div>
       </div>
+      {reanalyzeError && <p className="text-caption text-error">{reanalyzeError}</p>}
 
       {/* ── Company keywords ── */}
       {companyKeywords.length > 0 && (

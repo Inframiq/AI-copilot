@@ -52,7 +52,7 @@ async def analyze_jd(
                 cached_jd_analysis = None  # corrupt cache — fall back to re-parsing
 
     analysis = await analyze_jd_match(
-        resume_row.content,
+        body.content if body.content is not None else resume_row.content,
         jd_row.raw_text,
         provider,
         company_name=body.company_name,

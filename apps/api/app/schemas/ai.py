@@ -2,6 +2,7 @@ import json
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
+from app.schemas.resume import _validate_content_size
 
 _MAX_PRIORITY_SKILLS = 20
 _MAX_PROFILE_JSON_BYTES = 200_000
@@ -28,6 +29,13 @@ class AnalyzeRequest(BaseModel):
     resume_id: uuid.UUID
     jd_id: uuid.UUID
     company_name: str | None = Field(default=None, max_length=200)
+    # Optional unsaved-content override — same pattern as PdfGenerateRequest.
+    # Lets the bullet-review screen re-score the resume as currently edited
+    # (accepted/rejected/humanized bullets) without persisting anything or
+    # requiring resume_id's stored content to already reflect those edits.
+    content: dict | None = None
+
+    _check_content_size = field_validator("content")(_validate_content_size)
 
 
 class AnalyzeOut(BaseModel):

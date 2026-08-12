@@ -16,6 +16,44 @@ export interface BulletChange {
   tailored: string;
 }
 
+// Merge accepted bullet decisions into the original content — shared by
+// generatePreview (renders a PDF from this) and reanalyzePreview (scores
+// this against the JD). Never written to the resume store or backend.
+function buildMergedContent(
+  pendingContent: ResumeContent,
+  originalContent: ResumeContent,
+  bulletDecisions: Record<string, BulletDecision>,
+  suggestedSkills: string[],
+): ResumeContent {
+  // Merge: use tailored bullet unless user rejected it.
+  const mergedExperience = pendingContent.experience.map((job, jobIdx) => {
+    const origJob = originalContent.experience[jobIdx];
+    const mergedBullets = job.bullets.map((bullet, bulletIdx) => {
+      const key = `exp${jobIdx}_b${bulletIdx}`;
+      const origBullet = origJob?.bullets[bulletIdx] ?? "";
+      const decision = bulletDecisions[key] ?? "accept";
+      return decision === "reject" ? origBullet : bullet;
+    });
+    return { ...job, bullets: mergedBullets };
+  });
+
+  // Skills: start with original, add only user-selected suggested skills
+  const originalSkillsSet = new Set(originalContent.skills);
+  const userSelectedSkills = suggestedSkills.filter(
+    (s) => bulletDecisions[`skill_add:${s}`] === "accept",
+  );
+  const mergedSkills = [
+    ...originalContent.skills,
+    ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)),
+  ];
+
+  return {
+    ...pendingContent,
+    experience: mergedExperience,
+    skills: mergedSkills,
+  };
+}
+
 interface TailoringState {
   jdId: string | null;
   jdText: string;
@@ -31,6 +69,7 @@ interface TailoringState {
   isLoading: boolean;
   isAnalyzing: boolean;
   isApplying: boolean;
+  isReanalyzing: boolean;
   error: string | null;
 
   // Pending review state — populated after tailoring, cleared after save/discard
@@ -64,6 +103,11 @@ interface TailoringState {
    * resume store or persist anything — the original resume is untouched
    * until saveTailoredResume is explicitly called. */
   generatePreview: (resumeId: string) => Promise<void>;
+  /** Re-scores the resume exactly as currently shown in review (accepted/
+   * rejected/humanized bullets, still unsaved) against the JD. Updates
+   * atsScore/matchedSkills/missingSkills/companyKeywords in place; persists
+   * nothing. */
+  reanalyzePreview: (resumeId: string) => Promise<void>;
   /** Persists the previewed content — either overwriting the original resume
    * ("update") or creating a brand-new resume record ("new"), the user's
    * explicit choice. Returns the id of the resume the content now lives in. */
@@ -91,6 +135,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   isLoading: false,
   isAnalyzing: false,
   isApplying: false,
+  isReanalyzing: false,
   error: null,
   pendingContent: null,
   bulletDecisions: {},
@@ -291,33 +336,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent) return;
 
-    // Merge: use tailored bullet unless user rejected it.
-    const mergedExperience = pendingContent.experience.map((job, jobIdx) => {
-      const origJob = originalContent.experience[jobIdx];
-      const mergedBullets = job.bullets.map((bullet, bulletIdx) => {
-        const key = `exp${jobIdx}_b${bulletIdx}`;
-        const origBullet = origJob?.bullets[bulletIdx] ?? "";
-        const decision = bulletDecisions[key] ?? "accept";
-        return decision === "reject" ? origBullet : bullet;
-      });
-      return { ...job, bullets: mergedBullets };
-    });
-
-    // Skills: start with original, add only user-selected suggested skills
-    const originalSkillsSet = new Set(originalContent.skills);
-    const userSelectedSkills = suggestedSkills.filter(
-      (s) => bulletDecisions[`skill_add:${s}`] === "accept",
-    );
-    const mergedSkills = [
-      ...originalContent.skills,
-      ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)),
-    ];
-
-    const mergedContent = {
-      ...pendingContent,
-      experience: mergedExperience,
-      skills: mergedSkills,
-    };
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills);
 
     set({ isApplying: true, error: null, mergedContent });
     try {
@@ -337,6 +356,34 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to generate preview";
       set({ error: msg, isApplying: false });
+      throw new Error(msg);
+    }
+  },
+
+  // Re-score the same merged (accepted/rejected/humanized) content against
+  // the JD — surfaced after per-bullet Humanize, since humanizing can lower
+  // keyword density and the ATS Score shown otherwise never reflects that
+  // until this is called. Never persists anything.
+  reanalyzePreview: async (resumeId: string) => {
+    const { pendingContent, bulletDecisions, suggestedSkills, jdId, companyName } = get();
+    const originalContent = useResumeStore.getState().content;
+    if (!pendingContent || !originalContent || !jdId) return;
+
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills);
+
+    set({ isReanalyzing: true, error: null });
+    try {
+      const result = await apiClient.analyzeJd(resumeId, jdId, companyName, mergedContent);
+      set({
+        atsScore: result.ats_score,
+        matchedSkills: result.matched_skills,
+        missingSkills: result.missing_skills,
+        companyKeywords: result.company_keywords ?? [],
+        isReanalyzing: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Reanalyze failed";
+      set({ error: msg, isReanalyzing: false });
       throw new Error(msg);
     }
   },

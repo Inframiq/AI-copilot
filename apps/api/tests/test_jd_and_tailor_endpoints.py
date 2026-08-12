@@ -216,6 +216,110 @@ async def test_create_jd_requires_auth():
     assert r.status_code == 401
 
 
+# ── POST /ai/analyze ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_analyze_uses_saved_resume_content_by_default():
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+
+    fake_analysis = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python"],
+            methodologies_and_frameworks=[],
+            domain_expertise_themes=[],
+            seniority_indicators=[],
+            ats_filter_phrases=[],
+        ),
+        matched_skills=["Python"],
+        missing_skills=[],
+        ats_score=100,
+        company_keywords=[],
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake_analysis)
+        ) as mock_analyze:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/analyze",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["ats_score"] == 100
+        # Whatever's saved on the resume row — no override was sent.
+        assert mock_analyze.call_args.args[0] == resume.content
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_analyze_uses_content_override_when_provided():
+    """The bullet-review screen's Reanalyze action passes the current,
+    unsaved (accepted/rejected/humanized) bullet state as `content` so the
+    score reflects what's actually on screen — not what's saved in the DB,
+    which this override must take priority over."""
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+
+    fake_analysis = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python"],
+            methodologies_and_frameworks=[],
+            domain_expertise_themes=[],
+            seniority_indicators=[],
+            ats_filter_phrases=[],
+        ),
+        matched_skills=[],
+        missing_skills=["Python"],
+        ats_score=0,
+        company_keywords=[],
+    )
+    override_content = {"experience": [{"title": "Eng", "bullets": ["Humanized, no keywords"]}], "skills": []}
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake_analysis)
+        ) as mock_analyze:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/analyze",
+                    json={
+                        "resume_id": str(resume.id),
+                        "jd_id": str(jd.id),
+                        "content": override_content,
+                    },
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["ats_score"] == 0
+        assert mock_analyze.call_args.args[0] == override_content
+        assert mock_analyze.call_args.args[0] != resume.content
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── POST /ai/tailor ───────────────────────────────────────────────────────────
 
 

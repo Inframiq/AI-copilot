@@ -10,6 +10,7 @@ vi.mock("@/lib/api-client", () => ({
     createResume: vi.fn(),
     generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/tailored.pdf" }),
     createJd: vi.fn(),
+    analyzeJd: vi.fn(),
   },
 }));
 
@@ -218,6 +219,50 @@ describe("useTailoringStore", () => {
     expect(useResumeStore.getState().pdfSignedUrl).toBe(
       "https://example.com/tailored.pdf"
     );
+  });
+
+  it("reanalyzePreview re-scores the current merged bullets against the JD without persisting", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
+      ...mockTailorResult,
+      ats_score: 60,
+      tailored_content: {
+        ...mockTailorResult.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Humanized, fewer keywords"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().atsScore).toBe(60);
+
+    vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+      ats_score: 45,
+      matched_skills: ["React"],
+      missing_skills: ["TypeScript", "GraphQL"],
+      company_keywords: [],
+    });
+
+    await useTailoringStore.getState().reanalyzePreview("resume-abc");
+
+    // Scored the current unsaved bullet state, not what's saved on the resume.
+    expect(apiClient.analyzeJd).toHaveBeenCalledWith(
+      "resume-abc",
+      "jd-001",
+      "",
+      expect.objectContaining({
+        experience: [expect.objectContaining({ bullets: ["Humanized, fewer keywords"] })],
+      })
+    );
+    expect(useTailoringStore.getState().atsScore).toBe(45);
+    expect(useTailoringStore.getState().matchedSkills).toEqual(["React"]);
+    expect(useTailoringStore.getState().missingSkills).toEqual(["TypeScript", "GraphQL"]);
+    // Nothing persisted.
+    expect(apiClient.updateResume).not.toHaveBeenCalled();
+    expect(useResumeStore.getState().content).toEqual(original);
   });
 
   it("saveTailoredResume('update') persists the merged content to the same resume", async () => {

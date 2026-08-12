@@ -166,11 +166,16 @@ export const apiClient = {
     resumeId: string,
     jdId: string,
     companyName?: string,
+    /** Unsaved content to score instead of what's persisted on resumeId —
+     * the bullet-review screen's Reanalyze action uses this to re-score the
+     * currently accepted/rejected/humanized bullets without saving them. */
+    contentOverride?: ResumeContent,
   ): Promise<AnalyzeOut> =>
     request<AnalyzeOut>("POST", "/ai/analyze", {
       resume_id: resumeId,
       jd_id: jdId,
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
+      ...(contentOverride ? { content: contentOverride } : {}),
     }),
 
   tailorResume: (

@@ -21,6 +21,8 @@ vi.mock("@/lib/api-client", () => ({
     tailorResume: vi.fn(),
     generatePdf: vi.fn(),
     createJd: vi.fn(),
+    rewriteBullet: vi.fn(),
+    analyzeJd: vi.fn(),
   },
 }));
 
@@ -203,5 +205,63 @@ describe("EditorPanel", () => {
     await waitFor(() => {
       expect(screen.queryByText("Writing Style")).not.toBeInTheDocument();
     });
+  });
+
+  it("shows Reanalyze only after using per-bullet Humanize, and it re-scores without saving", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      ats_score: 70,
+      matched_skills: ["React"],
+      missing_skills: [],
+      tailored_content: {
+        ...original,
+        experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
+      },
+      questions: [],
+      company_keywords: [],
+      suggested_skills: [],
+    } as any);
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValue({
+      rewritten_text: "Built things, naturally",
+    } as any);
+    vi.mocked(apiClient.analyzeJd).mockResolvedValue({
+      ats_score: 40,
+      matched_skills: [],
+      missing_skills: ["React"],
+      company_keywords: [],
+    } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    expect(screen.queryByText("Reanalyze")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Humanize"));
+    await waitFor(() => expect(apiClient.rewriteBullet).toHaveBeenCalled());
+    expect(await screen.findByText("Reanalyze")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Reanalyze"));
+    await waitFor(() => expect(apiClient.analyzeJd).toHaveBeenCalled());
+    await waitFor(() => expect(useTailoringStore.getState().atsScore).toBe(40));
+    expect(apiClient.updateResume).not.toHaveBeenCalled();
   });
 });
