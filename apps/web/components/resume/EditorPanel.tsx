@@ -697,7 +697,7 @@ export function EditorPanel() {
 
               {isLoading && (
                 <p className="text-caption text-on-surface-variant text-center">
-                  AI is rewriting your bullets — this takes 15–30 seconds…
+                  AI is rewriting your bullets — this can take up to a couple of minutes…
                 </p>
               )}
             </>
@@ -860,7 +860,7 @@ function TailoringForm({
 
       {isLoading && (
         <p className="text-caption text-on-surface-variant text-center">
-          AI is rewriting your bullets — this takes 15–30 seconds…
+          AI is rewriting your bullets — this can take up to a couple of minutes…
         </p>
       )}
     </div>
