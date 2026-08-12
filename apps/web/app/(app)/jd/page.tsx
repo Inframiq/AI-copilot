@@ -97,6 +97,7 @@ export default function JDIndexPage() {
   const [error, setError] = useState<string | null>(null);
 
   const setJd = useTailoringStore((s) => s.setJd);
+  const jdId = useTailoringStore((s) => s.jdId);
   const runAnalysis = useTailoringStore((s) => s.runAnalysis);
   const isAnalyzing = useTailoringStore((s) => s.isAnalyzing);
   const atsScore = useTailoringStore((s) => s.atsScore);
@@ -278,9 +279,20 @@ export default function JDIndexPage() {
     }
     setError(null);
     setTailorError(null);
-    // Opens SaveAnalysisModal — the actual create+analyze happens in
-    // handleConfirmSaveAs once the user names it (and resolves any
-    // name conflict), same as a file manager's Save As.
+
+    // Unchanged from the JD already loaded/saved in this session — this is
+    // a reanalyze, not a new save, so it shouldn't ask for a name (and
+    // shouldn't even hit /jd — runAnalysis reuses the existing jdId).
+    if (jdId && storedJdText.trim() === jdText.trim()) {
+      setIsSubmitting(true);
+      setSelectedPriority(new Set());
+      runAnalysis(activeResumeId).finally(() => setIsSubmitting(false));
+      return;
+    }
+
+    // New or changed content — opens SaveAnalysisModal. The actual
+    // create+analyze happens in handleConfirmSaveAs once the user names it
+    // (and resolves any name conflict), same as a file manager's Save As.
     setPendingSaveText(jdText);
   }
 
