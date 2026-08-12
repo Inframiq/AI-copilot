@@ -37,13 +37,14 @@ class OpenAIProvider(AIProvider):
     async def complete_structured(
         self, system: str, user: str, schema: type[BaseModel], model_tier: str = "fast"
     ) -> BaseModel:
+        # gpt-5.6-luna rejects the `temperature` param on the Responses API
+        # (400 Unsupported parameter) — this model has no sampling knob to set.
         response = await self._client.responses.parse(
             model=_MODEL,
             instructions=system,
             input=user,
             text_format=schema,
             max_output_tokens=self._max_output_tokens,
-            temperature=0,
         )
         # Same unused response.usage as above.
         return response.output_parsed
