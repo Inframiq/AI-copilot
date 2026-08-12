@@ -19,6 +19,7 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     updateResume: vi.fn().mockResolvedValue({}),
     tailorResume: vi.fn(),
+    getSession: vi.fn(),
     generatePdf: vi.fn(),
     createJd: vi.fn(),
     rewriteBullet: vi.fn(),
@@ -177,11 +178,17 @@ describe("EditorPanel", () => {
     } as any);
     vi.mocked(apiClient.tailorResume).mockResolvedValue({
       session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
       ats_score: 70,
       matched_skills: ["React"],
       missing_skills: [],
       tailored_content: SAMPLE_CONTENT,
-      questions: [],
       company_keywords: [],
       suggested_skills: [],
     } as any);
@@ -224,6 +231,13 @@ describe("EditorPanel", () => {
     } as any);
     vi.mocked(apiClient.tailorResume).mockResolvedValue({
       session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
       ats_score: 70,
       matched_skills: ["React"],
       missing_skills: [],
@@ -231,7 +245,6 @@ describe("EditorPanel", () => {
         ...original,
         experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
       },
-      questions: [],
       company_keywords: [],
       suggested_skills: [],
     } as any);
@@ -295,6 +308,13 @@ describe("EditorPanel", () => {
     } as any);
     vi.mocked(apiClient.tailorResume).mockResolvedValue({
       session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
       ats_score: 70,
       matched_skills: ["React"],
       missing_skills: [],
@@ -302,7 +322,6 @@ describe("EditorPanel", () => {
         ...original,
         experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
       },
-      questions: [],
       company_keywords: [],
       suggested_skills: ["Kubernetes", "GraphQL"],
     } as any);
@@ -345,6 +364,13 @@ describe("EditorPanel", () => {
     } as any);
     vi.mocked(apiClient.tailorResume).mockResolvedValue({
       session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
       ats_score: 70,
       matched_skills: ["React"],
       missing_skills: [],
@@ -352,7 +378,6 @@ describe("EditorPanel", () => {
         ...original,
         experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
       },
-      questions: [],
       company_keywords: [],
       suggested_skills: ["Kubernetes"],
     } as any);

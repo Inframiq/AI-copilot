@@ -3,7 +3,6 @@ import type {
   Resume,
   JobDescription,
   JDStatus,
-  TailorOut,
   AnalyzeOut,
   PrepQuestionOut,
   SkillQuestionOut,
@@ -185,8 +184,8 @@ export const apiClient = {
     humanizeLevel: number,
     companyName?: string,
     prioritySkills?: string[],
-  ): Promise<TailorOut> =>
-    request<TailorOut>("POST", "/ai/tailor", {
+  ): Promise<{ session_id: string; status: string }> =>
+    request("POST", "/ai/tailor", {
       resume_id: resumeId,
       jd_id: jdId,
       humanize_level: humanizeLevel,
@@ -206,10 +205,13 @@ export const apiClient = {
     session_id: string;
     resume_id: string;
     jd_id: string;
+    status: "pending" | "completed" | "failed";
     tailored_content: ResumeContent | null;
     ats_score: number | null;
     matched_skills: string[];
     missing_skills: string[];
+    company_keywords: string[];
+    suggested_skills: string[];
   }> => request("GET", `/ai/sessions/${sessionId}`),
 
   getQuestions: (sessionId: string): Promise<PrepQuestionOut[]> =>

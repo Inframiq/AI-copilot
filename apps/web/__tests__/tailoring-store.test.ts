@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { TailorOut, ResumeContent, JobDescription } from "@career-copilot/types";
+import type { ResumeContent, JobDescription } from "@career-copilot/types";
 
 // ── Mock apiClient ────────────────────────────────────────────────────────
 // NOTE: vi.mock is hoisted, so the factory must NOT reference outer variables.
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     tailorResume: vi.fn(),
+    getSession: vi.fn(),
     updateResume: vi.fn().mockResolvedValue({}),
     createResume: vi.fn(),
     generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/tailored.pdf" }),
@@ -14,8 +15,11 @@ vi.mock("@/lib/api-client", () => ({
   },
 }));
 
-const mockTailorResult: TailorOut = {
+const mockCompletedSession = {
   session_id: "session-xyz",
+  resume_id: "resume-abc",
+  jd_id: "jd-001",
+  status: "completed" as const,
   ats_score: 82,
   matched_skills: ["TypeScript", "React"],
   missing_skills: ["GraphQL"],
@@ -25,7 +29,6 @@ const mockTailorResult: TailorOut = {
     education: [],
     skills: ["TypeScript", "React"],
   },
-  questions: [],
   company_keywords: [],
   suggested_skills: [],
 };
@@ -46,8 +49,13 @@ describe("useTailoringStore", () => {
     useTailoringStore.getState().resetStore();
     useResumeStore.getState().resetStore();
     vi.clearAllMocks();
-    // Default: tailorResume resolves with the mock result
-    vi.mocked(apiClient.tailorResume).mockResolvedValue(mockTailorResult);
+    // Default: tailorResume kicks off a session, getSession reports it done
+    // on the very first poll — most tests don't care about the pending phase.
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-xyz",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue(mockCompletedSession);
     vi.mocked(apiClient.updateResume).mockResolvedValue({} as any);
     vi.mocked(apiClient.generatePdf).mockResolvedValue({
       signed_url: "https://example.com/tailored.pdf",
@@ -188,10 +196,10 @@ describe("useTailoringStore", () => {
     };
     useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
-    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
-      ...mockTailorResult,
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
       tailored_content: {
-        ...mockTailorResult.tailored_content,
+        ...mockCompletedSession.tailored_content,
         experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
       },
     });
@@ -228,11 +236,11 @@ describe("useTailoringStore", () => {
     };
     useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
-    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
-      ...mockTailorResult,
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
       ats_score: 60,
       tailored_content: {
-        ...mockTailorResult.tailored_content,
+        ...mockCompletedSession.tailored_content,
         experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Humanized, fewer keywords"] }],
       },
     });
@@ -377,8 +385,8 @@ describe("useTailoringStore", () => {
     useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
     useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
-    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
-      ...mockTailorResult,
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
       suggested_skills: ["Kubernetes", "Docker"],
     });
 
@@ -395,5 +403,45 @@ describe("useTailoringStore", () => {
     useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
     useTailoringStore.getState().resetStore();
     expect(useTailoringStore.getState().prioritySkills).toEqual([]);
+  });
+
+  it("runTailoring polls until the session status is completed", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession)
+        .mockResolvedValueOnce({ ...mockCompletedSession, status: "pending", tailored_content: null })
+        .mockResolvedValueOnce(mockCompletedSession);
+
+      const promise = useTailoringStore.getState().runTailoring("resume-abc");
+      await vi.advanceTimersByTimeAsync(3000);
+      await promise;
+
+      expect(apiClient.getSession).toHaveBeenCalledTimes(2);
+      const state = useTailoringStore.getState();
+      expect(state.isLoading).toBe(false);
+      expect(state.atsScore).toBe(82);
+      expect(state.sessionId).toBe("session-xyz");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("runTailoring surfaces a generic error when the session status is failed", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      status: "failed",
+      tailored_content: null,
+    });
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const state = useTailoringStore.getState();
+    expect(state.error).toBe("Tailoring failed — please try again.");
+    expect(state.isLoading).toBe(false);
+    expect(state.pendingContent).toBeNull();
   });
 });

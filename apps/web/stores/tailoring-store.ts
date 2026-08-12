@@ -261,70 +261,99 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       mergedContent: null,
       previewPdfUrl: null,
     });
+
+    let started: { session_id: string; status: string };
     try {
-      const result = await apiClient.tailorResume(
+      started = await apiClient.tailorResume(
         resumeId,
         jdId,
         humanizeLevel,
         companyName || undefined,
         prioritySkills,
       );
-
-      // Build initial bullet decisions — all changed bullets default to 'accept'.
-      // We compare against the current resume content to find what changed.
-      const initialDecisions: Record<string, BulletDecision> = {};
-      if (result.tailored_content) {
-        const originalContent = useResumeStore.getState().content;
-        if (originalContent) {
-          result.tailored_content.experience.forEach((job, jobIdx) => {
-            const origJob = originalContent.experience[jobIdx];
-            job.bullets.forEach((bullet, bulletIdx) => {
-              const origBullet = origJob?.bullets[bulletIdx] ?? "";
-              if (bullet !== origBullet) {
-                initialDecisions[`exp${jobIdx}_b${bulletIdx}`] = "accept";
-              }
-            });
-          });
-          // Per-skill decisions: added skills default to "accept", removed skills default to "reject"
-          const originalSkillsSet = new Set(originalContent.skills);
-          const tailoredSkillsSet = new Set(result.tailored_content.skills);
-          for (const s of result.tailored_content.skills) {
-            if (!originalSkillsSet.has(s)) initialDecisions[`skill_add:${s}`] = "accept";
-          }
-          for (const s of originalContent.skills) {
-            if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
-          }
-        }
-      }
-
-      // Pre-accept suggested-skill chips the user explicitly asked for —
-      // saves them re-clicking what they already picked on the JD page.
-      // AI-only suggestions (not in prioritySkills) are left undecided, same
-      // as always, so the user still reviews them via the chip UI.
-      const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
-      for (const s of result.suggested_skills ?? []) {
-        if (prioritySet.has(s.toLowerCase())) {
-          initialDecisions[`skill_add:${s}`] = "accept";
-        }
-      }
-
-      set({
-        sessionId: result.session_id,
-        atsScore: result.ats_score,
-        matchedSkills: result.matched_skills,
-        missingSkills: result.missing_skills,
-        companyKeywords: result.company_keywords ?? [],
-        suggestedSkills: result.suggested_skills ?? [],
-        pendingContent: result.tailored_content ?? null,
-        bulletDecisions: initialDecisions,
-        isLoading: false,
-      });
     } catch (e: unknown) {
-      set({
-        error: e instanceof Error ? e.message : "Tailoring failed",
-        isLoading: false,
-      });
+      set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
+      return;
     }
+
+    // Poll GET /ai/sessions/{id} — the background job on the server can take
+    // 30-90s+ (chained LLM calls), well past what a single HTTP request can
+    // wait on Render's proxy. See routers/ai.py's _run_tailoring_background
+    // for why this exists. The "Tailor Resume" button is disabled while
+    // isLoading is true, so this can't overlap with a second call.
+    const POLL_INTERVAL_MS = 3000;
+    const MAX_ATTEMPTS = 40; // ~2 minutes ceiling
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      let session;
+      try {
+        session = await apiClient.getSession(started.session_id);
+      } catch (e: unknown) {
+        set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
+        return;
+      }
+
+      if (session.status === "completed") {
+        const initialDecisions: Record<string, BulletDecision> = {};
+        if (session.tailored_content) {
+          const originalContent = useResumeStore.getState().content;
+          if (originalContent) {
+            session.tailored_content.experience.forEach((job, jobIdx) => {
+              const origJob = originalContent.experience[jobIdx];
+              job.bullets.forEach((bullet, bulletIdx) => {
+                const origBullet = origJob?.bullets[bulletIdx] ?? "";
+                if (bullet !== origBullet) {
+                  initialDecisions[`exp${jobIdx}_b${bulletIdx}`] = "accept";
+                }
+              });
+            });
+            const originalSkillsSet = new Set(originalContent.skills);
+            const tailoredSkillsSet = new Set(session.tailored_content.skills);
+            for (const s of session.tailored_content.skills) {
+              if (!originalSkillsSet.has(s)) initialDecisions[`skill_add:${s}`] = "accept";
+            }
+            for (const s of originalContent.skills) {
+              if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
+            }
+          }
+        }
+
+        const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+        for (const s of session.suggested_skills) {
+          if (prioritySet.has(s.toLowerCase())) {
+            initialDecisions[`skill_add:${s}`] = "accept";
+          }
+        }
+
+        set({
+          sessionId: session.session_id,
+          atsScore: session.ats_score,
+          matchedSkills: session.matched_skills,
+          missingSkills: session.missing_skills,
+          companyKeywords: session.company_keywords,
+          suggestedSkills: session.suggested_skills,
+          pendingContent: session.tailored_content,
+          bulletDecisions: initialDecisions,
+          isLoading: false,
+        });
+        return;
+      }
+
+      if (session.status === "failed") {
+        set({ error: "Tailoring failed — please try again.", isLoading: false });
+        return;
+      }
+
+      // Still pending — wait before the next check, unless this was the last attempt.
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
+    }
+
+    set({
+      error: "Tailoring is taking longer than expected. Please try again in a moment.",
+      isLoading: false,
+    });
   },
 
   // Merge accepted bullet decisions into the original content and render a
