@@ -440,8 +440,14 @@ export function BulletReviewPanel() {
             pre-generation; per-bullet Humanize still uses it, just without a
             second control to change it at this stage. */}
 
-        {/* 3. Accept All / Generate PDF */}
-        {!allDecided && (
+        {/* 3. Accept All / Generate PDF — Accept All is always shown (not
+            gated on allDecided): every changed bullet already defaults to
+            "accept" the moment tailoring completes (see runTailoring's
+            initialDecisions), so allDecided is true from the start and a
+            !allDecided guard here would never render. Clicking it is a
+            harmless no-op when nothing was rejected, and a real action when
+            something was. */}
+        {bulletChanges.length > 0 && (
           <button
             onClick={() => setAllBulletDecisions(bulletChanges, "accept")}
             className="w-full py-sm rounded-xl text-label-md text-primary border border-primary/40 hover:bg-primary/5 transition-all"
