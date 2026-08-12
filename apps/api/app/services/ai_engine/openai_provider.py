@@ -43,6 +43,7 @@ class OpenAIProvider(AIProvider):
             input=user,
             text_format=schema,
             max_output_tokens=self._max_output_tokens,
+            temperature=0,
         )
         # Same unused response.usage as above.
         return response.output_parsed

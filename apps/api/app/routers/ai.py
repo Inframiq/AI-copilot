@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import attributes
 from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
@@ -64,6 +65,7 @@ async def analyze_jd(
         existing = dict(jd_row.parsed) if jd_row.parsed else {}
         existing["agent1"] = analysis.jd_analysis.model_dump()
         jd_row.parsed = existing
+        attributes.flag_modified(jd_row, "parsed")
         await db.commit()
 
     return AnalyzeOut(
