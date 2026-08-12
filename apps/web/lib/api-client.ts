@@ -54,6 +54,14 @@ export const apiClient = {
   getResume: (id: string): Promise<Resume> =>
     request<Resume>("GET", `/resumes/${id}`),
 
+  getOriginalResumeFile: (
+    id: string
+  ): Promise<{ signed_url: string; file_name: string | null }> =>
+    request<{ signed_url: string; file_name: string | null }>(
+      "GET",
+      `/resumes/${id}/original`
+    ),
+
   createResume: (payload: {
     title: string;
     template_id?: string;

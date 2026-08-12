@@ -127,4 +127,28 @@ describe("apiClient", () => {
       await expect(apiClient.parseResumeFile(file, "ats_clean")).rejects.toThrow("File too large");
     });
   });
+
+  describe("getOriginalResumeFile", () => {
+    it("fetches the signed URL for the untouched uploaded file", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        jsonResponse({ signed_url: "https://signed.example/original.pdf", file_name: "resume.pdf" })
+      );
+
+      const result = await apiClient.getOriginalResumeFile("resume-1");
+
+      const [url, init] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain("/resumes/resume-1/original");
+      expect(init?.method).toBe("GET");
+      expect(result).toEqual({ signed_url: "https://signed.example/original.pdf", file_name: "resume.pdf" });
+    });
+
+    it("throws when the resume has no original file", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        jsonResponse({ detail: "No original file for this resume" }, { ok: false, status: 404 })
+      );
+      await expect(apiClient.getOriginalResumeFile("resume-1")).rejects.toThrow(
+        "No original file for this resume"
+      );
+    });
+  });
 });

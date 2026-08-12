@@ -8,6 +8,7 @@ from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.db.models import Resume
 
@@ -218,6 +219,7 @@ _FAKE_PDF_BYTES = b"%PDF-1.4\n%fake minimal pdf content for magic-byte check\n"
 
 @pytest.mark.asyncio
 async def test_parse_upload_creates_resume():
+    limiter.reset()
     override, mock_session = make_mock_db()
 
     created = make_resume(title="Test Candidate's Resume", content={"contact": {"name": "Test Candidate"}})
@@ -231,6 +233,7 @@ async def test_parse_upload_creates_resume():
 
     app.dependency_overrides[get_db] = override
     try:
+        mock_sb = MagicMock()
         with patch(
             "app.routers.resumes.extract_text", return_value="Test Candidate\nSenior Engineer\n..."
         ), patch(
@@ -243,6 +246,8 @@ async def test_parse_upload_creates_resume():
                     "skills": [],
                 }
             ),
+        ), patch(
+            "app.routers.resumes._supabase", return_value=mock_sb
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
@@ -254,12 +259,68 @@ async def test_parse_upload_creates_resume():
         assert r.status_code == 201
         body = r.json()
         assert body["title"] == "Test Candidate's Resume"
+        # The original PDF bytes are stored untouched, before AI parsing runs.
+        mock_sb.storage.from_.assert_called_with("resumes")
+        upload_call = mock_sb.storage.from_.return_value.upload.call_args
+        assert upload_call.args[1] == _FAKE_PDF_BYTES
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_parse_upload_rejects_docx():
+    """DOCX/DOC is no longer accepted — the original file is stored untouched
+    and shown verbatim in Preview, so there's no conversion path for it."""
+    limiter.reset()
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/resumes/parse-upload",
+                files={
+                    "file": (
+                        "resume.docx",
+                        io.BytesIO(b"PK\x03\x04fake docx content"),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+                data={"template_id": "ats_clean"},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 400
+        assert "PDF" in r.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_parse_upload_fails_when_storage_upload_fails():
+    """If the original file can't be stored, the whole upload must fail
+    rather than creating a Resume row with no master copy behind it."""
+    limiter.reset()
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        mock_sb = MagicMock()
+        mock_sb.storage.from_.return_value.upload.side_effect = Exception("storage down")
+        with patch("app.routers.resumes._supabase", return_value=mock_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 502
+        mock_session.add.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
 async def test_parse_upload_rejects_bad_magic_bytes():
+    limiter.reset()
     override, mock_session = make_mock_db()
     app.dependency_overrides[get_db] = override
     try:
@@ -277,6 +338,7 @@ async def test_parse_upload_rejects_bad_magic_bytes():
 
 @pytest.mark.asyncio
 async def test_parse_upload_rejects_unsupported_extension():
+    limiter.reset()
     override, mock_session = make_mock_db()
     app.dependency_overrides[get_db] = override
     try:
@@ -304,10 +366,13 @@ async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch):
         time.sleep(1)
         return "should never get here"
 
+    limiter.reset()
     override, mock_session = make_mock_db()
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.resumes.extract_text", side_effect=slow_extract_text):
+        with patch("app.routers.resumes.extract_text", side_effect=slow_extract_text), patch(
+            "app.routers.resumes._supabase", return_value=MagicMock()
+        ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/resumes/parse-upload",
@@ -321,8 +386,55 @@ async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
 
 
+# ── GET /resumes/{id}/original ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_original_file_returns_signed_url():
+    override, mock_session = make_mock_db()
+    resume = make_resume(
+        original_file_path="resumes/user/rid/original.pdf",
+        original_file_name="my_resume.pdf",
+    )
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.resumes.get_signed_url", return_value="https://signed.example/original.pdf"
+        ), patch("app.routers.resumes._supabase", return_value=MagicMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.get(f"/resumes/{resume.id}/original", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["signed_url"] == "https://signed.example/original.pdf"
+        assert body["file_name"] == "my_resume.pdf"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_original_file_404_when_no_original():
+    override, mock_session = make_mock_db()
+    resume = make_resume(original_file_path=None, original_file_name=None)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/resumes/{resume.id}/original", headers=make_auth_header())
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 @pytest.mark.asyncio
 async def test_parse_upload_requires_auth():
+    limiter.reset()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(
             "/resumes/parse-upload",

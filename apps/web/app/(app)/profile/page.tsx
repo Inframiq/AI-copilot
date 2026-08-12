@@ -154,6 +154,25 @@ export default function ProfilePage() {
       .catch(() => setMasterResumeTitle(null));
   }, [masterResumeId]);
 
+  // ── save-on-leave ────────────────────────────────────────────────────────
+  // A resume upload fills the form but no longer auto-saves (see handleUpload)
+  // so the user can review AI-extracted fields before they're persisted. If
+  // they navigate away without hitting "Save Profile" explicitly, save for
+  // them anyway — but only when the form is in a valid state, so leaving
+  // mid-edit with e.g. no name entered doesn't silently persist junk.
+  // Refs (not the effect's dependency array) carry the latest state into the
+  // unmount cleanup, since that effect only runs once on mount.
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  const isValidRef = useRef(false);
+  isValidRef.current = contact.name.trim().length > 0;
+
+  useEffect(() => {
+    return () => {
+      if (isValidRef.current) handleSaveRef.current();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
     setSaving(true); setError(null); setSaveOk(false);
@@ -196,8 +215,8 @@ export default function ProfilePage() {
 
   // ── resume upload ──────────────────────────────────────────────────────────
   const acceptFile = useCallback((f: File) => {
-    if (!f.name.match(/\.(pdf|docx|doc)$/i)) {
-      setError("Only PDF or DOCX files are supported."); return;
+    if (!f.name.match(/\.pdf$/i)) {
+      setError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return;
     }
     if (f.size > 10 * 1024 * 1024) { setError("File must be under 10 MB."); return; }
     handleUpload(f);
@@ -252,6 +271,12 @@ export default function ProfilePage() {
         ? (c.certifications as string[]).map(name => ({ id: newId(), name, issuer: "", year: "" }))
         : [];
 
+      // Fill the form only — deliberately NOT persisted yet. The uploaded
+      // file is the user's master copy; auto-filling parsed fields is a
+      // convenience, but overwriting their saved career profile before they
+      // can review what the AI extracted is not. This gets saved either by
+      // the "Save Profile" button or automatically on leaving this page
+      // (see the save-on-leave effect below), same as any other edit here.
       setContact(newContact);
       setHeadline(newHeadline);
       setSkills(newSkills.join(", "));
@@ -263,22 +288,7 @@ export default function ProfilePage() {
       setMasterResumeTitle(resume.title);
       setMasterResumeTemplateId(resume.template_id);
 
-      // Persist immediately — replacing the resume should update the saved
-      // career profile right away, not just the on-screen form until the
-      // user remembers to click "Save Profile" separately.
-      await upsertCareerProfile({
-        master_resume_id: resume.id,
-        contact: newContact,
-        headline: newHeadline || null,
-        experience: newExperiences,
-        projects: newProjects,
-        education: newEducation,
-        skills: newSkills,
-        certifications: newCertifications,
-        role_status: roleStatus || null,
-      });
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
-      await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
       await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -358,7 +368,7 @@ export default function ProfilePage() {
       {/* ── Resume upload ─────────────────────────────────────────────────── */}
       <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
         <SectionHeader icon={UploadSimple} title="Resume" />
-        <input ref={fileRef} type="file" accept=".pdf,.docx,.doc" className="hidden"
+        <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
 
         {masterResumeId && masterResumeTitle ? (
@@ -409,7 +419,7 @@ export default function ProfilePage() {
                 {uploading ? "Parsing resume…" : dragging ? "Release to upload" : "Upload your resume"}
               </p>
               <p className="text-caption text-on-surface-variant mt-xs">
-                PDF or DOCX · AI extracts contact, experience, education, and skills automatically
+                PDF only · AI extracts contact, experience, education, and skills automatically
               </p>
             </div>
             <span className="shrink-0 text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm hover:bg-primary/5 transition-all">

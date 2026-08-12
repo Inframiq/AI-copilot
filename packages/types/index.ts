@@ -57,6 +57,7 @@ export interface Resume {
   content: ResumeContent;
   ats_score?: number;
   pdf_path?: string;
+  original_file_name?: string | null;
   created_at: string;
   updated_at: string;
 }

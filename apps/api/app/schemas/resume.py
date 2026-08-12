@@ -56,6 +56,16 @@ class ResumeOut(BaseModel):
     content: dict
     template_id: str
     pdf_url: str | None
+    # Presence (not the raw storage path) is what the frontend needs — it
+    # decides whether Preview can show the untouched original vs. falling
+    # back to the template-rendered content. The signed URL comes from the
+    # dedicated /resumes/{id}/original endpoint, same pattern as pdf_url.
+    original_file_name: str | None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+class OriginalFileOut(BaseModel):
+    signed_url: str
+    file_name: str | None

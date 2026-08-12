@@ -8,9 +8,9 @@ from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest
+from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
-from app.services.pdf import generate_pdf, upload_pdf
+from app.services.pdf import generate_pdf, upload_pdf, get_signed_url
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -32,15 +32,13 @@ def _supabase():
     return _sb_client
 
 
-# Allowed upload MIME types and their magic byte signatures
-_ALLOWED_MIME = {
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
+# Upload only accepts PDF — the uploaded file is stored untouched as the
+# user's master copy and shown verbatim in Preview, so there's no DOCX/DOC
+# conversion path (and no need for a LibreOffice dependency). Users with a
+# DOCX resume convert it to PDF themselves before uploading.
+_ALLOWED_MIME = {"application/pdf"}
 _MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
-    (b"PK\x03\x04", "docx"),
 ]
 
 _VALID_TEMPLATES = {"ats_clean", "ats_modern", "ats_professional", "ats_minimal"}
@@ -78,6 +76,22 @@ async def get_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db: A
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
     return resume
+
+
+@router.get("/{resume_id}/original", response_model=OriginalFileOut)
+async def get_original_resume_file(
+    resume_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """Signed URL for the untouched file the user uploaded — Preview's source
+    of truth when one exists, instead of the AI-parsed/templated version."""
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+    )
+    resume = result.scalar_one_or_none()
+    if not resume or not resume.original_file_path:
+        raise HTTPException(status_code=404, detail="No original file for this resume")
+    signed_url = get_signed_url(resume.original_file_path, _supabase())
+    return OriginalFileOut(signed_url=signed_url, file_name=resume.original_file_name)
 
 
 @router.patch("/{resume_id}", response_model=ResumeOut)
@@ -264,10 +278,8 @@ async def parse_and_create_resume(
             raise HTTPException(status_code=404, detail="Resume not found")
 
     content_type = file.content_type or ""
-    if content_type not in _ALLOWED_MIME and not (
-        file.filename or ""
-    ).lower().endswith((".pdf", ".docx", ".doc")):
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
+    if content_type not in _ALLOWED_MIME and not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
 
     raw_bytes = await file.read()
 
@@ -278,12 +290,28 @@ async def parse_and_create_resume(
     try:
         _check_magic_bytes(raw_bytes)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
+
+    # Fixed up front (rather than left to the DB default) so the original file
+    # can be uploaded to its final storage path before the Resume row exists.
+    resume_id = existing_resume.id if existing_resume is not None else uuid.uuid4()
+
+    # Store the untouched original — this is the user's master copy, shown
+    # verbatim in Preview. Synchronous and required (unlike the best-effort
+    # background upload used for generated preview PDFs): if this fails, the
+    # whole upload fails rather than leaving a Resume row with no master file.
+    original_path = f"resumes/{user['sub']}/{resume_id}/original.pdf"
+    try:
+        _supabase().storage.from_("resumes").upload(
+            original_path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
 
     try:
         # Run off the event loop with a hard deadline — a pathologically
-        # crafted PDF/DOCX can make parsing take a long time, and this call
-        # is synchronous CPU work that would otherwise block every other
+        # crafted PDF can make parsing take a long time, and this call is
+        # synchronous CPU work that would otherwise block every other
         # concurrent request on this worker for its duration.
         raw_text = await asyncio.wait_for(
             asyncio.to_thread(extract_text, raw_bytes, content_type or file.filename or ""),
@@ -311,16 +339,21 @@ async def parse_and_create_resume(
         existing_resume.title = title[:255]
         existing_resume.template_id = template_id
         existing_resume.content = parsed
+        existing_resume.original_file_path = original_path
+        existing_resume.original_file_name = file.filename
         await db.commit()
         await db.refresh(existing_resume)
         response.status_code = status.HTTP_200_OK
         return existing_resume
 
     resume = Resume(
+        id=resume_id,
         user_id=uuid.UUID(user["sub"]),
         title=title[:255],
         template_id=template_id,
         content=parsed,
+        original_file_path=original_path,
+        original_file_name=file.filename,
     )
     db.add(resume)
     await db.commit()

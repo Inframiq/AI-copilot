@@ -20,6 +20,12 @@ class Resume(Base):
     template_id: Mapped[str] = mapped_column(String(50), nullable=False, default="ats_clean")
     # Stores path in Supabase Storage: resumes/{user_id}/{resume_id}.pdf — NOT a signed URL
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Untouched original file the user uploaded (PDF only), stored at
+    # resumes/{user_id}/{resume_id}/original.pdf — NOT a signed URL. Null for
+    # resumes built from scratch in Studio (no upload). This is the "master
+    # copy" Preview shows verbatim — never the AI-parsed/templated version.
+    original_file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
 

@@ -82,8 +82,8 @@ export default function OnboardingPage() {
   }
 
   async function handleFile(file: File) {
-    if (!file.name.match(/\.(pdf|docx|doc)$/i)) {
-      setUploadError("Only PDF or DOCX files are supported.");
+    if (!file.name.match(/\.pdf$/i)) {
+      setUploadError("Only PDF files are supported. Convert your resume to PDF and re-upload.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -202,7 +202,7 @@ export default function OnboardingPage() {
         >
           <input
             type="file"
-            accept=".pdf,.docx,.doc"
+            accept=".pdf"
             className="hidden"
             disabled={uploading}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
@@ -220,7 +220,7 @@ export default function OnboardingPage() {
                 <FileDoc size={28} />
               </div>
               <p className="text-body-md text-on-surface font-semibold">Drop your resume here</p>
-              <p className="text-body-sm text-on-surface-variant">or click to browse — PDF or DOCX, up to 10 MB</p>
+              <p className="text-body-sm text-on-surface-variant">or click to browse — PDF only, up to 10 MB</p>
             </>
           )}
         </label>

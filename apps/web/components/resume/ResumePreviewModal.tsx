@@ -24,9 +24,17 @@ export function ResumePreviewModal({ resumeId, templateId, title, onClose }: Pro
 
   useEffect(() => {
     let cancelled = false;
-    apiClient.generatePdf(resumeId, templateId)
+    // Prefer the untouched file the user actually uploaded — Preview must
+    // never show an AI-reparsed/re-templated stand-in for it. Only resumes
+    // built from scratch in Studio (no upload) fall back to rendering
+    // resume.content through a template, since that IS their real content.
+    apiClient.getOriginalResumeFile(resumeId)
       .then(({ signed_url }) => { if (!cancelled) setPdfUrl(signed_url); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load preview"); });
+      .catch(() => {
+        apiClient.generatePdf(resumeId, templateId)
+          .then(({ signed_url }) => { if (!cancelled) setPdfUrl(signed_url); })
+          .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load preview"); });
+      });
     return () => { cancelled = true; };
   }, [resumeId, templateId]);
 

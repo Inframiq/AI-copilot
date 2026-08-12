@@ -73,8 +73,8 @@ export default function StudioIndexPage() {
   }, []);
 
   function acceptFile(f: File) {
-    const ok = f.name.endsWith(".pdf") || f.name.endsWith(".docx") || f.name.endsWith(".doc");
-    if (!ok) { setError("Only PDF or DOCX files are supported."); return; }
+    const ok = f.name.endsWith(".pdf");
+    if (!ok) { setError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return; }
     if (f.size > 10 * 1024 * 1024) { setError("File must be smaller than 10 MB."); return; }
     setError(null);
     setFile(f);
@@ -223,7 +223,7 @@ export default function StudioIndexPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.doc"
+            accept=".pdf"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); }}
           />
@@ -272,7 +272,7 @@ export default function StudioIndexPage() {
                     {isDragging ? "Release to upload" : "Drop your resume here"}
                   </p>
                   <p className="text-body-sm text-on-surface-variant mt-xs">
-                    PDF or DOCX up to 10 MB · AI parses every section automatically
+                    PDF up to 10 MB · AI parses every section automatically
                   </p>
                 </div>
 
