@@ -492,7 +492,8 @@ export default function JDIndexPage() {
             </button>
           </form>
 
-          {hasResults && (
+          {/* Tailor Resume — always available once there's JD text, no analysis required */}
+          {jdText.trim() && (
             <div className="flex flex-col gap-xs">
               {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
               <button

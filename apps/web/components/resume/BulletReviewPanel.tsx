@@ -37,10 +37,13 @@ export function BulletReviewPanel() {
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
   const setHumanizeLevel = useTailoringStore((s) => s.setHumanizeLevel);
   const jdText = useTailoringStore((s) => s.jdText);
+  const runTailoring = useTailoringStore((s) => s.runTailoring);
+  const isTailoring = useTailoringStore((s) => s.isLoading);
 
   const resumeId = useResumeStore((s) => s.resumeId);
   const originalContent = useResumeStore((s) => s.content);
 
+  const [isRetailoring, setIsRetailoring] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [showSaveChoice, setShowSaveChoice] = useState(false);
@@ -80,6 +83,15 @@ export function BulletReviewPanel() {
 
   const allDecided =
     bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
+
+  // Re-run tailoring with the same JD — discards current review and starts fresh.
+  async function handleRetailor() {
+    if (!resumeId || !jdText.trim()) return;
+    setIsRetailoring(true);
+    discardPending();
+    await runTailoring(resumeId);
+    setIsRetailoring(false);
+  }
 
   async function handleRewriteBullet(
     change: BulletChange,
@@ -182,12 +194,25 @@ export function BulletReviewPanel() {
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
         />
-        <button
-          onClick={discardPending}
-          className="w-full py-sm rounded-xl border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors"
-        >
-          Done
-        </button>
+        <div className="flex gap-sm">
+          {jdText.trim() && (
+            <button
+              onClick={handleRetailor}
+              disabled={isRetailoring || isTailoring}
+              className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-md text-primary border border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
+            >
+              <Sparkle size={15} className={isRetailoring || isTailoring ? "animate-pulse" : ""} />
+              {isRetailoring || isTailoring ? "Tailoring…" : "Re-tailor"}
+            </button>
+          )}
+          <button
+            onClick={discardPending}
+            disabled={isRetailoring || isTailoring}
+            className="flex-1 py-sm rounded-xl border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50"
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }
@@ -204,13 +229,27 @@ export function BulletReviewPanel() {
             {atsScore !== null && ` · ATS Score: ${atsScore}%`}
           </p>
         </div>
-        <button
-          onClick={discardPending}
-          className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container-low transition-colors"
-        >
-          <ArrowCounterClockwise size={13} />
-          Discard
-        </button>
+        <div className="flex items-center gap-xs">
+          {/* Re-tailor: re-run AI tailoring with the same JD from within the studio */}
+          {jdText.trim() && (
+            <button
+              onClick={handleRetailor}
+              disabled={isRetailoring || isTailoring}
+              className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Sparkle size={13} className={isRetailoring || isTailoring ? "animate-pulse" : ""} />
+              {isRetailoring || isTailoring ? "Tailoring…" : "Re-tailor"}
+            </button>
+          )}
+          <button
+            onClick={discardPending}
+            disabled={isRetailoring || isTailoring}
+            className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container-low transition-colors disabled:opacity-50"
+          >
+            <ArrowCounterClockwise size={13} />
+            Discard
+          </button>
+        </div>
       </div>
 
       {/* ── Company keywords ── */}
