@@ -29,8 +29,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False),
     )
     op.create_index("ix_skill_question_bank_skill", "skill_question_bank", ["skill"])
+    op.create_index(
+        "ix_skill_question_bank_topic_created",
+        "skill_question_bank",
+        ["topic", sa.text("created_at DESC")],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_skill_question_bank_topic_created", table_name="skill_question_bank")
     op.drop_index("ix_skill_question_bank_skill", table_name="skill_question_bank")
     op.drop_table("skill_question_bank")

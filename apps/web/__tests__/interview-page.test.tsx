@@ -62,3 +62,29 @@ describe("InterviewIndexPage — no active session", () => {
     );
   });
 });
+
+describe("InterviewIndexPage — session active but zero prep questions", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    vi.clearAllMocks();
+  });
+
+  it("falls back to the shared bank instead of showing the empty state forever", async () => {
+    useTailoringStore.setState({ sessionId: "session-1" });
+    vi.mocked(apiClient.getQuestions).mockResolvedValue([]);
+    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([
+      {
+        id: "q-1",
+        skill: "kubernetes",
+        topic: "Technical",
+        question: "Describe how you've used Kubernetes in production.",
+        answer_framework: "STAR: ...",
+      },
+    ]);
+
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByText(/Describe how you've used Kubernetes/)).toBeInTheDocument();
+    expect(screen.queryByText(/No Technical questions yet/)).not.toBeInTheDocument();
+  });
+});

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 ValidTemplateId = Literal["ats_clean", "ats_modern", "ats_professional", "ats_minimal"]
 
 # resume.content is forwarded verbatim into "pro"-tier LLM prompts during
-# /ai/tailor (see services/tailoring.py rewrite_bullets / generate_prep_questions).
+# /ai/tailor (see services/tailoring.py rewrite_bullets / get_or_generate_prep_questions).
 # Without a cap here, a user could bypass the 100k-char text cap that the
 # parse-upload path enforces and hand-craft an oversized content blob via
 # POST/PATCH /resumes, inflating per-call LLM token cost arbitrarily.

@@ -7,9 +7,6 @@ import {
   TrendDown,
   Play,
   MicrophoneStage,
-  ChatCircleText,
-  Star,
-  Users,
   Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
@@ -51,7 +48,12 @@ export default function InterviewIndexPage() {
   const { data: bankQuestions = [], isLoading: bankLoading } = useQuery<SkillQuestionOut[]>({
     queryKey: ["questionBank", activeTab],
     queryFn: () => apiClient.getQuestionBank(activeTab),
-    enabled: !sessionId,
+    // Mirrors the render gate below (`sessionId && questions.length > 0`):
+    // fetch the shared bank whenever we'd actually render the browse UI,
+    // including when a session exists but returned zero prep questions.
+    // `!isLoading` avoids a throwaway fetch while session questions are
+    // still in flight and `questions.length` is transiently 0.
+    enabled: !sessionId || (!isLoading && questions.length === 0),
   });
 
   // Session-level progress — real, persisted server-side (PrepQuestion.practiced_at)

@@ -84,10 +84,6 @@ class PrepQuestionData(BaseModel):
     order_index: int
 
 
-class PrepQuestionsWrapper(BaseModel):
-    questions: list[PrepQuestionData]
-
-
 _TOPIC_VALUES = {"Technical", "Behavioral", "HR & Culture"}
 
 
@@ -544,19 +540,24 @@ async def get_or_generate_prep_questions(
 
     keys = [key for key, _ in normalized]
     cached_rows = (
-        await db.execute(select(SkillQuestionBank).where(SkillQuestionBank.skill.in_(keys)))
+        await db.execute(
+            select(SkillQuestionBank)
+            .where(SkillQuestionBank.skill.in_(keys))
+            .order_by(SkillQuestionBank.skill, SkillQuestionBank.created_at)
+        )
     ).scalars().all()
     covered_keys = {row.skill for row in cached_rows}
     uncovered_display = [display for key, display in normalized if key not in covered_keys]
+    uncovered_keys = {key for key, display in normalized if display in uncovered_display}
 
     new_rows: list[SkillQuestionBank] = []
     if uncovered_display:
         generated = await _generate_questions_for_skills(uncovered_display, resume_content, provider)
-        display_to_key = {display.lower(): key for key, display in normalized}
         for q in generated:
-            key = display_to_key.get(q.skill.strip().lower())
-            if key is None:
-                continue  # LLM echoed a skill we never asked about — drop it, don't cache garbage
+            key = q.skill.strip().lower()
+            if key not in uncovered_keys:
+                continue  # LLM echoed a skill we never asked about (or one already
+                # cached) — drop it, don't cache garbage or duplicate a covered skill.
             topic = q.topic if q.topic in _TOPIC_VALUES else "Technical"
             row = SkillQuestionBank(
                 skill=key, topic=topic, question=q.question, answer_framework=q.answer_framework
@@ -566,8 +567,31 @@ async def get_or_generate_prep_questions(
         if new_rows:
             await db.commit()
 
-    all_rows = list(cached_rows) + new_rows
-    selected = all_rows[:10]
+    # Round-robin across skills (at most 2 questions per skill) so a user
+    # missing many skills gets breadth across all of them, not every question
+    # for the first few skills encountered. `all_rows`' input order is
+    # deterministic (cached_rows ordered by skill/created_at above, new_rows
+    # generated in normalized/uncovered_display order), so this selection is
+    # reproducible for identical cached input.
+    by_skill: dict[str, list[SkillQuestionBank]] = {}
+    order: list[str] = []
+    for row in list(cached_rows) + new_rows:
+        if row.skill not in by_skill:
+            by_skill[row.skill] = []
+            order.append(row.skill)
+        by_skill[row.skill].append(row)
+
+    selected: list[SkillQuestionBank] = []
+    round_idx = 0
+    while len(selected) < 10 and round_idx < 2:
+        for skill in order:
+            if len(selected) >= 10:
+                break
+            bucket = by_skill[skill]
+            if round_idx < len(bucket):
+                selected.append(bucket[round_idx])
+        round_idx += 1
+
     return [
         PrepQuestionData(
             topic=row.topic,
