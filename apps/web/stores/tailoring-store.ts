@@ -46,6 +46,14 @@ interface TailoringState {
   setCompanyName: (name: string) => void;
   setPrioritySkills: (skills: string[]) => void;
   togglePrioritySkill: (skill: string) => void;
+  /** Hydrate analysis results directly — used when navigating from the JD
+   * detail page (which runs its own react-query analysis) to the studio. */
+  setAnalysisResults: (results: {
+    atsScore: number | null;
+    matchedSkills: string[];
+    missingSkills: string[];
+    companyKeywords: string[];
+  }) => void;
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
@@ -103,6 +111,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         : [...s.prioritySkills, skill],
     })),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
+  setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords }) =>
+    set({ atsScore, matchedSkills, missingSkills, companyKeywords }),
   setBulletDecision: (key, decision) =>
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision } })),
   setAllBulletDecisions: (changes, decision) => {

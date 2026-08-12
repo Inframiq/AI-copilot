@@ -97,9 +97,7 @@ export default function JDIndexPage() {
 
   const setJd = useTailoringStore((s) => s.setJd);
   const runAnalysis = useTailoringStore((s) => s.runAnalysis);
-  const runTailoring = useTailoringStore((s) => s.runTailoring);
   const isAnalyzing = useTailoringStore((s) => s.isAnalyzing);
-  const isTailoring = useTailoringStore((s) => s.isLoading);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
@@ -122,7 +120,6 @@ export default function JDIndexPage() {
     });
   }
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
-  const [navigatingToStudio, setNavigatingToStudio] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState("");
@@ -295,24 +292,15 @@ export default function JDIndexPage() {
     }
   }
 
-  async function handleTailor() {
+  function handleTailor() {
     if (!activeResumeId) return;
     setTailorError(null);
+    // Set the priority skills the user picked on this page so EditorPanel
+    // can show them pre-selected when the studio loads.
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
-    // Covers the whole wait (AI rewrite + the moment of route transition)
-    // with a blurred overlay so the pause reads as an intentional "doing
-    // something smart" beat rather than a stuck button.
-    setNavigatingToStudio(true);
-    await runTailoring(activeResumeId);
-    const err = useTailoringStore.getState().error;
-    if (err) {
-      setTailorError(err);
-      setNavigatingToStudio(false);
-      return;
-    }
-    // The tailored content + regenerated PDF are already sitting in the
-    // resume store (runTailoring hydrates it) — jump straight into Resume
-    // Builder to preview it instead of leaving the user to go find it.
+    // Navigate to Resume Builder — actual tailoring runs there, not here.
+    // The JD context (jdId, jdText, atsScore, matched/missing skills) is
+    // already in the tailoring store from the runAnalysis call.
     router.push(`/studio/${activeResumeId}`);
   }
 
@@ -492,18 +480,19 @@ export default function JDIndexPage() {
             </button>
           </form>
 
-          {/* Tailor Resume — always available once there's JD text, no analysis required */}
+          {/* Tailor Resume — always available once there's JD text.
+              Navigates to Resume Builder where the user configures and runs tailoring. */}
           {jdText.trim() && (
             <div className="flex flex-col gap-xs">
               {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
               <button
                 type="button"
                 onClick={handleTailor}
-                disabled={isTailoring || !activeResumeId}
+                disabled={!activeResumeId}
                 className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-success-accent to-success-accent/80 shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
               >
                 <Sparkle size={20} />
-                {isTailoring ? "Tailoring resume…" : sessionId ? "Re-tailor Resume" : "Tailor Resume"}
+                {sessionId ? "Re-tailor Resume" : "Tailor Resume"}
               </button>
             </div>
           )}
@@ -861,27 +850,6 @@ export default function JDIndexPage() {
         </div>
       )}
 
-      {/* Bridges the tailoring wait + route transition into Resume Builder
-          with one continuous beat instead of a stuck button then a jump cut. */}
-      {navigatingToStudio && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 backdrop-blur-md">
-          <div className="flex flex-col items-center gap-md text-center px-lg">
-            <div className="relative w-16 h-16">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
-              <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkle size={22} weight="fill" className="text-primary" />
-              </div>
-            </div>
-            <div>
-              <p className="text-headline-md text-on-surface font-bold">Tailoring your resume…</p>
-              <p className="text-body-sm text-on-surface-variant mt-xs">
-                Matching your bullets to the job description — just a moment.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

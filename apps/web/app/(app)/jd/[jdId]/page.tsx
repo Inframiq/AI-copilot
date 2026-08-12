@@ -25,12 +25,11 @@ export default function JDPage({
 }) {
   const { jdId } = use(params);
   const router = useRouter();
-  const [isTailoring, setIsTailoring] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
 
   const setJd = useTailoringStore((s) => s.setJd);
-  const runTailoring = useTailoringStore((s) => s.runTailoring);
+  const setAnalysisResults = useTailoringStore((s) => s.setAnalysisResults);
   const setResume = useResumeStore((s) => s.setResume);
 
   const { data: jd } = useQuery<JobDescription>({
@@ -91,19 +90,22 @@ export default function JDPage({
   const matchedSkills = analysis?.matched_skills ?? [];
   const missingSkills = analysis?.missing_skills ?? [];
 
-  async function handleTailor() {
+  function handleTailor() {
     if (!jd || !masterResume) return;
-    setIsTailoring(true);
     setTailorError(null);
+    // Load JD context into the tailoring store so EditorPanel picks it up.
     setJd(jdId, jd.raw_text);
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
-    await runTailoring(masterResume.id);
-    const err = useTailoringStore.getState().error;
-    if (err) {
-      setTailorError(err);
-      setIsTailoring(false);
-      return;
+    // Also push the analysis results so the studio can display the ATS context.
+    if (analysis) {
+      setAnalysisResults({
+        atsScore: analysis.ats_score,
+        matchedSkills: analysis.matched_skills,
+        missingSkills: analysis.missing_skills,
+        companyKeywords: analysis.company_keywords ?? [],
+      });
     }
+    // Navigate to Resume Builder — tailoring runs there, not here.
     router.push(`/studio/${masterResume.id}`);
   }
 
@@ -306,24 +308,14 @@ export default function JDPage({
               <div className="flex gap-sm mt-xs">
                 <button
                   onClick={handleTailor}
-                  disabled={isTailoring}
-                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
                 >
-                  {isTailoring ? (
-                    <>
-                      <ArrowCounterClockwise size={14} className="animate-spin" />
-                      Tailoring…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkle size={14} />
-                      Tailor
-                    </>
-                  )}
+                  <Sparkle size={14} />
+                  Tailor
                 </button>
                 <button
                   onClick={handleOpen}
-                  disabled={isTailoring || isOpening}
+                  disabled={isOpening}
                   className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-surface border border-outline-variant/40 hover:bg-surface-container hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isOpening ? (
@@ -358,26 +350,6 @@ export default function JDPage({
         </Card>
       </div>
 
-      {/* Full-screen tailoring overlay */}
-      {isTailoring && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-md">
-          <div className="flex flex-col items-center gap-md text-center px-lg">
-            <div className="relative w-16 h-16">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
-              <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkle size={22} weight="fill" className="text-primary" />
-              </div>
-            </div>
-            <div>
-              <p className="text-headline-md text-on-surface font-bold">Tailoring your resume…</p>
-              <p className="text-body-sm text-on-surface-variant mt-xs">
-                Matching your bullets to this job description — just a moment.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

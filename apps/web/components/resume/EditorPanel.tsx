@@ -7,7 +7,7 @@ import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
 import { uploadResumePhoto } from "@/lib/photo-upload";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
-import { CaretDown, CaretRight, CheckCircle } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CheckCircle, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -30,14 +30,19 @@ export function EditorPanel() {
 
   const {
     jdText, setJd,
+    jdId,
     companyName, setCompanyName,
+    atsScore, matchedSkills, missingSkills,
+    prioritySkills, togglePrioritySkill,
     runTailoring, isLoading,
     pendingContent,
   } = useTailoringStore();
 
-  // In tailoring mode the BulletReviewPanel is the focus — collapse the content
-  // editor by default so the user immediately sees the AI-suggested changes.
-  const isTailoringMode = pendingContent !== null;
+  // "JD context mode" = user navigated from JD Analyzer with a saved JD but
+  // hasn't run tailoring yet. The tabs collapse so the tailoring form is the
+  // clear focus. "Tailoring mode" = AI has run and BulletReviewPanel is shown.
+  const hasJdContext = !!jdId && pendingContent === null;
+  const isTailoringMode = pendingContent !== null || hasJdContext;
   const [editorOpen, setEditorOpen] = useState(!isTailoringMode);
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -569,22 +574,34 @@ export function EditorPanel() {
         </Tabs.Content>
       </Tabs.Root>}
 
-      {/* JD Context + AI Tailoring — only once there's an actual resume to
-          tailor (either filled in by hand across the tabs above, or already
-          populated by an uploaded/parsed resume), not on a blank scaffold. */}
+      {/* AI Tailoring section */}
       {hasResumeContent ? (
         <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
           {pendingContent ? (
             /* ── Review step: show after tailoring runs ── */
             <BulletReviewPanel />
+          ) : hasJdContext ? (
+            /* ── JD-context mode: arrived from JD Analyzer, ready to tailor ── */
+            <TailoringForm
+              jdText={jdText}
+              companyName={companyName}
+              setCompanyName={setCompanyName}
+              atsScore={atsScore}
+              matchedSkills={matchedSkills}
+              missingSkills={missingSkills}
+              prioritySkills={prioritySkills}
+              togglePrioritySkill={togglePrioritySkill}
+              isLoading={isLoading}
+              onTailor={() => resumeId && runTailoring(resumeId)}
+              resumeId={resumeId}
+            />
           ) : (
-            /* ── Input step: paste JD and run tailoring ── */
+            /* ── Manual mode: user pastes JD directly in the studio ── */
             <>
               <p className="text-label-md text-on-surface-variant uppercase tracking-wider">
                 Tailor to Job Description
               </p>
 
-              {/* Target Company — optional */}
               <div className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
                   Target Company
@@ -643,6 +660,156 @@ export function EditorPanel() {
             </p>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── TailoringForm ─────────────────────────────────────────────────────────────
+// Shown when the user arrives from JD Analyzer (jdId is set). Pre-fills all
+// the JD context from the store and lets the user configure then run tailoring.
+function TailoringForm({
+  jdText,
+  companyName,
+  setCompanyName,
+  atsScore,
+  matchedSkills,
+  missingSkills,
+  prioritySkills,
+  togglePrioritySkill,
+  isLoading,
+  onTailor,
+  resumeId,
+}: {
+  jdText: string;
+  companyName: string;
+  setCompanyName: (v: string) => void;
+  atsScore: number | null;
+  matchedSkills: string[];
+  missingSkills: string[];
+  prioritySkills: string[];
+  togglePrioritySkill: (skill: string) => void;
+  isLoading: boolean;
+  onTailor: () => void;
+  resumeId: string | null;
+}) {
+  const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+
+  return (
+    <div className="flex flex-col gap-md">
+      {/* Header */}
+      <div className="flex items-center gap-sm">
+        <Sparkle size={18} className="text-primary" />
+        <p className="text-label-md font-bold text-on-surface">Tailor Resume to this JD</p>
+      </div>
+
+      {/* ATS context badge — only if analysis was run */}
+      {atsScore !== null && (
+        <div className="rounded-xl border border-outline-variant/20 bg-surface-container/50 p-md flex items-center gap-md">
+          <div className="flex-shrink-0 text-center">
+            <div
+              className={`text-headline-md font-bold ${
+                atsScore >= 80 ? "text-success" : atsScore >= 60 ? "text-primary" : "text-error"
+              }`}
+            >
+              {atsScore}%
+            </div>
+            <p className="text-caption text-on-surface-variant">ATS Match</p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap gap-xs">
+              {matchedSkills.slice(0, 5).map((s) => (
+                <span
+                  key={s}
+                  className="flex items-center gap-xs px-xs py-0.5 bg-success/10 text-caption text-on-surface rounded-md border border-success/25"
+                >
+                  <CheckCircle size={10} weight="fill" className="text-success shrink-0" />
+                  {s}
+                </span>
+              ))}
+              {matchedSkills.length > 5 && (
+                <span className="text-caption text-on-surface-variant">+{matchedSkills.length - 5} more</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Priority skills — missing keywords the user can flag for the AI */}
+      {missingSkills.length > 0 && (
+        <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
+          <div className="flex items-center gap-xs">
+            <Target size={15} className="text-primary shrink-0" />
+            <p className="text-label-sm font-bold text-on-surface">Keywords to Prioritize</p>
+          </div>
+          <p className="text-caption text-on-surface-variant -mt-xs">
+            Click any gap keyword to tell the AI to weave it into your bullets.
+          </p>
+          <div className="flex flex-wrap gap-xs">
+            {missingSkills.map((skill) => {
+              const selected = prioritySet.has(skill.toLowerCase());
+              return (
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() => togglePrioritySkill(skill)}
+                  className={`flex items-center gap-xs px-sm py-0.5 text-caption font-medium rounded-md border transition-all ${
+                    selected
+                      ? "bg-primary text-on-primary border-primary"
+                      : "bg-error-container/30 text-on-error-container border-error/25 hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {selected ? (
+                    <CheckCircle size={11} weight="fill" className="shrink-0" />
+                  ) : (
+                    <WarningCircle size={11} weight="fill" className="text-error shrink-0" />
+                  )}
+                  {skill}
+                </button>
+              );
+            })}
+          </div>
+          {prioritySkills.length > 0 && (
+            <p className="text-caption text-primary font-medium">
+              {prioritySkills.length} keyword{prioritySkills.length !== 1 ? "s" : ""} flagged — AI will focus on these.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Target Company */}
+      <div className="flex flex-col gap-xs">
+        <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
+          Target Company
+          <span className="text-caption bg-secondary-container text-primary px-xs py-0.5 rounded-full">optional</span>
+        </label>
+        <input
+          type="text"
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          placeholder="e.g. Google, Stripe, Amazon…"
+          maxLength={200}
+          className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+        />
+      </div>
+
+      {/* Humanize slider */}
+      <HumanizeSlider />
+
+      {/* Run tailoring */}
+      <button
+        onClick={onTailor}
+        disabled={isLoading || !resumeId}
+        className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-sm"
+      >
+        <Sparkle size={18} />
+        {isLoading ? "Tailoring your resume…" : "Tailor Resume"}
+      </button>
+
+      {isLoading && (
+        <p className="text-caption text-on-surface-variant text-center">
+          AI is rewriting your bullets — this takes 15–30 seconds…
+        </p>
       )}
     </div>
   );
