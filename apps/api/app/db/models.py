@@ -87,6 +87,27 @@ class PrepQuestion(Base):
     session: Mapped["TailoringSession"] = relationship(back_populates="questions")
 
 
+class SkillQuestionBank(Base):
+    """Shared, cross-user cache of interview questions keyed by skill.
+
+    Not tied to any resume, JD, or session — the same "Kubernetes" question
+    can be reused for every user whose missing-skill list includes it,
+    instead of every tailoring run re-generating it from scratch. See
+    get_or_generate_prep_questions in services/tailoring.py.
+    """
+    __tablename__ = "skill_question_bank"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Normalized (stripped, lowercased) — the display-cased form the LLM
+    # returned isn't stored here since it's never shown standalone; only via
+    # topic groupings.
+    skill: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    topic: Mapped[str] = mapped_column(String(20), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_framework: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
 class LearningItem(Base):
     __tablename__ = "learning_items"
 
