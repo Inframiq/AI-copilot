@@ -2,11 +2,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     extract_jd_skills, ParsedJD,
-    generate_prep_questions, PrepQuestionData,
+    get_or_generate_prep_questions, PrepQuestionData, SkillQuestionData, SkillQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
     JDAnalysis, MappingPlan, BulletMapping,
-    WriterOutput, RewrittenBullet, PrepQuestionsWrapper,
+    WriterOutput, RewrittenBullet,
     _build_agent3_system,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
@@ -54,13 +54,34 @@ async def test_extract_jd_skills_returns_parsed_jd():
     assert "Python" in result.required
 
 
+def make_mock_db_with_rows(rows):
+    session = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = rows
+    session.execute = AsyncMock(return_value=result)
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    return session
+
+
 @pytest.mark.asyncio
-async def test_generate_prep_questions_returns_list():
-    questions = [PrepQuestionData(topic="AWS", question="How would you approach AWS?", answer_framework="Use STAR", is_gap_based=True, order_index=0)]
-    provider = make_mock_provider(structured_return=MagicMock(questions=questions))
-    result = await generate_prep_questions(["AWS"], {"experience": []}, provider)
-    assert len(result) >= 1
-    assert result[0].topic == "AWS"
+async def test_get_or_generate_prep_questions_returns_list():
+    provider = make_mock_provider(
+        structured_return=SkillQuestionsWrapper(
+            questions=[
+                SkillQuestionData(
+                    skill="AWS", topic="Technical",
+                    question="How would you approach AWS?", answer_framework="Use STAR",
+                )
+            ]
+        )
+    )
+    db = make_mock_db_with_rows([])
+
+    result = await get_or_generate_prep_questions(["AWS"], {"experience": []}, provider, db)
+
+    assert len(result) == 1
+    assert result[0].topic == "Technical"
 
 
 def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():

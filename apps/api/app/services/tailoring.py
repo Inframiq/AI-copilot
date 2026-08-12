@@ -19,9 +19,12 @@ import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import compute_delta
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
+from app.db.models import SkillQuestionBank
 
 logger = logging.getLogger("app")
 
@@ -83,6 +86,20 @@ class PrepQuestionData(BaseModel):
 
 class PrepQuestionsWrapper(BaseModel):
     questions: list[PrepQuestionData]
+
+
+_TOPIC_VALUES = {"Technical", "Behavioral", "HR & Culture"}
+
+
+class SkillQuestionData(BaseModel):
+    skill: str
+    topic: str
+    question: str
+    answer_framework: str
+
+
+class SkillQuestionsWrapper(BaseModel):
+    questions: list[SkillQuestionData]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -482,23 +499,85 @@ async def _agent3_write(
 
 # ── Prep questions (runs in parallel with Agent 3) ────────────────────────────
 
-async def generate_prep_questions(
-    missing_skills: list[str], resume_content: dict, provider: AIProvider
-) -> list[PrepQuestionData]:
-    safe_missing = _sanitize_skill_list(missing_skills)
+async def _generate_questions_for_skills(
+    skills: list[str], resume_content: dict, provider: AIProvider
+) -> list[SkillQuestionData]:
+    """LLM call scoped to skills with no cached bank entry yet — never called
+    for a skill get_or_generate_prep_questions already found in the cache."""
     system = (
-        "You are an expert interview coach. Generate exactly 10 targeted interview "
-        "questions for a candidate who is missing these skills: "
-        f"{safe_missing}. "
-        "For each question provide: topic, question, answer_framework (use the STAR "
-        "method — Situation, Task, Action, Result), is_gap_based=true, order_index "
-        "(1-based). Weight harder questions toward the most critical missing skills. "
+        "You are an expert interview coach. For EACH of the following skills a "
+        f"candidate is missing, generate exactly 2 targeted interview questions: {skills}. "
+        "For each question provide: skill (must exactly match one of the input skills, "
+        "verbatim), topic (exactly one of \"Technical\", \"Behavioral\", \"HR & Culture\"), "
+        "question, answer_framework (use the STAR method — Situation, Task, Action, Result). "
+        "These questions will be reused for other candidates missing the same skill, so keep "
+        "them skill-focused rather than referencing this specific candidate's resume. "
         "Return JSON with a 'questions' array only."
     )
     wrapper = await provider.complete_structured(
-        system, json.dumps(resume_content), PrepQuestionsWrapper, model_tier="pro"
+        system, json.dumps(resume_content), SkillQuestionsWrapper, model_tier="pro"
     )
     return wrapper.questions
+
+
+async def get_or_generate_prep_questions(
+    missing_skills: list[str],
+    resume_content: dict,
+    provider: AIProvider,
+    db: AsyncSession,
+) -> list[PrepQuestionData]:
+    """Cache-aside prep-question lookup: reuses bank rows for skills already
+    seen (from any prior user's tailoring run), and only calls the LLM for
+    skills genuinely new to the bank — same pattern as the jd.parsed["agent1"]
+    cache in routers/ai.py, applied to prep questions instead of JD parsing.
+    """
+    safe_missing = _sanitize_skill_list(missing_skills)
+    normalized: list[tuple[str, str]] = []
+    seen_keys: set[str] = set()
+    for s in safe_missing:
+        key = s.strip().lower()
+        if key and key not in seen_keys:
+            seen_keys.add(key)
+            normalized.append((key, s.strip()))
+    if not normalized:
+        return []
+
+    keys = [key for key, _ in normalized]
+    cached_rows = (
+        await db.execute(select(SkillQuestionBank).where(SkillQuestionBank.skill.in_(keys)))
+    ).scalars().all()
+    covered_keys = {row.skill for row in cached_rows}
+    uncovered_display = [display for key, display in normalized if key not in covered_keys]
+
+    new_rows: list[SkillQuestionBank] = []
+    if uncovered_display:
+        generated = await _generate_questions_for_skills(uncovered_display, resume_content, provider)
+        display_to_key = {display.lower(): key for key, display in normalized}
+        for q in generated:
+            key = display_to_key.get(q.skill.strip().lower())
+            if key is None:
+                continue  # LLM echoed a skill we never asked about — drop it, don't cache garbage
+            topic = q.topic if q.topic in _TOPIC_VALUES else "Technical"
+            row = SkillQuestionBank(
+                skill=key, topic=topic, question=q.question, answer_framework=q.answer_framework
+            )
+            db.add(row)
+            new_rows.append(row)
+        if new_rows:
+            await db.commit()
+
+    all_rows = list(cached_rows) + new_rows
+    selected = all_rows[:10]
+    return [
+        PrepQuestionData(
+            topic=row.topic,
+            question=row.question,
+            answer_framework=row.answer_framework,
+            is_gap_based=True,
+            order_index=i + 1,
+        )
+        for i, row in enumerate(selected)
+    ]
 
 
 # ── Public entry points ───────────────────────────────────────────────────────
