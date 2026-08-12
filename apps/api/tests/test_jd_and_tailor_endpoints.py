@@ -2,7 +2,7 @@ import time
 import uuid
 import jwt as pyjwt
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
@@ -216,6 +216,68 @@ async def test_create_jd_requires_auth():
     assert r.status_code == 401
 
 
+# ── GET /jd/{jd_id}/latest-session ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_latest_session_returns_completed_not_pending():
+    """A TailoringSession row is now inserted up-front with status="pending"
+    before the AI pipeline runs, and stays in the table permanently if the
+    run fails or the user's poll times out. ORDER BY created_at DESC LIMIT 1
+    alone would return that newer, hollow row and shadow an earlier, real,
+    completed session — the query must filter to status="completed" first."""
+    from app.db.models import TailoringSession
+
+    jd_id = uuid.uuid4()
+    user_id = uuid.UUID(TEST_USER_ID)
+    now = datetime.now(timezone.utc)
+
+    completed_session = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        resume_id=uuid.uuid4(),
+        jd_id=jd_id,
+        status="completed",
+        created_at=now - timedelta(hours=1),
+    )
+    pending_session = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        resume_id=uuid.uuid4(),
+        jd_id=jd_id,
+        status="pending",
+        created_at=now,
+    )
+    rows = [completed_session, pending_session]
+
+    override, mock_session = make_mock_db()
+
+    async def fake_execute(stmt):
+        # Stand in for the real DB: apply the compiled statement's WHERE and
+        # ORDER BY/LIMIT against our two in-memory rows, so this exercises
+        # the route's actual query-building rather than trusting a canned
+        # mock return value.
+        compiled_sql = str(stmt.compile(compile_kwargs={"literal_binds": True})).lower()
+        candidates = rows
+        if "status" in compiled_sql and "completed" in compiled_sql:
+            candidates = [r for r in candidates if r.status == "completed"]
+        candidates = sorted(candidates, key=lambda r: r.created_at, reverse=True)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = candidates[0].id if candidates else None
+        return result
+
+    mock_session.execute = fake_execute
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/latest-session", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["session_id"] == str(completed_session.id)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── POST /ai/analyze ─────────────────────────────────────────────────────────
 
 
@@ -378,15 +440,40 @@ async def test_tailor_resume_returns_202_and_creates_pending_session():
 
     from app.db.models import TailoringSession
 
+    created_session = TailoringSession(
+        user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
+    )
+
     def fake_add(obj):
         if isinstance(obj, TailoringSession) and obj.id is None:
             obj.id = uuid.uuid4()
+            created_session.id = obj.id
 
     mock_session.add = MagicMock(side_effect=fake_add)
 
+    # ASGITransport runs BackgroundTasks synchronously, so
+    # _run_tailoring_background actually executes during this request and
+    # opens its own AsyncSessionLocal() — fake it out the same way the
+    # neighboring background-task tests do, or it'll hit a real DB.
+    bg_session = MagicMock()
+    bg_result = MagicMock()
+    bg_result.scalar_one_or_none.side_effect = lambda: created_session
+    bg_session.execute = AsyncMock(return_value=bg_result)
+    bg_session.commit = AsyncMock()
+    bg_session.add_all = MagicMock()
+
+    class _FakeSessionContextManager:
+        async def __aenter__(self):
+            return bg_session
+
+        async def __aexit__(self, *exc_info):
+            return False
+
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()):
+        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()), patch(
+            "app.routers.ai.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
+        ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/ai/tailor",

@@ -110,6 +110,7 @@ async def get_latest_session(jd_id: uuid.UUID, user=Depends(get_current_user), d
         .where(
             TailoringSession.jd_id == jd_id,
             TailoringSession.user_id == uuid.UUID(user["sub"]),
+            TailoringSession.status == "completed",
         )
         .order_by(TailoringSession.created_at.desc())
         .limit(1)

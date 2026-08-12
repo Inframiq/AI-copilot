@@ -283,14 +283,27 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     // isLoading is true, so this can't overlap with a second call.
     const POLL_INTERVAL_MS = 3000;
     const MAX_ATTEMPTS = 40; // ~2 minutes ceiling
+    const MAX_CONSECUTIVE_FAILURES = 3; // tolerate transient blips (dropped connection, proxy 502) —
+    // the background job keeps running server-side even if one poll fails.
+
+    let consecutiveFailures = 0;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       let session;
       try {
         session = await apiClient.getSession(started.session_id);
+        consecutiveFailures = 0;
       } catch (e: unknown) {
-        set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
-        return;
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
+          return;
+        }
+        // Not yet at the limit — treat like a "still pending" tick and retry.
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+        continue;
       }
 
       if (session.status === "completed") {

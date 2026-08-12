@@ -428,6 +428,34 @@ describe("useTailoringStore", () => {
     }
   });
 
+  it("runTailoring tolerates a couple of transient poll failures and still completes", async () => {
+    // A dropped connection or a 502 from the hosting proxy on one or two
+    // polls shouldn't abort a run that's still succeeding server-side.
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession)
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce(mockCompletedSession);
+
+      const promise = useTailoringStore.getState().runTailoring("resume-abc");
+      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      await promise;
+
+      expect(apiClient.getSession).toHaveBeenCalledTimes(3);
+      const state = useTailoringStore.getState();
+      expect(state.isLoading).toBe(false);
+      expect(state.error).toBeNull();
+      expect(state.atsScore).toBe(82);
+      expect(state.sessionId).toBe("session-xyz");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("runTailoring surfaces a generic error when the session status is failed", async () => {
     useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
