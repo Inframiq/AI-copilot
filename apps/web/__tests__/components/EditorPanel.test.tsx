@@ -197,5 +197,11 @@ describe("EditorPanel", () => {
     await waitFor(() => {
       expect(useTailoringStore.getState().sessionId).toBe("session-1");
     });
+    // The bullet review screen (shown once tailoring completes) must not
+    // duplicate the Writing Style slider already shown before generating —
+    // every bullet here has its own Humanize button instead.
+    await waitFor(() => {
+      expect(screen.queryByText("Writing Style")).not.toBeInTheDocument();
+    });
   });
 });

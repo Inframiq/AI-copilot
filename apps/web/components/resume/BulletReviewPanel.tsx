@@ -34,8 +34,9 @@ export function BulletReviewPanel() {
   const atsScore = useTailoringStore((s) => s.atsScore);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
+  // Not user-adjustable here anymore (the Writing Style slider that changed
+  // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
-  const setHumanizeLevel = useTailoringStore((s) => s.setHumanizeLevel);
   const jdText = useTailoringStore((s) => s.jdText);
   const runTailoring = useTailoringStore((s) => s.runTailoring);
   const isTailoring = useTailoringStore((s) => s.isLoading);
@@ -175,9 +176,6 @@ export function BulletReviewPanel() {
     acc[groupKey].changes.push(change);
     return acc;
   }, {});
-
-  const humanizeLabel =
-    humanizeLevel < 30 ? "Natural" : humanizeLevel > 70 ? "ATS Max" : "Balanced";
 
   if (bulletChanges.length === 0) {
     return (
@@ -389,32 +387,12 @@ export function BulletReviewPanel() {
           setBulletDecision={setBulletDecision}
         />
 
-        {/* 2. Humanize level */}
-        <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-label-sm font-bold text-on-surface">Writing Style</p>
-              <p className="text-caption text-on-surface-variant">
-                Affects per-bullet Rewrite &amp; Humanize
-              </p>
-            </div>
-            <span className="text-label-sm font-bold text-primary px-sm py-xs rounded-lg bg-primary/10">
-              {humanizeLabel}
-            </span>
-          </div>
-          <div className="flex items-center gap-sm">
-            <span className="text-caption text-on-surface-variant w-12">Natural</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={humanizeLevel}
-              onChange={(e) => setHumanizeLevel(Number(e.target.value))}
-              className="flex-1 accent-primary h-1.5 rounded-full cursor-pointer"
-            />
-            <span className="text-caption text-on-surface-variant w-12 text-right">ATS Max</span>
-          </div>
-        </div>
+        {/* 2. Writing Style slider removed here — it duplicates the one
+            already shown before generating (TailoringForm / the manual-paste
+            form), and every bullet in this review already has its own
+            Humanize button. humanizeLevel stays at whatever value was set
+            pre-generation; per-bullet Humanize still uses it, just without a
+            second control to change it at this stage. */}
 
         {/* 3. Accept All / Generate PDF */}
         {!allDecided && (
