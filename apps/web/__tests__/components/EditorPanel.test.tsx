@@ -253,11 +253,18 @@ describe("EditorPanel", () => {
     await userEvent.click(screen.getByText("Tailor Resume"));
     await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
 
-    // Changed bullets default to "accept" the moment tailoring completes,
-    // but Accept All must still be visible (not gated on there being
-    // anything left "undecided" — there never is, by design) so the user
-    // has an explicit, always-available finalize action.
+    // Changed bullets default to "accept" the moment tailoring completes, so
+    // the button reflects that state immediately rather than reading the
+    // same "Accept All" regardless of what's already true.
+    expect(screen.getByText("All Bullets Accepted")).toBeInTheDocument();
+
+    // Rejecting a bullet flips the button back to an actionable state.
+    await userEvent.click(screen.getByText("Keep original"));
     expect(screen.getByText("Accept All")).toBeInTheDocument();
+    expect(screen.queryByText("All Bullets Accepted")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Accept All"));
+    expect(screen.getByText("All Bullets Accepted")).toBeInTheDocument();
 
     expect(screen.queryByText("Reanalyze")).not.toBeInTheDocument();
 

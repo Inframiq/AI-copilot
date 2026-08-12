@@ -92,6 +92,7 @@ export function BulletReviewPanel() {
   const acceptedBullets = bulletChanges.filter(
     (c) => (bulletDecisions[c.key] ?? "accept") === "accept",
   ).length;
+  const allAccepted = bulletChanges.length > 0 && acceptedBullets === bulletChanges.length;
 
   const allDecided =
     bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
@@ -475,13 +476,20 @@ export function BulletReviewPanel() {
             initialDecisions), so allDecided is true from the start and a
             !allDecided guard here would never render. Clicking it is a
             harmless no-op when nothing was rejected, and a real action when
-            something was. */}
+            something was. Its style reflects current state — filled blue
+            once every bullet actually is accepted, outlined otherwise —
+            instead of looking the same regardless of what's already true. */}
         {bulletChanges.length > 0 && (
           <button
             onClick={() => setAllBulletDecisions(bulletChanges, "accept")}
-            className="w-full py-sm rounded-xl text-label-md text-primary border border-primary/40 hover:bg-primary/5 transition-all"
+            className={`w-full flex items-center justify-center gap-xs py-sm rounded-xl text-label-md transition-all ${
+              allAccepted
+                ? "text-on-primary bg-primary shadow-sm hover:opacity-90"
+                : "text-primary border border-primary/40 hover:bg-primary/5"
+            }`}
           >
-            Accept All
+            {allAccepted && <Check size={15} weight="bold" />}
+            {allAccepted ? "All Bullets Accepted" : "Accept All"}
           </button>
         )}
 
