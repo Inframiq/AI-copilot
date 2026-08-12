@@ -111,7 +111,8 @@ export default function ProfilePage() {
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
   const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
-  const [skills, setSkills] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillDraft, setSkillDraft] = useState("");
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([]);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [education, setEducation] = useState<EducationEntry[]>([]);
@@ -138,7 +139,7 @@ export default function ProfilePage() {
     setContact({ ...emptyContact(), ...profile.contact });
     setRoleStatus(profile.role_status ?? "");
     setHeadline(profile.headline ?? "");
-    setSkills(profile.skills.join(", "));
+    setSkills(profile.skills);
     setExperiences(profile.experience);
     setProjects(profile.projects ?? []);
     setEducation(profile.education);
@@ -177,7 +178,6 @@ export default function ProfilePage() {
   async function handleSave(): Promise<boolean> {
     setSaving(true); setError(null); setSaveOk(false);
     try {
-      const skillArr = skills.split(",").map(s => s.trim()).filter(Boolean);
       const profileInput: CareerProfileInput = {
         master_resume_id: masterResumeId,
         contact,
@@ -185,7 +185,7 @@ export default function ProfilePage() {
         experience: experiences,
         projects,
         education,
-        skills: skillArr,
+        skills,
         certifications,
         role_status: roleStatus || null,
       };
@@ -279,7 +279,7 @@ export default function ProfilePage() {
       // (see the save-on-leave effect below), same as any other edit here.
       setContact(newContact);
       setHeadline(newHeadline);
-      setSkills(newSkills.join(", "));
+      setSkills(newSkills);
       setExperiences(newExperiences);
       setProjects(newProjects);
       setEducation(newEducation);
@@ -345,7 +345,16 @@ export default function ProfilePage() {
     );
   }
 
-  const skillChips = skills.split(",").map(s => s.trim()).filter(Boolean);
+  // ── skill add/remove ─────────────────────────────────────────────────────────
+  function addSkill() {
+    const trimmed = skillDraft.trim();
+    if (!trimmed) return;
+    if (!skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      setSkills(prev => [...prev, trimmed]);
+    }
+    setSkillDraft("");
+  }
+  const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
   return (
     <div className="max-w-3xl mx-auto p-gutter pb-xxl flex flex-col gap-xl">
@@ -489,14 +498,25 @@ export default function ProfilePage() {
       <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
         <SectionHeader icon={Wrench} title="Skills" />
         <div className="flex flex-col gap-sm">
-          <input value={skills} onChange={e => setSkills(e.target.value)}
-            placeholder="React, TypeScript, Python, AWS, Docker, Figma…"
-            className={inputCls} />
-          {skillChips.length > 0 && (
+          <div className="flex gap-xs">
+            <input value={skillDraft} onChange={e => setSkillDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+              placeholder="Add a skill — e.g. React, AWS, Figma…"
+              className={inputCls} />
+            <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
+              className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+              <Plus size={16} weight="bold" />
+            </button>
+          </div>
+          {skills.length > 0 && (
             <div className="flex flex-wrap gap-xs">
-              {skillChips.map(s => (
-                <span key={s} className="px-sm py-xs bg-secondary-container text-primary text-caption rounded-full font-medium">
+              {skills.map(s => (
+                <span key={s} className="flex items-center gap-xs pl-sm pr-xs py-xs bg-secondary-container text-primary text-caption rounded-full font-medium">
                   {s}
+                  <button type="button" onClick={() => removeSkill(s)} aria-label={`Remove ${s}`}
+                    className="rounded-full p-0.5 hover:bg-primary/15 transition-colors">
+                    <X size={11} weight="bold" />
+                  </button>
                 </span>
               ))}
             </div>

@@ -6,6 +6,7 @@ import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash } from "@ph
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
 
 const PICKER_TEMPLATES = RESUME_TEMPLATES.filter((t) =>
@@ -89,10 +90,17 @@ export default function StudioIndexPage() {
       if (mode === "upload" && file) {
         resume = await apiClient.parseResumeFile(file, selected);
       } else {
+        // Pre-fill from the career profile (Profile page) so a new resume
+        // starts with what's already known about the user instead of a
+        // blank slate — falls back to empty only if no profile exists yet.
+        const profile = await getCareerProfile().catch(() => null);
+        const content = profile
+          ? profileToResumeContent(profile)
+          : { contact: { name: "", email: "" }, experience: [], education: [], skills: [] };
         resume = await apiClient.createResume({
           title: "Untitled Resume",
           template_id: selected,
-          content: { contact: { name: "", email: "" }, experience: [], education: [], skills: [] },
+          content,
         });
       }
       router.push(`/studio/${resume.id}`);
