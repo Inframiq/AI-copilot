@@ -39,7 +39,7 @@ export function SaveAnalysisModal({ defaultName, existingTitles, onCancel, onCon
     <>
       <div className="fixed inset-0 z-40 bg-on-surface/30 backdrop-blur-sm" onClick={conflict ? undefined : onCancel} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-lg pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-md bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl overflow-hidden">
+        <div className="pointer-events-auto w-full max-w-[26rem] bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl overflow-hidden">
           {conflict ? (
             <div className="p-lg flex flex-col gap-md">
               <div className="flex items-start gap-md">
