@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey
+from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey, Index, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from app.db.session import Base
@@ -96,6 +96,9 @@ class SkillQuestionBank(Base):
     get_or_generate_prep_questions in services/tailoring.py.
     """
     __tablename__ = "skill_question_bank"
+    __table_args__ = (
+        Index("ix_skill_question_bank_topic_created", "topic", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Normalized (stripped, lowercased) — the display-cased form the LLM
