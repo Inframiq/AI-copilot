@@ -57,6 +57,15 @@ class PrepQuestionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SkillQuestionOut(BaseModel):
+    id: uuid.UUID
+    skill: str
+    topic: str
+    question: str
+    answer_framework: str
+    model_config = {"from_attributes": True}
+
+
 class LearningItemIn(BaseModel):
     skill: str = Field(min_length=1, max_length=255)
     source_jd_title: str | None = Field(default=None, max_length=255)
