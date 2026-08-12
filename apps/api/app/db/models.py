@@ -63,6 +63,9 @@ class TailoringSession(Base):
     missing_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     tailored_content: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     humanize_level: Mapped[int] = mapped_column(Integer, default=50)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    company_keywords: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    suggested_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     resume: Mapped["Resume"] = relationship(back_populates="sessions")
