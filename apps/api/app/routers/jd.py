@@ -48,6 +48,16 @@ async def create_jd(
         )
     ).scalars().first()
     if existing is not None:
+        # Honor the caller's requested title even on a content match — the
+        # earlier "reuse silently, ignore the title" behavior meant an
+        # explicit "Save As" name could go in and never actually take
+        # effect (or show up anywhere) whenever the pasted text happened to
+        # match a previously saved JD, which is exactly what "Save As" is
+        # supposed to prevent being confusing about.
+        if body.title and body.title.strip() and body.title.strip() != existing.title:
+            existing.title = body.title.strip()[:255]
+            await db.commit()
+            await db.refresh(existing)
         response.status_code = status.HTTP_200_OK
         return existing
 

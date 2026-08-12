@@ -123,6 +123,48 @@ async def test_create_jd_reuses_existing_entry_for_duplicate_text():
         # No AI call and no new row — this must be a pure lookup, not a re-parse.
         mock_extract.assert_not_called()
         mock_session.add.assert_not_called()
+        # Same title as already stored — no redundant write either.
+        mock_session.commit.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_jd_renames_existing_entry_on_content_match_with_new_title():
+    """Save As with a name that differs from the matched entry's current
+    title must actually apply that name — otherwise typing a new name for
+    JD text you've already saved silently does nothing, which is exactly
+    the confusion "Save As" exists to prevent."""
+    override, mock_session = make_mock_db()
+    existing_jd = JobDescription(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Untitled JD",
+        raw_text="We need a senior engineer with Python.",
+        parsed={"required": ["Python"], "nice_to_have": []},
+        status="applied",
+        created_at=datetime.now(timezone.utc),
+    )
+    found = MagicMock()
+    found.scalars.return_value.first.return_value = existing_jd
+    mock_session.execute.return_value = found
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.extract_jd_skills", new=AsyncMock()) as mock_extract:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/jd",
+                    json={"raw_text": "We need a senior engineer with Python.", "title": "jd1"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["id"] == str(existing_jd.id)
+        assert r.json()["title"] == "jd1"
+        assert existing_jd.title == "jd1"
+        mock_extract.assert_not_called()
+        mock_session.add.assert_not_called()
+        mock_session.commit.assert_called_once()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
