@@ -1,68 +1,71 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — Material You palette generated from the indigo/violet primary
-     (#3525cd / #712ae2) in the Stitch "Profile" mockup, superseding the
-     earlier blue reskin. Token names are unchanged, so no component needed
-     to change structurally. */
-  --color-primary: #3525cd;
-  --color-surface-container: #f0ecf9;
-  --color-tertiary-container: #516177;
-  --color-tertiary-fixed: #d3e4fe;
-  --color-background: #fcf8ff;
+  /* Colors — sky-blue palette sampled from a 4-band reference swatch
+     (#E3F2FD pale, #90CAF9 light, #2196F3 vivid/primary, #0D47A1 navy),
+     superseding the earlier teal/navy reskin. Token names are unchanged,
+     so no component needed to change structurally. Surrounding ramp
+     steps not given directly (surface container tiers, outline,
+     fixed-dim variants, etc.) are interpolated between these four
+     anchors to keep the same M3 token structure. */
+  --color-primary: #2196f3;
+  --color-surface-container: #e3f2fd;
+  --color-tertiary-container: #cfe6fa;
+  --color-tertiary-fixed: #e3f2fd;
+  --color-background: #ffffff;
   /* Not the standard pale M3 "container" tone — this app uses
      primary-container as a darker sibling of primary (gradients,
      hover/pressed states on solid primary buttons), so it's pinned to a
      darker step of the same generated primary palette instead. */
-  --color-primary-container: #4f46e5;
-  --color-surface-container-high: #eae6f4;
-  --color-inverse-on-surface: #f3effc;
-  --color-tertiary-fixed-dim: #b7c8e1;
-  --color-inverse-primary: #c3c0ff;
-  --color-on-tertiary-container: #ccdcf7;
+  --color-primary-container: #0d47a1;
+  --color-surface-container-high: #cfe6fa;
+  --color-inverse-on-surface: #eaf4fd;
+  --color-tertiary-fixed-dim: #90caf9;
+  --color-inverse-primary: #90caf9;
+  --color-on-tertiary-container: #0a2e66;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #c3c0ff;
-  --color-secondary: #712ae2;
-  --color-on-primary-fixed: #0f0069;
+  --color-primary-fixed-dim: #90caf9;
+  --color-secondary: #0d47a1;
+  --color-on-primary-fixed: #0d47a1;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
-  --color-surface-dim: #dcd8e5;
-  --color-on-primary-fixed-variant: #3323cc;
-  --color-on-background: #1b1b24;
+  --color-surface-dim: #c8ddf2;
+  --color-on-primary-fixed-variant: #0d47a1;
+  --color-on-background: #0d47a1;
   --color-error-container: #ffdad6;
-  --color-on-surface-variant: #464555;
-  --color-surface-tint: #4d44e3;
-  --color-outline-variant: #c7c4d8;
-  --color-surface-container-low: #f5f2ff;
-  --color-secondary-fixed-dim: #d2bbff;
-  --color-surface-bright: #fcf8ff;
+  --color-on-surface-variant: #4a6b8c;
+  --color-surface-tint: #2196f3;
+  --color-outline-variant: #c8ddf2;
+  --color-surface-container-low: #f0f8fe;
+  --color-secondary-fixed-dim: #45607c;
+  --color-surface-bright: #ffffff;
   --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #0b1c30;
-  --color-secondary-container: #8a4cfc;
+  --color-on-tertiary-fixed: #0d47a1;
+  --color-secondary-container: #14509c;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #e4e1ee;
-  --color-on-surface: #1b1b24;
+  --color-surface-container-highest: #b9d9f7;
+  --color-on-surface: #0d47a1;
   /* Paired with the darker primary-container above — a light tone so
      text/icons stay legible on that darker background. */
-  --color-on-primary-container: #dad7ff;
-  --color-primary-fixed: #e2dfff;
-  --color-surface: #fcf8ff;
-  --color-on-tertiary-fixed-variant: #38485d;
-  --color-on-secondary-fixed-variant: #5a00c6;
+  --color-on-primary-container: #e3f2fd;
+  --color-primary-fixed: #e3f2fd;
+  --color-surface: #ffffff;
+  --color-on-tertiary-fixed-variant: #0d47a1;
+  --color-on-secondary-fixed-variant: #1d5a9e;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #302f39;
-  --color-surface-variant: #e4e1ee;
-  --color-outline: #777587;
-  --color-success-accent: #3525cd;
+  --color-inverse-surface: #123a72;
+  --color-surface-variant: #d8e8f8;
+  --color-outline: #6d8caa;
+  --color-success-accent: #2196f3;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #3a495f;
-  --color-on-secondary-container: #fffbff;
-  --color-secondary-fixed: #eaddff;
-  --color-on-secondary-fixed: #25005a;
+  --color-tertiary: #0d47a1;
+  --color-on-secondary-container: #e3f2fd;
+  --color-secondary-fixed: #cfe0f5;
+  --color-on-secondary-fixed: #0d47a1;
 
   /* Border radius */
   --radius: 0.25rem;
@@ -121,7 +124,7 @@
 }
 
 html, body {
-  background-color: #fcf8ff; /* --color-background */
+  background-color: #ffffff; /* --color-background */
   height: 100%;
 }
 
