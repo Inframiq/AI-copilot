@@ -320,6 +320,14 @@ export default function JDIndexPage() {
     }
   }
 
+  function handleClearJd() {
+    setJdText("");
+    setJd("", "");
+    setError(null);
+    setTailorError(null);
+    setSelectedPriority(new Set());
+  }
+
   function handleTailor() {
     if (!activeResumeId) {
       setTailorError("Please set up a profile or upload a resume first.");
@@ -492,9 +500,21 @@ export default function JDIndexPage() {
               <ClipboardText size={24} className="text-primary" />
               Job Description Input
             </h2>
-            <button className="p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 transition-all duration-300">
-              <ListDashes size={20} />
-            </button>
+            <div className="flex items-center gap-xs">
+              {jdText.trim() && (
+                <button
+                  type="button"
+                  onClick={handleClearJd}
+                  className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption font-semibold text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-all duration-300"
+                >
+                  <Trash size={14} />
+                  Clear
+                </button>
+              )}
+              <button className="p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 transition-all duration-300">
+                <ListDashes size={20} />
+              </button>
+            </div>
           </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-md flex-1">
             <div className="relative flex-1 min-h-[300px]">
