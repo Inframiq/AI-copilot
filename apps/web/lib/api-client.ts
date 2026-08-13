@@ -10,6 +10,9 @@ import type {
   LearningItem,
   ExternalContact,
   JDDetails,
+  CoverLetter,
+  CoverLetterStart,
+  JDCoverLetter,
 } from "@career-copilot/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -141,6 +144,40 @@ export const apiClient = {
 
   deleteJd: (id: string): Promise<void> =>
     request<void>("DELETE", `/jd/${id}`),
+
+  // ── Cover Letters ────────────────────────────────────────────────────────
+  generateCoverLetter: (
+    resumeId: string,
+    jdId: string,
+    humanizeLevel: number,
+    tailoringSessionId?: string,
+    companyName?: string
+  ): Promise<CoverLetterStart> =>
+    request<CoverLetterStart>("POST", "/cover-letters", {
+      resume_id: resumeId,
+      jd_id: jdId,
+      humanize_level: humanizeLevel,
+      tailoring_session_id: tailoringSessionId,
+      company_name: companyName,
+    }),
+
+  getCoverLetter: (id: string): Promise<CoverLetter> =>
+    request<CoverLetter>("GET", `/cover-letters/${id}`),
+
+  getCoverLetters: (): Promise<CoverLetter[]> =>
+    request<CoverLetter[]>("GET", "/cover-letters"),
+
+  getJdCoverLetter: (jdId: string): Promise<JDCoverLetter> =>
+    request<JDCoverLetter>("GET", `/jd/${jdId}/cover-letter`),
+
+  updateCoverLetter: (id: string, content: string): Promise<CoverLetter> =>
+    request<CoverLetter>("PATCH", `/cover-letters/${id}`, { content }),
+
+  generateCoverLetterPdf: (id: string): Promise<{ signed_url: string }> =>
+    request<{ signed_url: string }>("POST", `/cover-letters/${id}/pdf`),
+
+  deleteCoverLetter: (id: string): Promise<void> =>
+    request<void>("DELETE", `/cover-letters/${id}`),
 
   // ── External Contacts ───────────────────────────────────────────────────────
   getContacts: (): Promise<ExternalContact[]> =>

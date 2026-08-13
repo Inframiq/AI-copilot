@@ -109,6 +109,29 @@ export interface JDDetails {
   questions_practiced: number;
 }
 
+export interface CoverLetter {
+  id: string;
+  resume_id: string;
+  jd_id: string;
+  tailoring_session_id: string | null;
+  content: string | null;
+  humanize_level: number;
+  pdf_url: string | null;
+  status: "pending" | "completed" | "failed";
+  created_at: string;
+}
+
+export interface CoverLetterStart {
+  cover_letter_id: string;
+  status: string;
+}
+
+export interface JDCoverLetter {
+  cover_letter_id: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
 export interface AnalyzeOut {
   ats_score: number;
   matched_skills: string[];

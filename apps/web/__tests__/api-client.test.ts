@@ -177,4 +177,32 @@ describe("apiClient", () => {
       expect(url).not.toContain("topic=");
     });
   });
+
+  it("generateCoverLetter POSTs to /cover-letters with the right body", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ cover_letter_id: "cl-1", status: "pending" }));
+
+    const result = await apiClient.generateCoverLetter("resume-1", "jd-1", 60, "session-1");
+
+    expect(result).toEqual({ cover_letter_id: "cl-1", status: "pending" });
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain("/cover-letters");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      humanize_level: 60,
+      tailoring_session_id: "session-1",
+      company_name: undefined,
+    });
+  });
+
+  it("getJdCoverLetter GETs /jd/{id}/cover-letter", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ cover_letter_id: null, status: null, created_at: null }));
+
+    const result = await apiClient.getJdCoverLetter("jd-1");
+
+    expect(result.cover_letter_id).toBeNull();
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain("/jd/jd-1/cover-letter");
+  });
 });
