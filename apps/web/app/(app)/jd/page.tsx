@@ -535,7 +535,7 @@ export default function JDIndexPage() {
             <button
               type="submit"
               disabled={isSubmitting || !jdText.trim()}
-              className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-primary to-[#000840] shadow-[0_4px_12px_rgba(0,10,86,0.3)] hover:shadow-[0_8px_20px_rgba(0,10,86,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-primary to-primary-container shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <MagnifyingGlass size={20} />
               {isSubmitting ? "Analyzing…" : "Analyze Description"}
@@ -572,13 +572,13 @@ export default function JDIndexPage() {
             <div className="flex sm:flex-col items-center gap-sm shrink-0 sm:w-24">
               <div className="relative w-20 h-20 shrink-0">
                 <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" fill="none" r="45" stroke="#eaedff" strokeWidth="10" />
+                  <circle cx="50" cy="50" fill="none" r="45" stroke="#ebedfb" strokeWidth="10" />
                   <circle
                     cx="50"
                     cy="50"
                     fill="none"
                     r="45"
-                    stroke="#000a56"
+                    stroke="#0058c9"
                     strokeLinecap="round"
                     strokeWidth="10"
                     strokeDasharray="283"

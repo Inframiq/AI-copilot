@@ -7,7 +7,7 @@ const LiquidEther = dynamic(() => import("./LiquidEther.jsx"), { ssr: false });
 // Brand navy → periwinkle gradient (see app/globals.css --color-primary /
 // --color-primary-container / --color-primary-fixed-dim) instead of React
 // Bits' default purple/pink preset.
-const BRAND_COLORS = ["#142175", "#3a4b9e", "#bcc3ff"];
+const BRAND_COLORS = ["#00429a", "#0058c9", "#b0c6ff"];
 
 export function LiquidEtherBackground() {
   return (

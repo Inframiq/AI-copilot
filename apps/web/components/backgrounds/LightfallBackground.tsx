@@ -9,7 +9,7 @@ const Lightfall = dynamic(() => import("./Lightfall.jsx"), { ssr: false });
 // Bits' default purple/pink preset. backgroundColor/opacity/glow are tuned
 // down from the library defaults so the effect stays a subtle wash on this
 // app's light background rather than a heavy dark overlay.
-const BRAND_COLORS = ["#bcc3ff", "#7c89e8", "#142175"];
+const BRAND_COLORS = ["#b0c6ff", "#0058c9", "#00429a"];
 
 export function LightfallBackground() {
   return (
@@ -19,7 +19,7 @@ export function LightfallBackground() {
         dpr={undefined}
         mixBlendMode={undefined}
         colors={BRAND_COLORS}
-        backgroundColor="#eaedff"
+        backgroundColor="#ebedfb"
         opacity={0.22}
         glow={0.9}
         backgroundGlow={0.08}

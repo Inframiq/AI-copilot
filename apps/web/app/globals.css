@@ -1,59 +1,68 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors */
-  --color-primary: #000a56;
-  --color-surface-container: #eaedff;
-  --color-tertiary-container: #292c2e;
-  --color-tertiary-fixed: #e1e3e5;
+  /* Colors — Material You palette generated from the primary blue (#3a6ed2)
+     sampled across the Stitch reference mockups (buttons, selected states,
+     header bars), using the "Vibrant" M3 variant for CTA punch. Token names
+     are unchanged from before, so no component needed to change. */
+  --color-primary: #0058c9;
+  --color-surface-container: #ebedfb;
+  --color-tertiary-container: #e8ddff;
+  --color-tertiary-fixed: #e8ddff;
   --color-background: #faf8ff;
-  --color-primary-container: #142175;
-  --color-surface-container-high: #e1e7ff;
-  --color-inverse-on-surface: #eef0ff;
-  --color-tertiary-fixed-dim: #c5c7c9;
-  --color-inverse-primary: #bcc3ff;
-  --color-on-tertiary-container: #919395;
+  /* Not the standard pale M3 "container" tone — this app uses
+     primary-container as a darker sibling of primary (gradients,
+     hover/pressed states on solid primary buttons), so it's pinned to a
+     darker step of the same generated primary palette instead. */
+  --color-primary-container: #00429a;
+  --color-surface-container-high: #e5e7f5;
+  --color-inverse-on-surface: #eef0fd;
+  --color-tertiary-fixed-dim: #cebef7;
+  --color-inverse-primary: #b0c6ff;
+  --color-on-tertiary-container: #4b3f6f;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #bcc3ff;
-  --color-secondary: #505f76;
-  --color-on-primary-fixed: #000d60;
+  --color-primary-fixed-dim: #b0c6ff;
+  --color-secondary: #5a5c7e;
+  --color-on-primary-fixed: #001944;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
-  --color-surface-dim: #d2d9f4;
-  --color-on-primary-fixed-variant: #333f91;
-  --color-on-background: #131b2e;
+  --color-surface-dim: #d7d9e6;
+  --color-on-primary-fixed-variant: #00429a;
+  --color-on-background: #181b25;
   --color-error-container: #ffdad6;
-  --color-on-surface-variant: #454651;
-  --color-surface-tint: #4b57aa;
-  --color-outline-variant: #c6c5d3;
+  --color-on-surface-variant: #424654;
+  --color-surface-tint: #0058c9;
+  --color-outline-variant: #c2c6d6;
   --color-surface-container-low: #f2f3ff;
-  --color-secondary-fixed-dim: #b8c7e2;
+  --color-secondary-fixed-dim: #c3c3eb;
   --color-surface-bright: #faf8ff;
   --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #191c1e;
-  --color-secondary-container: #d4e3ff;
+  --color-on-tertiary-fixed: #1f1341;
+  --color-secondary-container: #e0e0ff;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #dae2fc;
-  --color-on-surface: #131b2e;
-  --color-on-primary-container: #818de4;
-  --color-primary-fixed: #dfe0ff;
+  --color-surface-container-highest: #e0e2ef;
+  --color-on-surface: #181b25;
+  /* Paired with the darker primary-container above — a light tone so
+     text/icons stay legible on that darker background. */
+  --color-on-primary-container: #b0c6ff;
+  --color-primary-fixed: #d9e2ff;
   --color-surface: #faf8ff;
-  --color-on-tertiary-fixed-variant: #444749;
-  --color-on-secondary-fixed-variant: #39485e;
+  --color-on-tertiary-fixed-variant: #4b3f6f;
+  --color-on-secondary-fixed-variant: #424465;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #283044;
-  --color-surface-variant: #dae2fc;
-  --color-outline: #767682;
-  --color-success-accent: #4b57aa;
+  --color-inverse-surface: #2d303a;
+  --color-surface-variant: #dee2f2;
+  --color-outline: #727785;
+  --color-success-accent: #0058c9;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #151819;
-  --color-on-secondary-container: #56657c;
-  --color-secondary-fixed: #d4e3ff;
-  --color-on-secondary-fixed: #0c1c30;
+  --color-tertiary: #645788;
+  --color-on-secondary-container: #424465;
+  --color-secondary-fixed: #e0e0ff;
+  --color-on-secondary-fixed: #171937;
 
   /* Border radius */
   --radius: 0.25rem;

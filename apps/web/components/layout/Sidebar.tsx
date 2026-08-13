@@ -87,7 +87,7 @@ export function Sidebar() {
       <div className="mt-auto flex flex-col gap-sm pb-md">
         <button
           onClick={signOut}
-          className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-[#142175] to-[#000a56] shadow-[0_4px_12px_rgba(0,10,86,0.3)] hover:shadow-[0_8px_20px_rgba(0,10,86,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 mb-md"
+          className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 mb-md"
         >
           Sign Out
         </button>
