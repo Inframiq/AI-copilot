@@ -14,6 +14,7 @@ vi.mock("@/lib/api-client", () => ({
     getJds: vi.fn().mockResolvedValue([]),
     getQuestionBank: vi.fn(),
     markQuestionPracticed: vi.fn(),
+    getLatestSession: vi.fn().mockResolvedValue({ session_id: null }),
   },
 }));
 
@@ -60,6 +61,41 @@ describe("InterviewIndexPage — no active session", () => {
     await waitFor(() =>
       expect(apiClient.getQuestionBank).toHaveBeenCalledWith("Behavioral")
     );
+  });
+});
+
+describe("InterviewIndexPage — no in-memory session but a real one exists server-side", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    vi.clearAllMocks();
+  });
+
+  it("resolves the latest real session instead of falling back to the shared bank", async () => {
+    // Simulates a page reload: the in-memory tailoring store's sessionId is
+    // gone, but the user does have a real completed tailoring session.
+    vi.mocked(apiClient.getLatestSession).mockResolvedValue({
+      session_id: "session-latest",
+      matched_skills: ["Python"],
+      missing_skills: ["Kubernetes"],
+    });
+    vi.mocked(apiClient.getQuestions).mockResolvedValue([
+      {
+        id: "q-real",
+        session_id: "session-latest",
+        topic: "Technical",
+        question: "Tell me about a time you used Python in production.",
+        answer_framework: "STAR: ...",
+        is_gap_based: false,
+        order_index: 0,
+        practiced_at: null,
+      },
+    ]);
+    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([]);
+
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByText(/Tell me about a time you used Python/)).toBeInTheDocument();
+    expect(apiClient.getQuestions).toHaveBeenCalledWith("session-latest");
   });
 });
 

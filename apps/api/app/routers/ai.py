@@ -271,6 +271,42 @@ async def browse_questions(
     return rows
 
 
+@router.get("/sessions/latest")
+async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Most recent completed tailoring session for this user, across every
+    JD — used by Interview Center to resolve real, JD-specific questions on
+    load instead of falling back to the unfiltered cross-user question bank
+    just because the in-memory tailoring store (which only tracks the most
+    recently *active* session, not the most recent one overall) is empty,
+    e.g. after a page reload or navigating in directly.
+
+    Registered before /sessions/{session_id} — "latest" would otherwise be
+    parsed as that route's session_id and 422 on the UUID conversion.
+    """
+    uid = uuid.UUID(user["sub"])
+    result = await db.execute(
+        select(TailoringSession)
+        .where(TailoringSession.user_id == uid, TailoringSession.status == "completed")
+        .order_by(TailoringSession.created_at.desc())
+        .limit(1)
+    )
+    session = result.scalars().first()
+    if not session:
+        return {"session_id": None}
+    return {
+        "session_id": str(session.id),
+        "resume_id": str(session.resume_id),
+        "jd_id": str(session.jd_id),
+        "status": session.status,
+        "tailored_content": session.tailored_content,
+        "ats_score": session.ats_score,
+        "matched_skills": session.matched_skills,
+        "missing_skills": session.missing_skills,
+        "company_keywords": session.company_keywords,
+        "suggested_skills": session.suggested_skills,
+    }
+
+
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Return a tailoring session's stored output so the frontend can reload a

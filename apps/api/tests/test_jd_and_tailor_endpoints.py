@@ -698,6 +698,59 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
         app.dependency_overrides.pop(get_db, None)
 
 
+# ── GET /ai/sessions/latest ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_latest_session_resolves_before_session_id_route():
+    """Guards the registration-order requirement: /sessions/latest must be
+    matched instead of /sessions/{session_id} trying (and failing) to parse
+    "latest" as a UUID."""
+    from app.db.models import TailoringSession
+
+    session_row = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        resume_id=uuid.uuid4(),
+        jd_id=uuid.uuid4(),
+        status="completed",
+        ats_score=77,
+        created_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = make_mock_db()
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = session_row
+    mock_session.execute = AsyncMock(return_value=result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/ai/sessions/latest", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["session_id"] == str(session_row.id)
+        assert body["ats_score"] == 77
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_session_no_sessions_returns_null():
+    override, mock_session = make_mock_db()
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_session.execute = AsyncMock(return_value=result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/ai/sessions/latest", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json() == {"session_id": None}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── GET /ai/sessions/{id} ────────────────────────────────────────────────────
 
 

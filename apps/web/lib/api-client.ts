@@ -218,6 +218,24 @@ export const apiClient = {
     suggested_skills: string[];
   }> => request("GET", `/ai/sessions/${sessionId}`),
 
+  // Most recent completed session across every JD — resolves Interview
+  // Center to real, JD-specific questions on load even when the in-memory
+  // tailoring store's sessionId is empty (page reload, direct nav, JD
+  // switch), instead of it silently falling back to the unrelated
+  // cross-user question bank.
+  getLatestSession: (): Promise<{
+    session_id: string | null;
+    resume_id?: string;
+    jd_id?: string;
+    status?: "pending" | "completed" | "failed";
+    tailored_content?: ResumeContent | null;
+    ats_score?: number | null;
+    matched_skills?: string[];
+    missing_skills?: string[];
+    company_keywords?: string[];
+    suggested_skills?: string[];
+  }> => request("GET", "/ai/sessions/latest"),
+
   getQuestions: (sessionId: string): Promise<PrepQuestionOut[]> =>
     request<PrepQuestionOut[]>(
       "GET",

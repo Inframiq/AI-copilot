@@ -29,11 +29,25 @@ function classifyTopic(topic: string): Tab {
 export default function InterviewIndexPage() {
   const router    = useRouter();
   const queryClient = useQueryClient();
-  const sessionId = useTailoringStore((s) => s.sessionId);
-  const matchedSkills = useTailoringStore((s) => s.matchedSkills);
-  const missingSkills = useTailoringStore((s) => s.missingSkills);
+  const storeSessionId = useTailoringStore((s) => s.sessionId);
+  const storeMatchedSkills = useTailoringStore((s) => s.matchedSkills);
+  const storeMissingSkills = useTailoringStore((s) => s.missingSkills);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
+
+  // The in-memory tailoring store only knows about a session if tailoring
+  // just ran in this browser tab — a reload, direct nav, or switching JDs
+  // wipes it. Fall back to the user's actual most recent completed session
+  // (real, JD-specific) before ever falling back further to the unfiltered
+  // cross-user question bank.
+  const { data: latestSession } = useQuery({
+    queryKey: ["latestSession"],
+    queryFn: () => apiClient.getLatestSession(),
+    enabled: storeSessionId === null,
+  });
+  const sessionId = storeSessionId ?? latestSession?.session_id ?? null;
+  const matchedSkills = storeSessionId ? storeMatchedSkills : latestSession?.matched_skills ?? storeMatchedSkills;
+  const missingSkills = storeSessionId ? storeMissingSkills : latestSession?.missing_skills ?? storeMissingSkills;
 
   const { data: questions = [], isLoading } = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
