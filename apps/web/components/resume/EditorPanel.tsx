@@ -602,7 +602,7 @@ export function EditorPanel() {
       </Tabs.Root>}
 
       {/* AI Tailoring section */}
-      {hasResumeContent ? (
+      {hasResumeContent || isTailoringMode ? (
         <div className="border-t border-outline-variant/20 pt-lg flex flex-col gap-md">
           {/* JD-analyzer path only — the manual-paste path (jdId unset)
               already has the JD text right there in an editable textarea. */}

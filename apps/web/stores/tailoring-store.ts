@@ -146,7 +146,23 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   // previous one — EditorPanel's own JD-context textarea calls this too,
   // and unlike the two JD pages, it never explicitly sets prioritySkills
   // itself, so this is the one place that must clear it for everyone.
-  setJd: (id, text) => set({ jdId: id, jdText: text, prioritySkills: [] }),
+  setJd: (id, text) =>
+    set({
+      jdId: id,
+      jdText: text,
+      atsScore: null,
+      matchedSkills: [],
+      missingSkills: [],
+      companyKeywords: [],
+      suggestedSkills: [],
+      prioritySkills: [],
+      pendingContent: null,
+      sessionId: null,
+      bulletDecisions: {},
+      mergedContent: null,
+      previewPdfUrl: null,
+      error: null,
+    }),
   setCompanyName: (name) => set({ companyName: name }),
   setPrioritySkills: (skills) => set({ prioritySkills: skills }),
   togglePrioritySkill: (skill) =>
@@ -177,10 +193,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set({ pendingContent: { ...pendingContent, experience: newExp } });
   },
 
-  // Read-only "Analyze Description" step — computes ATS score / matched /
-  // missing skills without touching the resume. Tailoring (which rewrites
-  // the resume and regenerates the PDF) only happens when the user
-  // explicitly clicks "Tailor Resume" afterward, via runTailoring below.
+  // Helper to ensure job description is saved to backend if not already persisted
   runAnalysis: async (resumeId: string) => {
     let { jdId } = get();
     const { jdText, companyName } = get();
@@ -283,12 +296,14 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     // isLoading is true, so this can't overlap with a second call.
     const POLL_INTERVAL_MS = 3000;
     const MAX_ATTEMPTS = 40; // ~2 minutes ceiling
-    const MAX_CONSECUTIVE_FAILURES = 3; // tolerate transient blips (dropped connection, proxy 502) —
-    // the background job keeps running server-side even if one poll fails.
+    const MAX_CONSECUTIVE_FAILURES = 3; // tolerate transient blips (dropped connection, proxy 502)
 
     let consecutiveFailures = 0;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Race Condition Guard: If the user reset store or started another operation, abort polling update
+      if (!get().isLoading) return;
+
       let session;
       try {
         session = await apiClient.getSession(started.session_id);
@@ -296,7 +311,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       } catch (e: unknown) {
         consecutiveFailures++;
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
+          if (get().isLoading) {
+            set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
+          }
           return;
         }
         // Not yet at the limit — treat like a "still pending" tick and retry.
@@ -306,33 +323,36 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         continue;
       }
 
+      // Check again if state was reset during async await
+      if (!get().isLoading) return;
+
       if (session.status === "completed") {
         const initialDecisions: Record<string, BulletDecision> = {};
         if (session.tailored_content) {
           const originalContent = useResumeStore.getState().content;
-          if (originalContent) {
-            session.tailored_content.experience.forEach((job, jobIdx) => {
+          if (originalContent && Array.isArray(originalContent.experience)) {
+            session.tailored_content.experience?.forEach((job, jobIdx) => {
               const origJob = originalContent.experience[jobIdx];
-              job.bullets.forEach((bullet, bulletIdx) => {
-                const origBullet = origJob?.bullets[bulletIdx] ?? "";
+              job.bullets?.forEach((bullet, bulletIdx) => {
+                const origBullet = origJob?.bullets?.[bulletIdx] ?? "";
                 if (bullet !== origBullet) {
                   initialDecisions[`exp${jobIdx}_b${bulletIdx}`] = "accept";
                 }
               });
             });
-            const originalSkillsSet = new Set(originalContent.skills);
-            const tailoredSkillsSet = new Set(session.tailored_content.skills);
-            for (const s of session.tailored_content.skills) {
+            const originalSkillsSet = new Set(originalContent.skills || []);
+            const tailoredSkillsSet = new Set(session.tailored_content.skills || []);
+            for (const s of session.tailored_content.skills || []) {
               if (!originalSkillsSet.has(s)) initialDecisions[`skill_add:${s}`] = "accept";
             }
-            for (const s of originalContent.skills) {
+            for (const s of originalContent.skills || []) {
               if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
             }
           }
         }
 
         const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
-        for (const s of session.suggested_skills) {
+        for (const s of session.suggested_skills || []) {
           if (prioritySet.has(s.toLowerCase())) {
             initialDecisions[`skill_add:${s}`] = "accept";
           }
@@ -341,10 +361,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         set({
           sessionId: session.session_id,
           atsScore: session.ats_score,
-          matchedSkills: session.matched_skills,
-          missingSkills: session.missing_skills,
-          companyKeywords: session.company_keywords,
-          suggestedSkills: session.suggested_skills,
+          matchedSkills: session.matched_skills ?? [],
+          missingSkills: session.missing_skills ?? [],
+          companyKeywords: session.company_keywords ?? [],
+          suggestedSkills: session.suggested_skills ?? [],
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
           isLoading: false,
@@ -363,10 +383,12 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       }
     }
 
-    set({
-      error: "Tailoring is taking longer than expected. Please try again in a moment.",
-      isLoading: false,
-    });
+    if (get().isLoading) {
+      set({
+        error: "Tailoring is taking longer than expected. Please try again in a moment.",
+        isLoading: false,
+      });
+    }
   },
 
   // Merge accepted bullet decisions into the original content and render a
@@ -473,14 +495,20 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     }
   },
 
-  discardPending: () =>
+  discardPending: () => {
     set({
       pendingContent: null,
       bulletDecisions: {},
       suggestedSkills: [],
       mergedContent: null,
       previewPdfUrl: null,
-    }),
+    });
+    // The PDF preview panel reads pdfSignedUrl off the resume store, not
+    // previewPdfUrl above — without clearing it here too, starting a new
+    // tailoring run (same resume, different JD) leaves it showing the last
+    // JD's generated preview until the user regenerates one for the new JD.
+    useResumeStore.getState().setPdfSignedUrl(null);
+  },
 
   resetStore: () =>
     set({

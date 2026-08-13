@@ -17,7 +17,7 @@ interface ResumeState {
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   setTemplateId: (id: string) => void;
-  setPdfSignedUrl: (url: string) => void;
+  setPdfSignedUrl: (url: string | null) => void;
   resetStore: () => void;
   /** Bypasses the debounce and persists immediately — for callers that need
    *  the backend to be caught up before doing something else (e.g. a PDF

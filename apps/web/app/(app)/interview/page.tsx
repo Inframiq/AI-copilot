@@ -18,8 +18,11 @@ type Tab = (typeof TABS)[number];
 
 function classifyTopic(topic: string): Tab {
   const l = topic.toLowerCase();
-  if (/algorithm|system design|coding|technical|data structure|database|api|architecture|programming/.test(l)) return "Technical";
-  if (/behavioral|teamwork|leadership|conflict|communication|collaboration|management/.test(l)) return "Behavioral";
+  if (
+    /algorithm|system design|coding|technical|data structure|database|api|architecture|programming|react|typescript|javascript|python|frontend|backend|cloud|devops|fullstack|node|sql|css|html|git|docker|kubernetes|aws|java|c\+\+|golang|linux|rest|graphql|ci\/cd|framework|testing|security|infrastructure/.test(l)
+  )
+    return "Technical";
+  if (/behavioral|teamwork|leadership|conflict|communication|collaboration|management|culture|situational|career/.test(l)) return "Behavioral";
   return "HR & Culture";
 }
 

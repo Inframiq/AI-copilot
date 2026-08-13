@@ -91,8 +91,16 @@ export default function JDPage({
   const missingSkills = analysis?.missing_skills ?? [];
 
   function handleTailor() {
-    if (!jd || !masterResume) return;
+    if (!masterResume) {
+      setTailorError("No resume found. Please create or set up a resume first.");
+      return;
+    }
+    if (!jd) {
+      setTailorError("Job description not found.");
+      return;
+    }
     setTailorError(null);
+    useTailoringStore.getState().discardPending();
     // Load JD context into the tailoring store so EditorPanel picks it up.
     setJd(jdId, jd.raw_text);
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
@@ -113,6 +121,7 @@ export default function JDPage({
     if (!masterResume) return;
     setIsOpening(true);
     setTailorError(null);
+    if (jd) setJd(jdId, jd.raw_text);
     try {
       // Load the latest tailoring session for this JD
       const { session_id } = await apiClient.getLatestJdSession(jdId);

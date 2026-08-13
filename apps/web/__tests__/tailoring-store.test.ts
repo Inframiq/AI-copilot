@@ -472,4 +472,102 @@ describe("useTailoringStore", () => {
     expect(state.isLoading).toBe(false);
     expect(state.pendingContent).toBeNull();
   });
+
+  it("updatePendingBullet updates the specified bullet text in pendingContent", () => {
+    const initialContent: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Bullet 1", "Bullet 2"] }],
+    };
+    useTailoringStore.setState({ pendingContent: initialContent });
+
+    useTailoringStore.getState().updatePendingBullet(0, 1, "Bullet 2 updated");
+
+    const updated = useTailoringStore.getState().pendingContent;
+    expect(updated?.experience[0].bullets[1]).toBe("Bullet 2 updated");
+    expect(updated?.experience[0].bullets[0]).toBe("Bullet 1");
+  });
+
+  it("setAllBulletDecisions sets decisions for multiple bullet changes at once", () => {
+    const changes = [
+      { key: "exp0_b0", jobIdx: 0, bulletIdx: 0, jobTitle: "Eng", company: "Co", original: "a", tailored: "b" },
+      { key: "exp0_b1", jobIdx: 0, bulletIdx: 1, jobTitle: "Eng", company: "Co", original: "c", tailored: "d" },
+    ];
+
+    useTailoringStore.getState().setAllBulletDecisions(changes, "reject");
+
+    const decisions = useTailoringStore.getState().bulletDecisions;
+    expect(decisions["exp0_b0"]).toBe("reject");
+    expect(decisions["exp0_b1"]).toBe("reject");
+  });
+
+  it("discardPending clears staged tailoring state", () => {
+    useTailoringStore.setState({
+      pendingContent: SAMPLE_CONTENT,
+      bulletDecisions: { exp0_b0: "accept" },
+      suggestedSkills: ["Python"],
+      previewPdfUrl: "https://example.com/test.pdf",
+    });
+
+    useTailoringStore.getState().discardPending();
+
+    const state = useTailoringStore.getState();
+    expect(state.pendingContent).toBeNull();
+    expect(state.bulletDecisions).toEqual({});
+    expect(state.suggestedSkills).toEqual([]);
+    expect(state.previewPdfUrl).toBeNull();
+  });
+
+  // Regression: tailoring a second, different JD against the same resume
+  // (the normal case — a user has one master resume, multiple JDs) left
+  // the PreviewPanel showing the *first* JD's generated PDF, because
+  // useResumeStore.pdfSignedUrl was never cleared. The Studio page's
+  // resume-hydration effect only re-syncs when resume.id !== storeResumeId
+  // (see studio/[resumeId]/page.tsx) — since it's the same resume both
+  // times, that effect is a no-op, so nothing else clears it either.
+  it("discardPending also clears the stale generated-PDF preview on the resume store", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+    expect(useResumeStore.getState().pdfSignedUrl).toBe("https://example.com/tailored.pdf");
+
+    // User starts tailoring against a second JD without ever saving or
+    // discarding — both jd/page.tsx and jd/[jdId]/page.tsx call
+    // discardPending() as part of kicking off that new run.
+    useTailoringStore.getState().discardPending();
+
+    expect(useResumeStore.getState().pdfSignedUrl).toBeNull();
+  });
+
+  it("runTailoring aborts polling updates if resetStore is called during polling", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+
+      let resolvePoll: (val: any) => void = () => {};
+      const pendingPollPromise = new Promise((res) => {
+        resolvePoll = res;
+      });
+      vi.mocked(apiClient.getSession).mockReturnValue(pendingPollPromise as any);
+
+      const runPromise = useTailoringStore.getState().runTailoring("resume-abc");
+
+      // While polling is waiting, user resets the store
+      useTailoringStore.getState().resetStore();
+
+      // Resolve the background request
+      resolvePoll(mockCompletedSession);
+      await runPromise;
+
+      // Store should remain reset and not hydrated by completed session
+      const state = useTailoringStore.getState();
+      expect(state.sessionId).toBeNull();
+      expect(state.atsScore).toBeNull();
+      expect(state.pendingContent).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

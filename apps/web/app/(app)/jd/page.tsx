@@ -70,7 +70,10 @@ function extractInsights(text: string) {
   else if (/\best\b/.test(lower)) locNote = "EST timezone preferred";
   // Compensation
   let comp = "Not disclosed"; let compNote = "Check job posting";
-  const salMatch = text.match(/\$[\d,]+k?[\s]*[-–][\s]*\$[\d,]+k?/i) || text.match(/[\d]+k\s*[-–]\s*[\d]+k/i);
+  const salMatch =
+    text.match(/\$[\d,]+k?[\s]*(?:[-–]|to)[\s]*\$?[\d,]+k?/i) ||
+    text.match(/[\d]+k\s*(?:[-–]|to)\s*[\d]+k/i) ||
+    text.match(/\$[\d,]+(?:\.\d+)?[\s]*[-–]?[\s]*\$?[\d,]+(?:\.\d+)?\s*(?:\/|\s*per\s*)(?:hr|hour)/i);
   if (salMatch) { comp = salMatch[0].replace(/\s+/g, " "); compNote = "Listed salary range"; }
   else if (/competitive/i.test(text)) { comp = "Competitive"; compNote = "Exact range not disclosed"; }
   // Culture
@@ -144,6 +147,11 @@ export default function JDIndexPage() {
     queryFn: () => apiClient.getLearningItems(),
   });
 
+  const { data: jds = [] } = useQuery<JobDescription[]>({
+    queryKey: ["jds"],
+    queryFn: () => apiClient.getJds(),
+  });
+
   async function handleJdStatusChange(id: string, status: JDStatus) {
     const jd = jds.find((j) => j.id === id);
     queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
@@ -151,9 +159,6 @@ export default function JDIndexPage() {
     );
     try {
       await apiClient.updateJdStatus(id, status);
-      // Only surface the "prepare for interview?" prompt on the transition
-      // into Interview status, and only if there's actually a tailored
-      // resume for this JD to prep from.
       if (status === "interview") {
         const { session_id } = await apiClient.getLatestJdSession(id);
         if (session_id) {
@@ -167,7 +172,8 @@ export default function JDIndexPage() {
   }
 
   async function handleAddToLearningPath(skill: string) {
-    const sourceTitle = (storedJdText || jdText).trim().split("\n")[0].slice(0, 120) || undefined;
+    const activeJd = jds.find((j) => j.id === jdId);
+    const sourceTitle = activeJd?.title || (storedJdText || jdText).trim().split("\n")[0].slice(0, 120) || undefined;
     try {
       const item = await apiClient.addLearningItem({ skill, source_jd_title: sourceTitle });
       queryClient.setQueryData<LearningItem[]>(["learning"], (list) => [item, ...(list ?? [])]);
@@ -236,11 +242,6 @@ export default function JDIndexPage() {
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
     staleTime: 2 * 60 * 1000,
-  });
-
-  const { data: jds = [] } = useQuery<JobDescription[]>({
-    queryKey: ["jds"],
-    queryFn: () => apiClient.getJds(),
   });
 
   // Career profile — same query key as the profile page and Networking so a
@@ -320,14 +321,15 @@ export default function JDIndexPage() {
   }
 
   function handleTailor() {
-    if (!activeResumeId) return;
+    if (!activeResumeId) {
+      setTailorError("Please set up a profile or upload a resume first.");
+      return;
+    }
     setTailorError(null);
-    // Set the priority skills the user picked on this page so EditorPanel
-    // can show them pre-selected when the studio loads.
+    // Ensure the store is synced with the current JD ID and JD text on this page
+    setJd(jdId ?? "", jdText);
+    useTailoringStore.getState().discardPending();
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
-    // Navigate to Resume Builder — actual tailoring runs there, not here.
-    // The JD context (jdId, jdText, atsScore, matched/missing skills) is
-    // already in the tailoring store from the runAnalysis call.
     router.push(`/studio/${activeResumeId}`);
   }
 
@@ -491,7 +493,13 @@ export default function JDIndexPage() {
             <div className="relative flex-1 min-h-[300px]">
               <textarea
                 value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setJdText(val);
+                  if (storedJdText && val.trim() !== storedJdText.trim()) {
+                    setJd("", val);
+                  }
+                }}
                 className="w-full h-full p-md bg-surface-container-lowest/50 border border-outline-variant/50 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none text-body-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none min-h-[300px]"
                 placeholder={`Paste the full job description here...\n\ne.g., 'Looking for a Senior Product Designer with 5+ years of experience in Figma, design systems, and user testing...'`}
               />
