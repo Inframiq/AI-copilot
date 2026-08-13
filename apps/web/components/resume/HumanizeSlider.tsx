@@ -4,9 +4,17 @@ import * as RadixSlider from "@radix-ui/react-slider";
 export function HumanizeSlider({
   value,
   onChange,
+  onCommit,
+  disabled,
 }: {
   value: number;
   onChange: (n: number) => void;
+  // Fires once when the user releases the drag (Radix's onValueCommit),
+  // distinct from onChange which fires on every tick during the drag.
+  // Optional — existing call sites that only need live value updates
+  // (EditorPanel/TailoringForm) are unaffected if they omit it.
+  onCommit?: (n: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-sm">
@@ -21,10 +29,12 @@ export function HumanizeSlider({
       <RadixSlider.Root
         value={[value]}
         onValueChange={([v]) => onChange(v)}
+        onValueCommit={([v]) => onCommit?.(v)}
         min={0}
         max={100}
         step={5}
-        className="relative flex items-center w-full h-5"
+        disabled={disabled}
+        className="relative flex items-center w-full h-5 data-[disabled]:opacity-50"
       >
         <RadixSlider.Track className="bg-surface-variant relative grow rounded-full h-2">
           <RadixSlider.Range className="absolute bg-primary rounded-full h-full" />

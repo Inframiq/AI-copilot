@@ -1,6 +1,7 @@
 "use client";
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { DownloadSimple, Copy, FloppyDisk, Sparkle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +14,7 @@ export default function CoverLetterEditorPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -20,8 +22,9 @@ export default function CoverLetterEditorPage({
   const [isExporting, setIsExporting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sliderValue, setSliderValue] = useState<number | null>(null);
 
-  const { data: letter } = useQuery<CoverLetter>({
+  const { data: letter, isError } = useQuery<CoverLetter>({
     queryKey: ["coverLetter", id],
     queryFn: () => apiClient.getCoverLetter(id),
     // Poll while generation is in flight; stop once it lands on a terminal status.
@@ -53,18 +56,18 @@ export default function CoverLetterEditorPage({
   }
 
   async function handleRegenerate(nextHumanizeLevel: number) {
-    if (!letter) return;
+    if (!letter || isRegenerating) return;
     setIsRegenerating(true);
     setError(null);
     try {
-      await apiClient.generateCoverLetter(
+      // The backend always creates a brand-new CoverLetter row rather than
+      // mutating this one, so re-fetching this id would just show the same
+      // stale content. Navigate to the new letter's page instead — it
+      // already handles the "pending" status with a spinner + polling.
+      const { cover_letter_id } = await apiClient.generateCoverLetter(
         letter.resume_id, letter.jd_id, nextHumanizeLevel, letter.tailoring_session_id ?? undefined
       );
-      // Regeneration creates a new row; simplest correct behavior for v1 is
-      // to just re-fetch this one's fields won't change — a full rebuild UX
-      // (navigating to the new id) is a follow-up, not required for save/
-      // edit/export to work correctly here.
-      queryClient.invalidateQueries({ queryKey: ["coverLetter", id] });
+      router.push(`/cover-letters/${cover_letter_id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to regenerate");
     } finally {
@@ -100,6 +103,19 @@ export default function CoverLetterEditorPage({
     setTimeout(() => setCopied(false), 2000);
   }
 
+  if (isError) {
+    return (
+      <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
+        <p className="text-body-md text-error font-medium">
+          Could not load this cover letter. It may have been deleted, or you may not have access to it.
+        </p>
+        <a href="/cover-letters" className="text-label-md text-primary hover:underline">
+          Back to Cover Letters
+        </a>
+      </div>
+    );
+  }
+
   if (!letter || letter.status === "pending") {
     return (
       <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
@@ -132,7 +148,12 @@ export default function CoverLetterEditorPage({
           rows={16}
           className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         />
-        <HumanizeSlider value={letter.humanize_level} onChange={handleRegenerate} />
+        <HumanizeSlider
+          value={sliderValue ?? letter.humanize_level}
+          onChange={setSliderValue}
+          onCommit={handleRegenerate}
+          disabled={isRegenerating}
+        />
         {error && <p className="text-caption text-error">{error}</p>}
         <div className="flex flex-wrap gap-sm">
           <button
@@ -159,7 +180,7 @@ export default function CoverLetterEditorPage({
             {copied ? "Copied!" : "Copy Text"}
           </button>
           <button
-            onClick={() => handleRegenerate(letter.humanize_level)}
+            onClick={() => handleRegenerate(sliderValue ?? letter.humanize_level)}
             disabled={isRegenerating}
             className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
           >

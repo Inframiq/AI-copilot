@@ -1,6 +1,6 @@
 "use client";
 import { use, useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
@@ -28,6 +28,7 @@ export default function JDPage({
 }) {
   const { jdId } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isOpening, setIsOpening] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
 
@@ -72,6 +73,11 @@ export default function JDPage({
     setLetterError(null);
     try {
       const { cover_letter_id } = await apiClient.generateCoverLetter(masterResume.id, jdId, 50);
+      // Invalidate so a return-navigation to this page within the default
+      // 60s staleTime window (see providers.tsx) doesn't show the stale
+      // "Not generated yet" state with a re-clickable Generate button.
+      queryClient.invalidateQueries({ queryKey: ["jdCoverLetter", jdId] });
+      queryClient.invalidateQueries({ queryKey: ["coverLetters"] });
       router.push(`/cover-letters/${cover_letter_id}`);
     } catch (e: unknown) {
       setLetterError(e instanceof Error ? e.message : "Failed to generate cover letter");
@@ -471,11 +477,11 @@ export default function JDPage({
             ) : (
               <button
                 onClick={handleGenerateCoverLetter}
-                disabled={isGeneratingLetter || !masterResume}
+                disabled={isGeneratingLetter || !masterResume || coverLetter?.status === "pending"}
                 className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
               >
-                <Sparkle size={14} className={isGeneratingLetter ? "animate-pulse" : ""} />
-                {isGeneratingLetter ? "Generating…" : "Generate"}
+                <Sparkle size={14} className={isGeneratingLetter || coverLetter?.status === "pending" ? "animate-pulse" : ""} />
+                {isGeneratingLetter || coverLetter?.status === "pending" ? "Generating…" : "Generate"}
               </button>
             )}
           </div>

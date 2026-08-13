@@ -173,4 +173,45 @@ describe("JDPage — Cover Letter row", () => {
     await userEvent.click(await screen.findByText("Open Letter"));
     expect(mockPush).toHaveBeenCalledWith("/cover-letters/cl-2");
   });
+
+  // Regression: after generating, the ["jdCoverLetter", jdId] query wasn't
+  // invalidated, so returning to this page within the app's default 60s
+  // staleTime showed the stale "Not generated yet" state with a live,
+  // re-clickable Generate button — inviting a second, wasted generation.
+  it("invalidates the jdCoverLetter (and coverLetters) query cache after generating", async () => {
+    vi.mocked(apiClient.getJdCoverLetter).mockResolvedValue({ cover_letter_id: null, status: null, created_at: null });
+    vi.mocked(apiClient.generateCoverLetter).mockResolvedValue({ cover_letter_id: "cl-1", status: "pending" });
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+
+    await act(async () => {
+      render(
+        <QueryClientProvider client={client}>
+          <JDPage params={Promise.resolve({ jdId: "jd-1" })} />
+        </QueryClientProvider>
+      );
+    });
+
+    await userEvent.click(await screen.findByText("Generate"));
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["jdCoverLetter", "jd-1"] })
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["coverLetters"] });
+  });
+
+  // Regression: the "Generate" button stayed clickable even while a
+  // generation was already in flight (status "pending"), inviting a
+  // duplicate, wasted LLM generation from a stale-looking button.
+  it("disables Generate while a cover letter is already pending", async () => {
+    vi.mocked(apiClient.getJdCoverLetter).mockResolvedValue({
+      cover_letter_id: "cl-1", status: "pending", created_at: null,
+    });
+
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+
+    const generatingButton = await screen.findByRole("button", { name: /Generating…/ });
+    expect(generatingButton).toBeDisabled();
+  });
 });
