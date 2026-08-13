@@ -131,7 +131,12 @@ export default function JDPage({
     if (!masterResume) return;
     setIsOpening(true);
     setTailorError(null);
-    if (jd) setJd(jdId, jd.raw_text);
+    // Do NOT call setJd() here — "Open" means "show me the resume I already
+    // tailored," not "enter the tailoring flow for this JD." Setting jdId
+    // makes EditorPanel's hasJdContext true, which collapses the content
+    // editor into its JD-context "Expand to edit" state by default — so the
+    // tailored resume the user just asked to open renders hidden behind a
+    // collapsed header, reading as a blank/default Studio page.
     try {
       // Load the latest tailoring session for this JD
       const { session_id } = await apiClient.getLatestJdSession(jdId);
