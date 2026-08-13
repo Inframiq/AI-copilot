@@ -98,6 +98,17 @@ export interface TailorOut {
   suggested_skills: string[];
 }
 
+export interface JDDetails {
+  session_id: string | null;
+  ats_score: number | null;
+  resume_id: string | null;
+  resume_title: string | null;
+  resume_pdf_url: string | null;
+  session_created_at: string | null;
+  questions_total: number;
+  questions_practiced: number;
+}
+
 export interface AnalyzeOut {
   ats_score: number;
   matched_skills: string[];

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { AnalyzeOut, JobDescription, Resume } from "@career-copilot/types";
+import type { AnalyzeOut, JobDescription, Resume, JDDetails } from "@career-copilot/types";
 import {
   CheckCircle,
   WarningCircle,
@@ -16,6 +16,8 @@ import {
   ArrowCounterClockwise,
   FolderOpen,
   Target,
+  FileText,
+  Microphone,
 } from "@phosphor-icons/react";
 
 export default function JDPage({
@@ -45,6 +47,14 @@ export default function JDPage({
   const { data: resumes = [] } = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
+  });
+
+  // Everything already generated for this JD — the latest tailored resume
+  // and its interview prep progress — so this page can show that work
+  // instead of only ever offering to start it over.
+  const { data: jdDetails } = useQuery<JDDetails>({
+    queryKey: ["jdDetails", jdId],
+    queryFn: () => apiClient.getJdDetails(jdId),
   });
 
   // Only show the master resume; fall back to first resume if no profile set
@@ -339,13 +349,70 @@ export default function JDPage({
           )}
 
           {tailorError && <p className="text-caption text-error">{tailorError}</p>}
+        </Card>
 
-          <button
-            onClick={() => router.push("/interview")}
-            className="w-full py-sm rounded-xl text-label-md text-on-surface-variant border border-outline-variant/30 hover:bg-surface-container transition-colors mt-auto"
-          >
-            Go to Interview Center
-          </button>
+        {/* Generated for this JD — the tailored resume and interview prep
+            progress from the latest completed tailoring run, if any. Reads
+            from jd_id-linked TailoringSession/PrepQuestion rows so this
+            stays accurate even after navigating away and back. */}
+        <Card className="lg:col-span-2 flex flex-col gap-md">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
+            Generated for This JD
+          </h2>
+
+          {!jdDetails?.session_id ? (
+            <p className="text-body-sm text-on-surface-variant">
+              No tailored resume yet — click Tailor above to generate one.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-sm">
+              {/* Tailored resume */}
+              <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <FileText size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-label-md text-on-surface font-semibold truncate">
+                    {jdDetails.resume_title ?? "Tailored resume"}
+                  </p>
+                  <p className="text-caption text-on-surface-variant">
+                    {jdDetails.ats_score !== null ? `${jdDetails.ats_score}% ATS match` : "Tailored"}
+                    {jdDetails.session_created_at &&
+                      ` · ${new Date(jdDetails.session_created_at).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <button
+                  onClick={handleOpen}
+                  disabled={isOpening}
+                  className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+                >
+                  <FolderOpen size={14} />
+                  Open
+                </button>
+              </div>
+
+              {/* Interview prep progress */}
+              <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Microphone size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-label-md text-on-surface font-semibold">Interview Practice</p>
+                  <p className="text-caption text-on-surface-variant">
+                    {jdDetails.questions_total > 0
+                      ? `${jdDetails.questions_practiced} of ${jdDetails.questions_total} questions practiced`
+                      : "No prep questions generated yet"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push(`/interview/${jdDetails.session_id}`)}
+                  className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                >
+                  Practice
+                </button>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Raw JD text preview — full width */}

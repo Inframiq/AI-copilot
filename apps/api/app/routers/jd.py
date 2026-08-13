@@ -1,9 +1,10 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.db.session import get_db
-from app.db.models import JobDescription, TailoringSession
+from app.db.models import JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
@@ -117,6 +118,57 @@ async def get_latest_session(jd_id: uuid.UUID, user=Depends(get_current_user), d
     )
     session_id = result.scalar_one_or_none()
     return {"session_id": str(session_id) if session_id else None}
+
+
+@router.get("/{jd_id}/details")
+async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Everything generated from this JD so far — the latest tailored resume
+    and its interview prep progress — so the JD detail page can show them
+    directly instead of the user having to re-tailor or dig through
+    Interview Center to find work already done for this JD."""
+    uid = uuid.UUID(user["sub"])
+    result = await db.execute(
+        select(TailoringSession)
+        .options(selectinload(TailoringSession.resume))
+        .where(
+            TailoringSession.jd_id == jd_id,
+            TailoringSession.user_id == uid,
+            TailoringSession.status == "completed",
+        )
+        .order_by(TailoringSession.created_at.desc())
+        .limit(1)
+    )
+    session = result.scalars().first()
+    if not session:
+        return {
+            "session_id": None,
+            "ats_score": None,
+            "resume_id": None,
+            "resume_title": None,
+            "resume_pdf_url": None,
+            "session_created_at": None,
+            "questions_total": 0,
+            "questions_practiced": 0,
+        }
+
+    q_result = await db.execute(
+        select(
+            func.count(PrepQuestion.id),
+            func.count(PrepQuestion.practiced_at),
+        ).where(PrepQuestion.session_id == session.id)
+    )
+    questions_total, questions_practiced = q_result.one()
+
+    return {
+        "session_id": str(session.id),
+        "ats_score": session.ats_score,
+        "resume_id": str(session.resume_id),
+        "resume_title": session.resume.title if session.resume else None,
+        "resume_pdf_url": session.resume.pdf_url if session.resume else None,
+        "session_created_at": session.created_at.isoformat(),
+        "questions_total": questions_total,
+        "questions_practiced": questions_practiced,
+    }
 
 
 @router.delete("/{jd_id}", status_code=204)

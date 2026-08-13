@@ -9,6 +9,7 @@ import type {
   ResumeContent,
   LearningItem,
   ExternalContact,
+  JDDetails,
 } from "@career-copilot/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -134,6 +135,9 @@ export const apiClient = {
 
   getLatestJdSession: (id: string): Promise<{ session_id: string | null }> =>
     request<{ session_id: string | null }>("GET", `/jd/${id}/latest-session`),
+
+  getJdDetails: (id: string): Promise<JDDetails> =>
+    request<JDDetails>("GET", `/jd/${id}/details`),
 
   deleteJd: (id: string): Promise<void> =>
     request<void>("DELETE", `/jd/${id}`),

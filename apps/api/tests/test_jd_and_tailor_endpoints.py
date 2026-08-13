@@ -216,6 +216,78 @@ async def test_create_jd_requires_auth():
     assert r.status_code == 401
 
 
+# ── GET /jd/{jd_id}/details ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_jd_details_returns_resume_and_question_progress():
+    from app.db.models import TailoringSession, Resume
+
+    jd_id = uuid.uuid4()
+    user_id = uuid.UUID(TEST_USER_ID)
+    resume = Resume(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title="My Resume",
+        template_id="ats_clean",
+        pdf_url="resumes/user/resume.pdf",
+    )
+    session_row = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        resume_id=resume.id,
+        jd_id=jd_id,
+        status="completed",
+        ats_score=82,
+        created_at=datetime.now(timezone.utc),
+    )
+    session_row.resume = resume
+
+    override, mock_session = make_mock_db()
+    session_result = MagicMock()
+    session_result.scalars.return_value.first.return_value = session_row
+    questions_result = MagicMock()
+    questions_result.one.return_value = (5, 2)
+    mock_session.execute = AsyncMock(side_effect=[session_result, questions_result])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/details", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["session_id"] == str(session_row.id)
+        assert body["ats_score"] == 82
+        assert body["resume_id"] == str(resume.id)
+        assert body["resume_title"] == "My Resume"
+        assert body["resume_pdf_url"] == "resumes/user/resume.pdf"
+        assert body["questions_total"] == 5
+        assert body["questions_practiced"] == 2
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_jd_details_no_session_returns_empty_state():
+    jd_id = uuid.uuid4()
+    override, mock_session = make_mock_db()
+    session_result = MagicMock()
+    session_result.scalars.return_value.first.return_value = None
+    mock_session.execute = AsyncMock(return_value=session_result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/details", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["session_id"] is None
+        assert body["questions_total"] == 0
+        assert body["questions_practiced"] == 0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── GET /jd/{jd_id}/latest-session ──────────────────────────────────────────
 
 
