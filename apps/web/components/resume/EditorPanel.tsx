@@ -42,6 +42,7 @@ export function EditorPanel() {
     prioritySkills, togglePrioritySkill,
     runTailoring, isLoading, error: tailoringError,
     pendingContent,
+    humanizeLevel, setHumanizeLevel,
   } = useTailoringStore();
 
   // "JD context mode" = user navigated from JD Analyzer with a saved JD but
@@ -682,6 +683,8 @@ export function EditorPanel() {
               error={tailoringError}
               onTailor={() => resumeId && runTailoring(resumeId)}
               resumeId={resumeId}
+              humanizeLevel={humanizeLevel}
+              setHumanizeLevel={setHumanizeLevel}
             />
           ) : (
             /* ── Manual mode: user pastes JD directly in the studio ── */
@@ -721,7 +724,7 @@ export function EditorPanel() {
                 className="w-full px-md py-md rounded-lg border border-outline-variant/50 bg-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               />
 
-              <HumanizeSlider />
+              <HumanizeSlider value={humanizeLevel} onChange={setHumanizeLevel} />
 
               <button
                 onClick={() => resumeId && runTailoring(resumeId)}
@@ -772,6 +775,8 @@ function TailoringForm({
   error,
   onTailor,
   resumeId,
+  humanizeLevel,
+  setHumanizeLevel,
 }: {
   jdText: string;
   companyName: string;
@@ -785,6 +790,8 @@ function TailoringForm({
   error: string | null;
   onTailor: () => void;
   resumeId: string | null;
+  humanizeLevel: number;
+  setHumanizeLevel: (n: number) => void;
 }) {
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
 
@@ -887,7 +894,7 @@ function TailoringForm({
       </div>
 
       {/* Humanize slider */}
-      <HumanizeSlider />
+      <HumanizeSlider value={humanizeLevel} onChange={setHumanizeLevel} />
 
       {/* Run tailoring */}
       <button

@@ -1,23 +1,26 @@
 "use client";
 import * as RadixSlider from "@radix-ui/react-slider";
-import { useTailoringStore } from "@/stores/tailoring-store";
 
-export function HumanizeSlider() {
-  const { humanizeLevel, setHumanizeLevel } = useTailoringStore();
-
+export function HumanizeSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+}) {
   return (
     <div className="flex flex-col gap-sm">
       <div className="flex justify-between items-center">
         <span className="text-label-md text-on-surface-variant">Humanize Level</span>
-        <span className="text-label-md text-primary font-bold">{humanizeLevel}</span>
+        <span className="text-label-md text-primary font-bold">{value}</span>
       </div>
       <div className="flex items-center justify-between text-caption text-on-surface-variant mb-xs">
         <span>Natural</span>
         <span>ATS Max</span>
       </div>
       <RadixSlider.Root
-        value={[humanizeLevel]}
-        onValueChange={([v]) => setHumanizeLevel(v)}
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
         min={0}
         max={100}
         step={5}
