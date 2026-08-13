@@ -4,9 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   User,
   Briefcase,
-  GraduationCap,
-  Certificate,
-  Wrench,
   UploadSimple,
   Plus,
   CaretDown,
@@ -23,7 +20,12 @@ import {
   MapPin,
   Eye,
   ArrowSquareOut,
+  Buildings,
+  MagnifyingGlass,
   Code,
+  Certificate,
+  PencilSimple,
+  Trash,
   Link as LinkIcon,
 } from "@phosphor-icons/react";
 import {
@@ -67,13 +69,12 @@ const emptyProject = (): ProjectEntry => ({
 });
 
 // ── Section header ─────────────────────────────────────────────────────────────
-function SectionHeader({ icon: Icon, title, onAdd, addLabel }: {
-  icon: React.ElementType; title: string; onAdd?: () => void; addLabel?: string;
+function SectionHeader({ title, onAdd, addLabel }: {
+  title: string; onAdd?: () => void; addLabel?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-md">
-      <h2 className="text-headline-md text-on-surface font-bold flex items-center gap-sm tracking-tight">
-        <Icon size={22} className="text-primary" />
+    <div className="flex items-center justify-between mb-lg">
+      <h2 className="text-headline-md text-on-surface font-bold tracking-tight">
         {title}
       </h2>
       {onAdd && (
@@ -95,6 +96,7 @@ const cardCls = "bg-surface-container-lowest/80 backdrop-blur-xl rounded-2xl p-l
 // ── Input / Textarea helpers ───────────────────────────────────────────────────
 const inputCls = "w-full px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
 const textareaCls = `${inputCls} resize-none`;
+const fieldLabelCls = "text-label-sm text-on-surface-variant/90 flex items-center gap-xs font-semibold tracking-wide";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
@@ -378,7 +380,7 @@ export default function ProfilePage() {
 
       {/* ── Resume upload ─────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={UploadSimple} title="Resume" />
+        <SectionHeader title="Resume" />
         <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
 
@@ -439,30 +441,15 @@ export default function ProfilePage() {
 
       {/* ── Contact information ───────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={User} title="Contact Information" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+        <SectionHeader title="Contact Information" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-lg gap-y-md">
           <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><User size={14} /> Full Name</label>
+            <label className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>
             <input value={contact.name ?? ""} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
               placeholder="Jane Smith" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><EnvelopeSimple size={14} /> Email</label>
-            <input type="email" value={contact.email ?? ""} onChange={e => setContact(p => ({ ...p, email: e.target.value }))}
-              placeholder="jane@example.com" className={inputCls} />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Phone size={14} /> Phone</label>
-            <input value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
-              placeholder="+1 (555) 000-0000" className={inputCls} />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><MapPin size={14} /> Location</label>
-            <input value={contact.location ?? ""} onChange={e => setContact(p => ({ ...p, location: e.target.value }))}
-              placeholder="San Francisco, CA" className={inputCls} />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Briefcase size={14} /> Job Role</label>
+            <label className={fieldLabelCls}><Briefcase size={14} className="text-primary/70" /> Job Role</label>
             <select value={roleStatus} onChange={e => setRoleStatus(e.target.value as RoleStatus | "")}
               className={inputCls}>
               <option value="">Select…</option>
@@ -471,22 +458,42 @@ export default function ProfilePage() {
             </select>
           </div>
           <div className="flex flex-col gap-xs md:col-span-2">
-            <label className="text-label-sm text-on-surface-variant">Headline / Title</label>
+            <label className={fieldLabelCls}>Professional Headline</label>
             <input value={headline} onChange={e => setHeadline(e.target.value)}
               placeholder="Senior Software Engineer · Open to Work" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><LinkedinLogo size={14} /> LinkedIn</label>
-            <input type="url" value={contact.linkedin ?? ""} onChange={e => setContact(p => ({ ...p, linkedin: e.target.value }))}
-              placeholder="https://linkedin.com/in/you" className={inputCls} />
+            <label className={fieldLabelCls}><EnvelopeSimple size={14} className="text-primary/70" /> Email Address</label>
+            <input type="email" value={contact.email ?? ""} onChange={e => setContact(p => ({ ...p, email: e.target.value }))}
+              placeholder="jane@example.com" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><GithubLogo size={14} /> GitHub</label>
-            <input type="url" value={contact.github ?? ""} onChange={e => setContact(p => ({ ...p, github: e.target.value }))}
-              placeholder="https://github.com/you" className={inputCls} />
+            <label className={fieldLabelCls}><Phone size={14} className="text-primary/70" /> Phone Number</label>
+            <input value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
+              placeholder="+1 (555) 000-0000" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs md:col-span-2">
-            <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Globe size={14} /> Website / Portfolio</label>
+            <label className={fieldLabelCls}><MapPin size={14} className="text-primary/70" /> Location</label>
+            <input value={contact.location ?? ""} onChange={e => setContact(p => ({ ...p, location: e.target.value }))}
+              placeholder="San Francisco, CA" className={inputCls} />
+          </div>
+          <div className="flex flex-col gap-sm md:col-span-2 mt-xs">
+            <label className={fieldLabelCls}><LinkIcon size={14} className="text-primary/70" /> Social Links</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+              <div className="relative">
+                <LinkedinLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+                <input type="url" value={contact.linkedin ?? ""} onChange={e => setContact(p => ({ ...p, linkedin: e.target.value }))}
+                  placeholder="linkedin.com/in/you" className={`${inputCls} pl-[2.75rem]`} />
+              </div>
+              <div className="relative">
+                <GithubLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+                <input type="url" value={contact.github ?? ""} onChange={e => setContact(p => ({ ...p, github: e.target.value }))}
+                  placeholder="github.com/you" className={`${inputCls} pl-[2.75rem]`} />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-xs md:col-span-2">
+            <label className={fieldLabelCls}><Globe size={14} className="text-primary/70" /> Website / Portfolio</label>
             <input type="url" value={contact.website ?? ""} onChange={e => setContact(p => ({ ...p, website: e.target.value }))}
               placeholder="https://yoursite.com" className={inputCls} />
           </div>
@@ -495,13 +502,16 @@ export default function ProfilePage() {
 
       {/* ── Skills ──────────────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={Wrench} title="Skills" />
+        <SectionHeader title="Skills" />
         <div className="flex flex-col gap-sm">
           <div className="flex gap-xs">
-            <input value={skillDraft} onChange={e => setSkillDraft(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
-              placeholder="Add a skill — e.g. React, AWS, Figma…"
-              className={inputCls} />
+            <div className="relative flex-1">
+              <MagnifyingGlass size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+              <input value={skillDraft} onChange={e => setSkillDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+                placeholder="Add a skill — e.g. React, AWS, Figma…"
+                className={`${inputCls} pl-[2.75rem]`} />
+            </div>
             <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
               <Plus size={16} weight="bold" />
@@ -526,7 +536,7 @@ export default function ProfilePage() {
 
       {/* ── Experience ─────────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={Briefcase} title="Experience" onAdd={addExp} addLabel="Add Experience" />
+        <SectionHeader title="Experience" onAdd={addExp} addLabel="Add Experience" />
         {experiences.length === 0 ? (
           <button type="button" onClick={addExp}
             className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
@@ -539,10 +549,10 @@ export default function ProfilePage() {
               const collapsed = collapsedExp[exp.id] ?? false;
               return (
                 <div key={exp.id} className="relative">
-                  <div className={`absolute -left-[25px] md:-left-[29px] top-4 w-3 h-3 rounded-full ring-4 ring-surface-container-lowest ${collapsed ? "bg-outline-variant" : "bg-primary"}`} />
+                  <div className={`absolute -left-[27px] md:-left-[31px] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`} />
                   <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
                   {/* Header */}
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
+                  <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
                     <div className="flex rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
                       {(["full-time", "internship"] as const).map(t => (
                         <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
@@ -555,8 +565,19 @@ export default function ProfilePage() {
                         </button>
                       ))}
                     </div>
-                    <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                    {exp.company && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{exp.company}{exp.title ? ` · ${exp.title}` : ""}</span>}
+                    <div className="flex-1 min-w-0">
+                      {exp.company || exp.title ? (
+                        <>
+                          <p className="text-label-md text-on-surface font-bold truncate">{exp.title || "Untitled Role"}</p>
+                          <p className="text-caption text-on-surface-variant flex items-center gap-xs mt-0.5">
+                            <Buildings size={12} className="text-primary/60" />
+                            {exp.company}{(exp.start || exp.end) ? ` · ${exp.start}${exp.current ? " - Present" : exp.end ? ` - ${exp.end}` : ""}` : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-caption text-on-surface-variant">#{idx + 1} — new entry</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => setCollapsedExp(p => ({ ...p, [exp.id]: !collapsed }))}
                         className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
@@ -570,7 +591,7 @@ export default function ProfilePage() {
                   </div>
                   {/* Fields */}
                   {!collapsed && (
-                    <div className="p-md flex flex-col gap-sm bg-surface-container-lowest">
+                    <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
                       <div className="grid grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Company *</label>
@@ -649,7 +670,7 @@ export default function ProfilePage() {
 
       {/* ── Projects ───────────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={Code} title="Projects" onAdd={addProj} addLabel="Add Project" />
+        <SectionHeader title="Projects" onAdd={addProj} addLabel="Add Project" />
         <p className="text-caption text-on-surface-variant -mt-sm mb-md">
           {roleStatus === "student"
             ? "Since you may not have work experience yet, this is often the most important section on your resume."
@@ -662,62 +683,98 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add your first project</span>
           </button>
         ) : (
-          <div className="flex flex-col gap-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             {projects.map((proj, idx) => {
               const collapsed = collapsedProj[proj.id] ?? false;
+              const tint = idx % 2 === 0 ? "primary" : "secondary";
               return (
-                <div key={proj.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
-                  {/* Header */}
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
-                    <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                    {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
-                    <div className="flex items-center gap-xs ml-auto shrink-0">
-                      <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                        <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                      </button>
-                      <button type="button" onClick={() => removeProj(proj.id)}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* Fields */}
-                  {!collapsed && (
-                    <div className="p-md flex flex-col gap-sm bg-surface-container-lowest">
-                      <div className="grid grid-cols-2 gap-sm">
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Project Name *</label>
-                          <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
-                            placeholder="Campus Marketplace" className={inputCls} />
+                <div key={proj.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "" : "md:col-span-2"}`}>
+                  {collapsed ? (
+                    <div onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: false }))}
+                      className="p-lg flex flex-col h-full cursor-pointer group">
+                      <div className="flex items-start justify-between mb-md">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                          tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                        }`}>
+                          <Code size={22} />
                         </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Tech Stack</label>
-                          <input value={proj.techStack ?? ""} onChange={e => updateProj(proj.id, "techStack", e.target.value)}
-                            placeholder="React, Node.js, PostgreSQL" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Start</label>
-                          <input value={proj.start ?? ""} onChange={e => updateProj(proj.id, "start", e.target.value)}
-                            placeholder="Jan 2024" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">End</label>
-                          <input value={proj.end ?? ""} onChange={e => updateProj(proj.id, "end", e.target.value)}
-                            placeholder="May 2024 or Present" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs col-span-2">
-                          <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Link (optional)</label>
-                          <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
-                            placeholder="https://github.com/you/project" className={inputCls} />
+                        <div className="flex items-center gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button type="button" onClick={e => { e.stopPropagation(); setCollapsedProj(p => ({ ...p, [proj.id]: false })); }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <PencilSimple size={14} />
+                          </button>
+                          <button type="button" onClick={e => { e.stopPropagation(); removeProj(proj.id); }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <Trash size={14} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
-                        <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
-                          rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
-                      </div>
+                      <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{proj.name || `Untitled Project #${idx + 1}`}</h3>
+                      <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
+                        {proj.description || proj.techStack || "No description yet — click to edit"}
+                      </p>
+                      {proj.link && (
+                        <a href={proj.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                          className={`mt-md w-fit flex items-center gap-xs text-label-sm font-semibold rounded-lg px-md py-xs transition-all ${
+                            tint === "primary" ? "text-primary bg-primary/5 hover:bg-primary/10" : "text-secondary bg-secondary/5 hover:bg-secondary/10"
+                          }`}>
+                          View Project <ArrowSquareOut size={12} />
+                        </a>
+                      )}
                     </div>
+                  ) : (
+                    <>
+                      {/* Header */}
+                      <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
+                        <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                        {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
+                        <div className="flex items-center gap-xs ml-auto shrink-0">
+                          <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                          </button>
+                          <button type="button" onClick={() => removeProj(proj.id)}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Fields */}
+                      <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
+                        <div className="grid grid-cols-2 gap-sm">
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Project Name *</label>
+                            <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
+                              placeholder="Campus Marketplace" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Tech Stack</label>
+                            <input value={proj.techStack ?? ""} onChange={e => updateProj(proj.id, "techStack", e.target.value)}
+                              placeholder="React, Node.js, PostgreSQL" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Start</label>
+                            <input value={proj.start ?? ""} onChange={e => updateProj(proj.id, "start", e.target.value)}
+                              placeholder="Jan 2024" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">End</label>
+                            <input value={proj.end ?? ""} onChange={e => updateProj(proj.id, "end", e.target.value)}
+                              placeholder="May 2024 or Present" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs col-span-2">
+                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Link (optional)</label>
+                            <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
+                              placeholder="https://github.com/you/project" className={inputCls} />
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
+                          <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
+                            rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               );
@@ -728,7 +785,7 @@ export default function ProfilePage() {
 
       {/* ── Education ──────────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={GraduationCap} title="Education" onAdd={addEdu} addLabel="Add Education" />
+        <SectionHeader title="Education" onAdd={addEdu} addLabel="Add Education" />
         {education.length === 0 ? (
           <button type="button" onClick={addEdu}
             className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
@@ -802,7 +859,7 @@ export default function ProfilePage() {
 
       {/* ── Certifications ─────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader icon={Certificate} title="Certifications" onAdd={addCert} addLabel="Add Certification" />
+        <SectionHeader title="Certifications" onAdd={addCert} addLabel="Add Certification" />
         {certifications.length === 0 ? (
           <button type="button" onClick={addCert}
             className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
@@ -810,43 +867,74 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add a certification</span>
           </button>
         ) : (
-          <div className="flex flex-col gap-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             {certifications.map((cert, idx) => {
               const collapsed = collapsedCert[cert.id] ?? false;
+              const tint = idx % 2 === 0 ? "primary" : "secondary";
               return (
-                <div key={cert.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
-                    <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                    {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
-                    <div className="flex items-center gap-xs ml-auto shrink-0">
-                      <button type="button" onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: !collapsed }))}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                        <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                      </button>
-                      <button type="button" onClick={() => removeCert(cert.id)}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                        <X size={14} />
-                      </button>
+                <div key={cert.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "" : "md:col-span-2"}`}>
+                  {collapsed ? (
+                    <div onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: false }))}
+                      className="p-lg flex flex-col h-full cursor-pointer group">
+                      <div className="flex items-start justify-between mb-md">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                          tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                        }`}>
+                          <Certificate size={22} />
+                        </div>
+                        <div className="flex items-center gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button type="button" onClick={e => { e.stopPropagation(); setCollapsedCert(p => ({ ...p, [cert.id]: false })); }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <PencilSimple size={14} />
+                          </button>
+                          <button type="button" onClick={e => { e.stopPropagation(); removeCert(cert.id); }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <Trash size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{cert.name || `Untitled Certification #${idx + 1}`}</h3>
+                      {cert.issuer && (
+                        <p className={`text-caption font-semibold flex items-center gap-xs mb-xs ${tint === "primary" ? "text-primary" : "text-secondary"}`}>
+                          <Buildings size={12} /> {cert.issuer}
+                        </p>
+                      )}
+                      {cert.year && <p className="text-caption text-on-surface-variant">Issued: {cert.year}</p>}
                     </div>
-                  </div>
-                  {!collapsed && (
-                    <div className="p-md grid grid-cols-3 gap-sm bg-surface-container-lowest">
-                      <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
-                        <label className="text-caption text-on-surface-variant">Certification Name *</label>
-                        <input value={cert.name ?? ""} onChange={e => updateCert(cert.id, "name", e.target.value)}
-                          placeholder="AWS Solutions Architect" className={inputCls} />
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
+                        <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                        {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
+                        <div className="flex items-center gap-xs ml-auto shrink-0">
+                          <button type="button" onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: !collapsed }))}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                          </button>
+                          <button type="button" onClick={() => removeCert(cert.id)}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
-                        <label className="text-caption text-on-surface-variant">Issuing Organisation</label>
-                        <input value={cert.issuer ?? ""} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
-                          placeholder="Amazon Web Services" className={inputCls} />
+                      <div className="p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
+                        <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
+                          <label className="text-caption text-on-surface-variant">Certification Name *</label>
+                          <input value={cert.name ?? ""} onChange={e => updateCert(cert.id, "name", e.target.value)}
+                            placeholder="AWS Solutions Architect" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
+                          <label className="text-caption text-on-surface-variant">Issuing Organisation</label>
+                          <input value={cert.issuer ?? ""} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
+                            placeholder="Amazon Web Services" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs col-span-1">
+                          <label className="text-caption text-on-surface-variant">Year</label>
+                          <input value={cert.year ?? ""} onChange={e => updateCert(cert.id, "year", e.target.value)}
+                            placeholder="2023" className={inputCls} />
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-xs col-span-1">
-                        <label className="text-caption text-on-surface-variant">Year</label>
-                        <input value={cert.year ?? ""} onChange={e => updateCert(cert.id, "year", e.target.value)}
-                          placeholder="2023" className={inputCls} />
-                      </div>
-                    </div>
+                    </>
                   )}
                 </div>
               );
