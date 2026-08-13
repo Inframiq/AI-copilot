@@ -76,6 +76,12 @@ class WriterOutput(BaseModel):
     updated_skills: list[str]
 
 
+class CoverLetterOutput(BaseModel):
+    """Output of the cover-letter writer agent — one prose block including
+    a generic salutation and signoff, ready to render or edit as-is."""
+    body: str
+
+
 class PrepQuestionData(BaseModel):
     topic: str
     question: str
@@ -524,6 +530,70 @@ async def _agent3_write(
         _build_agent3_system(humanize_level),
         json.dumps(payload),
         WriterOutput,
+        model_tier="pro",
+    )
+
+
+# ── Cover letter writer ────────────────────────────────────────────────────
+
+def _build_cover_letter_system(humanize_level: int) -> str:
+    if humanize_level < 30:
+        tone = "Write in warm, natural prose — a real person's voice, not a template."
+    elif humanize_level > 70:
+        tone = "Front-load JD keywords and technical terms; prioritise ATS scanability over flow."
+    else:
+        tone = "Balance a natural, confident voice with the JD's key terminology."
+
+    return f"""\
+<system_role>
+You are an expert cover letter writer. Given a job description's analysis \
+and a candidate's resume, write a complete, ready-to-send cover letter body.
+</system_role>
+
+<rules>
+1. FACT LOCK — NEVER FABRICATE: Only reference companies, titles, tools, and \
+achievements that literally appear in resume_content. Never invent a hiring \
+manager's name, a specific company address, an achievement, or a metric not \
+already present in resume_content.
+2. STRUCTURE: "Dear Hiring Manager," on its own line, then one opening \
+paragraph naming the target role and company (target_role, company_name), \
+one to two body paragraphs connecting 2-3 specific resume achievements to \
+jd_analysis's themes/tools/skills (prioritise matched_skills — these are \
+already confirmed to overlap with the JD), one closing paragraph expressing \
+interest and inviting next steps, then "Sincerely," on its own line followed \
+by the candidate's real name from resume_content.contact.name.
+3. LENGTH: 250-400 words total, excluding the salutation and signoff lines.
+4. TONE: {tone}
+5. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+</rules>
+
+<output_schema>
+{{
+  "body": "string — the full letter text, salutation through signoff, separated by blank lines between paragraphs"
+}}
+</output_schema>"""
+
+
+async def write_cover_letter(
+    resume_content: dict,
+    jd_analysis: JDAnalysis,
+    matched_skills: list[str],
+    jd_title: str,
+    company_name: str | None,
+    humanize_level: int,
+    provider: AIProvider,
+) -> CoverLetterOutput:
+    payload = {
+        "target_role": jd_title,
+        "company_name": company_name or "the company",
+        "jd_analysis": jd_analysis.model_dump(),
+        "matched_skills": _sanitize_skill_list(matched_skills),
+        "resume_content": resume_content,
+    }
+    return await provider.complete_structured(
+        _build_cover_letter_system(humanize_level),
+        json.dumps(payload),
+        CoverLetterOutput,
         model_tier="pro",
     )
 

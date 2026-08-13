@@ -282,3 +282,37 @@ def test_agent2_prompt_skill_cap_is_internally_consistent():
     # that caused Agent 2 to under-return suggested skills.
     assert "6-skill cap" not in _AGENT2_SYSTEM
     assert "15-skill cap" in _AGENT2_SYSTEM
+
+
+@pytest.mark.asyncio
+async def test_write_cover_letter_passes_jd_and_resume_context_to_the_prompt():
+    from app.services.tailoring import write_cover_letter, CoverLetterOutput
+
+    provider = make_mock_provider(
+        structured_return=CoverLetterOutput(
+            body="Dear Hiring Manager,\n\nI am excited to apply...\n\nSincerely,\nJane Doe"
+        )
+    )
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python", "AWS"],
+        domain_expertise_themes=["distributed systems"],
+    )
+    resume_content = {
+        "contact": {"name": "Jane Doe", "email": "jane@example.com"},
+        "experience": [{"company": "Acme", "title": "Engineer", "bullets": ["Built APIs with Python"]}],
+        "skills": ["Python", "AWS"],
+    }
+
+    result = await write_cover_letter(
+        resume_content, jd_analysis, ["Python", "AWS"], "Senior Backend Engineer",
+        "Acme Corp", 50, provider,
+    )
+
+    assert isinstance(result, CoverLetterOutput)
+    assert "Jane Doe" in result.body
+    provider.complete_structured.assert_called_once()
+    call_args = provider.complete_structured.call_args
+    sent_payload = call_args.args[1]
+    assert "Senior Backend Engineer" in sent_payload
+    assert "Acme Corp" in sent_payload
+    assert "distributed systems" in sent_payload
