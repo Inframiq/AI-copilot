@@ -1,122 +1,129 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — AuraColor "Modern Tech" palette (#0066FF royal blue,
-     #050A30 near-black navy, #F4F7FF near-white), the same trio echoed
-     in that reference's AAA-contrast "Accessible Deep" collection.
-     Supersedes the earlier Color Hunt reskin. Applied app-wide via
-     these shared tokens, so the landing, auth, and every other page
-     pick it up automatically. Token names are unchanged, so no
-     component needed to change structurally. Surrounding ramp steps
-     not given directly (surface container tiers, outline, fixed-dim
-     variants, etc.) are interpolated between these three anchors to
-     keep the same M3 token structure. */
-  --color-primary: #0066ff;
-  --color-surface-container: #f4f7ff;
-  --color-tertiary-container: #dde3f7;
-  --color-tertiary-fixed: #f4f7ff;
-  --color-background: #f4f7ff;
-  /* Not the standard pale M3 "container" tone — this app uses
-     primary-container as a darker sibling of primary (gradients,
-     hover/pressed states on solid primary buttons), so it's pinned to a
-     darker step of the same generated primary palette instead. */
-  --color-primary-container: #050a30;
-  --color-surface-container-high: #e3eafc;
-  --color-inverse-on-surface: #eef2fd;
-  --color-tertiary-fixed-dim: #a8c4ff;
-  --color-inverse-primary: #a8c4ff;
-  --color-on-tertiary-container: #0a1240;
+  /* Colors — "Executive Precision Light" design system (DESIGN.md), a
+     full M3-shaped token set given as literal hex values rather than
+     sampled from a screenshot, mapped 1:1 by name onto this app's
+     existing tokens. Supersedes the AuraColor "Modern Tech" palette.
+     Token names are unchanged, so no component needed to change
+     structurally. success-accent/success/success-container/etc. aren't
+     part of the spec (no semantic-success color given) — success-accent
+     stays pinned to primary per this app's convention, the rest are
+     untouched. */
+  --color-primary: #0050cb;
+  --color-surface-container: #f1f5f9;
+  --color-tertiary-container: #cc4204;
+  --color-tertiary-fixed: #ffdbd0;
+  --color-background: #f7f9fb;
+  --color-primary-container: #e0ebff;
+  --color-surface-container-high: #e2e8f0;
+  --color-inverse-on-surface: #eff1f3;
+  --color-tertiary-fixed-dim: #ffb59d;
+  --color-inverse-primary: #b3c5ff;
+  --color-on-tertiary-container: #fff6f4;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #a8c4ff;
-  --color-secondary: #050a30;
-  --color-on-primary-fixed: #050a30;
+  --color-primary-fixed-dim: #b3c5ff;
+  --color-secondary: #575b85;
+  --color-on-primary-fixed: #001849;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
-  --color-surface-dim: #dce5fa;
-  --color-on-primary-fixed-variant: #050a30;
-  --color-on-background: #050a30;
+  --color-surface-dim: #f1f5f9;
+  --color-on-primary-fixed-variant: #003fa4;
+  --color-on-background: #191c1e;
   --color-error-container: #ffdad6;
-  --color-on-surface-variant: #45516b;
-  --color-surface-tint: #0066ff;
-  --color-outline-variant: #d7e0f5;
-  --color-surface-container-low: #f9fbff;
-  --color-secondary-fixed-dim: #454f74;
-  --color-surface-bright: #f4f7ff;
+  --color-on-surface-variant: #475569;
+  --color-surface-tint: #0054d6;
+  --color-outline-variant: #e2e8f0;
+  --color-surface-container-low: #f8fafc;
+  --color-secondary-fixed-dim: #bfc3f3;
+  --color-surface-bright: #ffffff;
   --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #050a30;
-  --color-secondary-container: #131c4d;
+  --color-on-tertiary-fixed: #390c00;
+  --color-secondary-container: #cacefe;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #cfdbf7;
-  --color-on-surface: #050a30;
-  /* Paired with the darker primary-container above — a light tone so
-     text/icons stay legible on that darker background. */
-  --color-on-primary-container: #f4f7ff;
-  --color-primary-fixed: #f4f7ff;
-  --color-surface: #f4f7ff;
-  --color-on-tertiary-fixed-variant: #050a30;
-  --color-on-secondary-fixed-variant: #1a2557;
+  --color-surface-container-highest: #cbd5e1;
+  --color-on-surface: #0f172a;
+  --color-on-primary-container: #0047b3;
+  --color-primary-fixed: #dae1ff;
+  --color-surface: #ffffff;
+  --color-on-tertiary-fixed-variant: #832600;
+  --color-on-secondary-fixed-variant: #3f446c;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #101a4a;
-  --color-surface-variant: #e0e8fb;
-  --color-outline: #7480a0;
-  --color-success-accent: #0066ff;
+  --color-inverse-surface: #2d3133;
+  --color-surface-variant: #e0e3e5;
+  --color-outline: #94a3b8;
+  --color-success-accent: #0050cb;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #050a30;
-  --color-on-secondary-container: #f4f7ff;
-  --color-secondary-fixed: #cfd6ef;
-  --color-on-secondary-fixed: #050a30;
+  --color-tertiary: #a33200;
+  --color-on-secondary-container: #525780;
+  --color-secondary-fixed: #dfe0ff;
+  --color-on-secondary-fixed: #13183e;
 
-  /* Border radius */
-  --radius: 0.25rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
-  --radius-full: 9999px;
+  /* Border radius — left as-is: this app's existing DEFAULT/lg/xl/2xl
+     scale (4/8/12/16px) already lands on the same pixel values the spec
+     calls for (buttons/inputs at 8px via rounded-lg, large cards at
+     16px via rounded-2xl), just under different tier names, so
+     remapping names would touch every rounded-* class for no visual
+     change. */
 
-  /* Spacing */
+  /* Spacing — xl/xxl widened per the spec's explicit "major vertical
+     sections separated by 48px/80px, not data-dense" direction; these
+     two are used pervasively (gap-xl, pb-xxl, etc.) so this alone
+     opens up breathing room app-wide. */
   --spacing-lg: 24px;
   --spacing-gutter: 24px;
-  --spacing-xl: 32px;
+  --spacing-xl: 48px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
-  --spacing-xxl: 48px;
+  --spacing-xxl: 80px;
   --spacing-xs: 4px;
   --spacing-sidebar-width: 280px;
 
-  /* Font sizes */
-  --text-headline-xl: 36px;
-  --text-headline-xl--line-height: 1.2;
+  /* Font sizes — Hanken Grotesk already matches the spec's typeface, so
+     only sizes/weights/leading/tracking move, mapped by closest
+     semantic tier onto this app's existing token names (display-lg →
+     headline-xl per the spec's own "use display-lg for section
+     entries" guidance; headline-lg → headline-lg; title-md →
+     headline-md; label-md → label-md). body-sm/label-sm/caption have
+     no direct equivalent in the spec, so they keep close to their
+     current size and only pick up the lighter-weight, wider-tracking
+     rhythm the spec uses elsewhere. */
+  --text-headline-xl: 48px;
+  --text-headline-xl--line-height: 1.166667;
   --text-headline-xl--font-weight: 700;
   --text-headline-xl--letter-spacing: -0.02em;
-  --text-headline-lg: 28px;
-  --text-headline-lg--line-height: 1.3;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 1.25;
   --text-headline-lg--font-weight: 600;
-  --text-headline-md: 22px;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-md: 20px;
   --text-headline-md--line-height: 1.4;
   --text-headline-md--font-weight: 600;
   --text-body-lg: 18px;
-  --text-body-lg--line-height: 1.6;
+  --text-body-lg--line-height: 1.555556;
   --text-body-lg--font-weight: 400;
   --text-body-md: 16px;
-  --text-body-md--line-height: 1.6;
+  --text-body-md--line-height: 1.5;
   --text-body-md--font-weight: 400;
   --text-body-sm: 14px;
-  --text-body-sm--line-height: 1.5;
+  --text-body-sm--line-height: 1.428571;
   --text-body-sm--font-weight: 400;
   --text-label-md: 14px;
-  --text-label-md--line-height: 1.2;
-  --text-label-md--font-weight: 600;
-  --text-label-md--letter-spacing: 0.05em;
+  --text-label-md--line-height: 1.428571;
+  --text-label-md--font-weight: 500;
+  --text-label-md--letter-spacing: 0.01em;
   --text-label-sm: 12px;
-  --text-label-sm--line-height: 1.2;
+  --text-label-sm--line-height: 1.333333;
   --text-label-sm--font-weight: 500;
-  --text-caption: 10px;
-  --text-caption--line-height: 1.2;
-  --text-caption--font-weight: 600;
+  --text-label-sm--letter-spacing: 0.01em;
+  --text-caption: 11px;
+  --text-caption--line-height: 1.454545;
+  --text-caption--font-weight: 500;
+  --text-caption--letter-spacing: 0.01em;
 
   /* Font family */
   --font-sans: var(--font-hanken), sans-serif;
@@ -127,7 +134,7 @@
 }
 
 html, body {
-  background-color: #f4f7ff; /* --color-background */
+  background-color: #f7f9fb; /* --color-background */
   height: 100%;
 }
 
