@@ -41,7 +41,7 @@ export function ScoreRing({ score, size = 80 }: ScoreRingProps) {
         cx={size / 2}
         cy={size / 2}
         r={r}
-        stroke="#d6e4f0"
+        stroke="#e3eafc"
         strokeWidth={strokeWidth}
         fill="none"
       />
@@ -64,7 +64,7 @@ export function ScoreRing({ score, size = 80 }: ScoreRingProps) {
         y="50%"
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#163172"
+        fill="#050a30"
         fontSize={size / 4}
         fontWeight="700"
         fontFamily="var(--font-hanken), sans-serif"

@@ -572,13 +572,13 @@ export default function JDIndexPage() {
             <div className="flex sm:flex-col items-center gap-sm shrink-0 sm:w-24">
               <div className="relative w-20 h-20 shrink-0">
                 <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" fill="none" r="45" stroke="#d6e4f0" strokeWidth="10" />
+                  <circle cx="50" cy="50" fill="none" r="45" stroke="#e3eafc" strokeWidth="10" />
                   <circle
                     cx="50"
                     cy="50"
                     fill="none"
                     r="45"
-                    stroke="#1e56a0"
+                    stroke="#0066ff"
                     strokeLinecap="round"
                     strokeWidth="10"
                     strokeDasharray="283"
