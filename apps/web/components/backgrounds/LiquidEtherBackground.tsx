@@ -4,10 +4,10 @@ import dynamic from "next/dynamic";
 // LiquidEther touches canvas/WebGL/window and can't run during SSR.
 const LiquidEther = dynamic(() => import("./LiquidEther.jsx"), { ssr: false });
 
-// Brand navy → periwinkle gradient (see app/globals.css --color-primary /
+// Brand indigo → violet gradient (see app/globals.css --color-primary /
 // --color-primary-container / --color-primary-fixed-dim) instead of React
 // Bits' default purple/pink preset.
-const BRAND_COLORS = ["#00429a", "#0058c9", "#b0c6ff"];
+const BRAND_COLORS = ["#4f46e5", "#3525cd", "#c3c0ff"];
 
 export function LiquidEtherBackground() {
   return (

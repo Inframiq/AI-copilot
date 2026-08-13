@@ -4,12 +4,12 @@ import dynamic from "next/dynamic";
 // Lightfall touches canvas/WebGL/window and can't run during SSR.
 const Lightfall = dynamic(() => import("./Lightfall.jsx"), { ssr: false });
 
-// Brand navy → periwinkle gradient (see app/globals.css --color-primary /
+// Brand indigo → violet gradient (see app/globals.css --color-primary /
 // --color-primary-container / --color-primary-fixed-dim) instead of React
 // Bits' default purple/pink preset. backgroundColor/opacity/glow are tuned
 // down from the library defaults so the effect stays a subtle wash on this
 // app's light background rather than a heavy dark overlay.
-const BRAND_COLORS = ["#b0c6ff", "#0058c9", "#00429a"];
+const BRAND_COLORS = ["#c3c0ff", "#3525cd", "#4f46e5"];
 
 export function LightfallBackground() {
   return (

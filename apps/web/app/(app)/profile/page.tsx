@@ -13,7 +13,6 @@ import {
   X,
   FloppyDisk,
   FilePdf,
-  FileDoc,
   CheckCircle,
   Spinner,
   LinkedinLogo,
@@ -73,7 +72,7 @@ function SectionHeader({ icon: Icon, title, onAdd, addLabel }: {
 }) {
   return (
     <div className="flex items-center justify-between mb-md">
-      <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+      <h2 className="text-headline-md text-on-surface font-bold flex items-center gap-sm tracking-tight">
         <Icon size={22} className="text-primary" />
         {title}
       </h2>
@@ -81,7 +80,7 @@ function SectionHeader({ icon: Icon, title, onAdd, addLabel }: {
         <button
           type="button"
           onClick={onAdd}
-          className="flex items-center gap-xs px-md py-sm rounded-xl text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+          className="flex items-center gap-xs px-md py-xs rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
         >
           <Plus size={14} weight="bold" /> {addLabel ?? "Add"}
         </button>
@@ -90,8 +89,11 @@ function SectionHeader({ icon: Icon, title, onAdd, addLabel }: {
   );
 }
 
+// ── Card shell ────────────────────────────────────────────────────────────────
+const cardCls = "bg-surface-container-lowest/80 backdrop-blur-xl rounded-2xl p-lg border border-outline-variant/30 shadow-lg shadow-primary/5";
+
 // ── Input / Textarea helpers ───────────────────────────────────────────────────
-const inputCls = "w-full px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary placeholder:text-on-surface-variant/50 transition-all";
+const inputCls = "w-full px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
 const textareaCls = `${inputCls} resize-none`;
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -357,13 +359,13 @@ export default function ProfilePage() {
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
   return (
-    <div className="max-w-3xl mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-xl">
       {/* Page header */}
-      <div className="pt-xl">
-        <h1 className="text-headline-xl text-on-surface font-bold" style={{ letterSpacing: "-0.02em" }}>
+      <div className="pt-xl flex flex-col gap-xs">
+        <h1 className="text-headline-xl text-on-surface font-extrabold" style={{ letterSpacing: "-0.02em" }}>
           My Profile
         </h1>
-        <p className="text-body-md text-on-surface-variant mt-xs">
+        <p className="text-body-md text-on-surface-variant max-w-2xl leading-relaxed">
           Source of truth for your career — used by JD Analyzer and Resume Builder.
         </p>
       </div>
@@ -375,34 +377,36 @@ export default function ProfilePage() {
       )}
 
       {/* ── Resume upload ─────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={UploadSimple} title="Resume" />
         <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
 
         {masterResumeId && masterResumeTitle ? (
-          <div className="flex items-center gap-md p-md rounded-xl bg-primary/5 border border-primary/20 mb-md">
-            <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-              <FileDoc size={20} className="text-primary" />
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-md p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+            <div className="flex items-start gap-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-error-container to-error-container/60 text-error flex items-center justify-center shrink-0 border border-error-container/50">
+                <FilePdf size={22} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-label-md text-on-surface font-semibold truncate">{masterResumeTitle}</p>
+                <p className="text-caption text-on-surface-variant mt-xs">Active resume · fields auto-populated from this file</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-label-md text-on-surface font-semibold truncate">{masterResumeTitle}</p>
-              <p className="text-caption text-on-surface-variant">Active resume · fields auto-populated from this file</p>
-            </div>
-            <div className="flex items-center gap-md shrink-0">
+            <div className="flex items-center gap-sm shrink-0">
               <button
                 onClick={() => setShowPreview(true)}
-                className="flex items-center gap-xs text-label-sm text-primary hover:underline">
+                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
                 <Eye size={14} /> Preview
               </button>
               <button onClick={() => router.push(`/studio/${masterResumeId}`)}
-                className="flex items-center gap-xs text-label-sm text-primary hover:underline">
+                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
                 <ArrowSquareOut size={14} /> Open
               </button>
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="flex items-center gap-xs text-label-sm text-primary hover:underline disabled:opacity-50">
+                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
                 {uploading && <Spinner size={14} className="animate-spin" />}
                 {uploading ? "Replacing…" : "Replace"}
               </button>
@@ -414,32 +418,27 @@ export default function ProfilePage() {
             onDragLeave={() => setDragging(false)}
             onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) acceptFile(f); }}
             onClick={() => fileRef.current?.click()}
-            className={`rounded-xl border-2 border-dashed p-lg flex items-center gap-lg cursor-pointer transition-all ${
-              dragging ? "border-primary bg-primary/5" : "border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30"
+            className={`group rounded-xl border-2 border-dashed p-xl flex flex-col items-center text-center gap-sm cursor-pointer transition-all ${
+              dragging ? "border-primary bg-primary/5" : "border-outline-variant/50 hover:border-primary/60 hover:bg-primary/5"
             }`}
           >
-            {uploading ? (
-              <Spinner size={28} className="text-primary animate-spin" />
-            ) : (
-              <UploadSimple size={28} className={dragging ? "text-primary" : "text-on-surface-variant/50"} />
-            )}
-            <div className="flex-1">
-              <p className="text-label-md text-on-surface font-semibold">
-                {uploading ? "Parsing resume…" : dragging ? "Release to upload" : "Upload your resume"}
-              </p>
-              <p className="text-caption text-on-surface-variant mt-xs">
-                PDF only · AI extracts contact, experience, education, and skills automatically
-              </p>
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-xs shadow-sm transition-all ${
+              dragging ? "bg-primary text-white" : "bg-surface-variant/50 text-on-surface-variant group-hover:bg-primary group-hover:text-white"
+            }`}>
+              {uploading ? <Spinner size={26} className="animate-spin" /> : <UploadSimple size={26} />}
             </div>
-            <span className="shrink-0 text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm hover:bg-primary/5 transition-all">
-              Browse
-            </span>
+            <p className="text-label-md text-on-surface font-semibold">
+              {uploading ? "Parsing resume…" : dragging ? "Release to upload" : "Drag & drop your new resume here"}
+            </p>
+            <p className="text-caption text-on-surface-variant">
+              PDF only · AI extracts contact, experience, education, and skills automatically
+            </p>
           </div>
         )}
       </section>
 
       {/* ── Contact information ───────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={User} title="Contact Information" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
           <div className="flex flex-col gap-xs">
@@ -495,7 +494,7 @@ export default function ProfilePage() {
       </section>
 
       {/* ── Skills ──────────────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={Wrench} title="Skills" />
         <div className="flex flex-col gap-sm">
           <div className="flex gap-xs">
@@ -504,17 +503,18 @@ export default function ProfilePage() {
               placeholder="Add a skill — e.g. React, AWS, Figma…"
               className={inputCls} />
             <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
-              className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+              className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
               <Plus size={16} weight="bold" />
             </button>
           </div>
           {skills.length > 0 && (
-            <div className="flex flex-wrap gap-xs">
+            <div className="flex flex-wrap gap-sm">
               {skills.map(s => (
-                <span key={s} className="flex items-center gap-xs pl-sm pr-xs py-xs bg-secondary-container text-primary text-caption rounded-full font-medium">
+                <span key={s} className="flex items-center gap-xs pl-sm pr-xs py-xs bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface text-caption rounded-full font-semibold hover:border-primary/50 hover:shadow-md transition-all">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
                   {s}
                   <button type="button" onClick={() => removeSkill(s)} aria-label={`Remove ${s}`}
-                    className="rounded-full p-0.5 hover:bg-primary/15 transition-colors">
+                    className="rounded-full p-0.5 hover:bg-primary/15 hover:text-error transition-colors">
                     <X size={11} weight="bold" />
                   </button>
                 </span>
@@ -525,7 +525,7 @@ export default function ProfilePage() {
       </section>
 
       {/* ── Experience ─────────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={Briefcase} title="Experience" onAdd={addExp} addLabel="Add Experience" />
         {experiences.length === 0 ? (
           <button type="button" onClick={addExp}
@@ -534,19 +534,21 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add your first experience</span>
           </button>
         ) : (
-          <div className="flex flex-col gap-sm">
+          <div className="relative pl-lg md:pl-xl flex flex-col gap-md before:content-[''] before:absolute before:left-[7px] md:before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-outline-variant/30">
             {experiences.map((exp, idx) => {
               const collapsed = collapsedExp[exp.id] ?? false;
               return (
-                <div key={exp.id} className="rounded-xl border border-outline-variant/30 overflow-hidden">
+                <div key={exp.id} className="relative">
+                  <div className={`absolute -left-[25px] md:-left-[29px] top-4 w-3 h-3 rounded-full ring-4 ring-surface-container-lowest ${collapsed ? "bg-outline-variant" : "bg-primary"}`} />
+                  <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
                   {/* Header */}
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container">
+                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
                     <div className="flex rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
                       {(["full-time", "internship"] as const).map(t => (
                         <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
                           className={`px-sm py-xs font-medium transition-colors ${
                             exp.type === t
-                              ? t === "internship" ? "bg-secondary-container text-primary" : "bg-primary text-on-primary"
+                              ? t === "internship" ? "bg-secondary-container text-on-secondary-container" : "bg-primary text-on-primary"
                               : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"
                           }`}>
                           {t === "full-time" ? "Full-time" : "Internship"}
@@ -557,11 +559,11 @@ export default function ProfilePage() {
                     {exp.company && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{exp.company}{exp.title ? ` · ${exp.title}` : ""}</span>}
                     <div className="flex items-center gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => setCollapsedExp(p => ({ ...p, [exp.id]: !collapsed }))}
-                        className="p-xs rounded text-on-surface-variant hover:text-primary transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                         <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
                       </button>
                       <button type="button" onClick={() => removeExp(exp.id)}
-                        className="p-xs rounded text-on-surface-variant hover:text-error transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
                         <X size={14} />
                       </button>
                     </div>
@@ -637,6 +639,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   )}
+                  </div>
                 </div>
               );
             })}
@@ -645,7 +648,7 @@ export default function ProfilePage() {
       </section>
 
       {/* ── Projects ───────────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={Code} title="Projects" onAdd={addProj} addLabel="Add Project" />
         <p className="text-caption text-on-surface-variant -mt-sm mb-md">
           {roleStatus === "student"
@@ -663,18 +666,18 @@ export default function ProfilePage() {
             {projects.map((proj, idx) => {
               const collapsed = collapsedProj[proj.id] ?? false;
               return (
-                <div key={proj.id} className="rounded-xl border border-outline-variant/30 overflow-hidden">
+                <div key={proj.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
                   {/* Header */}
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container">
+                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
                     <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
                     {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
                     <div className="flex items-center gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
-                        className="p-xs rounded text-on-surface-variant hover:text-primary transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                         <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
                       </button>
                       <button type="button" onClick={() => removeProj(proj.id)}
-                        className="p-xs rounded text-on-surface-variant hover:text-error transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
                         <X size={14} />
                       </button>
                     </div>
@@ -724,7 +727,7 @@ export default function ProfilePage() {
       </section>
 
       {/* ── Education ──────────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={GraduationCap} title="Education" onAdd={addEdu} addLabel="Add Education" />
         {education.length === 0 ? (
           <button type="button" onClick={addEdu}
@@ -737,8 +740,8 @@ export default function ProfilePage() {
             {education.map((edu, idx) => {
               const collapsed = collapsedEdu[edu.id] ?? false;
               return (
-                <div key={edu.id} className="rounded-xl border border-outline-variant/30 overflow-hidden">
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container">
+                <div key={edu.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
+                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
                     <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
                     {edu.institution && (
                       <span className="text-label-sm text-on-surface font-semibold truncate flex-1">
@@ -747,11 +750,11 @@ export default function ProfilePage() {
                     )}
                     <div className="flex items-center gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => setCollapsedEdu(p => ({ ...p, [edu.id]: !collapsed }))}
-                        className="p-xs rounded text-on-surface-variant hover:text-primary transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                         <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
                       </button>
                       <button type="button" onClick={() => removeEdu(edu.id)}
-                        className="p-xs rounded text-on-surface-variant hover:text-error transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
                         <X size={14} />
                       </button>
                     </div>
@@ -798,7 +801,7 @@ export default function ProfilePage() {
       </section>
 
       {/* ── Certifications ─────────────────────────────────────────────────── */}
-      <section className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+      <section className={cardCls}>
         <SectionHeader icon={Certificate} title="Certifications" onAdd={addCert} addLabel="Add Certification" />
         {certifications.length === 0 ? (
           <button type="button" onClick={addCert}
@@ -811,17 +814,17 @@ export default function ProfilePage() {
             {certifications.map((cert, idx) => {
               const collapsed = collapsedCert[cert.id] ?? false;
               return (
-                <div key={cert.id} className="rounded-xl border border-outline-variant/30 overflow-hidden">
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container">
+                <div key={cert.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
+                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
                     <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
                     {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
                     <div className="flex items-center gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: !collapsed }))}
-                        className="p-xs rounded text-on-surface-variant hover:text-primary transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                         <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
                       </button>
                       <button type="button" onClick={() => removeCert(cert.id)}
-                        className="p-xs rounded text-on-surface-variant hover:text-error transition-colors">
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
                         <X size={14} />
                       </button>
                     </div>
@@ -857,7 +860,7 @@ export default function ProfilePage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-sm px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-xl shadow-primary/30 hover:shadow-2xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+          className="flex items-center gap-sm px-xl py-md rounded-full text-label-md text-on-primary bg-gradient-to-br from-primary to-secondary shadow-xl shadow-primary/30 hover:-translate-y-0.5 hover:shadow-2xl active:scale-95 active:translate-y-0 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
         >
           {saving ? <Spinner size={18} className="animate-spin" /> : saveOk ? <CheckCircle size={18} weight="fill" /> : <FloppyDisk size={18} />}
           {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}

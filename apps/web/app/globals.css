@@ -1,68 +1,68 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — Material You palette generated from the primary blue (#3a6ed2)
-     sampled across the Stitch reference mockups (buttons, selected states,
-     header bars), using the "Vibrant" M3 variant for CTA punch. Token names
-     are unchanged from before, so no component needed to change. */
-  --color-primary: #0058c9;
-  --color-surface-container: #ebedfb;
-  --color-tertiary-container: #e8ddff;
-  --color-tertiary-fixed: #e8ddff;
-  --color-background: #faf8ff;
+  /* Colors — Material You palette generated from the indigo/violet primary
+     (#3525cd / #712ae2) in the Stitch "Profile" mockup, superseding the
+     earlier blue reskin. Token names are unchanged, so no component needed
+     to change structurally. */
+  --color-primary: #3525cd;
+  --color-surface-container: #f0ecf9;
+  --color-tertiary-container: #516177;
+  --color-tertiary-fixed: #d3e4fe;
+  --color-background: #fcf8ff;
   /* Not the standard pale M3 "container" tone — this app uses
      primary-container as a darker sibling of primary (gradients,
      hover/pressed states on solid primary buttons), so it's pinned to a
      darker step of the same generated primary palette instead. */
-  --color-primary-container: #00429a;
-  --color-surface-container-high: #e5e7f5;
-  --color-inverse-on-surface: #eef0fd;
-  --color-tertiary-fixed-dim: #cebef7;
-  --color-inverse-primary: #b0c6ff;
-  --color-on-tertiary-container: #4b3f6f;
+  --color-primary-container: #4f46e5;
+  --color-surface-container-high: #eae6f4;
+  --color-inverse-on-surface: #f3effc;
+  --color-tertiary-fixed-dim: #b7c8e1;
+  --color-inverse-primary: #c3c0ff;
+  --color-on-tertiary-container: #ccdcf7;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #b0c6ff;
-  --color-secondary: #5a5c7e;
-  --color-on-primary-fixed: #001944;
+  --color-primary-fixed-dim: #c3c0ff;
+  --color-secondary: #712ae2;
+  --color-on-primary-fixed: #0f0069;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
-  --color-surface-dim: #d7d9e6;
-  --color-on-primary-fixed-variant: #00429a;
-  --color-on-background: #181b25;
+  --color-surface-dim: #dcd8e5;
+  --color-on-primary-fixed-variant: #3323cc;
+  --color-on-background: #1b1b24;
   --color-error-container: #ffdad6;
-  --color-on-surface-variant: #424654;
-  --color-surface-tint: #0058c9;
-  --color-outline-variant: #c2c6d6;
-  --color-surface-container-low: #f2f3ff;
-  --color-secondary-fixed-dim: #c3c3eb;
-  --color-surface-bright: #faf8ff;
+  --color-on-surface-variant: #464555;
+  --color-surface-tint: #4d44e3;
+  --color-outline-variant: #c7c4d8;
+  --color-surface-container-low: #f5f2ff;
+  --color-secondary-fixed-dim: #d2bbff;
+  --color-surface-bright: #fcf8ff;
   --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #1f1341;
-  --color-secondary-container: #e0e0ff;
+  --color-on-tertiary-fixed: #0b1c30;
+  --color-secondary-container: #8a4cfc;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #e0e2ef;
-  --color-on-surface: #181b25;
+  --color-surface-container-highest: #e4e1ee;
+  --color-on-surface: #1b1b24;
   /* Paired with the darker primary-container above — a light tone so
      text/icons stay legible on that darker background. */
-  --color-on-primary-container: #b0c6ff;
-  --color-primary-fixed: #d9e2ff;
-  --color-surface: #faf8ff;
-  --color-on-tertiary-fixed-variant: #4b3f6f;
-  --color-on-secondary-fixed-variant: #424465;
+  --color-on-primary-container: #dad7ff;
+  --color-primary-fixed: #e2dfff;
+  --color-surface: #fcf8ff;
+  --color-on-tertiary-fixed-variant: #38485d;
+  --color-on-secondary-fixed-variant: #5a00c6;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #2d303a;
-  --color-surface-variant: #dee2f2;
-  --color-outline: #727785;
-  --color-success-accent: #0058c9;
+  --color-inverse-surface: #302f39;
+  --color-surface-variant: #e4e1ee;
+  --color-outline: #777587;
+  --color-success-accent: #3525cd;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #645788;
-  --color-on-secondary-container: #424465;
-  --color-secondary-fixed: #e0e0ff;
-  --color-on-secondary-fixed: #171937;
+  --color-tertiary: #3a495f;
+  --color-on-secondary-container: #fffbff;
+  --color-secondary-fixed: #eaddff;
+  --color-on-secondary-fixed: #25005a;
 
   /* Border radius */
   --radius: 0.25rem;
@@ -121,7 +121,7 @@
 }
 
 html, body {
-  background-color: #faf8ff; /* --color-background */
+  background-color: #fcf8ff; /* --color-background */
   height: 100%;
 }
 
