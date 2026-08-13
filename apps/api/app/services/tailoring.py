@@ -107,12 +107,40 @@ def _strip_json_fence(raw: str) -> str:
     return s.strip()
 
 
+# Prose almost always opens with a verb describing what the candidate did —
+# a real skill name never does. Defense-in-depth against the model ignoring
+# the "short noun phrase, not a sentence" instruction in the Agent 2 prompt
+# and echoing a bullet/responsibility fragment into the skills list instead.
+_SKILL_LEADING_VERBS = re.compile(
+    r"^(developed|managed|led|responsible for|worked|helped|created|built|"
+    r"implemented|designed|collaborated|utilized|maintained|assisted|drove|"
+    r"delivered|coordinated|analyzed|performed|conducted|supported|"
+    r"experience (with|in)|proficient (with|in|at)|knowledge of|ability to)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_a_skill(s: str) -> bool:
+    """Reject prose that slipped past the LLM's own formatting rules — a
+    process/responsibility description mistaken for a skill name, not a
+    skill itself. Real skill names are short noun phrases; sentences and
+    bullet fragments are not."""
+    words = s.split()
+    if len(words) == 0 or len(words) > 6:
+        return False
+    if ". " in s or s.count(",") > 1 or ";" in s:
+        return False
+    if _SKILL_LEADING_VERBS.match(s.strip()):
+        return False
+    return True
+
+
 def _sanitize_skill_list(skills: list[str]) -> list[str]:
     result = []
     for s in skills:
         s = re.sub(r"[\x00-\x1f\x7f]", "", s)
-        s = s[:200]
-        if s:
+        s = s[:200].strip()
+        if s and _looks_like_a_skill(s):
             result.append(s)
     return result
 
@@ -342,11 +370,18 @@ list them most-important-first — the skill most central to this JD and best \
 evidenced by the candidate's work goes first, the most marginal goes last. \
 The frontend offers the user a "top 15" quick-add drawn from list order, so a \
 skill's position is a real signal of priority, not incidental.
+   - SHAPE: every entry must be a short skill name or tool/technology/\
+methodology name — 1 to 4 words, no verbs, no punctuation, never a sentence \
+or a paraphrase of a responsibility. "Kubernetes", "Stakeholder Management", \
+"Serverless Architecture" are valid; "Managed a team of engineers to deliver \
+projects on time" or "Experience with cloud infrastructure and deployment \
+processes" are NOT skills and must never appear here — that is bullet-level \
+narrative, not a skill.
 6. PRIORITY SKILLS OVERRIDE: if priority_skills_from_user (in the payload) is \
 non-empty, the user has explicitly confirmed they have every skill listed there \
 and wants it highlighted — always include all of them in plausible_skills_to_add \
 verbatim, bypassing the evidence filter in rule 5 for these specific skills only \
-(they do not count toward the 6-skill cap in rule 5). Additionally, for any \
+(they do not count toward the 15-skill cap in rule 5). Additionally, for any \
 bullet whose work could plausibly demonstrate a priority skill, prefer INJECT to \
 weave it in naturally — but never fabricate metrics or experience just to force \
 the connection; it's fine for a priority skill to surface only in \

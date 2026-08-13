@@ -8,6 +8,7 @@ from app.services.tailoring import (
     JDAnalysis, MappingPlan, BulletMapping,
     WriterOutput, RewrittenBullet,
     _build_agent3_system,
+    _sanitize_skill_list, _looks_like_a_skill, _AGENT2_SYSTEM,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 
@@ -246,3 +247,38 @@ async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
 
     assert result.matched_skills.count("Python") == 1
     assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3
+
+
+# ── Skill sanitization ────────────────────────────────────────────────────────
+
+
+def test_sanitize_skill_list_keeps_real_skill_names():
+    skills = ["Python", "Serverless Architecture", "CI/CD", "Node.js", "Stakeholder Management"]
+    assert _sanitize_skill_list(skills) == skills
+
+
+def test_sanitize_skill_list_drops_process_narrative_masquerading_as_a_skill():
+    skills = [
+        "Python",
+        "Managed a team of engineers to deliver projects on time",
+        "Experience with cloud infrastructure and deployment processes",
+        "Responsible for coordinating cross-functional stakeholders across the org",
+        "AWS",
+    ]
+    result = _sanitize_skill_list(skills)
+    assert result == ["Python", "AWS"]
+
+
+def test_looks_like_a_skill_rejects_long_or_sentence_shaped_text():
+    assert _looks_like_a_skill("Kubernetes") is True
+    assert _looks_like_a_skill("Amazon Web Services") is True
+    assert _looks_like_a_skill("Led a cross-functional team of five engineers.") is False
+    assert _looks_like_a_skill("Knowledge of distributed systems design") is False
+    assert _looks_like_a_skill("Built, deployed, and maintained microservices") is False
+
+
+def test_agent2_prompt_skill_cap_is_internally_consistent():
+    # Regression guard for the "15-skill cap" vs "6-skill cap" contradiction
+    # that caused Agent 2 to under-return suggested skills.
+    assert "6-skill cap" not in _AGENT2_SYSTEM
+    assert "15-skill cap" in _AGENT2_SYSTEM

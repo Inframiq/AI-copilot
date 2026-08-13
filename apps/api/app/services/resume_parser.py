@@ -5,6 +5,7 @@ import json
 import zipfile
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
+from app.services.tailoring import _looks_like_a_skill
 
 _MAX_PDF_PAGES = 50
 _MAX_TEXT_CHARS = 100_000
@@ -137,7 +138,14 @@ Rules:
 - Return only the JSON object, no markdown fences.
 - Keep all original bullet text verbatim — do not rewrite.
 - If a field is not found, use null for strings and [] for arrays.
-- skills must be a flat list of individual skill strings.
+- skills must be a flat list of individual skill strings, each a short tool/
+  technology/methodology name — 1 to 4 words, no verbs, no punctuation, never
+  a sentence. "Python", "Stakeholder Management", "CI/CD" are valid entries.
+  Only pull these from an actual "Skills" section (or equivalent list of
+  tools/technologies) — never from prose like a summary, an experience
+  bullet, or a "Key Achievements" paragraph, even if it names a tool in
+  passing. If a bullet or paragraph is not itself a skills list, do not
+  extract anything from it into "skills".
 - "projects" is for personal/academic/hackathon projects listed under a
   "Projects" (or similar) heading — do NOT duplicate work performed under
   an employer, which belongs in "experience" instead.
@@ -164,4 +172,8 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     data.setdefault("projects", [])
     data.setdefault("education", [])
     data.setdefault("skills", [])
+    # Defense-in-depth against the model pulling a responsibility/summary
+    # sentence into "skills" despite the prompt rule against it — same
+    # prose-vs-skill-name filter tailoring.py applies to AI-suggested skills.
+    data["skills"] = [s for s in data["skills"] if isinstance(s, str) and _looks_like_a_skill(s)]
     return data
