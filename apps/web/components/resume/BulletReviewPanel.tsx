@@ -14,7 +14,7 @@ import {
   Copy,
   MagnifyingGlass,
 } from "@phosphor-icons/react";
-import { useTailoringStore, type BulletChange } from "@/stores/tailoring-store";
+import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
 
@@ -112,6 +112,15 @@ export function BulletReviewPanel() {
   const allDecided =
     bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
 
+  // How many suggested skills "Add top N" can actually add without pushing
+  // the merged resume over MAX_MERGED_SKILLS — see buildMergedContent.
+  const originalSkillsCount = originalContent?.skills.length ?? 0;
+  const topSkillsToAddCount = Math.min(
+    15,
+    suggestedSkills.length,
+    Math.max(0, MAX_MERGED_SKILLS - originalSkillsCount),
+  );
+
   // Re-run tailoring with the same JD — discards current review and starts fresh.
   async function handleRetailor() {
     if (!resumeId || !jdText.trim()) return;
@@ -194,8 +203,12 @@ export function BulletReviewPanel() {
 
   function acceptTopSkills() {
     // AI orders plausible_skills_to_add most-important-first (see Agent 2's
-    // prompt) — "top 15" is just the first 15 of that ranked list.
-    for (const skill of suggestedSkills.slice(0, 15)) {
+    // prompt) — "top N" is just the first N of that ranked list, where N is
+    // also bounded by however many slots are actually left under the
+    // resume-wide skills cap (see topSkillsToAddCount / buildMergedContent)
+    // so this can't push the merged resume over the limit just because it
+    // was auto-accepted rather than hand-picked.
+    for (const skill of suggestedSkills.slice(0, topSkillsToAddCount)) {
       setBulletDecision(`skill_add:${skill}`, "accept");
     }
     setShowSkillsPrompt(false);
@@ -269,6 +282,7 @@ export function BulletReviewPanel() {
           prioritySkills={prioritySkills}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
+          originalSkillsCount={originalContent?.skills.length ?? 0}
         />
         <div className="flex gap-sm">
           {jdText.trim() && (
@@ -478,6 +492,7 @@ export function BulletReviewPanel() {
           prioritySkills={prioritySkills}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
+          originalSkillsCount={originalContent?.skills.length ?? 0}
         />
 
         {/* 2. Writing Style slider removed here — it duplicates the one
@@ -622,9 +637,20 @@ export function BulletReviewPanel() {
             <div>
               <p className="text-headline-md text-on-surface font-bold mb-xs">Add suggested skills?</p>
               <p className="text-body-sm text-on-surface-variant">
-                You haven&apos;t picked any of the {suggestedSkills.length} suggested skills above. Want AI to add
-                the top {Math.min(15, suggestedSkills.length)} it thinks best match this JD? Otherwise your
-                resume&apos;s original skills are used as-is.
+                {topSkillsToAddCount > 0 ? (
+                  <>
+                    You haven&apos;t picked any of the {suggestedSkills.length} suggested skills above.
+                    Want AI to add the top {topSkillsToAddCount} it thinks best match this JD? Otherwise
+                    your resume&apos;s original skills are used as-is.
+                  </>
+                ) : (
+                  <>
+                    Your resume already lists {originalSkillsCount} skills — at the recommended cap, so
+                    none of the {suggestedSkills.length} suggested ones can be added without making the
+                    skills section look overstuffed. Trim a few existing skills first if you&apos;d like
+                    to make room.
+                  </>
+                )}
               </p>
             </div>
             <div className="flex gap-sm w-full">
@@ -634,12 +660,14 @@ export function BulletReviewPanel() {
               >
                 Keep original skills
               </button>
-              <button
-                onClick={acceptTopSkills}
-                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
-              >
-                Add top {Math.min(15, suggestedSkills.length)}
-              </button>
+              {topSkillsToAddCount > 0 && (
+                <button
+                  onClick={acceptTopSkills}
+                  className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+                >
+                  Add top {topSkillsToAddCount}
+                </button>
+              )}
             </div>
           </div>
         </div>,
@@ -655,14 +683,23 @@ function SkillsBlock({
   prioritySkills,
   bulletDecisions,
   setBulletDecision,
+  originalSkillsCount,
 }: {
   suggestedSkills: string[];
   prioritySkills: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
+  originalSkillsCount: number;
 }) {
   if (suggestedSkills.length === 0) return null;
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+  const selectedCount = suggestedSkills.filter(
+    (s) => bulletDecisions[`skill_add:${s}`] === "accept",
+  ).length;
+  // Mirrors buildMergedContent's cap — surfaced here so hitting the limit
+  // reads as an intentional guardrail, not skills silently failing to add.
+  const remainingSlots = Math.max(0, MAX_MERGED_SKILLS - originalSkillsCount - selectedCount);
+  const atCap = remainingSlots === 0;
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
       <div>
@@ -671,14 +708,21 @@ function SkillsBlock({
           Click a skill to include it in your resume
           {prioritySkills.length > 0 && " — ★ marks the keywords you picked on the JD page"}
         </p>
+        <p className="text-caption text-on-surface-variant">
+          {originalSkillsCount + selectedCount} / {MAX_MERGED_SKILLS} skills
+          {atCap && " — limit reached, deselect one to add another"}
+        </p>
       </div>
       <div className="flex flex-wrap gap-xs">
         {suggestedSkills.map((skill) => {
           const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
           const isPriority = prioritySet.has(skill.toLowerCase());
+          const disabled = !selected && atCap;
           return (
             <button
               key={skill}
+              disabled={disabled}
+              title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : undefined}
               onClick={() =>
                 setBulletDecision(
                   `skill_add:${skill}`,
@@ -688,6 +732,8 @@ function SkillsBlock({
               className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
                 selected
                   ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+                  : disabled
+                  ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
                   : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
               }`}
             >

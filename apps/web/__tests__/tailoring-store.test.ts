@@ -33,7 +33,7 @@ const mockCompletedSession = {
   suggested_skills: [],
 };
 
-import { useTailoringStore } from "../stores/tailoring-store";
+import { useTailoringStore, MAX_MERGED_SKILLS } from "../stores/tailoring-store";
 import { useResumeStore } from "../stores/resume-store";
 import { apiClient } from "../lib/api-client";
 
@@ -315,6 +315,39 @@ describe("useTailoringStore", () => {
     expect(useResumeStore.getState().pdfSignedUrl).toBe(
       "https://example.com/tailored.pdf"
     );
+  });
+
+  it("generatePreview caps merged skills at MAX_MERGED_SKILLS instead of piling up an unbounded list", async () => {
+    const manyOriginalSkills = Array.from({ length: MAX_MERGED_SKILLS - 2 }, (_, i) => `Original Skill ${i}`);
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      skills: manyOriginalSkills,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      suggested_skills: ["Kubernetes", "Docker", "Terraform", "GraphQL", "gRPC"],
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    // Accept every suggested skill — more than the 2 remaining slots allow.
+    for (const skill of ["Kubernetes", "Docker", "Terraform", "GraphQL", "gRPC"]) {
+      useTailoringStore.getState().setBulletDecision(`skill_add:${skill}`, "accept");
+    }
+
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.skills.length).toBe(MAX_MERGED_SKILLS);
+    // Original skills are never displaced by additions — only the overflow
+    // of newly-added ones gets trimmed.
+    expect(mergedContent?.skills.slice(0, manyOriginalSkills.length)).toEqual(manyOriginalSkills);
   });
 
   it("reanalyzePreview re-scores the current merged bullets against the JD without persisting", async () => {

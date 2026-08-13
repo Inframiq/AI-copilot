@@ -6,6 +6,14 @@ import type { ResumeContent } from "@career-copilot/types";
 // 'accept' = use tailored version, 'reject' = keep original
 export type BulletDecision = "accept" | "reject";
 
+// Same ceiling the from-scratch generator enforces (resume_spec.py
+// HARD_LIMITS: skill_categories.max(6) × skills_per_category.max(6)) — the
+// tailoring merge is the one path that previously had no cap at all, so an
+// original resume's skills plus every accepted suggestion could pile up into
+// a skills section that visually overflows the page and reads as padded
+// rather than curated.
+export const MAX_MERGED_SKILLS = 36;
+
 export interface BulletChange {
   key: string; // e.g. "exp0_b2" or "skills"
   jobIdx: number; // -1 for skills
@@ -45,7 +53,7 @@ function buildMergedContent(
   const mergedSkills = [
     ...originalContent.skills,
     ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)),
-  ];
+  ].slice(0, MAX_MERGED_SKILLS);
 
   return {
     ...pendingContent,
