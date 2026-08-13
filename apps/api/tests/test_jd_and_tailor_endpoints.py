@@ -314,6 +314,7 @@ async def test_get_jd_cover_letter_returns_latest():
         body = r.json()
         assert body["cover_letter_id"] == str(letter.id)
         assert body["status"] == "completed"
+        assert body["created_at"] == letter.created_at.isoformat()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
