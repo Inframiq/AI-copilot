@@ -14,7 +14,13 @@ import pytest
 # ---------------------------------------------------------------------------
 weasyprint = pytest.importorskip("weasyprint")
 
-from app.services.pdf import generate_letter_pdf, generate_pdf, get_signed_url, upload_pdf  # noqa: E402
+from app.services.pdf import (  # noqa: E402
+    _render_letter_html,
+    generate_letter_pdf,
+    generate_pdf,
+    get_signed_url,
+    upload_pdf,
+)
 
 SAMPLE_RESUME = {
     "contact": {
@@ -255,6 +261,18 @@ def test_generate_letter_pdf_escapes_body_text():
     # A literal "<script>" in body text must never reach the rendered HTML
     # unescaped — Jinja's autoescape (already enabled on _jinja_env) handles
     # this, this test just confirms the letter template doesn't opt out of it.
+    body = "Dear Hiring Manager,\n\n<script>alert(1)</script>\n\nSincerely,\nJane Doe"
+
+    html = _render_letter_html(contact, "January 1, 2026", body)
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_generate_letter_pdf_with_escaped_body_still_produces_pdf():
+    """Happy-path sanity check that a body containing HTML-special characters
+    still renders to a valid PDF end-to-end via generate_letter_pdf."""
+    contact = {"name": "Jane Doe", "email": "jane@example.com"}
     body = "Dear Hiring Manager,\n\n<script>alert(1)</script>\n\nSincerely,\nJane Doe"
 
     pdf_bytes = generate_letter_pdf(contact, "January 1, 2026", body)
