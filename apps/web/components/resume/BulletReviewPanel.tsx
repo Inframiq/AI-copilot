@@ -50,6 +50,12 @@ export function BulletReviewPanel() {
   const [isRetailoring, setIsRetailoring] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // Tracks whether a preview has ever been generated in this review session —
+  // once true, a later Humanize/Rewrite/accept-reject clears previewPdfUrl
+  // (see tailoring-store) and this flag relabels the button "Regenerate
+  // Preview" instead of "Preview Tailored Resume", so it reads as "your
+  // edit needs a fresh render" rather than starting over.
+  const [everPreviewed, setEverPreviewed] = useState(false);
   const [showSaveChoice, setShowSaveChoice] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -111,6 +117,7 @@ export function BulletReviewPanel() {
     if (!resumeId || !jdText.trim()) return;
     setIsRetailoring(true);
     discardPending();
+    setEverPreviewed(false);
     await runTailoring(resumeId);
     setIsRetailoring(false);
   }
@@ -166,6 +173,7 @@ export function BulletReviewPanel() {
     setGenerateError(null);
     try {
       await generatePreview(resumeId);
+      setEverPreviewed(true);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Preview generation failed");
     } finally {
@@ -513,10 +521,12 @@ export function BulletReviewPanel() {
               className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <FilePdf size={18} />
-              {isGenerating ? "Rendering preview…" : "Preview Tailored Resume"}
+              {isGenerating ? "Rendering preview…" : everPreviewed ? "Regenerate Preview" : "Preview Tailored Resume"}
             </button>
             <p className="text-caption text-on-surface-variant text-center">
-              This only renders a preview — your saved resume is not changed yet.
+              {everPreviewed
+                ? "You made changes since the last preview — regenerate to see them reflected."
+                : "This only renders a preview — your saved resume is not changed yet."}
             </p>
           </>
         )}

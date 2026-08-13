@@ -179,12 +179,22 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
   setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords }) =>
     set({ atsScore, matchedSkills, missingSkills, companyKeywords }),
-  setBulletDecision: (key, decision) =>
-    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision } })),
+  // Any edit made after a preview was already rendered invalidates that
+  // preview — it was built from a snapshot of pendingContent/bulletDecisions
+  // at generatePreview time, so a later Humanize/Rewrite/accept-reject/skill
+  // toggle would otherwise leave the visible PDF (and, worse, whatever
+  // saveTailoredResume would persist) silently out of sync with what's on
+  // screen. Clearing previewPdfUrl flips the review panel back to offering
+  // "Preview Tailored Resume" so the user has an obvious way to regenerate.
+  setBulletDecision: (key, decision) => {
+    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision }, previewPdfUrl: null }));
+    useResumeStore.getState().setPdfSignedUrl(null);
+  },
   setAllBulletDecisions: (changes, decision) => {
     const decisions: Record<string, BulletDecision> = {};
     for (const c of changes) decisions[c.key] = decision;
-    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions } }));
+    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions }, previewPdfUrl: null }));
+    useResumeStore.getState().setPdfSignedUrl(null);
   },
 
   updatePendingBullet: (jobIdx, bulletIdx, text) => {
@@ -195,7 +205,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       const newBullets = job.bullets.map((b, bi) => (bi === bulletIdx ? text : b));
       return { ...job, bullets: newBullets };
     });
-    set({ pendingContent: { ...pendingContent, experience: newExp } });
+    set({ pendingContent: { ...pendingContent, experience: newExp }, previewPdfUrl: null });
+    useResumeStore.getState().setPdfSignedUrl(null);
   },
 
   // Helper to ensure job description is saved to backend if not already persisted

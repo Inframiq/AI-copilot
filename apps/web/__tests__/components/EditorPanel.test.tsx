@@ -430,6 +430,75 @@ describe("EditorPanel", () => {
     expect(screen.queryByText("Add suggested skills?")).not.toBeInTheDocument();
   });
 
+  it("offers Regenerate Preview after Humanize invalidates an already-rendered preview", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
+      ats_score: 70,
+      matched_skills: ["React"],
+      missing_skills: [],
+      tailored_content: {
+        ...original,
+        experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
+      },
+      company_keywords: [],
+      suggested_skills: [],
+    } as any);
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValue({
+      rewritten_text: "Built things, naturally",
+    } as any);
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/preview.pdf" } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    // Generate the first preview.
+    await userEvent.click(screen.getByText("Preview Tailored Resume"));
+    await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalledTimes(1));
+    expect(useTailoringStore.getState().previewPdfUrl).toBe("https://example.com/preview.pdf");
+    expect(screen.getByText("Save…")).toBeInTheDocument();
+
+    // Humanizing after a preview already exists must invalidate it — not
+    // silently leave the Download/Save panel pointing at stale content —
+    // and surface an obvious way to regenerate.
+    await userEvent.click(screen.getByText("Humanize"));
+    await waitFor(() => expect(apiClient.rewriteBullet).toHaveBeenCalled());
+
+    expect(useTailoringStore.getState().previewPdfUrl).toBeNull();
+    expect(screen.queryByText("Save…")).not.toBeInTheDocument();
+    expect(await screen.findByText("Regenerate Preview")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Regenerate Preview"));
+    await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalledTimes(2));
+    const secondCallContent = vi.mocked(apiClient.generatePdf).mock.calls[1][2];
+    expect(secondCallContent?.experience[0].bullets[0]).toBe("Built things, naturally");
+  });
+
   it("does not prompt for suggested skills once the user has picked one manually", async () => {
     const original = {
       ...SAMPLE_CONTENT,
