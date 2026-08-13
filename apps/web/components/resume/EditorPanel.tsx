@@ -10,6 +10,12 @@ import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 import { CaretDown, CaretRight, CheckCircle, FileText, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
+// Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
+// from-scratch generator enforces this too (see resume_generator.py's
+// _truncate_summary_or_objective); this is the same cap applied where a
+// user types or pastes a summary directly.
+const SUMMARY_MAX_WORDS = 80;
+
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
   { key: "name", label: "Full Name" },
   { key: "email", label: "Email", type: "email" },
@@ -76,6 +82,23 @@ export function EditorPanel() {
   // already there from an uploaded/parsed resume — not just a blank scaffold.
   const hasResumeContent =
     content.experience.length > 0 || content.education.length > 0 || content.skills.length > 0;
+
+  const summaryWordCount = (content.summary ?? "").trim().split(/\s+/).filter(Boolean).length;
+
+  function handleSummaryChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    // Hard cap at the resume spec's summary limit (resume_spec.py
+    // HARD_LIMITS["summary"]["max_words"]) — a long, unbounded summary was
+    // the other half of the "resume looks artificially padded" complaint
+    // (the skills cap was the first half). Trims from the end so text the
+    // user already typed at the front is never silently rewritten.
+    if (words.length <= SUMMARY_MAX_WORDS) {
+      updateContent({ summary: value });
+    } else {
+      updateContent({ summary: words.slice(0, SUMMARY_MAX_WORDS).join(" ") });
+    }
+  }
 
   return (
     <div className="flex flex-col gap-lg h-full overflow-y-auto p-lg">
@@ -250,16 +273,28 @@ export function EditorPanel() {
         {/* Summary Tab */}
         <Tabs.Content value="summary" className="flex flex-col gap-md">
           <div className="bg-surface p-lg rounded-xl border border-outline-variant/20 shadow-sm flex flex-col gap-md">
-            <div className="flex items-center gap-sm mb-xs">
+            <div className="flex items-center justify-between gap-sm mb-xs">
               <h4 className="text-headline-md font-bold text-on-surface">Professional Summary</h4>
+              <span
+                className={`text-caption ${
+                  summaryWordCount >= SUMMARY_MAX_WORDS ? "text-error font-medium" : "text-on-surface-variant"
+                }`}
+              >
+                {summaryWordCount} / {SUMMARY_MAX_WORDS} words
+              </span>
             </div>
             <textarea
               value={content.summary ?? ""}
-              onChange={(e) => updateContent({ summary: e.target.value })}
+              onChange={handleSummaryChange}
               rows={6}
               placeholder="Write a compelling professional summary…"
               className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             />
+            {summaryWordCount >= SUMMARY_MAX_WORDS && (
+              <p className="text-caption text-error">
+                A tight, {SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long one — trim before adding more.
+              </p>
+            )}
           </div>
         </Tabs.Content>
 

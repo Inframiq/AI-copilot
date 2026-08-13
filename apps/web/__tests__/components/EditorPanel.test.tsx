@@ -159,6 +159,28 @@ describe("EditorPanel", () => {
     expect(await screen.findByText("Upload failed: too large")).toBeInTheDocument();
   });
 
+  it("caps the Summary tab at 80 words instead of accepting an unbounded paste", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    render(<EditorPanel />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "summary" }));
+    const textarea = screen.getByPlaceholderText(/Write a compelling professional summary/);
+
+    const oversized = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+    // userEvent.type is too slow for 120 words in a single test; paste
+    // simulates the real-world trigger (pasting a long paragraph) and
+    // exercises the same onChange path.
+    await userEvent.click(textarea);
+    await userEvent.paste(oversized);
+
+    await waitFor(() => {
+      const words = (useResumeStore.getState().content?.summary ?? "").split(/\s+/).filter(Boolean);
+      expect(words.length).toBe(80);
+      expect(words[0]).toBe("word0");
+    });
+    expect(screen.getByText("80 / 80 words")).toBeInTheDocument();
+  });
+
   it("Tailor Resume is disabled until JD text is entered", () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     render(<EditorPanel />);

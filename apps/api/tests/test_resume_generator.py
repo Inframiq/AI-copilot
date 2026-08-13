@@ -161,6 +161,46 @@ async def test_experienced_professional_profile():
 
 
 @pytest.mark.asyncio
+async def test_oversized_summary_gets_truncated_to_the_word_cap():
+    """HARD_LIMITS["summary"]["max_words"] is declared and checked by the
+    validator, but nothing previously acted on that violation — the
+    compression loop had no branch for "Summary"/"Objective", so an
+    oversized summary was flagged and then returned unfixed. This locks in
+    the fix: a summary over the cap must come back at or under it."""
+    profile = {
+        "contact": {"name": "Taylor Candidate", "email": "taylor@example.com"},
+        "education": [{"institution": "State University", "degree": "BSc CS", "year": "2023"}],
+        "experience": [_job("Acme", 3)],
+        "skills": ["Python"],
+    }
+    max_words = HARD_LIMITS["summary"]["max_words"]
+    oversized_summary = " ".join(f"word{i}" for i in range(max_words + 40))
+
+    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+        if schema is SelectionPlan:
+            payload = json.loads(user)
+            return SelectionPlan(tiers=[
+                RelevanceTier(item_id=item_id, tier="CORE") for item_id in payload.get("items", {})
+            ])
+        if schema is WrittenBullets:
+            items: dict[str, str] = json.loads(user)
+            return WrittenBullets(bullets=[RewrittenItem(item_id=k, text=v) for k, v in items.items()])
+        if schema is SummaryPlan:
+            return SummaryPlan(headline="", kind="summary", text=oversized_summary)
+        raise AssertionError(f"unexpected schema {schema}")
+
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+
+    result = await generate_resume(profile, "fresher", provider, target_role="Backend Developer")
+
+    final_word_count = len(result.resume_content["summary"].split())
+    assert final_word_count <= max_words
+    summary_violations = [v for v in result.validation.violations if v.section == "Summary"]
+    assert summary_violations == []
+
+
+@pytest.mark.asyncio
 async def test_irrelevant_content_is_excluded():
     """Scenario 4 — content classified EXCLUDE (irrelevant to the target
     role) must not appear anywhere in the final resume, even though it was

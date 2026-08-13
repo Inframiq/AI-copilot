@@ -333,6 +333,16 @@ def _truncate_headline(content: dict) -> None:
     content["headline"] = " ".join(words[:max_words])
 
 
+def _truncate_summary_or_objective(content: dict, section: str) -> None:
+    # section is "Summary" or "Objective" (see resume_validator.py) — matches
+    # the corresponding lowercase content key one-to-one.
+    key = section.lower()
+    max_words = HARD_LIMITS[key]["max_words"]
+    words = (content.get(key) or "").split()
+    if len(words) > max_words:
+        content[key] = " ".join(words[:max_words]).rstrip(",;:") + "."
+
+
 def _reduce_for_page_overflow(content: dict) -> None:
     """Priority per spec: drop weak optional sections first, then the
     weakest (last-ranked) project, then shorten the single longest bullet.
@@ -389,6 +399,8 @@ def _compress(content: dict, violations: list[Violation]) -> dict:
             _drop_empty(content, section)
         elif section == "Headline":
             _truncate_headline(content)
+        elif section in ("Summary", "Objective") and "below minimum" not in issue:
+            _truncate_summary_or_objective(content, section)
         elif section == "Page count":
             _reduce_for_page_overflow(content)
     return content

@@ -6,13 +6,17 @@ import type { ResumeContent } from "@career-copilot/types";
 // 'accept' = use tailored version, 'reject' = keep original
 export type BulletDecision = "accept" | "reject";
 
-// Same ceiling the from-scratch generator enforces (resume_spec.py
-// HARD_LIMITS: skill_categories.max(6) × skills_per_category.max(6)) — the
-// tailoring merge is the one path that previously had no cap at all, so an
-// original resume's skills plus every accepted suggestion could pile up into
-// a skills section that visually overflows the page and reads as padded
-// rather than curated.
-export const MAX_MERGED_SKILLS = 36;
+// The from-scratch generator's 36 (resume_spec.py HARD_LIMITS:
+// skill_categories.max(6) x skills_per_category.max(6)) assumes skills are
+// CATEGORIZED — up to 6 labeled rows ("Languages: ...", "Cloud: ...") of up
+// to 6 items each, so 36 total reads as organized, not crowded. This app's
+// ResumeContent.skills is always a flat list, and every PDF template renders
+// it as one unbroken comma-joined line/paragraph (see e.g.
+// templates/ats_clean.html's render_skills() macro) — 36 items in a single
+// line is keyword-stuffing, not a curated skills section. 20 is the
+// standard ATS-resume guidance for a flat skills line: enough for a
+// multi-domain candidate, short of looking padded.
+export const MAX_MERGED_SKILLS = 20;
 
 export interface BulletChange {
   key: string; // e.g. "exp0_b2" or "skills"
