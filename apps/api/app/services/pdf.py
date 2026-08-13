@@ -118,6 +118,40 @@ def count_pdf_pages(resume_content: dict, template_id: str) -> int:
     return len(document.pages)
 
 
+def _render_letter_html(contact: dict, date_str: str, body: str) -> str:
+    """Render a cover letter to an HTML string. Separate from _render_html
+    since letter content isn't shaped like resume_content (no experience/
+    education/skills sections) and needs no photo_url sanitization — the
+    letter template never renders an image."""
+    template = _jinja_env.get_template("cover_letter.html")
+    return template.render(contact=contact, date_str=date_str, body=body)
+
+
+def generate_letter_pdf(contact: dict, date_str: str, body: str) -> bytes:
+    """Render a cover letter and return PDF bytes."""
+    import weasyprint  # deferred, same reason as generate_pdf
+
+    html = _render_letter_html(contact, date_str, body)
+    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
+
+
+async def upload_letter_pdf(
+    pdf_bytes: bytes,
+    user_id: str,
+    cover_letter_id: str,
+    supabase_client,
+) -> str:
+    """Upload a cover letter PDF to the same Storage bucket resumes use
+    (no separate bucket provisioning needed), under its own path prefix."""
+    path = f"cover-letters/{user_id}/{cover_letter_id}.pdf"
+    supabase_client.storage.from_("resumes").upload(
+        path,
+        pdf_bytes,
+        {"content-type": "application/pdf", "upsert": "true"},
+    )
+    return path
+
+
 def _blocked_url_fetcher(url: str, *args, **kwargs):
     """Default-deny fetcher: only data: URIs are allowed, no network/file access.
 

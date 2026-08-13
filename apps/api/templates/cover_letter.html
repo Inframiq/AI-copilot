@@ -1,0 +1,30 @@
+<!-- apps/api/templates/cover_letter.html -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; margin: 1in; }
+  body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111; }
+  .header { margin-bottom: 24px; }
+  .name { font-size: 16pt; font-weight: 700; margin: 0 0 4px; }
+  .contact { font-size: 9.5pt; color: #444; }
+  .date { margin: 20px 0; font-size: 10.5pt; }
+  .body p { margin: 0 0 14px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <p class="name">{{ contact.name }}</p>
+    <p class="contact">
+      {{ contact.email }}{% if contact.phone %} · {{ contact.phone }}{% endif %}{% if contact.location %} · {{ contact.location }}{% endif %}
+    </p>
+  </div>
+  <p class="date">{{ date_str }}</p>
+  <div class="body">
+    {% for paragraph in body.split('\n\n') %}
+    <p>{{ paragraph }}</p>
+    {% endfor %}
+  </div>
+</body>
+</html>

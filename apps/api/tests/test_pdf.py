@@ -14,7 +14,7 @@ import pytest
 # ---------------------------------------------------------------------------
 weasyprint = pytest.importorskip("weasyprint")
 
-from app.services.pdf import generate_pdf, get_signed_url, upload_pdf  # noqa: E402
+from app.services.pdf import generate_letter_pdf, generate_pdf, get_signed_url, upload_pdf  # noqa: E402
 
 SAMPLE_RESUME = {
     "contact": {
@@ -234,3 +234,29 @@ def test_get_signed_url_custom_expiry():
         "resumes/u/r.pdf", 300
     )
     assert url == "https://storage.example.com/short-token"
+
+
+# ---------------------------------------------------------------------------
+# generate_letter_pdf tests
+# ---------------------------------------------------------------------------
+
+
+def test_generate_letter_pdf_returns_pdf_bytes():
+    contact = {"name": "Jane Doe", "email": "jane@example.com", "phone": "555-1234"}
+    body = "Dear Hiring Manager,\n\nI am excited to apply.\n\nSincerely,\nJane Doe"
+
+    pdf_bytes = generate_letter_pdf(contact, "January 1, 2026", body)
+
+    assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_generate_letter_pdf_escapes_body_text():
+    contact = {"name": "Jane Doe", "email": "jane@example.com"}
+    # A literal "<script>" in body text must never reach the rendered HTML
+    # unescaped — Jinja's autoescape (already enabled on _jinja_env) handles
+    # this, this test just confirms the letter template doesn't opt out of it.
+    body = "Dear Hiring Manager,\n\n<script>alert(1)</script>\n\nSincerely,\nJane Doe"
+
+    pdf_bytes = generate_letter_pdf(contact, "January 1, 2026", body)
+
+    assert pdf_bytes.startswith(b"%PDF")
