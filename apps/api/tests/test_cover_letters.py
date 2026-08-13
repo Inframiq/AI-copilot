@@ -213,3 +213,67 @@ async def test_delete_cover_letter():
         mock_session.delete.assert_called_once_with(letter)
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_generate_pdf_returns_data_url_and_persists_in_background():
+    import base64
+    from app.db.models import CoverLetter, Resume
+
+    class _FakeSessionContextManager:
+        def __init__(self, session):
+            self._session = session
+
+        async def __aenter__(self):
+            return self._session
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+    override, mock_session = make_mock_db()
+    letter = CoverLetter(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
+        resume_id=uuid.uuid4(), jd_id=uuid.uuid4(),
+        content="Dear Hiring Manager,\n\nBody.\n\nSincerely,\nJane Doe",
+        status="completed", created_at=datetime.now(timezone.utc),
+    )
+    resume = Resume(
+        id=letter.resume_id, user_id=uuid.UUID(TEST_USER_ID), title="R",
+        content={"contact": {"name": "Jane Doe", "email": "jane@example.com"}},
+        template_id="ats_clean",
+    )
+    letter_result = MagicMock()
+    letter_result.scalar_one_or_none.return_value = letter
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    mock_session.execute = AsyncMock(side_effect=[letter_result, resume_result])
+
+    bg_session = MagicMock()
+    bg_letter_result = MagicMock()
+    bg_letter_result.scalar_one_or_none.return_value = letter
+    bg_session.execute = AsyncMock(return_value=bg_letter_result)
+    bg_session.commit = AsyncMock()
+    session_factory = MagicMock(side_effect=lambda: _FakeSessionContextManager(bg_session))
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.cover_letters.generate_letter_pdf", return_value=b"%PDF-fake"
+        ) as mock_gen, patch(
+            "app.routers.cover_letters.upload_letter_pdf",
+            new=AsyncMock(return_value="cover-letters/user/letter.pdf"),
+        ) as mock_upload, patch(
+            "app.routers.cover_letters.AsyncSessionLocal", new=session_factory
+        ), patch(
+            "app.routers.cover_letters._supabase", return_value=MagicMock()
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(f"/cover-letters/{letter.id}/pdf", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["signed_url"] == "data:application/pdf;base64," + base64.b64encode(b"%PDF-fake").decode()
+        mock_gen.assert_called_once()
+        mock_upload.assert_called_once()
+        assert letter.pdf_url == "cover-letters/user/letter.pdf"
+    finally:
+        app.dependency_overrides.pop(get_db, None)

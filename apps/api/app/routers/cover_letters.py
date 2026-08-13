@@ -1,9 +1,13 @@
+import asyncio
+import base64
 import logging
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from supabase import create_client
+from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, CoverLetter
 from app.core.security import get_current_user
@@ -13,9 +17,19 @@ from app.schemas.cover_letter import (
 )
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import write_cover_letter, analyze_jd_match, JDAnalysis
+from app.services.pdf import generate_letter_pdf, upload_letter_pdf
 
 router = APIRouter(prefix="/cover-letters", tags=["cover-letters"])
 logger = logging.getLogger("app")
+
+_sb_client = None
+
+
+def _supabase():
+    global _sb_client
+    if _sb_client is None:
+        _sb_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+    return _sb_client
 
 
 async def _run_cover_letter_background(
@@ -196,3 +210,44 @@ async def delete_cover_letter(
         raise HTTPException(status_code=404, detail="Cover letter not found")
     await db.delete(letter)
     await db.commit()
+
+
+async def _persist_letter_pdf_to_storage(pdf_bytes: bytes, user_id: str, cover_letter_id: uuid.UUID) -> None:
+    sb = _supabase()
+    path = await upload_letter_pdf(pdf_bytes, user_id, str(cover_letter_id), sb)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(CoverLetter).where(CoverLetter.id == cover_letter_id))
+        letter = result.scalar_one_or_none()
+        if letter:
+            letter.pdf_url = path
+            await session.commit()
+
+
+@router.post("/{cover_letter_id}/pdf")
+@limiter.limit("10/minute")
+async def generate_cover_letter_pdf(
+    request: Request,
+    cover_letter_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    uid = uuid.UUID(user["sub"])
+    letter = (
+        await db.execute(
+            select(CoverLetter).where(CoverLetter.id == cover_letter_id, CoverLetter.user_id == uid)
+        )
+    ).scalar_one_or_none()
+    if not letter or not letter.content:
+        raise HTTPException(status_code=404, detail="Cover letter not found or not yet generated")
+    resume_row = (
+        await db.execute(select(Resume).where(Resume.id == letter.resume_id, Resume.user_id == uid))
+    ).scalar_one_or_none()
+    contact = (resume_row.content or {}).get("contact", {}) if resume_row else {}
+    now = datetime.now(timezone.utc)
+    date_str = f"{now:%B} {now.day}, {now:%Y}"
+
+    pdf_bytes = await asyncio.to_thread(generate_letter_pdf, contact, date_str, letter.content)
+    background_tasks.add_task(_persist_letter_pdf_to_storage, pdf_bytes, str(uid), cover_letter_id)
+    data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
+    return {"signed_url": data_url, "expires_in": None}
