@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     extract_jd_skills, ParsedJD,
     get_or_generate_prep_questions, PrepQuestionData, SkillQuestionData, SkillQuestionsWrapper,
+    JDQuestionData, JDQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
     JDAnalysis, MappingPlan, BulletMapping,
@@ -83,6 +84,65 @@ async def test_get_or_generate_prep_questions_returns_list():
 
     assert len(result) == 1
     assert result[0].topic == "Technical"
+
+
+@pytest.mark.asyncio
+async def test_get_or_generate_prep_questions_adds_jd_specific_questions_when_jd_analysis_given():
+    """Skill-bank questions alone don't reference this specific JD's domain/
+    seniority — when jd_analysis is passed, a few fresh, uncached questions
+    anchored to that JD's actual parsed themes should be added on top."""
+    jd_analysis = make_jd_analysis(
+        domain_expertise_themes=["fintech compliance"], seniority_indicators=["Staff+"],
+    )
+    provider = make_provider_dispatching_by_schema({
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[
+            SkillQuestionData(
+                skill="aws", topic="Technical",
+                question="Generic AWS question", answer_framework="Use STAR",
+            ),
+        ]),
+        JDQuestionsWrapper: JDQuestionsWrapper(questions=[
+            JDQuestionData(
+                topic="Technical",
+                question="How would you handle fintech compliance at Staff+ level?",
+                answer_framework="Use STAR",
+            ),
+        ]),
+    })
+    db = make_mock_db_with_rows([])
+
+    result = await get_or_generate_prep_questions(
+        ["AWS"], {"experience": []}, provider, db,
+        jd_analysis=jd_analysis, company_name="Acme Corp",
+    )
+
+    jd_specific = [q for q in result if not q.is_gap_based]
+    gap_based = [q for q in result if q.is_gap_based]
+    assert len(jd_specific) == 1
+    assert jd_specific[0].question == "How would you handle fintech compliance at Staff+ level?"
+    assert len(gap_based) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_or_generate_prep_questions_skips_jd_specific_when_no_jd_analysis():
+    """Backward-compatible default — omitting jd_analysis (as the one existing
+    caller in this file still does) must not attempt a second LLM call or
+    require a JDQuestionsWrapper response."""
+    provider = make_mock_provider(
+        structured_return=SkillQuestionsWrapper(
+            questions=[
+                SkillQuestionData(
+                    skill="AWS", topic="Technical",
+                    question="How would you approach AWS?", answer_framework="Use STAR",
+                )
+            ]
+        )
+    )
+    db = make_mock_db_with_rows([])
+
+    result = await get_or_generate_prep_questions(["AWS"], {"experience": []}, provider, db)
+
+    assert all(q.is_gap_based for q in result)
 
 
 def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():

@@ -104,6 +104,16 @@ class SkillQuestionsWrapper(BaseModel):
     questions: list[SkillQuestionData]
 
 
+class JDQuestionData(BaseModel):
+    topic: str
+    question: str
+    answer_framework: str
+
+
+class JDQuestionsWrapper(BaseModel):
+    questions: list[JDQuestionData]
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _strip_json_fence(raw: str) -> str:
@@ -621,16 +631,52 @@ async def _generate_questions_for_skills(
     return wrapper.questions
 
 
+async def _generate_jd_specific_questions(
+    jd_analysis: "JDAnalysis", company_name: str | None, resume_content: dict, provider: AIProvider
+) -> list[JDQuestionData]:
+    """LLM call anchored to this specific JD's parsed themes/seniority/company —
+    unlike _generate_questions_for_skills, these are never cached or reused
+    across users, since they're tied to this exact role rather than a bare
+    skill name. Deliberately small (3 questions) and additive: the bulk of
+    prep questions still come from the cheap, cached skill bank."""
+    at_company = f" at {company_name.strip()}" if company_name and company_name.strip() else ""
+    system = (
+        f"You are an expert interview coach preparing a candidate for a specific role{at_company}. "
+        "Based on this job's parsed requirements — "
+        f"technical tools: {jd_analysis.exact_technical_tools}, "
+        f"methodologies/frameworks: {jd_analysis.methodologies_and_frameworks}, "
+        f"domain expertise themes: {jd_analysis.domain_expertise_themes}, "
+        f"seniority indicators: {jd_analysis.seniority_indicators} — "
+        "generate exactly 3 interview questions that probe this specific role's domain and "
+        "seniority level, not generic skill trivia any candidate for any job could be asked. "
+        "For each provide: topic (exactly one of \"Technical\", \"Behavioral\", \"HR & Culture\"), "
+        "question, answer_framework (use the STAR method — Situation, Task, Action, Result). "
+        "Return JSON with a 'questions' array only."
+    )
+    wrapper = await provider.complete_structured(
+        system, json.dumps(resume_content), JDQuestionsWrapper, model_tier="pro"
+    )
+    return wrapper.questions
+
+
 async def get_or_generate_prep_questions(
     missing_skills: list[str],
     resume_content: dict,
     provider: AIProvider,
     db: AsyncSession,
+    jd_analysis: "JDAnalysis | None" = None,
+    company_name: str | None = None,
 ) -> list[PrepQuestionData]:
     """Cache-aside prep-question lookup: reuses bank rows for skills already
     seen (from any prior user's tailoring run), and only calls the LLM for
     skills genuinely new to the bank — same pattern as the jd.parsed["agent1"]
     cache in routers/ai.py, applied to prep questions instead of JD parsing.
+
+    When jd_analysis is given, also generates a few fresh, uncached questions
+    anchored to this specific JD's domain/seniority/company (see
+    _generate_jd_specific_questions) and places them first — the skill-bank
+    questions alone are deliberately generic and shared across users, so on
+    their own they don't feel tied to the JD being targeted.
     """
     safe_missing = _sanitize_skill_list(missing_skills)
     normalized: list[tuple[str, str]] = []
@@ -686,27 +732,47 @@ async def get_or_generate_prep_questions(
             order.append(row.skill)
         by_skill[row.skill].append(row)
 
+    # Capped at 7 (not 10) now that up to 3 JD-specific questions are
+    # prepended below, keeping the total around the same as before.
     selected: list[SkillQuestionBank] = []
     round_idx = 0
-    while len(selected) < 10 and round_idx < 2:
+    while len(selected) < 7 and round_idx < 2:
         for skill in order:
-            if len(selected) >= 10:
+            if len(selected) >= 7:
                 break
             bucket = by_skill[skill]
             if round_idx < len(bucket):
                 selected.append(bucket[round_idx])
         round_idx += 1
 
-    return [
+    jd_specific: list[JDQuestionData] = []
+    if jd_analysis is not None:
+        jd_specific = await _generate_jd_specific_questions(
+            jd_analysis, company_name, resume_content, provider
+        )
+
+    result: list[PrepQuestionData] = [
+        PrepQuestionData(
+            topic=q.topic if q.topic in _TOPIC_VALUES else "Technical",
+            question=q.question,
+            answer_framework=q.answer_framework,
+            is_gap_based=False,
+            order_index=i + 1,
+        )
+        for i, q in enumerate(jd_specific)
+    ]
+    offset = len(result)
+    result += [
         PrepQuestionData(
             topic=row.topic,
             question=row.question,
             answer_framework=row.answer_framework,
             is_gap_based=True,
-            order_index=i + 1,
+            order_index=offset + i + 1,
         )
         for i, row in enumerate(selected)
     ]
+    return result
 
 
 # ── Public entry points ───────────────────────────────────────────────────────
@@ -854,7 +920,10 @@ async def run_tailoring_pipeline(
 
     tailored_raw, questions_result = await asyncio.gather(
         _agent3_write(mapping_plan, original_skills, humanize_level, provider),
-        get_or_generate_prep_questions(analysis.missing_skills, resume_content, provider, db),
+        get_or_generate_prep_questions(
+            analysis.missing_skills, resume_content, provider, db,
+            jd_analysis=analysis.jd_analysis, company_name=company_name,
+        ),
         return_exceptions=True,
     )
     if isinstance(tailored_raw, BaseException):
