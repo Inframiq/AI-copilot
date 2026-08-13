@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
           <div key={label} className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col justify-between h-32 relative overflow-hidden">
             <div className="flex justify-between items-start">
               <span className="text-label-md text-on-surface-variant">{label}</span>
-              <div className="w-8 h-8 rounded-full bg-secondary-container/50 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <Icon size={18} weight="fill" className="text-primary" />
               </div>
             </div>

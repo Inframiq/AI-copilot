@@ -286,7 +286,7 @@ export default function DashboardPage() {
             >
               <div className="flex justify-between items-start">
                 <span className="text-label-md text-on-surface-variant">{label}</span>
-                <div className="w-8 h-8 rounded-full bg-secondary-container/50 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <Icon size={20} weight="fill" className="text-primary" />
                 </div>
               </div>
