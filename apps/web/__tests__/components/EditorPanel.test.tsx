@@ -214,6 +214,89 @@ describe("EditorPanel", () => {
     });
   });
 
+  it("shows an error message instead of silently resetting when tailoring fails (manual-paste path)", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "failed",
+      ats_score: null,
+      matched_skills: [],
+      missing_skills: [],
+      tailored_content: null,
+      company_keywords: [],
+      suggested_skills: [],
+    } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+
+    // Previously this failure was completely silent — the button just reset
+    // with no indication anything went wrong, which read as "nothing is
+    // happening" / a hang rather than a completed, failed attempt.
+    await waitFor(() => {
+      expect(screen.getByText("Tailoring failed — please try again.")).toBeInTheDocument();
+    });
+    expect(useTailoringStore.getState().isLoading).toBe(false);
+    // The JD text the user typed must survive the failure — a silent
+    // failure with no visible cause is what drives users to refresh the
+    // page, which (with no store persistence) is what actually loses it.
+    // (createJd ran as part of starting tailoring, so jdId is now set and
+    // the panel has switched to the JD-context view — that's expected;
+    // what matters is the text itself wasn't dropped.)
+    expect(useTailoringStore.getState().jdText).toBe("Senior Backend Engineer role");
+  });
+
+  it("shows an error message on the JD-analyzer path when tailoring fails, keeping the JD context visible", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-1", "We need a senior engineer with Python.");
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "failed",
+      ats_score: null,
+      matched_skills: [],
+      missing_skills: [],
+      tailored_content: null,
+      company_keywords: [],
+      suggested_skills: [],
+    } as any);
+
+    render(<EditorPanel />);
+    await userEvent.click(screen.getByText("Tailor Resume"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Tailoring failed — please try again.")).toBeInTheDocument();
+    });
+    // hasJdContext stays true (jdId untouched by a failed run), so the JD
+    // context — not just the error — must still be there for a retry.
+    expect(useTailoringStore.getState().jdId).toBe("jd-1");
+    expect(useTailoringStore.getState().jdText).toBe("We need a senior engineer with Python.");
+  });
+
   it("shows Reanalyze only after using per-bullet Humanize, and it re-scores without saving", async () => {
     const original = {
       ...SAMPLE_CONTENT,

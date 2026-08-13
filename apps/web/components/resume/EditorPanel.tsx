@@ -34,7 +34,7 @@ export function EditorPanel() {
     companyName, setCompanyName,
     atsScore, matchedSkills, missingSkills,
     prioritySkills, togglePrioritySkill,
-    runTailoring, isLoading,
+    runTailoring, isLoading, error: tailoringError,
     pendingContent,
   } = useTailoringStore();
 
@@ -644,6 +644,7 @@ export function EditorPanel() {
               prioritySkills={prioritySkills}
               togglePrioritySkill={togglePrioritySkill}
               isLoading={isLoading}
+              error={tailoringError}
               onTailor={() => resumeId && runTailoring(resumeId)}
               resumeId={resumeId}
             />
@@ -700,6 +701,9 @@ export function EditorPanel() {
                   AI is rewriting your bullets — this can take up to a couple of minutes…
                 </p>
               )}
+              {!isLoading && tailoringError && (
+                <p className="text-caption text-error text-center">{tailoringError}</p>
+              )}
             </>
           )}
         </div>
@@ -730,6 +734,7 @@ function TailoringForm({
   prioritySkills,
   togglePrioritySkill,
   isLoading,
+  error,
   onTailor,
   resumeId,
 }: {
@@ -742,6 +747,7 @@ function TailoringForm({
   prioritySkills: string[];
   togglePrioritySkill: (skill: string) => void;
   isLoading: boolean;
+  error: string | null;
   onTailor: () => void;
   resumeId: string | null;
 }) {
@@ -862,6 +868,9 @@ function TailoringForm({
         <p className="text-caption text-on-surface-variant text-center">
           AI is rewriting your bullets — this can take up to a couple of minutes…
         </p>
+      )}
+      {!isLoading && error && (
+        <p className="text-caption text-error text-center">{error}</p>
       )}
     </div>
   );
