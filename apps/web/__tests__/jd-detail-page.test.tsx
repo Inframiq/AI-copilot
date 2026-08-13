@@ -22,6 +22,8 @@ vi.mock("@/lib/api-client", () => ({
     }),
     getLatestJdSession: vi.fn(),
     getSession: vi.fn(),
+    getJdCoverLetter: vi.fn().mockResolvedValue({ cover_letter_id: null, status: null, created_at: null }),
+    generateCoverLetter: vi.fn(),
   },
 }));
 
@@ -133,5 +135,42 @@ describe("JDPage — Open (handleOpen)", () => {
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-1"));
     expect(useTailoringStore.getState().jdId).toBeNull();
+  });
+});
+
+describe("JDPage — Cover Letter row", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    useResumeStore.getState().resetStore();
+    vi.clearAllMocks();
+    vi.mocked(apiClient.getJd).mockResolvedValue(JD as any);
+    vi.mocked(apiClient.getResumes).mockResolvedValue([RESUME] as any);
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ session_id: null } as any);
+    vi.mocked(apiClient.analyzeJd).mockResolvedValue({
+      ats_score: 70, matched_skills: [], missing_skills: [], company_keywords: [],
+    });
+  });
+
+  it("offers to generate a cover letter when none exists yet", async () => {
+    vi.mocked(apiClient.getJdCoverLetter).mockResolvedValue({ cover_letter_id: null, status: null, created_at: null });
+    vi.mocked(apiClient.generateCoverLetter).mockResolvedValue({ cover_letter_id: "cl-1", status: "pending" });
+
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+
+    await userEvent.click(await screen.findByText("Generate"));
+
+    await waitFor(() => expect(apiClient.generateCoverLetter).toHaveBeenCalledWith("resume-1", "jd-1", 50));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/cover-letters/cl-1"));
+  });
+
+  it("offers to open an existing completed cover letter", async () => {
+    vi.mocked(apiClient.getJdCoverLetter).mockResolvedValue({
+      cover_letter_id: "cl-2", status: "completed", created_at: "2026-01-01T00:00:00Z",
+    });
+
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+
+    await userEvent.click(await screen.findByText("Open Letter"));
+    expect(mockPush).toHaveBeenCalledWith("/cover-letters/cl-2");
   });
 });

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { AnalyzeOut, JobDescription, Resume, JDDetails } from "@career-copilot/types";
+import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
 import {
   CheckCircle,
   WarningCircle,
@@ -18,6 +18,7 @@ import {
   Target,
   FileText,
   Microphone,
+  EnvelopeSimple,
 } from "@phosphor-icons/react";
 
 export default function JDPage({
@@ -56,6 +57,27 @@ export default function JDPage({
     queryKey: ["jdDetails", jdId],
     queryFn: () => apiClient.getJdDetails(jdId),
   });
+
+  const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
+  const [letterError, setLetterError] = useState<string | null>(null);
+
+  const { data: coverLetter } = useQuery<JDCoverLetter>({
+    queryKey: ["jdCoverLetter", jdId],
+    queryFn: () => apiClient.getJdCoverLetter(jdId),
+  });
+
+  async function handleGenerateCoverLetter() {
+    if (!masterResume) return;
+    setIsGeneratingLetter(true);
+    setLetterError(null);
+    try {
+      const { cover_letter_id } = await apiClient.generateCoverLetter(masterResume.id, jdId, 50);
+      router.push(`/cover-letters/${cover_letter_id}`);
+    } catch (e: unknown) {
+      setLetterError(e instanceof Error ? e.message : "Failed to generate cover letter");
+      setIsGeneratingLetter(false);
+    }
+  }
 
   // Only show the master resume; fall back to first resume if no profile set
   const masterResume = resumes.find((r) => r.id === careerProfile?.master_resume_id)
@@ -418,6 +440,46 @@ export default function JDPage({
               </div>
             </div>
           )}
+
+          {/* Cover letter — unconditional, unlike the two rows above: a
+              letter can be generated standalone before any tailoring
+              session exists for this JD. */}
+          <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <EnvelopeSimple size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-label-md text-on-surface font-semibold">Cover Letter</p>
+              <p className="text-caption text-on-surface-variant">
+                {coverLetter?.status === "completed"
+                  ? `Generated ${coverLetter.created_at ? new Date(coverLetter.created_at).toLocaleDateString() : ""}`
+                  : coverLetter?.status === "pending"
+                  ? "Generating…"
+                  : coverLetter?.status === "failed"
+                  ? "Generation failed — try again"
+                  : "Not generated yet"}
+              </p>
+            </div>
+            {coverLetter?.status === "completed" && coverLetter.cover_letter_id ? (
+              <button
+                onClick={() => router.push(`/cover-letters/${coverLetter.cover_letter_id}`)}
+                className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+              >
+                <FolderOpen size={14} />
+                Open Letter
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerateCoverLetter}
+                disabled={isGeneratingLetter || !masterResume}
+                className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+              >
+                <Sparkle size={14} className={isGeneratingLetter ? "animate-pulse" : ""} />
+                {isGeneratingLetter ? "Generating…" : "Generate"}
+              </button>
+            )}
+          </div>
+          {letterError && <p className="text-caption text-error">{letterError}</p>}
         </Card>
 
         {/* Raw JD text preview — full width */}
