@@ -288,6 +288,54 @@ async def test_get_jd_details_no_session_returns_empty_state():
         app.dependency_overrides.pop(get_db, None)
 
 
+# ── GET /jd/{jd_id}/cover-letter ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_jd_cover_letter_returns_latest():
+    from app.db.models import CoverLetter
+
+    jd_id = uuid.uuid4()
+    letter = CoverLetter(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
+        resume_id=uuid.uuid4(), jd_id=jd_id,
+        status="completed", created_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = make_mock_db()
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = letter
+    mock_session.execute = AsyncMock(return_value=result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/cover-letter", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cover_letter_id"] == str(letter.id)
+        assert body["status"] == "completed"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_jd_cover_letter_none_when_no_letter_yet():
+    jd_id = uuid.uuid4()
+    override, mock_session = make_mock_db()
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_session.execute = AsyncMock(return_value=result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/cover-letter", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json() == {"cover_letter_id": None, "status": None, "created_at": None}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── GET /jd/{jd_id}/latest-session ──────────────────────────────────────────
 
 

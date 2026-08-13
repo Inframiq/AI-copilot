@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
-from app.db.models import JobDescription, TailoringSession, PrepQuestion
+from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
@@ -168,6 +168,28 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
         "session_created_at": session.created_at.isoformat(),
         "questions_total": questions_total,
         "questions_practiced": questions_practiced,
+    }
+
+
+@router.get("/{jd_id}/cover-letter")
+async def get_jd_cover_letter(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Latest cover letter for this JD, regardless of status — the JD detail
+    page's "Generated for This JD" card uses this to show a pending/failed/
+    completed letter, or offer to generate one if there's none yet."""
+    uid = uuid.UUID(user["sub"])
+    result = await db.execute(
+        select(CoverLetter)
+        .where(CoverLetter.jd_id == jd_id, CoverLetter.user_id == uid)
+        .order_by(CoverLetter.created_at.desc())
+        .limit(1)
+    )
+    letter = result.scalars().first()
+    if not letter:
+        return {"cover_letter_id": None, "status": None, "created_at": None}
+    return {
+        "cover_letter_id": str(letter.id),
+        "status": letter.status,
+        "created_at": letter.created_at.isoformat(),
     }
 
 
