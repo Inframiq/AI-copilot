@@ -578,7 +578,7 @@ export default function JDIndexPage() {
                     cy="50"
                     fill="none"
                     r="45"
-                    stroke="#0050cb"
+                    stroke="#0066ff"
                     strokeLinecap="round"
                     strokeWidth="10"
                     strokeDasharray="283"

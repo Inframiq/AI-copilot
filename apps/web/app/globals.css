@@ -1,18 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — "Executive Precision Light" design system (DESIGN.md), a
-     full M3-shaped token set given as literal hex values rather than
-     sampled from a screenshot, mapped 1:1 by name onto this app's
-     existing tokens. Supersedes the AuraColor "Modern Tech" palette.
-     Token names are unchanged, so no component needed to change
-     structurally. success-accent/success/success-container/etc. aren't
-     part of the spec (no semantic-success color given) — success-accent
-     stays pinned to primary per this app's convention, the rest are
-     untouched. */
-  --color-primary: #0050cb;
+  /* Colors — "Executive Precision Light" design system, refined by a
+     follow-up style-tile image that relabeled the 4 anchor swatches:
+     primary #0066FF (was #0050CB), secondary #41466E (was #575B85),
+     and tertiary #CC4204 (was tertiary-container's value — tertiary and
+     tertiary-container are swapped from the original DESIGN.md to
+     match, since the tile's "Tertiary" swatch is the brighter of the
+     two and its accent-icon usage sample matches the old darker
+     tertiary-container tone). Neutral surface-container-low (#F8FAFC)
+     was already correct from the original DESIGN.md. Every other
+     derived token (containers, fixed/fixed-dim, on-* variants) is left
+     as generated from the original seed colors — close enough in hue
+     that regenerating the full M3 ramp isn't warranted for this small
+     a shift. Token names are unchanged, so no component needed to
+     change structurally. success-accent stays pinned to primary per
+     this app's convention. */
+  --color-primary: #0066ff;
   --color-surface-container: #f1f5f9;
-  --color-tertiary-container: #cc4204;
+  --color-tertiary-container: #a33200;
   --color-tertiary-fixed: #ffdbd0;
   --color-background: #f7f9fb;
   --color-primary-container: #e0ebff;
@@ -23,7 +29,7 @@
   --color-on-tertiary-container: #fff6f4;
   --color-on-error: #ffffff;
   --color-primary-fixed-dim: #b3c5ff;
-  --color-secondary: #575b85;
+  --color-secondary: #41466e;
   --color-on-primary-fixed: #001849;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
@@ -53,12 +59,12 @@
   --color-inverse-surface: #2d3133;
   --color-surface-variant: #e0e3e5;
   --color-outline: #94a3b8;
-  --color-success-accent: #0050cb;
+  --color-success-accent: #0066ff;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #a33200;
+  --color-tertiary: #cc4204;
   --color-on-secondary-container: #525780;
   --color-secondary-fixed: #dfe0ff;
   --color-on-secondary-fixed: #13183e;

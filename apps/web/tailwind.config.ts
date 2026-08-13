@@ -6,9 +6,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        "primary": "#0050cb",
+        "primary": "#0066ff",
         "surface-container": "#f1f5f9",
-        "tertiary-container": "#cc4204",
+        "tertiary-container": "#a33200",
         "tertiary-fixed": "#ffdbd0",
         "background": "#f7f9fb",
         "primary-container": "#e0ebff",
@@ -19,7 +19,7 @@ const config: Config = {
         "on-tertiary-container": "#fff6f4",
         "on-error": "#ffffff",
         "primary-fixed-dim": "#b3c5ff",
-        "secondary": "#575b85",
+        "secondary": "#41466e",
         "on-primary-fixed": "#001849",
         "on-tertiary": "#ffffff",
         "error": "#ba1a1a",
@@ -49,8 +49,8 @@ const config: Config = {
         "inverse-surface": "#2d3133",
         "surface-variant": "#e0e3e5",
         "outline": "#94a3b8",
-        "success-accent": "#0050cb",
-        "tertiary": "#a33200",
+        "success-accent": "#0066ff",
+        "tertiary": "#cc4204",
         "on-secondary-container": "#525780",
         "secondary-fixed": "#dfe0ff",
         "on-secondary-fixed": "#13183e",
