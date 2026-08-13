@@ -44,6 +44,7 @@ describe("Sidebar", () => {
       "My Profile",
       "JD Analyzer",
       "Resume Builder",
+      "Cover Letter",
       "Interview Center",
       "Analytics",
     ]) {

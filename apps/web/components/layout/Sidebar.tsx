@@ -10,6 +10,7 @@ import {
   ChartLineUp,
   MicrophoneStage,
   IdentificationCard,
+  EnvelopeSimple,
 } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
 
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/profile", icon: IdentificationCard, label: "My Profile" },
   { href: "/jd", icon: FileDashed, label: "JD Analyzer" },
   { href: "/studio", icon: FileText, label: "Resume Builder" },
+  { href: "/cover-letters", icon: EnvelopeSimple, label: "Cover Letter" },
   { href: "/interview", icon: MicrophoneStage, label: "Interview Center" },
   { href: "/analytics", icon: ChartLineUp, label: "Analytics" },
 ];
