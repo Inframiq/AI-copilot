@@ -316,3 +316,10 @@ async def test_write_cover_letter_passes_jd_and_resume_context_to_the_prompt():
     assert "Senior Backend Engineer" in sent_payload
     assert "Acme Corp" in sent_payload
     assert "distributed systems" in sent_payload
+    # resume_content must propagate faithfully into the sent payload (FACT LOCK depends on this)
+    assert "Jane Doe" in sent_payload
+    assert "jane@example.com" in sent_payload
+    assert "Built APIs with Python" in sent_payload
+    # matched_skills must pass through _sanitize_skill_list into the real sent payload
+    assert "Python" in sent_payload
+    assert "AWS" in sent_payload
