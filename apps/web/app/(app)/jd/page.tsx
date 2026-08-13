@@ -326,8 +326,15 @@ export default function JDIndexPage() {
       return;
     }
     setTailorError(null);
+    const { companyKeywords } = useTailoringStore.getState();
     // Ensure the store is synced with the current JD ID and JD text on this page
     setJd(jdId ?? "", jdText);
+    // setJd() also resets atsScore/matchedSkills/missingSkills/companyKeywords
+    // (needed so a genuinely different JD doesn't carry over the previous
+    // one's badge) — but this call is just a defensive re-sync of the JD
+    // already analyzed above, not an actual JD change, so restore them from
+    // what was captured just before the reset.
+    useTailoringStore.getState().setAnalysisResults({ atsScore, matchedSkills, missingSkills, companyKeywords });
     useTailoringStore.getState().discardPending();
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
     router.push(`/studio/${activeResumeId}`);

@@ -146,23 +146,28 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   // previous one — EditorPanel's own JD-context textarea calls this too,
   // and unlike the two JD pages, it never explicitly sets prioritySkills
   // itself, so this is the one place that must clear it for everyone.
-  setJd: (id, text) =>
+  setJd: (id, text) => {
+    const current = get();
+    // Only reset analysis results if setting a genuinely different JD
+    const isDifferentJd = (id !== "" && id !== current.jdId) || text.trim() !== current.jdText.trim();
     set({
       jdId: id,
       jdText: text,
-      atsScore: null,
-      matchedSkills: [],
-      missingSkills: [],
-      companyKeywords: [],
-      suggestedSkills: [],
-      prioritySkills: [],
+      companyName: isDifferentJd ? "" : current.companyName,
+      atsScore: isDifferentJd ? null : current.atsScore,
+      matchedSkills: isDifferentJd ? [] : current.matchedSkills,
+      missingSkills: isDifferentJd ? [] : current.missingSkills,
+      companyKeywords: isDifferentJd ? [] : current.companyKeywords,
+      suggestedSkills: isDifferentJd ? [] : current.suggestedSkills,
+      prioritySkills: isDifferentJd ? [] : current.prioritySkills,
       pendingContent: null,
-      sessionId: null,
+      sessionId: isDifferentJd ? null : current.sessionId,
       bulletDecisions: {},
       mergedContent: null,
       previewPdfUrl: null,
       error: null,
-    }),
+    });
+  },
   setCompanyName: (name) => set({ companyName: name }),
   setPrioritySkills: (skills) => set({ prioritySkills: skills }),
   togglePrioritySkill: (skill) =>
@@ -195,6 +200,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
   // Helper to ensure job description is saved to backend if not already persisted
   runAnalysis: async (resumeId: string) => {
+    // Identity token for this call — unlike runTailoring's isLoading guard,
+    // setJd() doesn't reset isAnalyzing, so a stale response has no flag to
+    // check against. jdText changes on every keystroke once the JD Analyzer
+    // textarea's content diverges from what's stored, so it's a reliable
+    // "is this still the JD I was asked to analyze" check even for an
+    // unsaved JD (jdId "" the whole time).
+    const startedForJdText = get().jdText;
     let { jdId } = get();
     const { jdText, companyName } = get();
 
@@ -206,9 +218,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       try {
         const title = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
         const jd = await apiClient.createJd({ title, raw_text: jdText });
+        if (get().jdText !== startedForJdText) return;
         jdId = jd.id;
         set({ jdId });
       } catch (e: unknown) {
+        if (get().jdText !== startedForJdText) return;
         set({ error: e instanceof Error ? e.message : "Failed to save job description" });
         return;
       }
@@ -225,6 +239,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     });
     try {
       const result = await apiClient.analyzeJd(resumeId, jdId, companyName || undefined);
+      if (get().jdText !== startedForJdText) return;
       set({
         atsScore: result.ats_score,
         matchedSkills: result.matched_skills,
@@ -233,6 +248,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         isAnalyzing: false,
       });
     } catch (e: unknown) {
+      if (get().jdText !== startedForJdText) return;
       set({
         error: e instanceof Error ? e.message : "Analysis failed",
         isAnalyzing: false,

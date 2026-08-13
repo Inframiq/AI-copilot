@@ -96,6 +96,94 @@ describe("useTailoringStore", () => {
     expect(useTailoringStore.getState().humanizeLevel).toBe(75);
   });
 
+  it("setJd resets companyName — a previous JD's target company must not silently apply to the next one", () => {
+    useTailoringStore.getState().setJd("jd-1", "First JD text");
+    useTailoringStore.getState().setCompanyName("Acme Corp");
+    expect(useTailoringStore.getState().companyName).toBe("Acme Corp");
+
+    useTailoringStore.getState().setJd("jd-2", "Second, unrelated JD text");
+
+    expect(useTailoringStore.getState().companyName).toBe("");
+  });
+
+  describe("runAnalysis", () => {
+    it("populates atsScore/matchedSkills/missingSkills from the API result", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "raw text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 88,
+        matched_skills: ["Python"],
+        missing_skills: ["AWS"],
+        company_keywords: ["fast-paced"],
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      const state = useTailoringStore.getState();
+      expect(state.atsScore).toBe(88);
+      expect(state.matchedSkills).toEqual(["Python"]);
+      expect(state.missingSkills).toEqual(["AWS"]);
+      expect(state.companyKeywords).toEqual(["fast-paced"]);
+      expect(state.isAnalyzing).toBe(false);
+    });
+
+    // Regression class: the same bug shape already found twice in this
+    // store (setJd not resetting a field, a page re-syncing and wiping
+    // results it shouldn't) — here the gap is a missing staleness guard.
+    // runTailoring already re-checks `get().isLoading` before applying a
+    // late-arriving result (see the "aborts polling updates" test below);
+    // runAnalysis has no equivalent check, so a response for a JD the user
+    // has since navigated away from can silently attach itself to whatever
+    // they're now looking at. Realistic trigger: JD Analyzer's textarea
+    // calls setJd() on every keystroke once the pasted text diverges from
+    // what's stored — so editing the JD while a prior analysis for it is
+    // still in flight (a plausible thing for an impatient user to do)
+    // fires this exact race.
+    it("discards an in-flight analysis result if the JD changes before it resolves", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "First JD text");
+
+      let resolveAnalyze: (val: unknown) => void = () => {};
+      const pending = new Promise((res) => {
+        resolveAnalyze = res;
+      });
+      vi.mocked(apiClient.analyzeJd).mockReturnValueOnce(pending as any);
+
+      const analysisPromise = useTailoringStore.getState().runAnalysis("resume-abc");
+
+      // User starts editing a different JD before the first analysis returns.
+      useTailoringStore.getState().setJd("", "Second, unrelated JD text");
+
+      resolveAnalyze({
+        ats_score: 91,
+        matched_skills: ["Stale"],
+        missing_skills: [],
+        company_keywords: [],
+      });
+      await analysisPromise;
+
+      const state = useTailoringStore.getState();
+      expect(state.atsScore).toBeNull();
+      expect(state.matchedSkills).toEqual([]);
+      expect(state.jdText).toBe("Second, unrelated JD text");
+    });
+
+    it("does not discard results when the JD is unchanged when the request resolves", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "First JD text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 91,
+        matched_skills: ["Python"],
+        missing_skills: [],
+        company_keywords: [],
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      expect(useTailoringStore.getState().atsScore).toBe(91);
+    });
+  });
+
   it("runTailoring succeeds and hydrates session state", async () => {
     // Set up resume store
     useResumeStore
