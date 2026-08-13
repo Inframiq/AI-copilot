@@ -73,6 +73,31 @@ class TailoringSession(Base):
     questions: Mapped[list["PrepQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
 
+class CoverLetter(Base):
+    __tablename__ = "cover_letters"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    resume_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="CASCADE")
+    )
+    jd_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="CASCADE")
+    )
+    # Nullable — set when generated from an existing tailoring session (reuses
+    # its tailored content); null for a standalone resume+JD generation. When
+    # the linked session is deleted, the letter goes with it (CASCADE),
+    # mirroring how PrepQuestion cascades off TailoringSession.
+    tailoring_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tailoring_sessions.id", ondelete="CASCADE"), nullable=True
+    )
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    humanize_level: Mapped[int] = mapped_column(Integer, default=50)
+    pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
 class PrepQuestion(Base):
     __tablename__ = "prep_questions"
 
