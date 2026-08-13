@@ -740,12 +740,28 @@ async def run_tailoring_pipeline(
     )
 
     # ── Agent 3 + prep questions in parallel (both pro model) ────────────────
+    # return_exceptions=True so a prep-questions failure (e.g. the model's
+    # structured-output JSON gets truncated for a long missing-skills list)
+    # can't discard an otherwise-successful bullet rewrite — prep questions
+    # are a bonus feature; the tailored resume itself is the point of this
+    # call and must not be thrown away because a secondary call flaked.
     original_skills = resume_content.get("skills", [])
 
-    tailored_raw, questions = await asyncio.gather(
+    tailored_raw, questions_result = await asyncio.gather(
         _agent3_write(mapping_plan, original_skills, humanize_level, provider),
         get_or_generate_prep_questions(analysis.missing_skills, resume_content, provider, db),
+        return_exceptions=True,
     )
+    if isinstance(tailored_raw, BaseException):
+        raise tailored_raw
+    if isinstance(questions_result, BaseException):
+        logger.exception(
+            "Prep-question generation failed — continuing tailoring without prep questions",
+            exc_info=questions_result,
+        )
+        questions: list[PrepQuestionData] = []
+    else:
+        questions = questions_result
 
     # ── patch rewritten bullets back into the original structure ─────────────
     tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)

@@ -33,18 +33,38 @@ invisible from the call sites in `tailoring.py` — they all say
 `model_tier="fast"` or `model_tier="pro"` as if it mattered, and it silently
 doesn't under this `.env`.
 
-### Known risk: 4096 output tokens may be too low for Agent 3
+### Confirmed bug (2026-08-13): 4096 output tokens is too low, and it was silently killing entire tailoring runs
 
 `GeminiProvider` deliberately sets `max_output_tokens=16384`
 (`gemini_provider.py:20`), with a comment explaining Agent 3 (the bullet
 rewriter) can legitimately need 8k–16k output tokens to rewrite a full
-resume's worth of bullets. `OpenAIProvider` under this `.env` is capped at
-**4096**. Agent 3's own system prompt (`tailoring.py`, rule 5) states that
-omitting even one bullet from its output is a **fatal** failure mode. For a
-resume with many bullets, a 4096-token cap risks silent truncation or
-incomplete coverage — this has not been confirmed as an active bug, just a
-structural risk worth watching if tailoring output starts dropping bullets
-on longer resumes.
+resume's worth of bullets. `OpenAIProvider` under this `.env` was capped at
+**4096**. This was flagged below as a theoretical risk; it turned out to be
+an active one. Reproduced directly against a real user's resume/JD: the
+Prep Questions call's structured-output JSON was cut off mid-string by the
+token cap (`gpt-5.6-luna` is a reasoning model — reasoning tokens share the
+same `max_output_tokens` budget as the visible output, so the visible JSON
+can run out of budget before it's complete), and the resulting
+`pydantic.ValidationError` (`Invalid JSON: EOF while parsing a string`)
+propagated out of `run_tailoring_pipeline`'s `asyncio.gather(...)` call and
+discarded an already-successful Agent 3 bullet rewrite along with it —
+every "Tailor Resume" click for that user was failing outright, not just
+losing prep questions.
+
+Fixed in two parts:
+1. **`.env`**: `OPENAI_MAX_OUTPUT_TOKENS` raised to `16384` (matching
+   Gemini's proven-safe cap) locally. This is a per-environment variable —
+   the production value on Render must be updated separately; it is not
+   controlled by this repo.
+2. **Code (`tailoring.py`, `run_tailoring_pipeline`)**: the Agent 3 / Prep
+   Questions `asyncio.gather` now uses `return_exceptions=True`. Agent 3
+   failing is still fatal (re-raised — there's no tailored resume without
+   it). Prep Questions failing is now non-fatal: it's logged and the
+   pipeline returns with an empty `prep_questions` list instead of
+   discarding a successful bullet rewrite. This is defense-in-depth on top
+   of the token-cap fix, not a replacement for it — Agent 3 itself has no
+   equivalent fallback (per rule 5 below, a partial rewrite is unacceptable,
+   so raising the cap is the only real fix for Agent 3's exposure).
 
 ### No token-usage telemetry exists
 

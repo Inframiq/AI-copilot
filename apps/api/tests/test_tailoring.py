@@ -158,6 +158,74 @@ async def test_run_tailoring_pipeline_returns_result():
 
 
 @pytest.mark.asyncio
+async def test_run_tailoring_pipeline_survives_prep_question_failure():
+    # Real-world trigger: the model's structured-output JSON for prep
+    # questions gets truncated (e.g. hits an output-token cap) and fails
+    # Pydantic validation. That must not discard an otherwise-successful
+    # bullet rewrite — prep questions are a bonus, the tailored resume is
+    # the point of this call.
+    responses = {
+        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[
+                BulletMapping(
+                    original_bullet_id="exp0_b0",
+                    original_text="Used Python",
+                    target_jd_keywords_to_inject=["Python"],
+                    preserved_metrics=[],
+                    strategic_instruction="REINFORCE",
+                )
+            ],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
+            updated_skills=["Python"],
+        ),
+    }
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+        if schema is SkillQuestionsWrapper:
+            raise ValueError("Invalid JSON: EOF while parsing a string")
+        return responses[schema]
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider, db)
+
+    assert isinstance(result, TailoringResult)
+    assert result.tailored_content["experience"][0]["bullets"] == ["Leveraged Python extensively"]
+    assert result.prep_questions == []
+
+
+@pytest.mark.asyncio
+async def test_run_tailoring_pipeline_reraises_agent3_failure():
+    # Unlike prep questions, Agent 3 failing IS fatal — there is no tailored
+    # resume to return without it, so this must still propagate.
+    responses = {
+        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+    }
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+        if schema is WriterOutput:
+            raise ValueError("Invalid JSON: EOF while parsing a string")
+        return responses[schema]
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider, db)
+
+
+@pytest.mark.asyncio
 async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
     # Same dedup guarantee as the analyze-only test above, but exercised
     # through the full tailoring pipeline.
