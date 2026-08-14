@@ -49,15 +49,21 @@ function buildMergedContent(
     return { ...job, bullets: mergedBullets };
   });
 
-  // Skills: start with original, add only user-selected suggested skills
+  // Skills: start with original, add only user-selected suggested skills.
+  // MAX_MERGED_SKILLS caps how many NEW skills can be appended — it must
+  // never truncate the original list itself (a resume that already has
+  // more than the cap, e.g. one uploaded/parsed with 30+ skills, would
+  // otherwise silently lose real content the user never asked to remove
+  // every time they preview/save).
   const originalSkillsSet = new Set(originalContent.skills);
   const userSelectedSkills = suggestedSkills.filter(
     (s) => bulletDecisions[`skill_add:${s}`] === "accept",
   );
+  const remainingSlots = Math.max(0, MAX_MERGED_SKILLS - originalContent.skills.length);
   const mergedSkills = [
     ...originalContent.skills,
-    ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)),
-  ].slice(0, MAX_MERGED_SKILLS);
+    ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)).slice(0, remainingSlots),
+  ];
 
   return {
     ...pendingContent,

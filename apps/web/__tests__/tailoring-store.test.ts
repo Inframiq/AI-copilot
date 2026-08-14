@@ -350,6 +350,36 @@ describe("useTailoringStore", () => {
     expect(mergedContent?.skills.slice(0, manyOriginalSkills.length)).toEqual(manyOriginalSkills);
   });
 
+  it("generatePreview never truncates a resume's existing skills, even when they already exceed MAX_MERGED_SKILLS on their own", async () => {
+    // A resume parsed/uploaded with more skills than the cap (e.g. 34) must
+    // keep every one of them — the cap only ever limits how many NEW
+    // suggested skills get appended, never the user's pre-existing content.
+    const manyOriginalSkills = Array.from({ length: MAX_MERGED_SKILLS + 14 }, (_, i) => `Original Skill ${i}`);
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      skills: manyOriginalSkills,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      suggested_skills: ["Kubernetes"],
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    useTailoringStore.getState().setBulletDecision("skill_add:Kubernetes", "accept");
+
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.skills).toEqual(manyOriginalSkills);
+    expect(mergedContent?.skills).not.toContain("Kubernetes");
+  });
+
   it("reanalyzePreview re-scores the current merged bullets against the JD without persisting", async () => {
     const original: ResumeContent = {
       ...SAMPLE_CONTENT,

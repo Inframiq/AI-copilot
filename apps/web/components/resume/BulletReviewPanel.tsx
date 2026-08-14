@@ -679,7 +679,9 @@ function SkillsBlock({
         <p className="text-caption text-on-surface-variant flex items-center gap-sm flex-wrap">
           <span>
             {originalSkillsCount + selectedCount} / {MAX_MERGED_SKILLS} skills
-            {atCap && " — limit reached, deselect one to add another"}
+            {atCap && selectedCount > 0 && " — limit reached, deselect one to add another"}
+            {atCap && selectedCount === 0 &&
+              " — your resume already has more skills than the recommended cap, so none of these can be added; trim some in the Skills tab to make room"}
           </span>
           <span className="flex items-center gap-xs">
             <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.High}`} /> High
