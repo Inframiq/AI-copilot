@@ -5,6 +5,7 @@ libraries (cairo, pango, gobject).  If WeasyPrint cannot be imported the
 tests are skipped gracefully rather than erroring.
 """
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -213,6 +214,40 @@ def test_render_html_never_renders_a_headline(template_id):
     # in this fixture (unlike the job-title case), so a plain absence check
     # is sufficient here.
     assert "Sr. Business Analyst" not in html
+
+
+# ---------------------------------------------------------------------------
+# .btxt used to hard-cap bullet text at max-height: 3.75em (exactly 3 lines
+# at the DEFAULT line-height of 1.25) with overflow: hidden. Since
+# line-height became a user-adjustable per-resume setting, any value above
+# the default made that box too short for its own 3 lines, silently
+# clipping the last line's tail — reported directly against a rendered PDF.
+# Fix: bullets just wrap naturally, however many lines they need.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
+def test_render_html_bullets_have_no_height_clip_at_any_line_spacing(template_id):
+    html = _render_html(SAMPLE_RESUME, template_id, line_spacing=1.6)
+    btxt_rule = re.search(r"\.btxt\s*\{[^}]*\}", html)
+    assert btxt_rule is not None
+    assert "max-height" not in btxt_rule.group()
+    assert "overflow" not in btxt_rule.group()
+
+
+def test_render_html_does_not_truncate_a_long_bullet_at_increased_line_spacing():
+    long_bullet = (
+        "Aligned cross-functional product development across 4 global streams (2300+ FTE), "
+        "linking business objectives, operational requirements, and product capabilities "
+        "through traceability from business objectives through implementation using modern "
+        "product management and collaboration tools."
+    )
+    resume = {
+        **SAMPLE_RESUME,
+        "experience": [{**SAMPLE_RESUME["experience"][0], "bullets": [long_bullet]}],
+    }
+    html = _render_html(resume, "ats_clean", line_spacing=1.5)
+    assert long_bullet in html
 
 
 # ---------------------------------------------------------------------------
