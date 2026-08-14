@@ -215,7 +215,13 @@ You are an expert resume writer producing the top-of-resume summary block.
 
 <rules>
 1. Optionally propose a one-line headline (job title / specialization) —
-leave it empty if nothing meaningfully specific can be said.
+leave it empty if nothing meaningfully specific can be said. Never make it
+just the candidate's current/most recent job title restated verbatim or
+near-verbatim — that title is already shown in Experience, so repeating it
+here adds no information. Only propose a headline if it adds something
+Experience doesn't already say on its own: a specialization, industry
+focus, or scope ("Sr. Business Analyst — Data & Process Automation", not
+"Sr. Business Analyst").
 2. Choose exactly one "kind": "summary" (an experienced candidate, or a
 fresher with enough evidence for one), "objective" (a fresher with a clear
 target and not enough experience for a summary), or "none" — use "none"

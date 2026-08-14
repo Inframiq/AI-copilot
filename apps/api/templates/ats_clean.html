@@ -31,7 +31,7 @@
 <body>
 <h1>{{ contact.name }}</h1>
 {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
-<div class="contact">{{ contact.email }} | {{ contact.phone }} | {{ contact.location }}</div>
+<div class="contact">{{ [contact.email, contact.phone, contact.location] | select | join(' | ') }}</div>
 
 {% macro render_summary_or_objective() %}
   {% if summary %}

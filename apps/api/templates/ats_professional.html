@@ -40,7 +40,7 @@
     <div class="name">{{ contact.name | upper }}</div>
     {% if headline %}<div class="headline">{{ headline | upper }}</div>{% endif %}
     <div class="contact-line">
-      {{ contact.location }}{% if contact.location and contact.phone %} | {% endif %}{{ contact.phone }}{% if contact.phone and contact.email %} | {% endif %}{{ contact.email }}
+      {{ [contact.location, contact.phone, contact.email] | select | join(' | ') }}
     </div>
   </div>
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}

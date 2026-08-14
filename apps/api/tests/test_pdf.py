@@ -15,6 +15,7 @@ import pytest
 weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import (  # noqa: E402
+    _render_html,
     _render_letter_html,
     generate_letter_pdf,
     generate_pdf,
@@ -169,6 +170,29 @@ def test_generate_pdf_strips_file_scheme_photo_url():
     }
     pdf = generate_pdf(malicious_resume, "ats_professional")
     assert pdf[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
+# Missing contact fields must be omitted, not rendered as the literal
+# string "None" (Jinja2 stringifies Python None unlike JS's undefined) —
+# ats_clean and ats_modern used to interpolate contact.location directly.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
+def test_render_html_omits_missing_location_instead_of_the_word_none(template_id):
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {**SAMPLE_RESUME["contact"], "location": None},
+    }
+    html = _render_html(resume, template_id)
+    assert "None" not in html
+
+
+@pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern"])
+def test_render_html_still_shows_location_when_present(template_id):
+    html = _render_html(SAMPLE_RESUME, template_id)
+    assert SAMPLE_RESUME["contact"]["location"] in html
 
 
 # ---------------------------------------------------------------------------

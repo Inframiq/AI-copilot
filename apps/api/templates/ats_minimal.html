@@ -36,7 +36,7 @@
 <div class="name">{{ contact.name | upper }}</div>
 {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
 <div class="contact-line">
-  {{ contact.location }}{% if contact.location %} &bull; {% endif %}{{ contact.phone }}{% if contact.phone %} &bull; {% endif %}{{ contact.email }}{% if contact.linkedin %} &bull; {{ contact.linkedin }}{% endif %}{% if contact.github %} &bull; {{ contact.github }}{% endif %}
+  {{ [contact.location, contact.phone, contact.email] | select | join(' • ') }}{% if contact.linkedin %} • {{ contact.linkedin }}{% endif %}{% if contact.github %} • {{ contact.github }}{% endif %}
 </div>
 <hr>
 
