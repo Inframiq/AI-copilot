@@ -73,24 +73,28 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 def _dedupe_redundant_headline(resume_content: dict) -> dict:
-    """Drop a headline that just restates the most recent job title verbatim.
+    """Drop a headline that just restates a job title already in Experience.
 
-    A headline reading "Sr. Business Analyst" adds nothing when the first
+    A headline reading "Sr. Business Analyst" adds nothing when some
     Experience entry's title already says exactly that — it's a redundant
     echo, not a distinguishing tagline, and reads as padding on an
-    ATS-focused resume. Only strips an EXACT match (case/punctuation
-    normalized) — anything that adds a specialization or scope beyond the
-    bare title is left alone, since that's genuinely useful context.
+    ATS-focused resume. Checks every entry, not just the most recent one —
+    the redundancy holds regardless of which role it echoes. Only strips an
+    EXACT match (case/punctuation/whitespace normalized) — anything that
+    adds a specialization or scope beyond the bare title is left alone,
+    since that's genuinely useful context.
     """
     headline = (resume_content.get("headline") or "").strip()
     experience = resume_content.get("experience") or []
-    if not headline or not experience:
+    if not headline:
         return resume_content
-    most_recent_title = (experience[0].get("title") or "").strip()
-    if not most_recent_title:
+    normalized_headline = _NON_ALNUM.sub("", headline.lower())
+    if not normalized_headline:
         return resume_content
-    if _NON_ALNUM.sub("", headline.lower()) == _NON_ALNUM.sub("", most_recent_title.lower()):
-        return {**resume_content, "headline": ""}
+    for job in experience:
+        title = (job.get("title") or "").strip()
+        if title and _NON_ALNUM.sub("", title.lower()) == normalized_headline:
+            return {**resume_content, "headline": ""}
     return resume_content
 
 

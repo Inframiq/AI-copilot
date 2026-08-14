@@ -235,6 +235,21 @@ def test_render_html_keeps_a_headline_that_adds_real_information():
     assert "Business Analyst — Process Automation &amp; Data Analytics" in html
 
 
+def test_render_html_drops_headline_that_echoes_an_older_job_title_not_just_the_latest():
+    # The redundant title can belong to any past role, not only the most
+    # recent one — the dedup must check every Experience entry.
+    resume = {
+        **SAMPLE_RESUME,
+        "headline": "Sr. Business Analyst",
+        "experience": [
+            {**SAMPLE_RESUME["experience"][0], "title": "Business Analyst"},
+            {**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"},
+        ],
+    }
+    html = _render_html(resume, "ats_clean")
+    assert '<div class="headline">' not in html
+
+
 # ---------------------------------------------------------------------------
 # upload_pdf tests (Supabase mocked)
 # ---------------------------------------------------------------------------
