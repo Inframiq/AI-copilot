@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const pushMock = vi.fn();
@@ -61,7 +61,7 @@ describe("PreviewPanel", () => {
         "https://example.com/resume.pdf"
       );
     });
-    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean");
+    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean", undefined, 1.25, 12);
   });
 
   it("shows the Interview Prep button only when a tailoring session exists", () => {
@@ -86,5 +86,41 @@ describe("PreviewPanel", () => {
     render(<PreviewPanel />);
     await userEvent.click(screen.getByText("ATS Modern"));
     expect(useResumeStore.getState().templateId).toBe("ats_modern");
+  });
+
+  it("adjusting spacing after a PDF exists marks it stale and relabels the button Regenerate PDF", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/resume.pdf",
+    });
+
+    render(<PreviewPanel />);
+    await userEvent.click(screen.getByText("Generate PDF"));
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "1.5" } });
+
+    expect(useResumeStore.getState().lineSpacing).toBe(1.5);
+    expect(screen.getByText("Regenerate PDF")).toBeInTheDocument();
+  });
+
+  it("Regenerate PDF sends the updated spacing values and clears the stale state", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/resume.pdf",
+    });
+
+    render(<PreviewPanel />);
+    await userEvent.click(screen.getByText("Generate PDF"));
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Paragraph spacing"), { target: { value: "20" } });
+    await userEvent.click(screen.getByText("Regenerate PDF"));
+
+    await waitFor(() =>
+      expect(apiClient.generatePdf).toHaveBeenLastCalledWith("resume-1", "ats_clean", undefined, 1.25, 20)
+    );
+    expect(screen.getByText("Generate PDF")).toBeInTheDocument();
+    expect(screen.queryByText("Regenerate PDF")).not.toBeInTheDocument();
   });
 });

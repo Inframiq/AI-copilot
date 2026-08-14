@@ -549,6 +549,8 @@ describe("useTailoringStore", () => {
       title: "Tailored Resume",
       content: SAMPLE_CONTENT,
       template_id: "ats_clean",
+      line_spacing: 1.25,
+      paragraph_spacing: 12,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -586,6 +588,8 @@ describe("useTailoringStore", () => {
       title: "Tailored Resume",
       content: SAMPLE_CONTENT,
       template_id: "ats_clean",
+      line_spacing: 1.25,
+      paragraph_spacing: 12,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

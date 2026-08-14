@@ -27,6 +27,11 @@ class ResumeCreate(BaseModel):
     title: str = Field(max_length=255)
     content: dict = {}
     template_id: ValidTemplateId = "ats_clean"
+    # PDF rendering preferences — see services/pdf.py generate_pdf docstring
+    # for what each controls. 1.0-1.6 / 0-24px comfortably spans "compact"
+    # to "very airy" without breaking a template's layout.
+    line_spacing: float = Field(default=1.25, ge=1.0, le=1.6)
+    paragraph_spacing: int = Field(default=12, ge=0, le=24)
     # When set, this create is "save the tailored resume for this JD" —
     # see create_resume in routers/resumes.py, which overwrites the JD's
     # already-linked resume (if any) instead of creating a new row.
@@ -39,6 +44,8 @@ class ResumeUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     content: dict | None = None
     template_id: ValidTemplateId | None = None
+    line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
+    paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -49,6 +56,12 @@ class PdfGenerateRequest(BaseModel):
     # tailoring results the user hasn't accepted yet) without persisting it
     # to the resume row.
     content: dict | None = None
+    # Optional spacing overrides — like template_id, persisted onto the
+    # resume when this isn't a content-override preview (see
+    # generate_resume_pdf). Omitted (None) means "use the resume's saved
+    # value", not "reset to the template default".
+    line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
+    paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -59,6 +72,8 @@ class ResumeOut(BaseModel):
     title: str
     content: dict
     template_id: str
+    line_spacing: float
+    paragraph_spacing: int
     pdf_url: str | None
     # Presence (not the raw storage path) is what the frontend needs — it
     # decides whether Preview can show the untouched original vs. falling

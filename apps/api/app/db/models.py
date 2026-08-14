@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey, Index, text
+from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey, Index, text, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from app.db.session import Base
@@ -18,6 +18,10 @@ class Resume(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     template_id: Mapped[str] = mapped_column(String(50), nullable=False, default="ats_clean")
+    # PDF rendering preferences — see services/pdf.py generate_pdf. Same
+    # persist-on-change pattern as template_id (set via POST /{id}/pdf).
+    line_spacing: Mapped[float] = mapped_column(Float, nullable=False, default=1.25)
+    paragraph_spacing: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
     # Stores path in Supabase Storage: resumes/{user_id}/{resume_id}.pdf — NOT a signed URL
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Untouched original file the user uploaded (PDF only), stored at

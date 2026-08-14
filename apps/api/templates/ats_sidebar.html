@@ -29,6 +29,10 @@
   .job-title-line .dates { font-weight: 400; color: #444; white-space: nowrap; }
   .job-company { font-weight: 700; font-style: italic; font-size: 9.5pt; margin-bottom: 2px; }
   table.bullets { width: 100%; border-collapse: collapse; margin: 2px 0 10px 0; font-size: 9.5pt; }
+  /* Without this, WeasyPrint can split a <tr> across a page break — the
+     bullet dot's <td> renders at the bottom of one page and its text <td>
+     at the top of the next, as two orphaned fragments of the same row. */
+  table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
   .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
   .btxt { padding: 0 0 3px 0; text-align: justify; max-height: 3.75em; overflow: hidden; }
   .edu-item { font-size: 9.5pt; margin-bottom: 3px; }

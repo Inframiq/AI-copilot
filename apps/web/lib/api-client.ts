@@ -71,6 +71,8 @@ export const apiClient = {
     title: string;
     template_id?: string;
     content?: ResumeContent;
+    line_spacing?: number;
+    paragraph_spacing?: number;
     /** When set, saves this as "the tailored resume for this JD" — the
      * backend overwrites the JD's already-linked resume (if any) instead of
      * creating a new row, so re-tailoring + saving again doesn't pile up
@@ -80,7 +82,7 @@ export const apiClient = {
 
   updateResume: (
     id: string,
-    payload: Partial<Pick<Resume, "title" | "template_id" | "content">>
+    payload: Partial<Pick<Resume, "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing">>
   ): Promise<Resume> => request<Resume>("PATCH", `/resumes/${id}`, payload),
 
   deleteResume: (id: string): Promise<void> =>
@@ -91,11 +93,18 @@ export const apiClient = {
     templateId: string,
     /** Renders this content instead of the resume's saved content, without
      * persisting it — used for previewing unsaved AI tailoring results. */
-    contentOverride?: ResumeContent
+    contentOverride?: ResumeContent,
+    /** Omitted (undefined) means "use the resume's saved value" — passing
+     * either persists it onto the resume, same as templateId, unless
+     * contentOverride is also set (an unsaved preview never persists). */
+    lineSpacing?: number,
+    paragraphSpacing?: number
   ): Promise<{ signed_url: string }> =>
     request<{ signed_url: string }>("POST", `/resumes/${id}/pdf`, {
       template_id: templateId,
       ...(contentOverride ? { content: contentOverride } : {}),
+      ...(lineSpacing !== undefined ? { line_spacing: lineSpacing } : {}),
+      ...(paragraphSpacing !== undefined ? { paragraph_spacing: paragraphSpacing } : {}),
     }),
 
   parseResumeFile: async (

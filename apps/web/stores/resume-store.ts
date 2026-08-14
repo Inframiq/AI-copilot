@@ -2,10 +2,17 @@ import { create } from "zustand";
 import { apiClient } from "@/lib/api-client";
 import type { ResumeContent } from "@career-copilot/types";
 
+const DEFAULT_LINE_SPACING = 1.25;
+const DEFAULT_PARAGRAPH_SPACING = 12;
+
 interface ResumeState {
   resumeId: string | null;
   content: ResumeContent | null;
   templateId: string;
+  /** CSS line-height multiplier applied when rendering this resume's PDF. */
+  lineSpacing: number;
+  /** Space in px after each bullet list / summary / plain list. */
+  paragraphSpacing: number;
   isDirty: boolean;
   pdfSignedUrl: string | null;
   _saveTimer: ReturnType<typeof setTimeout> | null;
@@ -13,10 +20,13 @@ interface ResumeState {
   setResume: (
     id: string,
     content: ResumeContent,
-    templateId: string
+    templateId: string,
+    lineSpacing?: number,
+    paragraphSpacing?: number
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   setTemplateId: (id: string) => void;
+  setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setPdfSignedUrl: (url: string | null) => void;
   resetStore: () => void;
   /** Bypasses the debounce and persists immediately — for callers that need
@@ -33,15 +43,19 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   resumeId: null,
   content: null,
   templateId: "ats_clean",
+  lineSpacing: DEFAULT_LINE_SPACING,
+  paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
   isDirty: false,
   pdfSignedUrl: null,
   _saveTimer: null,
 
-  setResume: (id, content, templateId) =>
+  setResume: (id, content, templateId, lineSpacing, paragraphSpacing) =>
     set({
       resumeId: id,
       content,
       templateId,
+      lineSpacing: lineSpacing ?? DEFAULT_LINE_SPACING,
+      paragraphSpacing: paragraphSpacing ?? DEFAULT_PARAGRAPH_SPACING,
       isDirty: false,
       pdfSignedUrl: null,
     }),
@@ -60,6 +74,11 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     get()._triggerAutoSave();
   },
 
+  setSpacing: (lineSpacing, paragraphSpacing) => {
+    set({ lineSpacing, paragraphSpacing, isDirty: true });
+    get()._triggerAutoSave();
+  },
+
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
   resetStore: () => {
@@ -69,6 +88,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       resumeId: null,
       content: null,
       templateId: "ats_clean",
+      lineSpacing: DEFAULT_LINE_SPACING,
+      paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
       isDirty: false,
       pdfSignedUrl: null,
       _saveTimer: null,
@@ -89,10 +110,15 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     if (timer !== null) clearTimeout(timer);
     set({ _saveTimer: null });
 
-    const { resumeId, content, templateId } = get();
+    const { resumeId, content, templateId, lineSpacing, paragraphSpacing } = get();
     if (!resumeId || !content) return;
     try {
-      await apiClient.updateResume(resumeId, { content, template_id: templateId });
+      await apiClient.updateResume(resumeId, {
+        content,
+        template_id: templateId,
+        line_spacing: lineSpacing,
+        paragraph_spacing: paragraphSpacing,
+      });
       set({ isDirty: false });
     } catch (err) {
       console.error("Save failed:", err);

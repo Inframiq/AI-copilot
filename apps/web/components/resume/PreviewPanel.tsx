@@ -4,18 +4,24 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
-import { ArrowSquareOut, DownloadSimple, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowSquareOut, ArrowsClockwise, DownloadSimple, SpinnerGap } from "@phosphor-icons/react";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
 export function PreviewPanel() {
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
+  const lineSpacing = useResumeStore((s) => s.lineSpacing);
+  const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const isDirty = useResumeStore((s) => s.isDirty);
   const setTemplateId = useResumeStore((s) => s.setTemplateId);
+  const setSpacing = useResumeStore((s) => s.setSpacing);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  // Spacing sliders only mark the preview stale — regenerating on every drag
+  // tick would fire a WeasyPrint render per pixel of slider movement.
+  const [spacingStale, setSpacingStale] = useState(false);
 
   const { sessionId, pendingContent } = useTailoringStore();
   const isTailoringMode = pendingContent !== null;
@@ -28,7 +34,7 @@ export function PreviewPanel() {
     setIsGenerating(true);
     setGenError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(resumeId, id);
+      const { signed_url } = await apiClient.generatePdf(resumeId, id, undefined, lineSpacing, paragraphSpacing);
       setPdfSignedUrl(signed_url);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Re-render failed");
@@ -37,14 +43,20 @@ export function PreviewPanel() {
     }
   }
 
+  function handleSpacingChange(nextLineSpacing: number, nextParagraphSpacing: number) {
+    setSpacing(nextLineSpacing, nextParagraphSpacing);
+    if (pdfSignedUrl) setSpacingStale(true);
+  }
+
   // Generate preview and update the iframe.
   async function handleGeneratePdf() {
     if (!resumeId) return;
     setIsGenerating(true);
     setGenError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
+      const { signed_url } = await apiClient.generatePdf(resumeId, templateId, undefined, lineSpacing, paragraphSpacing);
       setPdfSignedUrl(signed_url);
+      setSpacingStale(false);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Generation failed");
     } finally {
@@ -90,6 +102,46 @@ export function PreviewPanel() {
           </div>
         )}
 
+        {/* Spacing controls — hidden in tailoring mode, same as Generate PDF,
+            since BulletReviewPanel owns that flow. Sliders only mark the
+            preview stale; Regenerate PDF actually re-renders. */}
+        {!isTailoringMode && (
+          <div className="flex items-center gap-md flex-wrap">
+            <div className="flex items-center gap-xs">
+              <label htmlFor="line-spacing" className="text-label-sm text-on-surface-variant whitespace-nowrap">
+                Line spacing
+              </label>
+              <input
+                id="line-spacing"
+                type="range"
+                min={1}
+                max={1.6}
+                step={0.05}
+                value={lineSpacing}
+                onChange={(e) => handleSpacingChange(parseFloat(e.target.value), paragraphSpacing)}
+                className="w-20 accent-primary"
+              />
+              <span className="text-label-sm text-on-surface-variant w-9 text-right">{lineSpacing.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-xs">
+              <label htmlFor="paragraph-spacing" className="text-label-sm text-on-surface-variant whitespace-nowrap">
+                Paragraph spacing
+              </label>
+              <input
+                id="paragraph-spacing"
+                type="range"
+                min={0}
+                max={24}
+                step={2}
+                value={paragraphSpacing}
+                onChange={(e) => handleSpacingChange(lineSpacing, parseInt(e.target.value, 10))}
+                className="w-20 accent-primary"
+              />
+              <span className="text-label-sm text-on-surface-variant w-9 text-right">{paragraphSpacing}px</span>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex items-center gap-sm">
           {isDirty && (
@@ -105,12 +157,20 @@ export function PreviewPanel() {
             <button
               onClick={handleGeneratePdf}
               disabled={!resumeId || isGenerating}
-              className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex items-center gap-xs px-md py-sm rounded-lg text-label-sm border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                spacingStale
+                  ? "text-on-primary bg-primary border-primary hover:bg-primary-container"
+                  : "text-on-surface-variant border-outline-variant hover:bg-surface-container-low"
+              }`}
             >
-              {isGenerating
-                ? <SpinnerGap size={16} className="animate-spin" />
-                : <DownloadSimple size={16} />}
-              {isGenerating ? "Generating…" : "Generate PDF"}
+              {isGenerating ? (
+                <SpinnerGap size={16} className="animate-spin" />
+              ) : spacingStale ? (
+                <ArrowsClockwise size={16} />
+              ) : (
+                <DownloadSimple size={16} />
+              )}
+              {isGenerating ? "Generating…" : spacingStale ? "Regenerate PDF" : "Generate PDF"}
             </button>
           )}
           {sessionId && (

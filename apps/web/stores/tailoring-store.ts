@@ -560,13 +560,19 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         });
         targetId = created.id;
       }
-      const { signed_url } = await apiClient.generatePdf(targetId, resumeStore.templateId);
+      const { signed_url } = await apiClient.generatePdf(
+        targetId,
+        resumeStore.templateId,
+        undefined,
+        resumeStore.lineSpacing,
+        resumeStore.paragraphSpacing,
+      );
       // Hydrate the resume store with the just-saved content/PDF regardless
       // of mode — for "new" this also points the store at the newly created
       // resume, which matters because whoever navigates to
       // /studio/{targetId} next skips re-hydrating (and so keeps this PDF)
       // only when the store's resumeId already matches.
-      resumeStore.setResume(targetId, mergedContent, resumeStore.templateId);
+      resumeStore.setResume(targetId, mergedContent, resumeStore.templateId, resumeStore.lineSpacing, resumeStore.paragraphSpacing);
       useResumeStore.getState().setPdfSignedUrl(signed_url);
       set({
         pendingContent: null,

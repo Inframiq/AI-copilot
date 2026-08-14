@@ -71,6 +71,8 @@ def make_resume(**overrides):
         title="My Resume",
         content={"contact": {"name": "Test"}, "experience": [], "education": [], "skills": []},
         template_id="ats_clean",
+        line_spacing=1.25,
+        paragraph_spacing=12,
         pdf_url=None,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -176,6 +178,66 @@ async def test_generate_pdf_returns_signed_url():
 
 
 @pytest.mark.asyncio
+async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_generate_pdf():
+    override, mock_session = make_mock_db()
+    resume = make_resume()  # line_spacing=1.25, paragraph_spacing=12
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+    session_factory, _ = make_mock_session_factory(resume)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen, patch(
+            "app.routers.resumes.upload_pdf", new=AsyncMock(return_value="resumes/user/resume.pdf")
+        ), patch(
+            "app.routers.resumes.AsyncSessionLocal", new=session_factory
+        ), patch(
+            "app.routers.resumes._supabase", return_value=MagicMock()
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    f"/resumes/{resume.id}/pdf",
+                    json={"line_spacing": 1.5, "paragraph_spacing": 20},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        # Persisted onto the resume, same as template_id.
+        assert resume.line_spacing == 1.5
+        assert resume.paragraph_spacing == 20
+        # And forwarded to the actual render call.
+        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_generate_pdf_content_override_preview_does_not_persist_spacing():
+    override, mock_session = make_mock_db()
+    resume = make_resume()  # line_spacing=1.25, paragraph_spacing=12
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    f"/resumes/{resume.id}/pdf",
+                    json={"content": {"contact": {"name": "Preview"}}, "line_spacing": 1.5},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        # A content-override preview never persists — same rule template_id
+        # already follows, now applied to spacing too.
+        assert resume.line_spacing == 1.25
+        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.25, 12)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_generate_pdf_rejects_invalid_template():
     override, mock_session = make_mock_db()
     resume = make_resume()
@@ -228,6 +290,11 @@ async def test_parse_upload_creates_resume():
         obj.id = created.id
         obj.created_at = created.created_at
         obj.updated_at = created.updated_at
+        # Simulates SQLAlchemy applying the model's column defaults at flush
+        # time — the real endpoint doesn't pass these explicitly, so a real
+        # DB round-trip is what fills them in.
+        obj.line_spacing = created.line_spacing
+        obj.paragraph_spacing = created.paragraph_spacing
 
     mock_session.refresh = fake_refresh
 

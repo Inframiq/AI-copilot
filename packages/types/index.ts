@@ -55,6 +55,10 @@ export interface Resume {
   title: string;
   template_id: string;
   content: ResumeContent;
+  /** CSS line-height multiplier used when rendering this resume's PDF (1.0–1.6). */
+  line_spacing: number;
+  /** Space in px after each bullet list / summary / plain list (0–24). */
+  paragraph_spacing: number;
   ats_score?: number;
   pdf_path?: string;
   original_file_name?: string | null;

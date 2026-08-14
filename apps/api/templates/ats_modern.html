@@ -6,7 +6,7 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.25; margin: 0; color: #131b2e; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: {{ line_spacing }}; margin: 0; color: #131b2e; }
   h1 { font-size: 17pt; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.02em; line-height: 1.1; }
   .headline { font-size: 11pt; color: #454651; margin-bottom: 3px; }
   .contact { font-size: 9.5pt; color: #454651; margin-bottom: 10px; }
@@ -15,13 +15,17 @@
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .company { font-size: 9.5pt; color: #454651; }
   .dates { font-size: 9.5pt; color: #666; }
-  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 12px 0; }
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; }
+  /* Without this, WeasyPrint can split a <tr> across a page break — the
+     bullet dot's <td> renders at the bottom of one page and its text <td>
+     at the top of the next, as two orphaned fragments of the same row. */
+  table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
   .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
   .btxt { padding: 0 0 3px 0; font-size: 10pt; text-align: justify; max-height: 3.75em; overflow: hidden; }
   .kw { font-weight: 700; }
   .skills { font-size: 10pt; margin: 4px 0 6px; }
-  p.summary { font-size: 10pt; margin: 4px 0 8px; }
-  ul.plain { margin: 4px 0 8px 18px; padding: 0; font-size: 10pt; }
+  p.summary { font-size: 10pt; margin: 4px 0 {{ paragraph_spacing }}px; }
+  ul.plain { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: 10pt; }
 </style>
 </head>
 <body>

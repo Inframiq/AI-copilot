@@ -6,18 +6,22 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.25; color: #1a1a1a; margin: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
   .name { font-size: 18pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 3px; color: #1a1a1a; line-height: 1.1; }
   .headline { font-size: 10.5pt; text-align: center; color: #333; margin-bottom: 3px; }
   .contact-line { font-size: 9pt; text-align: center; color: #444; margin-bottom: 6px; }
   hr { border: none; border-top: 1.5pt solid #333; margin: 4px 0 6px; }
   h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
     color: #1a1a1a; border-bottom: 1.5pt solid #1a1a1a; padding-bottom: 2px; margin: 13px 0 5px; page-break-after: avoid; }
-  p.summary { margin: 4px 0 8px; font-size: 9.5pt; }
+  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: 9.5pt; }
   .job-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .job-dates { font-size: 9pt; color: #555; }
-  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 12px 0; font-size: 9.5pt; }
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: 9.5pt; }
+  /* Without this, WeasyPrint can split a <tr> across a page break — the
+     bullet dot's <td> renders at the bottom of one page and its text <td>
+     at the top of the next, as two orphaned fragments of the same row. */
+  table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
   .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
   .btxt { padding: 0 0 3px 0; text-align: justify; max-height: 3.75em; overflow: hidden; }
   .kw { font-weight: 700; }

@@ -69,11 +69,19 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     return resume_content
 
 
-def _render_html(resume_content: dict, template_id: str) -> str:
+def _render_html(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+) -> str:
     """Validate template_id and render resume_content to an HTML string.
 
     Shared by generate_pdf (→ bytes) and count_pdf_pages (→ int), so both
     always render from the exact same template + sanitization path.
+    count_pdf_pages always uses the defaults — it measures the from-scratch
+    generator's page-overflow compression loop, which doesn't know about a
+    user's per-resume spacing preference.
     """
     if template_id not in ALLOWED_TEMPLATES:
         raise ValueError(
@@ -81,15 +89,25 @@ def _render_html(resume_content: dict, template_id: str) -> str:
         )
     resume_content = _sanitize_resume_content(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
-    return template.render(**resume_content)
+    return template.render(**resume_content, line_spacing=line_spacing, paragraph_spacing=paragraph_spacing)
 
 
-def generate_pdf(resume_content: dict, template_id: str) -> bytes:
+def generate_pdf(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+) -> bytes:
     """Render resume_content with the named template and return PDF bytes.
 
     Args:
         resume_content: Dict with keys: contact, experience, education, skills.
         template_id: One of "ats_clean" or "ats_modern".
+        line_spacing: CSS line-height multiplier (matches Resume.line_spacing).
+        paragraph_spacing: Space in px after each bullet list / summary /
+            plain list (matches Resume.paragraph_spacing) — the "how much
+            air is between sections" knob, distinct from line_spacing's
+            "how tight are lines within a paragraph".
 
     Returns:
         Raw PDF bytes (starts with b"%PDF").
@@ -99,7 +117,7 @@ def generate_pdf(resume_content: dict, template_id: str) -> bytes:
     """
     import weasyprint  # deferred so import errors surface as ImportError, not module-level
 
-    html = _render_html(resume_content, template_id)
+    html = _render_html(resume_content, template_id, line_spacing, paragraph_spacing)
     return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
 
 

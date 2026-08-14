@@ -193,14 +193,30 @@ async def generate_resume_pdf(
     if template_id not in _VALID_TEMPLATES:
         raise HTTPException(status_code=400, detail="Invalid template_id.")
     is_preview = body is not None and body.content is not None
-    if template_id != resume.template_id and not is_preview:
-        resume.template_id = template_id
-        await db.commit()
+    # template_id and the spacing prefs all persist onto the resume the same
+    # way — a direct "how this resume renders" setting change, not tied to
+    # any one render — except during a content-override preview, where nothing
+    # persists (the resume's own saved content isn't even what's rendering).
+    if not is_preview:
+        changed = False
+        if template_id != resume.template_id:
+            resume.template_id = template_id
+            changed = True
+        if body and body.line_spacing is not None and body.line_spacing != resume.line_spacing:
+            resume.line_spacing = body.line_spacing
+            changed = True
+        if body and body.paragraph_spacing is not None and body.paragraph_spacing != resume.paragraph_spacing:
+            resume.paragraph_spacing = body.paragraph_spacing
+            changed = True
+        if changed:
+            await db.commit()
     content = body.content if is_preview else resume.content
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
-    pdf_bytes = await asyncio.to_thread(generate_pdf, content, template_id)
+    pdf_bytes = await asyncio.to_thread(
+        generate_pdf, content, template_id, resume.line_spacing, resume.paragraph_spacing
+    )
     # Hand the bytes straight back as a data URI so the browser can render the
     # preview immediately — the client no longer waits on a Supabase upload +
     # signed-URL round trip before it can show anything. Storage persistence
