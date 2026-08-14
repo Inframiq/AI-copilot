@@ -125,16 +125,6 @@ def validate_resume(
     except Exception as exc:  # pragma: no cover - defensive; a render failure is itself a violation
         violations.append(Violation("Page count", f"could not render to check page count: {exc}", None))
 
-    # ── Headline ──────────────────────────────────────────────────────────────
-    headline = resume_content.get("headline") or ""
-    if headline:
-        words = _word_count(headline)
-        max_words = HARD_LIMITS["headline"]["max_words"]
-        if words > max_words:
-            violations.append(Violation("Headline", f"{words} words", max_words))
-        if "\n" in headline.strip():
-            violations.append(Violation("Headline", "spans multiple lines", 1))
-
     # ── Summary / Objective (mutually exclusive) ─────────────────────────────
     summary = (resume_content.get("summary") or "").strip()
     objective = (resume_content.get("objective") or "").strip()

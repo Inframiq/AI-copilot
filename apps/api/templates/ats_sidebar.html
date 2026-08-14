@@ -9,7 +9,6 @@
   .header { display: flex; align-items: flex-start; gap: 16px; padding: 12px 36px 4px; }
   .photo { width: 80px; height: 80px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
   .name { font-size: 19pt; font-weight: 800; color: #2b2b2b; margin: 2px 0 4px; letter-spacing: 0.02em; line-height: 1.1; }
-  .headline { font-size: 10.5pt; color: #454651; margin: 0 0 4px; }
   .contact-line { font-size: 9pt; color: #333; margin-bottom: 2px; }
   .contact-line .marker { color: #4c6178; font-weight: bold; margin-right: 6px; }
   .body { padding: 3px 36px 16px; }
@@ -52,7 +51,6 @@
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
   <div>
     <div class="name">{{ contact.name | upper }}</div>
-    {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
     {% if contact.location %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.location }}</div>{% endif %}
     {% if contact.phone %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.phone }}</div>{% endif %}
     <div class="contact-line"><span class="marker">&#9679;</span>{{ contact.email }}</div>

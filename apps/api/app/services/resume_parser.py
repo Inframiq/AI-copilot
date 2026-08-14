@@ -36,7 +36,6 @@ def _check_docx_zip_safety(file_bytes: bytes) -> None:
 
 class ParsedResume(BaseModel):
     contact: dict
-    headline: str | None = None
     summary: str | None = None
     experience: list[dict]
     projects: list[dict] | None = None
@@ -101,7 +100,6 @@ Return a JSON object with EXACTLY this shape:
     "linkedin": "linkedin URL if present",
     "github": "github URL if present"
   },
-  "headline": "one-line job title / headline if present, else null",
   "summary": "professional summary paragraph if present, else null",
   "experience": [
     {

@@ -21,7 +21,6 @@ CandidateType = Literal["fresher", "experienced"]
 SECTION_ORDER: dict[CandidateType, list[str]] = {
     "fresher": [
         "header",
-        "headline",
         "summary_or_objective",
         "education",
         "skills",
@@ -34,7 +33,6 @@ SECTION_ORDER: dict[CandidateType, list[str]] = {
     ],
     "experienced": [
         "header",
-        "headline",
         "summary_or_objective",
         "skills",
         "experience",
@@ -59,7 +57,6 @@ TRAILING_OPTIONAL_SECTIONS = ["languages", "awards", "volunteer"]
 # the validator enforces.
 
 HARD_LIMITS = {
-    "headline": {"max_words": 14},  # "1 line" — generous single-line word cap
     "summary": {"min_words": 40, "max_words": 80},
     "objective": {"min_words": 25, "max_words": 50},
     "experience_bullets_per_role": {"min": 3, "max": 7, "prefer_max": 5},
@@ -115,7 +112,6 @@ ContentTier = Literal["CORE", "SUPPORTING", "OPTIONAL", "EXCLUDE"]
 # resolve_section_order below and by the PDF templates' section-order loop.
 _SECTION_CONTENT_KEYS: dict[str, list[str]] = {
     "header": ["contact"],
-    "headline": ["headline"],
     "summary_or_objective": ["summary", "objective"],
     "education": ["education"],
     "skills": ["skills"],

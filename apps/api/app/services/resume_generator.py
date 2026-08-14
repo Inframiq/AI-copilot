@@ -14,8 +14,8 @@ Pipeline:
      always preferring higher-tier items, never padding to reach a cap.
   3. Evidence-bound bullet writing (AI) — rewrite only the selected bullets;
      forbidden to add facts not present in the raw text.
-  4. Summary/objective + headline writing (AI) — or omit if neither adds
-     real information.
+  4. Summary/objective writing (AI) — or omit if it doesn't add real
+     information.
   5. Assembly into a ResumeContent-shaped dict with a resolved section_order.
   6. Deterministic validation (resume_validator) + a bounded compression
      loop that targets exactly the violations reported, never touching
@@ -77,7 +77,6 @@ class WrittenBullets(BaseModel):
 
 
 class SummaryPlan(BaseModel):
-    headline: str = ""
     kind: Literal["summary", "objective", "none"]
     text: str = ""
 
@@ -206,7 +205,7 @@ async def _write_bullets(items: dict[str, str], provider: AIProvider) -> Written
     )
 
 
-# ── Agent: summary/objective/headline writer ─────────────────────────────────
+# ── Agent: summary/objective writer ───────────────────────────────────────────
 
 _SUMMARY_SYSTEM = """\
 <system_role>
@@ -214,30 +213,22 @@ You are an expert resume writer producing the top-of-resume summary block.
 </system_role>
 
 <rules>
-1. Optionally propose a one-line headline (job title / specialization) —
-leave it empty if nothing meaningfully specific can be said. Never make it
-just the candidate's current/most recent job title restated verbatim or
-near-verbatim — that title is already shown in Experience, so repeating it
-here adds no information. Only propose a headline if it adds something
-Experience doesn't already say on its own: a specialization, industry
-focus, or scope ("Sr. Business Analyst — Data & Process Automation", not
-"Sr. Business Analyst").
-2. Choose exactly one "kind": "summary" (an experienced candidate, or a
+1. Choose exactly one "kind": "summary" (an experienced candidate, or a
 fresher with enough evidence for one), "objective" (a fresher with a clear
 target and not enough experience for a summary), or "none" — use "none"
 whenever neither would add real information beyond what's already visible
 in Experience/Projects/Education. Never write generic career-objective
 language just to fill the slot.
-3. Summary: 40-80 words. Objective: 25-50 words. Base every claim strictly
+2. Summary: 40-80 words. Objective: 25-50 words. Base every claim strictly
 on the selected_content provided — never invent skills, experience, or
 achievements not present there.
-4. Never use generic filler: passionate, motivated, hardworking,
+3. Never use generic filler: passionate, motivated, hardworking,
 results-driven, dynamic, team player, self-starter, seamless, synergy, etc.
-5. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+4. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
-{"headline": "string", "kind": "summary|objective|none", "text": "string"}
+{"kind": "summary|objective|none", "text": "string"}
 </output_schema>"""
 
 
@@ -333,12 +324,6 @@ def _drop_empty(content: dict, section: str) -> None:
         content["projects"] = [p for p in content.get("projects", []) if p.get("name") != name]
 
 
-def _truncate_headline(content: dict) -> None:
-    max_words = HARD_LIMITS["headline"]["max_words"]
-    words = (content.get("headline") or "").replace("\n", " ").split()
-    content["headline"] = " ".join(words[:max_words])
-
-
 def _truncate_summary_or_objective(content: dict, section: str) -> None:
     # section is "Summary" or "Objective" (see resume_validator.py) — matches
     # the corresponding lowercase content key one-to-one.
@@ -403,8 +388,6 @@ def _compress(content: dict, violations: list[Violation]) -> dict:
             content["projects"] = (content.get("projects") or [])[: HARD_LIMITS["projects"]["max"]]
         elif "empty section" in issue:
             _drop_empty(content, section)
-        elif section == "Headline":
-            _truncate_headline(content)
         elif section in ("Summary", "Objective") and "below minimum" not in issue:
             _truncate_summary_or_objective(content, section)
         elif section == "Page count":
@@ -497,7 +480,6 @@ async def generate_resume(
 
     assembled: dict = {
         "contact": profile.get("contact") or {},
-        "headline": (profile.get("headline") or "").strip(),
         "experience": experience,
         "projects": projects,
         "education": (profile.get("education") or [])[: HARD_LIMITS["education_entries"]["max"]],
@@ -515,8 +497,6 @@ async def generate_resume(
         assembled["summary"] = summary_plan.text.strip()
     elif summary_plan.kind == "objective":
         assembled["objective"] = summary_plan.text.strip()
-    if summary_plan.headline.strip() and not assembled["headline"]:
-        assembled["headline"] = summary_plan.headline.strip()
 
     assembled["section_order"] = resolve_section_order(candidate_type, assembled)
     result = validate_resume(assembled, candidate_type, template_id)

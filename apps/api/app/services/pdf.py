@@ -69,40 +69,6 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     return resume_content
 
 
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
-
-
-def _dedupe_redundant_headline(resume_content: dict) -> dict:
-    """Drop a headline that adds nothing beyond a job title already in Experience.
-
-    A headline reading "Sr. Business Analyst" is redundant not just when some
-    Experience entry's title matches it exactly, but also when that title is
-    a superset of it — e.g. "Sr. Business Analyst (Process Excellence)" —
-    since every word in the headline is already fully present in the title;
-    the headline contributes nothing the title doesn't already say. Checks
-    every entry, not just the most recent one — the redundancy holds
-    regardless of which role it echoes. A headline that adds a word or scope
-    the title DOESN'T have (e.g. "Sr. Business Analyst — Data & Process
-    Automation" against a bare "Business Analyst" title) is left alone,
-    since that's genuinely distinguishing information.
-    """
-    headline = (resume_content.get("headline") or "").strip()
-    experience = resume_content.get("experience") or []
-    if not headline:
-        return resume_content
-    normalized_headline = _NON_ALNUM.sub("", headline.lower())
-    if not normalized_headline:
-        return resume_content
-    for job in experience:
-        title = (job.get("title") or "").strip()
-        if not title:
-            continue
-        normalized_title = _NON_ALNUM.sub("", title.lower())
-        if normalized_headline in normalized_title:
-            return {**resume_content, "headline": ""}
-    return resume_content
-
-
 def _render_html(
     resume_content: dict,
     template_id: str,
@@ -122,7 +88,6 @@ def _render_html(
             f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
         )
     resume_content = _sanitize_resume_content(resume_content)
-    resume_content = _dedupe_redundant_headline(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
     return template.render(**resume_content, line_spacing=line_spacing, paragraph_spacing=paragraph_spacing)
 

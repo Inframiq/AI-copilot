@@ -8,7 +8,6 @@
   @page { margin: 0.5in; }
   body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
   .name { font-size: 18pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 3px; color: #1a1a1a; line-height: 1.1; }
-  .headline { font-size: 10.5pt; text-align: center; color: #333; margin-bottom: 3px; }
   .contact-line { font-size: 9pt; text-align: center; color: #444; margin-bottom: 6px; }
   hr { border: none; border-top: 1.5pt solid #333; margin: 4px 0 6px; }
   h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
@@ -34,7 +33,6 @@
 </head>
 <body>
 <div class="name">{{ contact.name | upper }}</div>
-{% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
 <div class="contact-line">
   {{ [contact.location, contact.phone, contact.email] | select | join(' • ') }}{% if contact.linkedin %} • {{ contact.linkedin }}{% endif %}{% if contact.github %} • {{ contact.github }}{% endif %}
 </div>

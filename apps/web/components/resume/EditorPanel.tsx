@@ -242,17 +242,6 @@ export function EditorPanel() {
               {photoError && <p className="text-label-sm text-error">{photoError}</p>}
             </div>
 
-            <div className="flex flex-col gap-xs">
-              <label className="text-label-sm text-on-surface-variant">Headline / Job Title</label>
-              <input
-                type="text"
-                value={content.headline ?? ""}
-                onChange={(e) => updateContent({ headline: e.target.value })}
-                placeholder="e.g. Senior Financial Analyst"
-                className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-              />
-            </div>
-
             {CONTACT_FIELDS.map(({ key, label, type }) => (
               <div key={key} className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant">{label}</label>

@@ -196,74 +196,23 @@ def test_render_html_still_shows_location_when_present(template_id):
 
 
 # ---------------------------------------------------------------------------
-# A headline that just restates the most recent job title is redundant
-# padding, not a distinguishing tagline — dropped at render time so it
-# doesn't need a data migration or manual per-resume edit to fix.
+# The headline slot under the name is gone entirely — every template used
+# to render it, whatever content.headline held (a bare job title reads as
+# redundant padding next to Experience; per-resume dedup heuristics kept
+# missing real-world phrasing variants). Simplest correct fix: never render
+# it, regardless of what's stored.
 # ---------------------------------------------------------------------------
 
 
-def test_render_html_drops_headline_that_exactly_echoes_the_latest_job_title():
-    resume = {
-        **SAMPLE_RESUME,
-        "headline": "Sr. Business Analyst",
-        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
-    }
-    html = _render_html(resume, "ats_clean")
-    # Still correctly shown once, as the Experience entry's job title — just
-    # not duplicated into the headline div right under the name.
+@pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
+def test_render_html_never_renders_a_headline(template_id):
+    resume = {**SAMPLE_RESUME, "headline": "Sr. Business Analyst"}
+    html = _render_html(resume, template_id)
     assert '<div class="headline">' not in html
-    assert html.count("Sr. Business Analyst") == 1
-
-
-def test_render_html_drops_headline_ignoring_case_and_punctuation_differences():
-    resume = {
-        **SAMPLE_RESUME,
-        "headline": "sr business analyst",
-        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
-    }
-    html = _render_html(resume, "ats_clean")
-    assert '<div class="headline">' not in html
-
-
-def test_render_html_keeps_a_headline_that_adds_real_information():
-    resume = {
-        **SAMPLE_RESUME,
-        "headline": "Business Analyst — Process Automation & Data Analytics",
-        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
-    }
-    html = _render_html(resume, "ats_clean")
-    assert "Business Analyst — Process Automation &amp; Data Analytics" in html
-
-
-def test_render_html_drops_headline_that_echoes_an_older_job_title_not_just_the_latest():
-    # The redundant title can belong to any past role, not only the most
-    # recent one — the dedup must check every Experience entry.
-    resume = {
-        **SAMPLE_RESUME,
-        "headline": "Sr. Business Analyst",
-        "experience": [
-            {**SAMPLE_RESUME["experience"][0], "title": "Business Analyst"},
-            {**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"},
-        ],
-    }
-    html = _render_html(resume, "ats_clean")
-    assert '<div class="headline">' not in html
-
-
-def test_render_html_drops_headline_that_is_a_prefix_of_a_more_specific_job_title():
-    # Real reported case: title has an extra qualifier the headline lacks
-    # ("Sr. Business Analyst (Process Excellence)" vs headline "Sr. Business
-    # Analyst") — every word of the headline is still fully contained in the
-    # title, so it's redundant even though it isn't an exact match.
-    resume = {
-        **SAMPLE_RESUME,
-        "headline": "Sr. Business Analyst",
-        "experience": [
-            {**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst (Process Excellence)"},
-        ],
-    }
-    html = _render_html(resume, "ats_clean")
-    assert '<div class="headline">' not in html
+    # SAMPLE_RESUME's headline text doesn't otherwise appear anywhere else
+    # in this fixture (unlike the job-title case), so a plain absence check
+    # is sufficient here.
+    assert "Sr. Business Analyst" not in html
 
 
 # ---------------------------------------------------------------------------

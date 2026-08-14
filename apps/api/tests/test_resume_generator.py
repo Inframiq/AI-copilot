@@ -41,7 +41,7 @@ def make_generator_provider(exclude_ids: frozenset[str] = frozenset()):
             items: dict[str, str] = json.loads(user)
             return WrittenBullets(bullets=[RewrittenItem(item_id=k, text=v) for k, v in items.items()])
         if schema is SummaryPlan:
-            return SummaryPlan(headline="", kind="none", text="")
+            return SummaryPlan(kind="none", text="")
         raise AssertionError(f"unexpected schema {schema}")
 
     provider = MagicMock()
@@ -186,7 +186,7 @@ async def test_oversized_summary_gets_truncated_to_the_word_cap():
             items: dict[str, str] = json.loads(user)
             return WrittenBullets(bullets=[RewrittenItem(item_id=k, text=v) for k, v in items.items()])
         if schema is SummaryPlan:
-            return SummaryPlan(headline="", kind="summary", text=oversized_summary)
+            return SummaryPlan(kind="summary", text=oversized_summary)
         raise AssertionError(f"unexpected schema {schema}")
 
     provider = MagicMock()

@@ -8,7 +8,6 @@
   @page { margin: 0.5in; }
   body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; margin: 0; color: #111; }
   h1 { font-size: 16pt; font-weight: 700; margin: 0 0 3px; line-height: 1.1; }
-  .headline { font-size: 10.5pt; color: #333; margin-bottom: 3px; }
   .contact { font-size: 9.5pt; color: #333; margin-bottom: 10px; }
   h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid #111; margin: 13px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
   .job-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 5px; }
@@ -30,7 +29,6 @@
 </head>
 <body>
 <h1>{{ contact.name }}</h1>
-{% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
 <div class="contact">{{ [contact.email, contact.phone, contact.location] | select | join(' | ') }}</div>
 
 {% macro render_summary_or_objective() %}
