@@ -396,7 +396,7 @@ describe("EditorPanel", () => {
     expect(apiClient.updateResume).not.toHaveBeenCalled();
   });
 
-  it("prompts for suggested skills only when none were picked, and adding them merges into the preview", async () => {
+  it("never adds suggested skills to the preview unless the user explicitly picks them", async () => {
     const original = {
       ...SAMPLE_CONTENT,
       experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
@@ -440,16 +440,14 @@ describe("EditorPanel", () => {
     await userEvent.click(screen.getByText("Tailor Resume"));
     await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
 
-    // No skill chip clicked — proceeding to preview must ask first.
+    // No skill chip clicked — preview must go straight through with the
+    // resume's original skills untouched, no auto-populated suggestions.
     await userEvent.click(screen.getByText("Preview Tailored Resume"));
-    expect(await screen.findByText("Add suggested skills?")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByText("Add top 2"));
 
     await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
     const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls[0][2];
-    expect(mergedContent?.skills).toEqual(expect.arrayContaining(["Kubernetes", "GraphQL"]));
-    expect(screen.queryByText("Add suggested skills?")).not.toBeInTheDocument();
+    expect(mergedContent?.skills).toEqual(original.skills);
+    expect(mergedContent?.skills).not.toEqual(expect.arrayContaining(["Kubernetes", "GraphQL"]));
   });
 
   it("offers Regenerate Preview after Humanize invalidates an already-rendered preview", async () => {
@@ -521,7 +519,7 @@ describe("EditorPanel", () => {
     expect(secondCallContent?.experience[0].bullets[0]).toBe("Built things, naturally");
   });
 
-  it("does not prompt for suggested skills once the user has picked one manually", async () => {
+  it("adds a suggested skill to the preview once the user picks it manually", async () => {
     const original = {
       ...SAMPLE_CONTENT,
       experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
@@ -568,7 +566,8 @@ describe("EditorPanel", () => {
     await userEvent.click(screen.getByText("Kubernetes"));
     await userEvent.click(screen.getByText("Preview Tailored Resume"));
 
-    expect(screen.queryByText("Add suggested skills?")).not.toBeInTheDocument();
     await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls[0][2];
+    expect(mergedContent?.skills).toEqual(expect.arrayContaining(["Kubernetes"]));
   });
 });

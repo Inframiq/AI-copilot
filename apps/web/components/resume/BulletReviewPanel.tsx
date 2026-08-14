@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -37,6 +36,7 @@ export function BulletReviewPanel() {
   const atsScore = useTailoringStore((s) => s.atsScore);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
+  const missingSkills = useTailoringStore((s) => s.missingSkills);
   // Not user-adjustable here anymore (the Writing Style slider that changed
   // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -65,20 +65,8 @@ export function BulletReviewPanel() {
   // happened, rather than silently leaving an outdated score on screen.
   const [hasHumanized, setHasHumanized] = useState(false);
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
-  // Shown on Preview Tailored Resume only if the user never touched any
-  // suggested-skill chip — an explicit choice (even a single click) is
-  // respected as-is, no prompt.
-  const [showSkillsPrompt, setShowSkillsPrompt] = useState(false);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
-  // Portal target readiness — document.body isn't available during SSR, and
-  // this panel's own ancestors (the page-transition wrapper's will-change/
-  // transform) turn "fixed" into "fixed relative to that ancestor" instead of
-  // the viewport, which is why this dialog was rendering clipped to the
-  // editor pane instead of covering the whole screen (PDF preview bleeding
-  // through). Portaling to <body> escapes that ancestor chain entirely.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   // ── Bullet changes (experience only) ─────────────────────────────────────
   const bulletChanges = useMemo<BulletChange[]>(() => {
@@ -112,14 +100,7 @@ export function BulletReviewPanel() {
   const allDecided =
     bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
 
-  // How many suggested skills "Add top N" can actually add without pushing
-  // the merged resume over MAX_MERGED_SKILLS — see buildMergedContent.
   const originalSkillsCount = originalContent?.skills.length ?? 0;
-  const topSkillsToAddCount = Math.min(
-    15,
-    suggestedSkills.length,
-    Math.max(0, MAX_MERGED_SKILLS - originalSkillsCount),
-  );
 
   // Re-run tailoring with the same JD — discards current review and starts fresh.
   async function handleRetailor() {
@@ -190,36 +171,6 @@ export function BulletReviewPanel() {
     }
   }
 
-  // Entry point for the "Preview Tailored Resume" button — interposes the
-  // top-15-skills prompt when nothing was explicitly decided.
-  function handlePreviewClick() {
-    const anySkillDecided = suggestedSkills.some((s) => `skill_add:${s}` in bulletDecisions);
-    if (suggestedSkills.length > 0 && !anySkillDecided) {
-      setShowSkillsPrompt(true);
-      return;
-    }
-    handleGeneratePreview();
-  }
-
-  function acceptTopSkills() {
-    // AI orders plausible_skills_to_add most-important-first (see Agent 2's
-    // prompt) — "top N" is just the first N of that ranked list, where N is
-    // also bounded by however many slots are actually left under the
-    // resume-wide skills cap (see topSkillsToAddCount / buildMergedContent)
-    // so this can't push the merged resume over the limit just because it
-    // was auto-accepted rather than hand-picked.
-    for (const skill of suggestedSkills.slice(0, topSkillsToAddCount)) {
-      setBulletDecision(`skill_add:${skill}`, "accept");
-    }
-    setShowSkillsPrompt(false);
-    handleGeneratePreview();
-  }
-
-  function skipSuggestedSkills() {
-    setShowSkillsPrompt(false);
-    handleGeneratePreview();
-  }
-
   async function handleDownload() {
     if (!previewPdfUrl) return;
     const response = await fetch(previewPdfUrl);
@@ -280,6 +231,8 @@ export function BulletReviewPanel() {
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
+          missingSkills={missingSkills}
+          companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
           originalSkillsCount={originalContent?.skills.length ?? 0}
@@ -490,6 +443,8 @@ export function BulletReviewPanel() {
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
+          missingSkills={missingSkills}
+          companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
           originalSkillsCount={originalContent?.skills.length ?? 0}
@@ -531,7 +486,7 @@ export function BulletReviewPanel() {
               <p className="text-caption text-error">{generateError}</p>
             )}
             <button
-              onClick={handlePreviewClick}
+              onClick={handleGeneratePreview}
               disabled={isApplying || isGenerating || !resumeId}
               className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
@@ -614,85 +569,48 @@ export function BulletReviewPanel() {
           </div>
         )}
       </div>
-
-      {/* Shown once, only when no suggested skill was ever clicked before
-          previewing — an explicit pick (even one) skips this entirely.
-          Portaled to <body> so it always covers the full viewport — nested
-          under the page-transition wrapper's animation styles, "fixed"
-          here would otherwise be positioned relative to an ancestor instead
-          of the viewport, rendering clipped behind the PDF preview pane. */}
-      {showSkillsPrompt && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-gutter">
-          <div className="relative bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
-            <button
-              onClick={skipSuggestedSkills}
-              aria-label="Close"
-              className="absolute top-md right-md p-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
-            >
-              <X size={18} />
-            </button>
-            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-              <Sparkle size={28} className="text-primary" />
-            </div>
-            <div>
-              <p className="text-headline-md text-on-surface font-bold mb-xs">Add suggested skills?</p>
-              <p className="text-body-sm text-on-surface-variant">
-                {topSkillsToAddCount > 0 ? (
-                  <>
-                    You haven&apos;t picked any of the {suggestedSkills.length} suggested skills above.
-                    Want AI to add the top {topSkillsToAddCount} it thinks best match this JD? Otherwise
-                    your resume&apos;s original skills are used as-is.
-                  </>
-                ) : (
-                  <>
-                    Your resume already lists {originalSkillsCount} skills — at the recommended cap, so
-                    none of the {suggestedSkills.length} suggested ones can be added without making the
-                    skills section look overstuffed. Trim a few existing skills first if you&apos;d like
-                    to make room.
-                  </>
-                )}
-              </p>
-            </div>
-            <div className="flex gap-sm w-full">
-              <button
-                onClick={skipSuggestedSkills}
-                className="flex-1 py-sm rounded-xl text-label-md text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors"
-              >
-                Keep original skills
-              </button>
-              {topSkillsToAddCount > 0 && (
-                <button
-                  onClick={acceptTopSkills}
-                  className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
-                >
-                  Add top {topSkillsToAddCount}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
 
 // ── Suggested skills sub-component ───────────────────────────────────────────
+// A skill is "Soft" if it names an interpersonal/behavioral trait rather
+// than a tool, technology, or domain method — everything else defaults to
+// "Technical". Deliberately the same kind of keyword heuristic as
+// classifyTopic in the Interview Center (app/(app)/interview/page.tsx):
+// no AI call, no backend change, cheap enough to run on every render.
+const SOFT_SKILL_PATTERN =
+  /leader|communicat|collaborat|team\s?work|team\s?player|problem[- ]?solv|adapt|time management|conflict|negotiat|mentor|coach|stakeholder engagement|presentation|interpersonal|critical thinking|creativity|emotional intelligence|work ethic|organi[sz]ational|flexibility|empath/i;
+
+type SkillTier = "High" | "Medium" | "Low";
+
+const TIER_DOT_CLASS: Record<SkillTier, string> = {
+  High: "bg-error",
+  Medium: "bg-tertiary",
+  Low: "bg-on-surface-variant/40",
+};
+
 function SkillsBlock({
   suggestedSkills,
   prioritySkills,
+  missingSkills,
+  companyKeywords,
   bulletDecisions,
   setBulletDecision,
   originalSkillsCount,
 }: {
   suggestedSkills: string[];
   prioritySkills: string[];
+  missingSkills: string[];
+  companyKeywords: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
   originalSkillsCount: number;
 }) {
   if (suggestedSkills.length === 0) return null;
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+  const missingSet = new Set(missingSkills.map((s) => s.toLowerCase()));
+  const keywordSet = new Set(companyKeywords.map((s) => s.toLowerCase()));
   const selectedCount = suggestedSkills.filter(
     (s) => bulletDecisions[`skill_add:${s}`] === "accept",
   ).length;
@@ -700,54 +618,88 @@ function SkillsBlock({
   // reads as an intentional guardrail, not skills silently failing to add.
   const remainingSlots = Math.max(0, MAX_MERGED_SKILLS - originalSkillsCount - selectedCount);
   const atCap = remainingSlots === 0;
+
+  // High = a real gap the JD asks for (or one you flagged yourself on the
+  // JD page); Medium = not a gap, but a keyword this company's ATS scans
+  // for; Low = a plausible AI suggestion tied to neither.
+  function tierOf(skill: string): SkillTier {
+    const l = skill.toLowerCase();
+    if (prioritySet.has(l) || missingSet.has(l)) return "High";
+    if (keywordSet.has(l)) return "Medium";
+    return "Low";
+  }
+
+  const technicalSkills = suggestedSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
+  const softSkills = suggestedSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
+
+  function renderChip(skill: string) {
+    const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
+    const isPriority = prioritySet.has(skill.toLowerCase());
+    const disabled = !selected && atCap;
+    const tier = tierOf(skill);
+    return (
+      <button
+        key={skill}
+        disabled={disabled}
+        title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority`}
+        onClick={() =>
+          setBulletDecision(
+            `skill_add:${skill}`,
+            selected ? "reject" : "accept",
+          )
+        }
+        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+          selected
+            ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+            : disabled
+            ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
+            : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
+        }`}
+      >
+        {selected ? (
+          <Check size={11} weight="bold" />
+        ) : (
+          <X size={11} weight="bold" />
+        )}
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TIER_DOT_CLASS[tier]}`} />
+        {isPriority && <span aria-label="You picked this keyword">★</span>}
+        {skill}
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
       <div>
         <p className="text-label-sm text-on-surface font-bold">Suggested Skills to Add</p>
         <p className="text-caption text-on-surface-variant">
-          Click a skill to include it in your resume
-          {prioritySkills.length > 0 && " — ★ marks the keywords you picked on the JD page"}
+          Click a skill to include it — nothing is added automatically.
+          {prioritySkills.length > 0 && " ★ marks the keywords you picked on the JD page."}
         </p>
-        <p className="text-caption text-on-surface-variant">
-          {originalSkillsCount + selectedCount} / {MAX_MERGED_SKILLS} skills
-          {atCap && " — limit reached, deselect one to add another"}
+        <p className="text-caption text-on-surface-variant flex items-center gap-sm flex-wrap">
+          <span>
+            {originalSkillsCount + selectedCount} / {MAX_MERGED_SKILLS} skills
+            {atCap && " — limit reached, deselect one to add another"}
+          </span>
+          <span className="flex items-center gap-xs">
+            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.High}`} /> High
+            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Medium}`} /> Medium
+            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Low}`} /> Low
+          </span>
         </p>
       </div>
-      <div className="flex flex-wrap gap-xs">
-        {suggestedSkills.map((skill) => {
-          const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
-          const isPriority = prioritySet.has(skill.toLowerCase());
-          const disabled = !selected && atCap;
-          return (
-            <button
-              key={skill}
-              disabled={disabled}
-              title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : undefined}
-              onClick={() =>
-                setBulletDecision(
-                  `skill_add:${skill}`,
-                  selected ? "reject" : "accept",
-                )
-              }
-              className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
-                selected
-                  ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
-                  : disabled
-                  ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
-                  : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
-              }`}
-            >
-              {selected ? (
-                <Check size={11} weight="bold" />
-              ) : (
-                <X size={11} weight="bold" />
-              )}
-              {isPriority && <span aria-label="You picked this keyword">★</span>}
-              {skill}
-            </button>
-          );
-        })}
-      </div>
+      {technicalSkills.length > 0 && (
+        <div className="flex flex-col gap-xs">
+          <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Technical</p>
+          <div className="flex flex-wrap gap-xs">{technicalSkills.map(renderChip)}</div>
+        </div>
+      )}
+      {softSkills.length > 0 && (
+        <div className="flex flex-col gap-xs">
+          <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Soft Skills</p>
+          <div className="flex flex-wrap gap-xs">{softSkills.map(renderChip)}</div>
+        </div>
+      )}
     </div>
   );
 }
