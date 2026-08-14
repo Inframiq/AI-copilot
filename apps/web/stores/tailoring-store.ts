@@ -496,7 +496,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   // so the original is never touched. Only ever called from a save
   // confirmation the user clicked — never automatically.
   saveTailoredResume: async (resumeId, mode, newTitle) => {
-    const { mergedContent } = get();
+    const { mergedContent, jdId } = get();
     const resumeStore = useResumeStore.getState();
     if (!mergedContent) throw new Error("No previewed content to save");
 
@@ -508,17 +508,27 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           content: mergedContent,
           template_id: resumeStore.templateId,
         });
-        resumeStore.setResume(resumeId, mergedContent, resumeStore.templateId);
       } else {
+        // jd_id links this save to the JD it was tailored for — the backend
+        // overwrites the JD's previously-saved resume (if any) instead of
+        // creating a new one, so re-tailoring + saving again doesn't pile
+        // up duplicates.
         const created = await apiClient.createResume({
           title: newTitle?.trim() || "Tailored Resume",
           template_id: resumeStore.templateId,
           content: mergedContent,
+          jd_id: jdId ?? undefined,
         });
         targetId = created.id;
       }
       const { signed_url } = await apiClient.generatePdf(targetId, resumeStore.templateId);
-      if (mode === "update") useResumeStore.getState().setPdfSignedUrl(signed_url);
+      // Hydrate the resume store with the just-saved content/PDF regardless
+      // of mode — for "new" this also points the store at the newly created
+      // resume, which matters because whoever navigates to
+      // /studio/{targetId} next skips re-hydrating (and so keeps this PDF)
+      // only when the store's resumeId already matches.
+      resumeStore.setResume(targetId, mergedContent, resumeStore.templateId);
+      useResumeStore.getState().setPdfSignedUrl(signed_url);
       set({
         pendingContent: null,
         bulletDecisions: {},

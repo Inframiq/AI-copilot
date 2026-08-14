@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
-from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter
+from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter, Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
@@ -139,7 +139,24 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
         .limit(1)
     )
     session = result.scalars().first()
-    if not session:
+
+    # The resume the user explicitly saved (Studio's "Save tailored resume")
+    # for this JD, if any — distinct from session.resume, which is the
+    # resume tailoring was RUN against (the input, not the reviewed/saved
+    # output). Preferred over session.resume whenever it exists, since it's
+    # what the user actually chose to keep for this JD.
+    jd_result = await db.execute(
+        select(JobDescription).where(JobDescription.id == jd_id, JobDescription.user_id == uid)
+    )
+    jd = jd_result.scalar_one_or_none()
+    tailored_resume = None
+    if jd and jd.tailored_resume_id:
+        tr_result = await db.execute(
+            select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
+        )
+        tailored_resume = tr_result.scalar_one_or_none()
+
+    if not session and not tailored_resume:
         return {
             "session_id": None,
             "ats_score": None,
@@ -151,21 +168,25 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
             "questions_practiced": 0,
         }
 
-    q_result = await db.execute(
-        select(
-            func.count(PrepQuestion.id),
-            func.count(PrepQuestion.practiced_at),
-        ).where(PrepQuestion.session_id == session.id)
-    )
-    questions_total, questions_practiced = q_result.one()
+    questions_total = questions_practiced = 0
+    if session:
+        q_result = await db.execute(
+            select(
+                func.count(PrepQuestion.id),
+                func.count(PrepQuestion.practiced_at),
+            ).where(PrepQuestion.session_id == session.id)
+        )
+        questions_total, questions_practiced = q_result.one()
+
+    resume_for_display = tailored_resume or (session.resume if session else None)
 
     return {
-        "session_id": str(session.id),
-        "ats_score": session.ats_score,
-        "resume_id": str(session.resume_id),
-        "resume_title": session.resume.title if session.resume else None,
-        "resume_pdf_url": session.resume.pdf_url if session.resume else None,
-        "session_created_at": session.created_at.isoformat(),
+        "session_id": str(session.id) if session else None,
+        "ats_score": session.ats_score if session else None,
+        "resume_id": str(resume_for_display.id) if resume_for_display else None,
+        "resume_title": resume_for_display.title if resume_for_display else None,
+        "resume_pdf_url": resume_for_display.pdf_url if resume_for_display else None,
+        "session_created_at": session.created_at.isoformat() if session else None,
         "questions_total": questions_total,
         "questions_practiced": questions_practiced,
     }

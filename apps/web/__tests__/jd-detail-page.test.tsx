@@ -20,8 +20,6 @@ vi.mock("@/lib/api-client", () => ({
       missing_skills: [],
       company_keywords: [],
     }),
-    getLatestJdSession: vi.fn(),
-    getSession: vi.fn(),
     getJdCoverLetter: vi.fn().mockResolvedValue({ cover_letter_id: null, status: null, created_at: null }),
     generateCoverLetter: vi.fn(),
   },
@@ -89,45 +87,36 @@ describe("JDPage — Open (handleOpen)", () => {
   // navigating to Studio. That set the tailoring store's jdId, which makes
   // EditorPanel's hasJdContext true and collapses the content editor into
   // its JD-context "Expand to edit" state by default — so a resume the user
-  // just asked to open (and that WAS correctly hydrated into the resume
-  // store) rendered hidden behind a collapsed header, reading as a blank or
-  // default Studio page instead of showing the tailored content.
-  it("hydrates the tailored resume into the resume store and navigates, without entering JD-tailoring mode", async () => {
-    vi.mocked(apiClient.getLatestJdSession).mockResolvedValue({ session_id: "session-1" });
-    vi.mocked(apiClient.getSession).mockResolvedValue({
+  // just asked to open rendered hidden behind a collapsed header, reading as
+  // a blank or default Studio page instead of showing the tailored content.
+  it("opens the resume saved for this JD (jdDetails.resume_id), without entering JD-tailoring mode", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({
       session_id: "session-1",
-      resume_id: "resume-1",
-      jd_id: "jd-1",
-      status: "completed",
-      tailored_content: {
-        contact: { name: "Jane Doe", email: "jane@example.com" },
-        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Tailored bullet"] }],
-        education: [],
-        skills: ["Python"],
-      },
+      resume_id: "resume-tailored-1",
+      resume_title: "Resume — Acme",
+      resume_pdf_url: null,
       ats_score: 82,
-      matched_skills: ["Python"],
-      missing_skills: [],
-      company_keywords: [],
-      suggested_skills: [],
+      session_created_at: new Date().toISOString(),
+      questions_total: 0,
+      questions_practiced: 0,
     } as any);
 
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
 
-    await userEvent.click(await screen.findByText("Open"));
+    // Two "Open" buttons render once a tailored resume exists for this JD
+    // (the always-shown Master Resume card, and the "Generated for This JD"
+    // row) — both call the same handler, so either works.
+    const [openButton] = await screen.findAllByText("Open");
+    await userEvent.click(openButton);
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-1"));
-
-    const resumeState = useResumeStore.getState();
-    expect(resumeState.resumeId).toBe("resume-1");
-    expect(resumeState.content?.experience[0].bullets).toEqual(["Tailored bullet"]);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-tailored-1"));
 
     // The bug: this used to be "jd-1", which is what collapsed the editor.
     expect(useTailoringStore.getState().jdId).toBeNull();
   });
 
-  it("falls back to opening the base resume when no tailored session exists", async () => {
-    vi.mocked(apiClient.getLatestJdSession).mockResolvedValue({ session_id: null });
+  it("falls back to opening the base resume when no tailored resume is linked to this JD", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ session_id: null, resume_id: null } as any);
 
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
 

@@ -70,6 +70,11 @@ export const apiClient = {
     title: string;
     template_id?: string;
     content?: ResumeContent;
+    /** When set, saves this as "the tailored resume for this JD" — the
+     * backend overwrites the JD's already-linked resume (if any) instead of
+     * creating a new row, so re-tailoring + saving again doesn't pile up
+     * duplicates. */
+    jd_id?: string;
   }): Promise<Resume> => request<Resume>("POST", "/resumes", payload),
 
   updateResume: (

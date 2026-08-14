@@ -445,9 +445,37 @@ describe("useTailoringStore", () => {
       expect.objectContaining({ title: "Resume — Acme", content: expect.any(Object) })
     );
     expect(apiClient.updateResume).not.toHaveBeenCalled();
-    // The original resume in the store is untouched.
-    expect(useResumeStore.getState().resumeId).toBe("resume-abc");
-    expect(useResumeStore.getState().content).toEqual(SAMPLE_CONTENT);
+    // The original resume record on the backend is untouched (a separate
+    // row was created above) — but the store now points at the newly saved
+    // resume and its freshly generated PDF, since the caller is about to
+    // navigate to /studio/{targetId} and that page should show the tailored
+    // PDF immediately instead of a blank preview.
+    expect(useResumeStore.getState().resumeId).toBe("resume-new");
+    expect(useResumeStore.getState().pdfSignedUrl).toBe("https://example.com/tailored.pdf");
+  });
+
+  it("saveTailoredResume('new') links the save to the current JD", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.createResume).mockResolvedValueOnce({
+      id: "resume-new",
+      user_id: "user-1",
+      title: "Tailored Resume",
+      content: SAMPLE_CONTENT,
+      template_id: "ats_clean",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    await useTailoringStore.getState().saveTailoredResume("resume-abc", "new");
+
+    expect(apiClient.createResume).toHaveBeenCalledWith(
+      expect.objectContaining({ jd_id: "jd-001" })
+    );
   });
 
   it("runTailoring handles API errors gracefully", async () => {

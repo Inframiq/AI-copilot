@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
 import {
@@ -34,7 +33,6 @@ export default function JDPage({
 
   const setJd = useTailoringStore((s) => s.setJd);
   const setAnalysisResults = useTailoringStore((s) => s.setAnalysisResults);
-  const setResume = useResumeStore((s) => s.setResume);
 
   const { data: jd } = useQuery<JobDescription>({
     queryKey: ["jd", jdId],
@@ -158,32 +156,20 @@ export default function JDPage({
   async function handleOpen() {
     if (!masterResume) return;
     setIsOpening(true);
-    setTailorError(null);
     // Do NOT call setJd() here — "Open" means "show me the resume I already
     // tailored," not "enter the tailoring flow for this JD." Setting jdId
     // makes EditorPanel's hasJdContext true, which collapses the content
     // editor into its JD-context "Expand to edit" state by default — so the
     // tailored resume the user just asked to open renders hidden behind a
     // collapsed header, reading as a blank/default Studio page.
-    try {
-      // Load the latest tailoring session for this JD
-      const { session_id } = await apiClient.getLatestJdSession(jdId);
-      if (session_id) {
-        const session = await apiClient.getSession(session_id);
-        if (session.tailored_content) {
-          // Hydrate the resume store with the previously tailored content
-          setResume(session.resume_id, session.tailored_content, masterResume.template_id);
-          router.push(`/studio/${session.resume_id}`);
-          return;
-        }
-      }
-      // No tailored session — just open the base resume
-      router.push(`/studio/${masterResume.id}`);
-    } catch {
-      router.push(`/studio/${masterResume.id}`);
-    } finally {
-      setIsOpening(false);
-    }
+    //
+    // jdDetails.resume_id is the resume the user explicitly saved for this
+    // JD (JobDescription.tailored_resume_id) when one exists, falling back
+    // to the resume tailoring was last run against — either way, the
+    // Studio page fetches that resume's real saved content itself, so no
+    // separate session/content hydration is needed here.
+    router.push(`/studio/${jdDetails?.resume_id ?? masterResume.id}`);
+    setIsOpening(false);
   }
 
   return (

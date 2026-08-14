@@ -27,6 +27,10 @@ class ResumeCreate(BaseModel):
     title: str = Field(max_length=255)
     content: dict = {}
     template_id: ValidTemplateId = "ats_clean"
+    # When set, this create is "save the tailored resume for this JD" —
+    # see create_resume in routers/resumes.py, which overwrites the JD's
+    # already-linked resume (if any) instead of creating a new row.
+    jd_id: uuid.UUID | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

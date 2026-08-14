@@ -246,9 +246,14 @@ async def test_get_jd_details_returns_resume_and_question_progress():
     override, mock_session = make_mock_db()
     session_result = MagicMock()
     session_result.scalars.return_value.first.return_value = session_row
+    # JD lookup for the tailored_resume_id link — unset here, so resume
+    # display falls back to session.resume (the resume tailoring ran
+    # against), same as before this field existed.
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = None
     questions_result = MagicMock()
     questions_result.one.return_value = (5, 2)
-    mock_session.execute = AsyncMock(side_effect=[session_result, questions_result])
+    mock_session.execute = AsyncMock(side_effect=[session_result, jd_result, questions_result])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -268,12 +273,70 @@ async def test_get_jd_details_returns_resume_and_question_progress():
 
 
 @pytest.mark.asyncio
+async def test_get_jd_details_prefers_the_saved_tailored_resume_over_the_session_input_resume():
+    """Studio's "Save tailored resume" links JobDescription.tailored_resume_id
+    to the resume the user actually chose to keep — that's what JD Details
+    should show, not session.resume (the resume tailoring was run against,
+    which may be an entirely different, untouched master resume)."""
+    from app.db.models import TailoringSession
+
+    jd_id = uuid.uuid4()
+    user_id = uuid.UUID(TEST_USER_ID)
+    input_resume = Resume(
+        id=uuid.uuid4(), user_id=user_id, title="Master Resume", template_id="ats_clean", pdf_url="master.pdf"
+    )
+    saved_resume = Resume(
+        id=uuid.uuid4(), user_id=user_id, title="Resume — Acme", template_id="ats_clean", pdf_url="acme.pdf"
+    )
+    session_row = TailoringSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        resume_id=input_resume.id,
+        jd_id=jd_id,
+        status="completed",
+        ats_score=82,
+        created_at=datetime.now(timezone.utc),
+    )
+    session_row.resume = input_resume
+    jd_row = JobDescription(
+        id=jd_id, user_id=user_id, title="Acme JD", raw_text="...", tailored_resume_id=saved_resume.id
+    )
+
+    override, mock_session = make_mock_db()
+    session_result = MagicMock()
+    session_result.scalars.return_value.first.return_value = session_row
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd_row
+    tailored_resume_result = MagicMock()
+    tailored_resume_result.scalar_one_or_none.return_value = saved_resume
+    questions_result = MagicMock()
+    questions_result.one.return_value = (0, 0)
+    mock_session.execute = AsyncMock(
+        side_effect=[session_result, jd_result, tailored_resume_result, questions_result]
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/details", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["resume_id"] == str(saved_resume.id)
+        assert body["resume_title"] == "Resume — Acme"
+        assert body["resume_pdf_url"] == "acme.pdf"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_get_jd_details_no_session_returns_empty_state():
     jd_id = uuid.uuid4()
     override, mock_session = make_mock_db()
     session_result = MagicMock()
     session_result.scalars.return_value.first.return_value = None
-    mock_session.execute = AsyncMock(return_value=session_result)
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = None
+    mock_session.execute = AsyncMock(side_effect=[session_result, jd_result])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -282,6 +345,7 @@ async def test_get_jd_details_no_session_returns_empty_state():
         assert r.status_code == 200
         body = r.json()
         assert body["session_id"] is None
+        assert body["resume_id"] is None
         assert body["questions_total"] == 0
         assert body["questions_practiced"] == 0
     finally:

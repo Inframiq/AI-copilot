@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db, AsyncSessionLocal
-from app.db.models import Resume
+from app.db.models import Resume, JobDescription
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
@@ -60,10 +60,40 @@ async def list_resumes(user=Depends(get_current_user), db: AsyncSession = Depend
 
 @router.post("", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
 async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    resume = Resume(user_id=uuid.UUID(user["sub"]), **body.model_dump())
+    uid = uuid.UUID(user["sub"])
+    payload = body.model_dump(exclude={"jd_id"})
+
+    jd = None
+    if body.jd_id:
+        result = await db.execute(
+            select(JobDescription).where(JobDescription.id == body.jd_id, JobDescription.user_id == uid)
+        )
+        jd = result.scalar_one_or_none()
+        if not jd:
+            raise HTTPException(status_code=404, detail="JD not found")
+        # A resume is already linked to this JD (e.g. a previous "Save as
+        # new") — overwrite it in place instead of creating another row, so
+        # re-tailoring the same JD and saving again doesn't pile up
+        # duplicate resumes.
+        if jd.tailored_resume_id:
+            result = await db.execute(
+                select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                for field, value in payload.items():
+                    setattr(existing, field, value)
+                await db.commit()
+                await db.refresh(existing)
+                return existing
+
+    resume = Resume(user_id=uid, **payload)
     db.add(resume)
     await db.commit()
     await db.refresh(resume)
+    if jd:
+        jd.tailored_resume_id = resume.id
+        await db.commit()
     return resume
 
 

@@ -42,6 +42,16 @@ class JobDescription(Base):
     parsed: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # not_applied -> applied -> interview -> final_round -> offer -> accepted, or rejected at any point
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_applied")
+    # The resume the user explicitly saved (Studio's "Save tailored resume")
+    # for this JD, distinct from TailoringSession.resume_id (the resume
+    # tailoring was RUN against, i.e. the input). Null until the user saves
+    # one; a later save-as-new for the same JD overwrites the resume this
+    # points at rather than creating another row — see create_resume in
+    # routers/resumes.py. SET NULL (not CASCADE) so deleting that resume
+    # doesn't take the JD down with it.
+    tailored_resume_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="jd", cascade="all, delete-orphan")

@@ -123,6 +123,112 @@ async def test_create_resume_returns_201():
 
 
 @pytest.mark.asyncio
+async def test_create_resume_with_jd_id_links_new_resume_to_the_jd():
+    """First "Save as new" for a JD that has no linked resume yet — creates a
+    resume as normal and links JobDescription.tailored_resume_id to it."""
+    from app.db.models import Resume, JobDescription
+    from datetime import datetime, timezone
+
+    jd_id = uuid.uuid4()
+    jd_row = JobDescription(
+        id=jd_id, user_id=uuid.UUID(TEST_USER_ID), title="Acme JD", raw_text="...", tailored_resume_id=None
+    )
+
+    override, mock_session = make_mock_db()
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd_row
+    mock_session.execute = AsyncMock(return_value=jd_result)
+
+    created_resume = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Resume — Acme",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    async def fake_refresh(obj):
+        obj.id = created_resume.id
+        obj.created_at = created_resume.created_at
+        obj.updated_at = created_resume.updated_at
+
+    mock_session.refresh = fake_refresh
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/resumes",
+                json={"title": "Resume — Acme", "jd_id": str(jd_id)},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 201
+        assert r.json()["title"] == "Resume — Acme"
+        # The newly created resume gets linked back onto the JD.
+        assert jd_row.tailored_resume_id == created_resume.id
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
+    """Re-tailoring the same JD and clicking "Save as new" again must
+    overwrite the resume already linked to it, not create a duplicate."""
+    from app.db.models import Resume, JobDescription
+    from datetime import datetime, timezone
+
+    jd_id = uuid.uuid4()
+    existing_resume_id = uuid.uuid4()
+    jd_row = JobDescription(
+        id=jd_id,
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Acme JD",
+        raw_text="...",
+        tailored_resume_id=existing_resume_id,
+    )
+    existing_resume = Resume(
+        id=existing_resume_id,
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Old Tailored Title",
+        content={"old": True},
+        template_id="ats_clean",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    override, mock_session = make_mock_db()
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd_row
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = existing_resume
+    mock_session.execute = AsyncMock(side_effect=[jd_result, resume_result])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/resumes",
+                json={
+                    "title": "Resume — Acme v2",
+                    "jd_id": str(jd_id),
+                    "content": {"new": True},
+                },
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 201
+        data = r.json()
+        # Same resume id — overwritten in place, not a new row.
+        assert data["id"] == str(existing_resume_id)
+        assert data["title"] == "Resume — Acme v2"
+        assert data["content"] == {"new": True}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_get_resume_404_when_not_found():
     override, mock_session = make_mock_db()
     mock_result = MagicMock()
