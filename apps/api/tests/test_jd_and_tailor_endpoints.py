@@ -995,3 +995,88 @@ async def test_get_my_questions_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/ai/questions/mine")
     assert r.status_code == 401
+
+
+# ── POST /ai/rewrite-bullet ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_custom_mode_requires_instructions():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post(
+            "/ai/rewrite-bullet",
+            json={"bullet_text": "Led a team of 5 engineers", "mode": "custom"},
+            headers=make_auth_header(),
+        )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_custom_mode_follows_instructions():
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(return_value="Rewritten per instructions.")
+    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/ai/rewrite-bullet",
+                json={
+                    "bullet_text": "Original summary text.",
+                    "mode": "custom",
+                    "custom_instruction": "Make it punchier and mention leadership.",
+                    "field": "summary",
+                },
+                headers=make_auth_header(),
+            )
+    assert r.status_code == 200
+    assert r.json()["rewritten_text"] == "Rewritten per instructions."
+    system_prompt, user_msg = mock_provider.complete.call_args.args[:2]
+    assert "instructions" in system_prompt.lower()
+    assert "Make it punchier and mention leadership." in user_msg
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_summary_field_truncates_to_word_cap():
+    from app.services.resume_spec import HARD_LIMITS
+
+    max_words = HARD_LIMITS["summary"]["max_words"]
+    overlong = " ".join(f"word{i}" for i in range(max_words + 30))
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(return_value=overlong)
+    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/ai/rewrite-bullet",
+                json={"bullet_text": "Original summary.", "mode": "rewrite", "field": "summary"},
+                headers=make_auth_header(),
+            )
+    assert r.status_code == 200
+    assert len(r.json()["rewritten_text"].split()) <= max_words
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
+    from app.services.resume_spec import HARD_LIMITS
+
+    max_words = HARD_LIMITS["summary"]["max_words"]
+    long_bullet = " ".join(f"word{i}" for i in range(max_words + 30))
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(return_value=long_bullet)
+    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/ai/rewrite-bullet",
+                json={"bullet_text": "Original bullet.", "mode": "rewrite"},
+                headers=make_auth_header(),
+            )
+    assert r.status_code == 200
+    assert len(r.json()["rewritten_text"].split()) == max_words + 30
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post(
+            "/ai/rewrite-bullet",
+            json={"bullet_text": "Original bullet.", "mode": "rewrite"},
+        )
+    assert r.status_code == 401

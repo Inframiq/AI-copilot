@@ -87,9 +87,18 @@ class LearningItemOut(BaseModel):
 
 class RewriteBulletRequest(BaseModel):
     bullet_text: str = Field(max_length=3000)
-    mode: str = Field(pattern="^(rewrite|humanize)$")
+    mode: str = Field(pattern="^(rewrite|humanize|custom)$")
     jd_context: str = Field(default="", max_length=8000)
     humanize_level: int = Field(default=50, ge=0, le=100)
+    # "custom" mode's free-text instructions — required for that mode only,
+    # enforced in the route handler rather than here since Pydantic can't
+    # express "required if mode == X" declaratively without a validator.
+    custom_instruction: str = Field(default="", max_length=1000)
+    # Changes prompt framing (single-line bullet vs. an 80-word-cap flowing
+    # paragraph) and applies the word cap backstop — see resume_spec.py
+    # HARD_LIMITS["summary"], the same limit the Summary tab's textarea
+    # already enforces when the user types directly.
+    field: str = Field(default="bullet", pattern="^(bullet|summary)$")
 
 
 class RewriteBulletOut(BaseModel):

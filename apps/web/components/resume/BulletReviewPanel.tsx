@@ -24,6 +24,7 @@ export function BulletReviewPanel() {
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
   const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
+  const updatePendingSummary = useTailoringStore((s) => s.updatePendingSummary);
   const generatePreview = useTailoringStore((s) => s.generatePreview);
   const reanalyzePreview = useTailoringStore((s) => s.reanalyzePreview);
   const isReanalyzing = useTailoringStore((s) => s.isReanalyzing);
@@ -67,6 +68,9 @@ export function BulletReviewPanel() {
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
+  const [summaryLoading, setSummaryLoading] = useState<"rewrite" | "humanize" | "custom" | null>(null);
+  const [summaryPrompt, setSummaryPrompt] = useState("");
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // ── Bullet changes (experience only) ─────────────────────────────────────
   const bulletChanges = useMemo<BulletChange[]>(() => {
@@ -130,6 +134,33 @@ export function BulletReviewPanel() {
       // silently fail — original tailored text stays
     } finally {
       setBulletLoading((prev) => ({ ...prev, [change.key]: null }));
+    }
+  }
+
+  async function handleRewriteSummary(mode: "rewrite" | "humanize" | "custom") {
+    const currentSummary = pendingContent?.summary?.trim();
+    if (!currentSummary) return;
+    if (mode === "custom" && !summaryPrompt.trim()) return;
+    setSummaryLoading(mode);
+    setSummaryError(null);
+    try {
+      const { rewritten_text } = await apiClient.rewriteBullet({
+        bullet_text: currentSummary,
+        mode,
+        jd_context: mode === "rewrite" ? jdText : undefined,
+        humanize_level: humanizeLevel,
+        custom_instruction: mode === "custom" ? summaryPrompt.trim() : undefined,
+        field: "summary",
+      });
+      updatePendingSummary(rewritten_text);
+      // Auto-accept the updated version
+      setBulletDecision("summary", "accept");
+      if (mode === "custom") setSummaryPrompt("");
+      if (mode === "humanize") setHasHumanized(true);
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : "Rewrite failed");
+    } finally {
+      setSummaryLoading(null);
     }
   }
 
@@ -225,7 +256,18 @@ export function BulletReviewPanel() {
             No changes to review — your resume is already well-aligned with this JD.
           </p>
         </div>
-        {/* Skills + generate still shown */}
+        {/* Summary + Skills + generate still shown */}
+        <SummaryBlock
+          originalSummary={originalContent?.summary ?? ""}
+          pendingSummary={pendingContent?.summary ?? ""}
+          decision={bulletDecisions["summary"]}
+          setBulletDecision={setBulletDecision}
+          onRewrite={handleRewriteSummary}
+          loading={summaryLoading}
+          error={summaryError}
+          prompt={summaryPrompt}
+          setPrompt={setSummaryPrompt}
+        />
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
@@ -326,6 +368,19 @@ export function BulletReviewPanel() {
           </div>
         </div>
       )}
+
+      {/* ── Summary ── */}
+      <SummaryBlock
+        originalSummary={originalContent?.summary ?? ""}
+        pendingSummary={pendingContent?.summary ?? ""}
+        decision={bulletDecisions["summary"]}
+        setBulletDecision={setBulletDecision}
+        onRewrite={handleRewriteSummary}
+        loading={summaryLoading}
+        error={summaryError}
+        prompt={summaryPrompt}
+        setPrompt={setSummaryPrompt}
+      />
 
       {/* ── Bullet groups ── */}
       {Object.entries(groups).map(([groupKey, group]) => (
@@ -567,6 +622,127 @@ export function BulletReviewPanel() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Professional Summary sub-component ───────────────────────────────────────
+// Unlike bullets (already diffed by the initial tailoring pass), the summary
+// starts identical to the original — nothing to review until the user
+// explicitly asks for a rewrite via one of the three actions below.
+function SummaryBlock({
+  originalSummary,
+  pendingSummary,
+  decision,
+  setBulletDecision,
+  onRewrite,
+  loading,
+  error,
+  prompt,
+  setPrompt,
+}: {
+  originalSummary: string;
+  pendingSummary: string;
+  decision: string | undefined;
+  setBulletDecision: (key: string, d: "accept" | "reject") => void;
+  onRewrite: (mode: "rewrite" | "humanize" | "custom") => void;
+  loading: "rewrite" | "humanize" | "custom" | null;
+  error: string | null;
+  prompt: string;
+  setPrompt: (v: string) => void;
+}) {
+  if (!originalSummary.trim() && !pendingSummary.trim()) return null;
+  const changed = pendingSummary.trim() !== originalSummary.trim();
+  const accepted = (decision ?? "accept") === "accept";
+
+  return (
+    <div className="rounded-xl border border-outline-variant/20 p-md flex flex-col gap-sm bg-surface">
+      <p className="text-label-md font-bold text-on-surface">Professional Summary</p>
+
+      {changed && (
+        <div className="flex flex-col gap-xs">
+          <span className="text-caption text-on-surface-variant uppercase tracking-wider">Original</span>
+          <p className="text-body-sm text-on-surface-variant line-through leading-relaxed">{originalSummary}</p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-xs">
+        <span
+          className={`text-caption uppercase tracking-wider font-bold ${changed ? "text-primary" : "text-on-surface-variant"}`}
+        >
+          {changed ? "AI Tailored" : "Current"}
+        </span>
+        <p className="text-body-sm text-on-surface leading-relaxed">
+          {pendingSummary || <em className="not-italic opacity-50">— empty —</em>}
+        </p>
+      </div>
+
+      {changed && (
+        <div className="flex items-center gap-xs">
+          <button
+            onClick={() => setBulletDecision("summary", "accept")}
+            className={`flex items-center gap-xs px-md py-xs rounded-lg text-label-sm transition-all ${
+              accepted
+                ? "bg-primary text-on-primary shadow-sm"
+                : "border border-outline-variant/40 text-on-surface-variant hover:border-primary hover:text-primary"
+            }`}
+          >
+            <Check size={14} weight={accepted ? "bold" : "regular"} />
+            Accept
+          </button>
+          <button
+            onClick={() => setBulletDecision("summary", "reject")}
+            className={`flex items-center gap-xs px-md py-xs rounded-lg text-label-sm transition-all ${
+              !accepted
+                ? "bg-error text-on-error shadow-sm"
+                : "border border-outline-variant/40 text-on-surface-variant hover:border-error hover:text-error"
+            }`}
+          >
+            <X size={14} weight={!accepted ? "bold" : "regular"} />
+            Keep original
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-xs pt-xs border-t border-outline-variant/10 flex-wrap">
+        <button
+          disabled={!!loading}
+          onClick={() => onRewrite("rewrite")}
+          title="Re-optimize the summary for the JD"
+          className="flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm border border-outline-variant/40 text-on-surface-variant hover:border-secondary hover:text-secondary transition-all disabled:opacity-40"
+        >
+          <ArrowsClockwise size={13} className={loading === "rewrite" ? "animate-spin" : ""} />
+          {loading === "rewrite" ? "Rewriting…" : "Rewrite for this JD"}
+        </button>
+        <button
+          disabled={!!loading}
+          onClick={() => onRewrite("humanize")}
+          title="Make the summary sound more natural"
+          className="flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm border border-outline-variant/40 text-on-surface-variant hover:border-tertiary hover:text-tertiary transition-all disabled:opacity-40"
+        >
+          <Sparkle size={13} className={loading === "humanize" ? "animate-pulse" : ""} />
+          {loading === "humanize" ? "Humanizing…" : "Humanize"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-xs">
+        <input
+          type="text"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Or describe how you want it written — e.g. “lead with leadership, keep it under 60 words”"
+          className="flex-1 px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        <button
+          disabled={!!loading || !prompt.trim()}
+          onClick={() => onRewrite("custom")}
+          className="flex items-center gap-xs px-md py-xs rounded-lg text-label-sm text-on-primary bg-primary hover:bg-primary-container transition-all disabled:opacity-50"
+        >
+          {loading === "custom" ? "Rewriting…" : "Rewrite"}
+        </button>
+      </div>
+
+      {error && <p className="text-caption text-error">{error}</p>}
     </div>
   );
 }

@@ -242,9 +242,13 @@ export const apiClient = {
 
   rewriteBullet: (payload: {
     bullet_text: string;
-    mode: "rewrite" | "humanize";
+    mode: "rewrite" | "humanize" | "custom";
     jd_context?: string;
     humanize_level?: number;
+    /** Required when mode is "custom" — free-text instructions for how to rewrite the text. */
+    custom_instruction?: string;
+    /** Changes prompt framing: single-line bullet vs. an 80-word-cap paragraph. Defaults to "bullet". */
+    field?: "bullet" | "summary";
   }): Promise<{ rewritten_text: string }> =>
     request<{ rewritten_text: string }>("POST", "/ai/rewrite-bullet", payload),
 

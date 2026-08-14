@@ -15,6 +15,7 @@ from app.schemas.ai import (
 )
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
+from app.services.resume_spec import HARD_LIMITS
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 logger = logging.getLogger("app")
@@ -220,36 +221,65 @@ async def rewrite_bullet(
     body: RewriteBulletRequest,
     user=Depends(get_current_user),
 ):
-    """Rewrite or humanize a single bullet point using AI."""
-    provider = get_ai_provider()
+    """Rewrite, humanize, or custom-instruction-rewrite a single bullet or
+    the resume's Summary using AI. Same lightweight single-call shape either
+    way — field only changes prompt framing (one-line bullet vs. an
+    80-word-cap flowing paragraph) and applies the summary word cap as a
+    backstop, the same limit the Summary tab's textarea already enforces
+    when the user types directly (resume_spec.py HARD_LIMITS["summary"])."""
+    if body.mode == "custom" and not body.custom_instruction.strip():
+        raise HTTPException(status_code=422, detail="custom_instruction is required for mode=custom")
 
-    if body.mode == "humanize":
+    provider = get_ai_provider()
+    is_summary = body.field == "summary"
+    label = "professional summary" if is_summary else "bullet"
+    format_rule = (
+        f"Write it as a single flowing paragraph (no bullet points, no line breaks), "
+        f"at most {HARD_LIMITS['summary']['max_words']} words."
+        if is_summary
+        else "Return a single resume bullet, one line."
+    )
+
+    if body.mode == "custom":
+        system = (
+            f"You are an expert resume writer. Rewrite this {label} following the user's instructions "
+            "exactly. Keep every factual claim, metric, and skill truthful to the original — never "
+            f"invent experience that isn't there. {format_rule} "
+            "Return ONLY the rewritten text — no quotes, no preamble, no explanation."
+        )
+        user_msg = f"Original {label}:\n{body.bullet_text}\n\nInstructions:\n{body.custom_instruction}"
+    elif body.mode == "humanize":
         tone = (
-            "Make this bullet sound natural and human. Reduce keyword density while keeping "
+            f"Make this {label} sound natural and human. Reduce keyword density while keeping "
             "the meaning, metrics, and impact intact. The reader should feel it was written "
             "by a person, not an ATS optimiser."
             if body.humanize_level < 50
-            else "Rewrite this bullet in fluent, confident prose — strong action verb, clear impact, "
-            "reads like a senior professional wrote it naturally."
+            else f"Rewrite this {label} in fluent, confident prose — clear impact, reads like a "
+            "senior professional wrote it naturally."
         )
         system = (
-            f"You are an expert resume writer. {tone} "
-            "Return ONLY the rewritten bullet — no quotes, no preamble, no explanation."
+            f"You are an expert resume writer. {tone} {format_rule} "
+            "Return ONLY the rewritten text — no quotes, no preamble, no explanation."
         )
-        user_msg = f"Bullet:\n{body.bullet_text}"
+        user_msg = f"{label.capitalize()}:\n{body.bullet_text}"
     else:  # rewrite — re-optimize for the JD
         system = (
-            "You are an elite ATS resume writer. Rewrite the bullet to better match the job "
-            "description below. Inject relevant keywords naturally, lead with a strong action "
-            "verb, and keep all metrics verbatim. "
-            "Return ONLY the rewritten bullet — no quotes, no preamble."
+            f"You are an elite ATS resume writer. Rewrite the {label} to better match the job "
+            "description below. Inject relevant keywords naturally and keep all metrics verbatim. "
+            f"{format_rule} Return ONLY the rewritten text — no quotes, no preamble."
         )
         jd_block = f"\nJob Description context:\n{body.jd_context}" if body.jd_context else ""
-        user_msg = f"Bullet:\n{body.bullet_text}{jd_block}"
+        user_msg = f"{label.capitalize()}:\n{body.bullet_text}{jd_block}"
 
     rewritten = await provider.complete(system, user_msg, model_tier="fast")
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
+    if is_summary:
+        # Backstop — the prompt asks for the cap, but never trust it alone.
+        words = rewritten.split()
+        max_words = HARD_LIMITS["summary"]["max_words"]
+        if len(words) > max_words:
+            rewritten = " ".join(words[:max_words]).rstrip(",;:") + "."
     return RewriteBulletOut(rewritten_text=rewritten)
 
 

@@ -417,6 +417,60 @@ describe("useTailoringStore", () => {
     expect(mergedContent?.skills).toEqual(["Original Skill 0", "Original Skill 5", "Kubernetes"]);
   });
 
+  it("generatePreview leaves the summary untouched by default, since the tailoring pass never rewrites it", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      summary: "Original summary text.",
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        summary: "Original summary text.",
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.summary).toBe("Original summary text.");
+  });
+
+  it("generatePreview uses the AI-rewritten summary once updatePendingSummary sets one, and reverts to the original when rejected", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      summary: "Original summary text.",
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        summary: "Original summary text.",
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    useTailoringStore.getState().updatePendingSummary("Rewritten summary text.");
+    useTailoringStore.getState().setBulletDecision("summary", "accept");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+    let mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.summary).toBe("Rewritten summary text.");
+
+    useTailoringStore.getState().setBulletDecision("summary", "reject");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+    mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.summary).toBe("Original summary text.");
+  });
+
   it("reanalyzePreview re-scores the current merged bullets against the JD without persisting", async () => {
     const original: ResumeContent = {
       ...SAMPLE_CONTENT,

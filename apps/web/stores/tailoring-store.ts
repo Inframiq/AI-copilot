@@ -60,6 +60,16 @@ function buildMergedContent(
     return { ...job, bullets: mergedBullets };
   });
 
+  // Summary: untouched by the initial tailoring pass (pendingContent.summary
+  // starts identical to originalContent.summary) — only ever diverges once
+  // the user explicitly triggers Rewrite/Humanize/a custom-instruction
+  // rewrite (see BulletReviewPanel's SummaryBlock), same opt-in shape as
+  // per-bullet Rewrite/Humanize. "reject" reverts to the original text.
+  const mergedSummary =
+    (bulletDecisions["summary"] ?? "accept") === "reject"
+      ? originalContent.summary
+      : pendingContent.summary;
+
   // Skills: fully user-curated, both directions. "skill_keep" decisions
   // (see defaultSkillKeepDecision) let the user drop existing skills —
   // needed for a resume parsed/uploaded with more skills than
@@ -83,6 +93,7 @@ function buildMergedContent(
     ...pendingContent,
     experience: mergedExperience,
     skills: mergedSkills,
+    summary: mergedSummary,
   };
 }
 
@@ -129,6 +140,7 @@ interface TailoringState {
   setBulletDecision: (key: string, decision: BulletDecision) => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
   updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
+  updatePendingSummary: (text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
   /** Renders a PDF preview of the accepted changes. Does NOT touch the
@@ -238,6 +250,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       return { ...job, bullets: newBullets };
     });
     set({ pendingContent: { ...pendingContent, experience: newExp }, previewPdfUrl: null });
+    useResumeStore.getState().setPdfSignedUrl(null);
+  },
+
+  updatePendingSummary: (text) => {
+    const { pendingContent } = get();
+    if (!pendingContent) return;
+    set({ pendingContent: { ...pendingContent, summary: text }, previewPdfUrl: null });
     useResumeStore.getState().setPdfSignedUrl(null);
   },
 

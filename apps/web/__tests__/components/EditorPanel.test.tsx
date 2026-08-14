@@ -570,4 +570,92 @@ describe("EditorPanel", () => {
     const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls[0][2];
     expect(mergedContent?.skills).toEqual(expect.arrayContaining(["Kubernetes"]));
   });
+
+  it("rewrites the professional summary for the JD, and separately via a custom instruction", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      summary: "Original summary text.",
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
+      ats_score: 70,
+      matched_skills: ["React"],
+      missing_skills: [],
+      // Bullets identical to original — no bullet changes to review, so
+      // only the Summary block renders (avoids the per-bullet Rewrite/
+      // Humanize buttons, which share button text with the summary's).
+      tailored_content: original,
+      company_keywords: [],
+      suggested_skills: [],
+    } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    expect(await screen.findByText("Original summary text.")).toBeInTheDocument();
+
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValueOnce({
+      rewritten_text: "AI-tailored summary for this JD.",
+    } as any);
+    await userEvent.click(screen.getByText("Rewrite for this JD"));
+
+    await waitFor(() =>
+      expect(apiClient.rewriteBullet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bullet_text: "Original summary text.",
+          mode: "rewrite",
+          field: "summary",
+          jd_context: "Senior Backend Engineer role",
+        })
+      )
+    );
+    expect(await screen.findByText("AI-tailored summary for this JD.")).toBeInTheDocument();
+    // The original now shows struck through as the diff, and Accept/Keep
+    // original become available, same as a bullet change.
+    expect(screen.getByText("Keep original")).toBeInTheDocument();
+
+    // A custom instruction rewrites it again, independent of the JD-rewrite above.
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValueOnce({
+      rewritten_text: "Summary rewritten per custom instructions.",
+    } as any);
+    await userEvent.type(
+      screen.getByPlaceholderText(/describe how you want it written/i),
+      "Lead with leadership experience"
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Rewrite$/ }));
+
+    await waitFor(() =>
+      expect(apiClient.rewriteBullet).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mode: "custom",
+          field: "summary",
+          custom_instruction: "Lead with leadership experience",
+        })
+      )
+    );
+    expect(await screen.findByText("Summary rewritten per custom instructions.")).toBeInTheDocument();
+  });
 });
