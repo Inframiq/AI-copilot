@@ -350,10 +350,38 @@ describe("useTailoringStore", () => {
     expect(mergedContent?.skills.slice(0, manyOriginalSkills.length)).toEqual(manyOriginalSkills);
   });
 
-  it("generatePreview never truncates a resume's existing skills, even when they already exceed MAX_MERGED_SKILLS on their own", async () => {
+  it("generatePreview keeps every existing skill by default when the resume is under the cap", async () => {
+    const fewOriginalSkills = ["React", "TypeScript", "Node.js"];
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      skills: fewOriginalSkills,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      suggested_skills: [],
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    // No skill_keep decisions made — under the cap, nothing forces a
+    // choice, so every existing skill stays in by default as before.
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.skills).toEqual(fewOriginalSkills);
+  });
+
+  it("generatePreview keeps none of a resume's existing skills by default once they already exceed MAX_MERGED_SKILLS, until the user explicitly picks some", async () => {
     // A resume parsed/uploaded with more skills than the cap (e.g. 34) must
-    // keep every one of them — the cap only ever limits how many NEW
-    // suggested skills get appended, never the user's pre-existing content.
+    // never have any of them auto-selected — that's an auto-populate in
+    // disguise (the first N would get picked FOR the user via the merge's
+    // trailing slice). The user has to explicitly keep the ones they want.
     const manyOriginalSkills = Array.from({ length: MAX_MERGED_SKILLS + 14 }, (_, i) => `Original Skill ${i}`);
     const original: ResumeContent = {
       ...SAMPLE_CONTENT,
@@ -373,11 +401,20 @@ describe("useTailoringStore", () => {
     await useTailoringStore.getState().runTailoring("resume-abc");
     useTailoringStore.getState().setBulletDecision("skill_add:Kubernetes", "accept");
 
+    // No skill_keep decisions made — none of the 34 should be pre-selected.
     await useTailoringStore.getState().generatePreview("resume-abc");
 
-    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
-    expect(mergedContent?.skills).toEqual(manyOriginalSkills);
-    expect(mergedContent?.skills).not.toContain("Kubernetes");
+    let mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.skills).toEqual(["Kubernetes"]);
+
+    // Explicitly keeping a couple of the original skills adds exactly
+    // those, and only those.
+    useTailoringStore.getState().setBulletDecision("skill_keep:Original Skill 0", "accept");
+    useTailoringStore.getState().setBulletDecision("skill_keep:Original Skill 5", "accept");
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+    expect(mergedContent?.skills).toEqual(["Original Skill 0", "Original Skill 5", "Kubernetes"]);
   });
 
   it("reanalyzePreview re-scores the current merged bullets against the JD without persisting", async () => {

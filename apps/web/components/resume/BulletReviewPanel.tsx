@@ -13,7 +13,7 @@ import {
   Copy,
   MagnifyingGlass,
 } from "@phosphor-icons/react";
-import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS } from "@/stores/tailoring-store";
+import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
 
@@ -99,8 +99,6 @@ export function BulletReviewPanel() {
 
   const allDecided =
     bulletChanges.length === 0 || bulletChanges.every((c) => c.key in bulletDecisions);
-
-  const originalSkillsCount = originalContent?.skills.length ?? 0;
 
   // Re-run tailoring with the same JD — discards current review and starts fresh.
   async function handleRetailor() {
@@ -235,7 +233,7 @@ export function BulletReviewPanel() {
           companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
-          originalSkillsCount={originalContent?.skills.length ?? 0}
+          originalSkills={originalContent?.skills ?? []}
         />
         <div className="flex gap-sm">
           {jdText.trim() && (
@@ -447,7 +445,7 @@ export function BulletReviewPanel() {
           companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
-          originalSkillsCount={originalContent?.skills.length ?? 0}
+          originalSkills={originalContent?.skills ?? []}
         />
 
         {/* 2. Writing Style slider removed here — it duplicates the one
@@ -591,37 +589,45 @@ const TIER_DOT_CLASS: Record<SkillTier, string> = {
 };
 
 function SkillsBlock({
+  originalSkills,
   suggestedSkills,
   prioritySkills,
   missingSkills,
   companyKeywords,
   bulletDecisions,
   setBulletDecision,
-  originalSkillsCount,
 }: {
+  originalSkills: string[];
   suggestedSkills: string[];
   prioritySkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
-  originalSkillsCount: number;
 }) {
-  if (suggestedSkills.length === 0) return null;
+  if (originalSkills.length === 0 && suggestedSkills.length === 0) return null;
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
   const missingSet = new Set(missingSkills.map((s) => s.toLowerCase()));
   const keywordSet = new Set(companyKeywords.map((s) => s.toLowerCase()));
-  const selectedCount = suggestedSkills.filter(
+
+  // Both "which existing skills to keep" and "which suggested skills to
+  // add" draw from the same MAX_MERGED_SKILLS budget — matches
+  // buildMergedContent, so hitting the limit here reads as the same
+  // guardrail the final resume will actually enforce, not a separate rule.
+  const keepDefault = defaultSkillKeepDecision(originalSkills.length);
+  const keptCount = originalSkills.filter(
+    (s) => (bulletDecisions[`skill_keep:${s}`] ?? keepDefault) === "accept",
+  ).length;
+  const addedCount = suggestedSkills.filter(
     (s) => bulletDecisions[`skill_add:${s}`] === "accept",
   ).length;
-  // Mirrors buildMergedContent's cap — surfaced here so hitting the limit
-  // reads as an intentional guardrail, not skills silently failing to add.
-  const remainingSlots = Math.max(0, MAX_MERGED_SKILLS - originalSkillsCount - selectedCount);
-  const atCap = remainingSlots === 0;
+  const totalSelected = keptCount + addedCount;
+  const atCap = totalSelected >= MAX_MERGED_SKILLS;
 
   // High = a real gap the JD asks for (or one you flagged yourself on the
   // JD page); Medium = not a gap, but a keyword this company's ATS scans
-  // for; Low = a plausible AI suggestion tied to neither.
+  // for; Low = a plausible AI suggestion tied to neither. Only meaningful
+  // for suggested skills — existing ones are already on the resume.
   function tierOf(skill: string): SkillTier {
     const l = skill.toLowerCase();
     if (prioritySet.has(l) || missingSet.has(l)) return "High";
@@ -629,11 +635,35 @@ function SkillsBlock({
     return "Low";
   }
 
-  const technicalSkills = suggestedSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
-  const softSkills = suggestedSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
+  function renderKeepChip(skill: string) {
+    const key = `skill_keep:${skill}`;
+    const kept = (bulletDecisions[key] ?? keepDefault) === "accept";
+    // Removing always frees a slot, so it's never blocked; only re-adding
+    // (undoing a removal) can be blocked once the shared budget is spent.
+    const disabled = !kept && atCap;
+    return (
+      <button
+        key={skill}
+        disabled={disabled}
+        title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — remove another to bring this back` : undefined}
+        onClick={() => setBulletDecision(key, kept ? "reject" : "accept")}
+        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+          kept
+            ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+            : disabled
+            ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
+            : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
+        }`}
+      >
+        {kept ? <Check size={11} weight="bold" /> : <X size={11} weight="bold" />}
+        {skill}
+      </button>
+    );
+  }
 
-  function renderChip(skill: string) {
-    const selected = bulletDecisions[`skill_add:${skill}`] === "accept";
+  function renderAddChip(skill: string) {
+    const key = `skill_add:${skill}`;
+    const selected = bulletDecisions[key] === "accept";
     const isPriority = prioritySet.has(skill.toLowerCase());
     const disabled = !selected && atCap;
     const tier = tierOf(skill);
@@ -642,12 +672,7 @@ function SkillsBlock({
         key={skill}
         disabled={disabled}
         title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority`}
-        onClick={() =>
-          setBulletDecision(
-            `skill_add:${skill}`,
-            selected ? "reject" : "accept",
-          )
-        }
+        onClick={() => setBulletDecision(key, selected ? "reject" : "accept")}
         className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
           selected
             ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
@@ -656,11 +681,7 @@ function SkillsBlock({
             : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
         }`}
       >
-        {selected ? (
-          <Check size={11} weight="bold" />
-        ) : (
-          <X size={11} weight="bold" />
-        )}
+        {selected ? <Check size={11} weight="bold" /> : <X size={11} weight="bold" />}
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TIER_DOT_CLASS[tier]}`} />
         {isPriority && <span aria-label="You picked this keyword">★</span>}
         {skill}
@@ -668,38 +689,78 @@ function SkillsBlock({
     );
   }
 
+  const originalTechnical = originalSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
+  const originalSoft = originalSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
+  const suggestedTechnical = suggestedSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
+  const suggestedSoft = suggestedSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
+
   return (
-    <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-sm">
+    <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-md">
       <div>
-        <p className="text-label-sm text-on-surface font-bold">Suggested Skills to Add</p>
+        <p className="text-label-sm text-on-surface font-bold">Skills</p>
         <p className="text-caption text-on-surface-variant">
-          Click a skill to include it — nothing is added automatically.
-          {prioritySkills.length > 0 && " ★ marks the keywords you picked on the JD page."}
+          {originalSkills.length > MAX_MERGED_SKILLS ? (
+            <>
+              Your resume has {originalSkills.length} skills — only {MAX_MERGED_SKILLS} can go on the tailored
+              version. None are kept automatically; select which ones matter most for this JD below.
+            </>
+          ) : (
+            "Click a suggested skill to add it — nothing is added automatically."
+          )}
         </p>
         <p className="text-caption text-on-surface-variant flex items-center gap-sm flex-wrap">
           <span>
-            {originalSkillsCount + selectedCount} / {MAX_MERGED_SKILLS} skills
-            {atCap && selectedCount > 0 && " — limit reached, deselect one to add another"}
-            {atCap && selectedCount === 0 &&
-              " — your resume already has more skills than the recommended cap, so none of these can be added; trim some in the Skills tab to make room"}
+            {totalSelected} / {MAX_MERGED_SKILLS} selected
+            {atCap && " — limit reached, deselect one to select another"}
           </span>
-          <span className="flex items-center gap-xs">
-            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.High}`} /> High
-            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Medium}`} /> Medium
-            <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Low}`} /> Low
-          </span>
+          {suggestedSkills.length > 0 && (
+            <span className="flex items-center gap-xs">
+              <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.High}`} /> High
+              <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Medium}`} /> Medium
+              <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Low}`} /> Low
+            </span>
+          )}
         </p>
       </div>
-      {technicalSkills.length > 0 && (
-        <div className="flex flex-col gap-xs">
-          <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Technical</p>
-          <div className="flex flex-wrap gap-xs">{technicalSkills.map(renderChip)}</div>
+
+      {originalSkills.length > 0 && (
+        <div className="flex flex-col gap-sm">
+          <p className="text-label-sm text-on-surface font-bold">Your Current Skills</p>
+          {originalTechnical.length > 0 && (
+            <div className="flex flex-col gap-xs">
+              <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Technical</p>
+              <div className="flex flex-wrap gap-xs">{originalTechnical.map(renderKeepChip)}</div>
+            </div>
+          )}
+          {originalSoft.length > 0 && (
+            <div className="flex flex-col gap-xs">
+              <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Soft Skills</p>
+              <div className="flex flex-wrap gap-xs">{originalSoft.map(renderKeepChip)}</div>
+            </div>
+          )}
         </div>
       )}
-      {softSkills.length > 0 && (
-        <div className="flex flex-col gap-xs">
-          <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Soft Skills</p>
-          <div className="flex flex-wrap gap-xs">{softSkills.map(renderChip)}</div>
+
+      {suggestedSkills.length > 0 && (
+        <div className="flex flex-col gap-sm">
+          <p className="text-label-sm text-on-surface font-bold">
+            Suggested Skills to Add
+            {prioritySkills.length > 0 && (
+              <span className="font-normal text-caption text-on-surface-variant"> — ★ marks the keywords you picked on the JD page</span>
+            )}
+          </p>
+          {suggestedTechnical.length > 0 && (
+            <div className="flex flex-col gap-xs">
+              <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Technical</p>
+              <div className="flex flex-wrap gap-xs">{suggestedTechnical.map(renderAddChip)}</div>
+            </div>
+          )}
+          {suggestedSoft.length > 0 && (
+            <div className="flex flex-col gap-xs">
+              <p className="text-caption text-on-surface-variant font-bold uppercase tracking-wider">Soft Skills</p>
+              <div className="flex flex-wrap gap-xs">{suggestedSoft.map(renderAddChip)}</div>
+            </div>
+          )}
         </div>
       )}
     </div>

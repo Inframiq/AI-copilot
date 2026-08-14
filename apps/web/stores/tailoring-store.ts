@@ -18,6 +18,17 @@ export type BulletDecision = "accept" | "reject";
 // multi-domain candidate, short of looking padded.
 export const MAX_MERGED_SKILLS = 20;
 
+// Whether an existing skill is kept by default, absent an explicit
+// "skill_keep" decision. Under the cap, there's no scarcity to force a
+// choice over, so every existing skill stays kept as it always has. Over
+// the cap, defaulting to "keep everything" would silently pick the first
+// MAX_MERGED_SKILLS for the user (via the trailing slice) — an auto-select
+// in disguise. So once the resume already has more skills than fit, none
+// are kept until the user explicitly picks which ones matter for this JD.
+export function defaultSkillKeepDecision(originalSkillsCount: number): BulletDecision {
+  return originalSkillsCount <= MAX_MERGED_SKILLS ? "accept" : "reject";
+}
+
 export interface BulletChange {
   key: string; // e.g. "exp0_b2" or "skills"
   jobIdx: number; // -1 for skills
@@ -49,21 +60,24 @@ function buildMergedContent(
     return { ...job, bullets: mergedBullets };
   });
 
-  // Skills: start with original, add only user-selected suggested skills.
-  // MAX_MERGED_SKILLS caps how many NEW skills can be appended — it must
-  // never truncate the original list itself (a resume that already has
-  // more than the cap, e.g. one uploaded/parsed with 30+ skills, would
-  // otherwise silently lose real content the user never asked to remove
-  // every time they preview/save).
-  const originalSkillsSet = new Set(originalContent.skills);
-  const userSelectedSkills = suggestedSkills.filter(
-    (s) => bulletDecisions[`skill_add:${s}`] === "accept",
+  // Skills: fully user-curated, both directions. "skill_keep" decisions
+  // (see defaultSkillKeepDecision) let the user drop existing skills —
+  // needed for a resume parsed/uploaded with more skills than
+  // MAX_MERGED_SKILLS, where keeping literally everything would either
+  // silently overflow the cap or (the previous bug) silently truncate the
+  // user's own content. "skill_add" decisions (default reject) are the
+  // opt-in suggested additions. The trailing slice is a backstop only —
+  // the UI disables further selection once the shared budget is spent, so
+  // this shouldn't normally trigger.
+  const keepDefault = defaultSkillKeepDecision(originalContent.skills.length);
+  const keptOriginalSkills = originalContent.skills.filter(
+    (s) => (bulletDecisions[`skill_keep:${s}`] ?? keepDefault) === "accept",
   );
-  const remainingSlots = Math.max(0, MAX_MERGED_SKILLS - originalContent.skills.length);
-  const mergedSkills = [
-    ...originalContent.skills,
-    ...userSelectedSkills.filter((s) => !originalSkillsSet.has(s)).slice(0, remainingSlots),
-  ];
+  const keptOriginalSet = new Set(keptOriginalSkills);
+  const userSelectedSkills = suggestedSkills.filter(
+    (s) => bulletDecisions[`skill_add:${s}`] === "accept" && !keptOriginalSet.has(s),
+  );
+  const mergedSkills = [...keptOriginalSkills, ...userSelectedSkills].slice(0, MAX_MERGED_SKILLS);
 
   return {
     ...pendingContent,
