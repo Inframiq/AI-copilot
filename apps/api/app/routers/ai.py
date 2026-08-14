@@ -3,14 +3,14 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, SkillQuestionBank
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.ai import (
-    TailorRequest, TailorOut, TailorStartOut, PrepQuestionOut, AnalyzeRequest, AnalyzeOut,
+    TailorRequest, TailorOut, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut, SkillQuestionOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
@@ -347,6 +347,61 @@ async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), d
         .order_by(PrepQuestion.order_index)
     )
     return result.scalars().all()
+
+
+@router.get("/questions/mine", response_model=list[PrepQuestionWithJdOut])
+async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Every prep question generated for this user, one JD's worth at a
+    time — from each JD's most recent completed tailoring session only, so
+    re-tailoring the same JD repeatedly doesn't pile up duplicate/stale
+    question sets under its name. Powers Interview Center's "categorize by
+    JD" grouping and its JD filter; both are computed client-side off this
+    one list rather than a separate endpoint per JD."""
+    uid = uuid.UUID(user["sub"])
+
+    latest_per_jd = (
+        select(
+            TailoringSession.jd_id,
+            func.max(TailoringSession.created_at).label("latest_created_at"),
+        )
+        .where(TailoringSession.user_id == uid, TailoringSession.status == "completed")
+        .group_by(TailoringSession.jd_id)
+        .subquery()
+    )
+    sessions_result = await db.execute(
+        select(TailoringSession.id, TailoringSession.jd_id, JobDescription.title)
+        .join(
+            latest_per_jd,
+            (TailoringSession.jd_id == latest_per_jd.c.jd_id)
+            & (TailoringSession.created_at == latest_per_jd.c.latest_created_at),
+        )
+        .join(JobDescription, TailoringSession.jd_id == JobDescription.id)
+        .where(TailoringSession.user_id == uid, TailoringSession.status == "completed")
+    )
+    session_jd = {row.id: (row.jd_id, row.title) for row in sessions_result.all()}
+    if not session_jd:
+        return []
+
+    questions_result = await db.execute(
+        select(PrepQuestion)
+        .where(PrepQuestion.session_id.in_(session_jd.keys()))
+        .order_by(PrepQuestion.order_index)
+    )
+    return [
+        PrepQuestionWithJdOut(
+            id=q.id,
+            session_id=q.session_id,
+            topic=q.topic,
+            question=q.question,
+            answer_framework=q.answer_framework,
+            is_gap_based=q.is_gap_based,
+            order_index=q.order_index,
+            practiced_at=q.practiced_at,
+            jd_id=session_jd[q.session_id][0],
+            jd_title=session_jd[q.session_id][1],
+        )
+        for q in questions_result.scalars().all()
+    ]
 
 
 @router.patch("/questions/{question_id}/practice", response_model=PrepQuestionOut)

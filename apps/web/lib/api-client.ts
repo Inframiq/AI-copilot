@@ -5,6 +5,7 @@ import type {
   JDStatus,
   AnalyzeOut,
   PrepQuestionOut,
+  PrepQuestionWithJdOut,
   SkillQuestionOut,
   ResumeContent,
   LearningItem,
@@ -283,6 +284,12 @@ export const apiClient = {
       "GET",
       `/ai/sessions/${sessionId}/questions`
     ),
+
+  // Every prep question generated across all of the user's JDs — one JD's
+  // worth at a time, from its latest completed session — used by Interview
+  // Center to categorize questions by JD and filter down to one.
+  getMyQuestions: (): Promise<PrepQuestionWithJdOut[]> =>
+    request<PrepQuestionWithJdOut[]>("GET", "/ai/questions/mine"),
 
   getQuestionBank: (topic?: string): Promise<SkillQuestionOut[]> =>
     request<SkillQuestionOut[]>(

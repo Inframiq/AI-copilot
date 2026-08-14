@@ -926,3 +926,72 @@ async def test_tailor_resume_requires_auth():
             json={"resume_id": str(uuid.uuid4()), "jd_id": str(uuid.uuid4()), "humanize_level": 50},
         )
     assert r.status_code == 401
+
+
+# ── GET /ai/questions/mine ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_my_questions_annotates_each_question_with_its_jd():
+    from app.db.models import PrepQuestion
+    from types import SimpleNamespace
+
+    uid = uuid.UUID(TEST_USER_ID)
+    session_id = uuid.uuid4()
+    jd_id = uuid.uuid4()
+    question = PrepQuestion(
+        id=uuid.uuid4(),
+        session_id=session_id,
+        topic="Technical",
+        question="Tell me about a distributed systems project.",
+        answer_framework="STAR: ...",
+        is_gap_based=False,
+        order_index=0,
+        practiced_at=None,
+    )
+
+    override, mock_session = make_mock_db()
+    sessions_result = MagicMock()
+    sessions_result.all.return_value = [
+        SimpleNamespace(id=session_id, jd_id=jd_id, title="Senior Backend Engineer — Acme")
+    ]
+    questions_result = MagicMock()
+    questions_result.scalars.return_value.all.return_value = [question]
+    mock_session.execute = AsyncMock(side_effect=[sessions_result, questions_result])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/ai/questions/mine", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body) == 1
+        assert body[0]["question"] == "Tell me about a distributed systems project."
+        assert body[0]["jd_id"] == str(jd_id)
+        assert body[0]["jd_title"] == "Senior Backend Engineer — Acme"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_my_questions_returns_empty_list_when_no_completed_sessions():
+    override, mock_session = make_mock_db()
+    sessions_result = MagicMock()
+    sessions_result.all.return_value = []
+    mock_session.execute = AsyncMock(return_value=sessions_result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/ai/questions/mine", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json() == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_my_questions_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/ai/questions/mine")
+    assert r.status_code == 401

@@ -57,6 +57,11 @@ class PrepQuestionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PrepQuestionWithJdOut(PrepQuestionOut):
+    jd_id: uuid.UUID
+    jd_title: str
+
+
 class SkillQuestionOut(BaseModel):
     id: uuid.UUID
     skill: str

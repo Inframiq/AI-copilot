@@ -150,6 +150,14 @@ export interface PrepQuestionOut {
   practiced_at: string | null;
 }
 
+// PrepQuestionOut plus which JD (by the title shown in the JD Analyzer) it
+// came from — one per JD, from that JD's latest completed tailoring
+// session. Powers Interview Center's per-JD grouping and filter.
+export interface PrepQuestionWithJdOut extends PrepQuestionOut {
+  jd_id: string;
+  jd_title: string;
+}
+
 export interface SkillQuestionOut {
   id: string;
   skill: string;
