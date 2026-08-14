@@ -360,7 +360,7 @@ export default function JDPage({
               <div className="flex gap-sm mt-xs">
                 <button
                   onClick={handleTailor}
-                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
+                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
                 >
                   <Sparkle size={14} />
                   Tailor

@@ -135,7 +135,7 @@ export default function StudioIndexPage() {
 
         <button
           onClick={() => setShowPrompt(false)}
-          className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
+          className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
         >
           Create a new resume
         </button>
@@ -350,7 +350,7 @@ export default function StudioIndexPage() {
         <button
           onClick={handleCreate}
           disabled={isWorking || (mode === "upload" && !file)}
-          className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 min-w-[240px] flex items-center justify-center gap-sm"
+          className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 min-w-[240px] flex items-center justify-center gap-sm"
         >
           {isWorking ? (
             <>

@@ -513,7 +513,7 @@ export default function ProfilePage() {
                 className={`${inputCls} pl-[2.75rem]`} />
             </div>
             <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
-              className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+              className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
               <Plus size={16} weight="bold" />
             </button>
           </div>
@@ -948,7 +948,7 @@ export default function ProfilePage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-sm px-xl py-md rounded-full text-label-md text-on-primary bg-gradient-to-br from-primary to-secondary shadow-xl shadow-primary/30 hover:-translate-y-0.5 hover:shadow-2xl active:scale-95 active:translate-y-0 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
+          className="flex items-center gap-sm px-xl py-md rounded-full text-label-md text-on-primary bg-primary shadow-xl shadow-primary/30 hover:-translate-y-0.5 hover:shadow-2xl active:scale-95 active:translate-y-0 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
         >
           {saving ? <Spinner size={18} className="animate-spin" /> : saveOk ? <CheckCircle size={18} weight="fill" /> : <FloppyDisk size={18} />}
           {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}

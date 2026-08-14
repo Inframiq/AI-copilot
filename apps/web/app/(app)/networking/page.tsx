@@ -518,7 +518,7 @@ export default function NetworkingPage() {
               </p>
               <button
                 onClick={() => setActiveTab("profile")}
-                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
               >
                 Go to My Profile
               </button>
@@ -610,7 +610,7 @@ export default function NetworkingPage() {
               {!networkSearch && (
                 <button
                   onClick={() => setActiveTab("discover")}
-                  className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                  className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
                 >
                   Go to Discover
                 </button>
@@ -672,7 +672,7 @@ export default function NetworkingPage() {
                     <div className="flex gap-sm shrink-0">
                       <button
                         onClick={() => acceptMutation.mutate(req.id)}
-                        className="px-md py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                        className="px-md py-sm rounded-xl text-label-sm text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200"
                       >
                         Accept
                       </button>
@@ -768,7 +768,7 @@ export default function NetworkingPage() {
           <div className="flex flex-col gap-lg">
             <button
               onClick={() => setShowAddContact(true)}
-              className="flex items-center gap-sm self-start px-lg py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+              className="flex items-center gap-sm self-start px-lg py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
             >
               <Plus size={18} /> Add External Contact
             </button>
@@ -944,7 +944,7 @@ export default function NetworkingPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                  className="flex-1 py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
                 >
                   Add Contact
                 </button>

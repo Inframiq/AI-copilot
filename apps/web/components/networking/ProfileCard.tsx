@@ -90,7 +90,7 @@ export function ProfileCard({
                 e.stopPropagation();
                 onConnect?.();
               }}
-              className="w-full py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200"
+              className="w-full py-sm rounded-xl text-label-sm text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200"
             >
               Connect
             </button>

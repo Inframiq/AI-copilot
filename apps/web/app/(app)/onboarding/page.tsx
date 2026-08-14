@@ -167,7 +167,7 @@ export default function OnboardingPage() {
             <button
               type="submit"
               disabled={!detailsValid || savingDetails}
-              className="w-full mt-sm py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full mt-sm py-md text-label-md text-on-primary rounded-xl bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               {savingDetails ? "Saving…" : "Continue"}
               {!savingDetails && <ArrowRight size={16} />}

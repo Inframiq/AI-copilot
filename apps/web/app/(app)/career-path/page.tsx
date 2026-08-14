@@ -271,7 +271,7 @@ export default function CareerPathPage() {
           {/* CTA */}
           <button
             onClick={() => router.push("/jd")}
-            className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+            className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
           >
             Analyze a Job Description
           </button>

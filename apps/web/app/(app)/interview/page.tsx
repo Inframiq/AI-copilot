@@ -223,7 +223,7 @@ export default function InterviewIndexPage() {
                       <div className="flex gap-sm">
                         <button
                           onClick={() => router.push(`/interview/${sessionId}?q=${q.id}`)}
-                          className="flex-1 py-md px-md bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
+                          className="flex-1 py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
                         >
                           <Play size={16} weight="fill" /> Practice This Question
                         </button>
@@ -290,7 +290,7 @@ export default function InterviewIndexPage() {
               </p>
               <button
                 onClick={() => router.push("/jd")}
-                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
               >
                 Go to JD Analyzer
               </button>
@@ -412,7 +412,7 @@ export default function InterviewIndexPage() {
           </p>
           <button
             onClick={() => sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd")}
-            className="w-full bg-gradient-to-b from-surface-container-lowest to-surface-container text-primary text-label-md py-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10"
+            className="w-full bg-surface-container-lowest text-primary text-label-md py-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10"
           >
             {sessionId ? "Join Session" : "Analyze a JD First"}
           </button>

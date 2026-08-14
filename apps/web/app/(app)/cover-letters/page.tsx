@@ -87,7 +87,7 @@ export default function CoverLettersPage() {
         <button
           onClick={handleGenerate}
           disabled={!resumeId || !jdId || isGenerating}
-          className="self-start flex items-center gap-xs px-lg py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="self-start flex items-center gap-xs px-lg py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Sparkle size={16} className={isGenerating ? "animate-pulse" : ""} />
           {isGenerating ? "Generating…" : "Generate Cover Letter"}

@@ -466,7 +466,7 @@ export default function JDIndexPage() {
               )}
               {overrideError && <p className="text-caption text-error">{overrideError}</p>}
               <button onClick={handleOverrideUpload} disabled={!overrideFile || overrideUploading}
-                className="w-full py-sm rounded-xl text-label-sm text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+                className="w-full py-sm rounded-xl text-label-sm text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
                 {overrideUploading ? "Parsing…" : "Use this resume"}
               </button>
             </>
@@ -535,7 +535,7 @@ export default function JDIndexPage() {
             <button
               type="submit"
               disabled={isSubmitting || !jdText.trim()}
-              className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-primary to-primary-container shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full py-md text-label-md text-on-primary rounded-xl bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <MagnifyingGlass size={20} />
               {isSubmitting ? "Analyzing…" : "Analyze Description"}
@@ -551,7 +551,7 @@ export default function JDIndexPage() {
                 type="button"
                 onClick={handleTailor}
                 disabled={!activeResumeId}
-                className="w-full py-md text-label-md text-on-primary rounded-xl bg-gradient-to-b from-success-accent to-success-accent/80 shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                className="w-full py-md text-label-md text-on-primary rounded-xl bg-success-accent shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
               >
                 <Sparkle size={20} />
                 {sessionId ? "Re-tailor Resume" : "Tailor Resume"}
@@ -903,7 +903,7 @@ export default function JDIndexPage() {
               </button>
               <button
                 onClick={() => router.push(`/interview/${interviewPrompt.sessionId}`)}
-                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
               >
                 Prepare Now
               </button>

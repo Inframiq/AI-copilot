@@ -533,7 +533,7 @@ export function BulletReviewPanel() {
             <button
               onClick={handlePreviewClick}
               disabled={isApplying || isGenerating || !resumeId}
-              className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full flex items-center justify-center gap-sm py-md rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <FilePdf size={18} />
               {isGenerating ? "Rendering preview…" : everPreviewed ? "Regenerate Preview" : "Preview Tailored Resume"}
@@ -561,7 +561,7 @@ export function BulletReviewPanel() {
               </button>
               <button
                 onClick={() => setShowSaveChoice(true)}
-                className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+                className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
               >
                 <FloppyDisk size={16} />
                 Save…
@@ -663,7 +663,7 @@ export function BulletReviewPanel() {
               {topSkillsToAddCount > 0 && (
                 <button
                   onClick={acceptTopSkills}
-                  className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all"
+                  className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
                 >
                   Add top {topSkillsToAddCount}
                 </button>

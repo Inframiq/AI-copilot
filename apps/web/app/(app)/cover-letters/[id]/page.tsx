@@ -159,7 +159,7 @@ export default function CoverLetterEditorPage({
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+            className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all disabled:opacity-50"
           >
             <FloppyDisk size={16} />
             {isSaving ? "Saving…" : "Save"}

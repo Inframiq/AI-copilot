@@ -376,7 +376,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={createNewResume}
-                className="px-lg py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+                className="px-lg py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
               >
                 Create Resume
               </button>

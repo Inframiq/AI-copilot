@@ -237,7 +237,7 @@ export default function StudioPage({
             <button
               onClick={handleExportPdf}
               disabled={isGeneratingPdf || !storeResumeId}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <DownloadSimple size={20} />
               {isGeneratingPdf ? "Generating…" : "Export PDF"}
@@ -306,7 +306,7 @@ export default function StudioPage({
               </button>
               <button
                 onClick={() => router.push("/jd")}
-                className="flex-1 py-1.5 px-3 bg-gradient-to-b from-primary to-primary-container text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-sm"
+                className="flex-1 py-1.5 px-3 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-sm"
               >
                 Tailor Resume
               </button>

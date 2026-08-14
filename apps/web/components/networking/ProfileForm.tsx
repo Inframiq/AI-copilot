@@ -314,7 +314,7 @@ export function ProfileForm({ initial, careerProfile, onSave, isSaving, error }:
       <button
         type="submit"
         disabled={isSaving || !form.display_name.trim()}
-        className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+        className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
       >
         {isSaving ? "Saving…" : "Save Profile"}
       </button>

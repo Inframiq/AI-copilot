@@ -729,7 +729,7 @@ export function EditorPanel() {
               <button
                 onClick={() => resumeId && runTailoring(resumeId)}
                 disabled={isLoading || !jdText.trim() || !resumeId}
-                className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? "Tailoring your resume…" : "Tailor Resume"}
               </button>
@@ -900,7 +900,7 @@ function TailoringForm({
       <button
         onClick={onTailor}
         disabled={isLoading || !resumeId}
-        className="w-full py-md rounded-xl text-label-md text-on-primary bg-gradient-to-b from-primary to-primary-container shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-sm"
+        className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-sm"
       >
         <Sparkle size={18} />
         {isLoading ? "Tailoring your resume…" : "Tailor Resume"}
