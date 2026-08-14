@@ -250,6 +250,22 @@ def test_render_html_drops_headline_that_echoes_an_older_job_title_not_just_the_
     assert '<div class="headline">' not in html
 
 
+def test_render_html_drops_headline_that_is_a_prefix_of_a_more_specific_job_title():
+    # Real reported case: title has an extra qualifier the headline lacks
+    # ("Sr. Business Analyst (Process Excellence)" vs headline "Sr. Business
+    # Analyst") — every word of the headline is still fully contained in the
+    # title, so it's redundant even though it isn't an exact match.
+    resume = {
+        **SAMPLE_RESUME,
+        "headline": "Sr. Business Analyst",
+        "experience": [
+            {**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst (Process Excellence)"},
+        ],
+    }
+    html = _render_html(resume, "ats_clean")
+    assert '<div class="headline">' not in html
+
+
 # ---------------------------------------------------------------------------
 # upload_pdf tests (Supabase mocked)
 # ---------------------------------------------------------------------------

@@ -73,16 +73,18 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 def _dedupe_redundant_headline(resume_content: dict) -> dict:
-    """Drop a headline that just restates a job title already in Experience.
+    """Drop a headline that adds nothing beyond a job title already in Experience.
 
-    A headline reading "Sr. Business Analyst" adds nothing when some
-    Experience entry's title already says exactly that — it's a redundant
-    echo, not a distinguishing tagline, and reads as padding on an
-    ATS-focused resume. Checks every entry, not just the most recent one —
-    the redundancy holds regardless of which role it echoes. Only strips an
-    EXACT match (case/punctuation/whitespace normalized) — anything that
-    adds a specialization or scope beyond the bare title is left alone,
-    since that's genuinely useful context.
+    A headline reading "Sr. Business Analyst" is redundant not just when some
+    Experience entry's title matches it exactly, but also when that title is
+    a superset of it — e.g. "Sr. Business Analyst (Process Excellence)" —
+    since every word in the headline is already fully present in the title;
+    the headline contributes nothing the title doesn't already say. Checks
+    every entry, not just the most recent one — the redundancy holds
+    regardless of which role it echoes. A headline that adds a word or scope
+    the title DOESN'T have (e.g. "Sr. Business Analyst — Data & Process
+    Automation" against a bare "Business Analyst" title) is left alone,
+    since that's genuinely distinguishing information.
     """
     headline = (resume_content.get("headline") or "").strip()
     experience = resume_content.get("experience") or []
@@ -93,7 +95,10 @@ def _dedupe_redundant_headline(resume_content: dict) -> dict:
         return resume_content
     for job in experience:
         title = (job.get("title") or "").strip()
-        if title and _NON_ALNUM.sub("", title.lower()) == normalized_headline:
+        if not title:
+            continue
+        normalized_title = _NON_ALNUM.sub("", title.lower())
+        if normalized_headline in normalized_title:
             return {**resume_content, "headline": ""}
     return resume_content
 
