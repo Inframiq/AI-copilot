@@ -196,6 +196,46 @@ def test_render_html_still_shows_location_when_present(template_id):
 
 
 # ---------------------------------------------------------------------------
+# A headline that just restates the most recent job title is redundant
+# padding, not a distinguishing tagline — dropped at render time so it
+# doesn't need a data migration or manual per-resume edit to fix.
+# ---------------------------------------------------------------------------
+
+
+def test_render_html_drops_headline_that_exactly_echoes_the_latest_job_title():
+    resume = {
+        **SAMPLE_RESUME,
+        "headline": "Sr. Business Analyst",
+        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
+    }
+    html = _render_html(resume, "ats_clean")
+    # Still correctly shown once, as the Experience entry's job title — just
+    # not duplicated into the headline div right under the name.
+    assert '<div class="headline">' not in html
+    assert html.count("Sr. Business Analyst") == 1
+
+
+def test_render_html_drops_headline_ignoring_case_and_punctuation_differences():
+    resume = {
+        **SAMPLE_RESUME,
+        "headline": "sr business analyst",
+        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
+    }
+    html = _render_html(resume, "ats_clean")
+    assert '<div class="headline">' not in html
+
+
+def test_render_html_keeps_a_headline_that_adds_real_information():
+    resume = {
+        **SAMPLE_RESUME,
+        "headline": "Business Analyst — Process Automation & Data Analytics",
+        "experience": [{**SAMPLE_RESUME["experience"][0], "title": "Sr. Business Analyst"}],
+    }
+    html = _render_html(resume, "ats_clean")
+    assert "Business Analyst — Process Automation &amp; Data Analytics" in html
+
+
+# ---------------------------------------------------------------------------
 # upload_pdf tests (Supabase mocked)
 # ---------------------------------------------------------------------------
 

@@ -69,6 +69,31 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     return resume_content
 
 
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _dedupe_redundant_headline(resume_content: dict) -> dict:
+    """Drop a headline that just restates the most recent job title verbatim.
+
+    A headline reading "Sr. Business Analyst" adds nothing when the first
+    Experience entry's title already says exactly that — it's a redundant
+    echo, not a distinguishing tagline, and reads as padding on an
+    ATS-focused resume. Only strips an EXACT match (case/punctuation
+    normalized) — anything that adds a specialization or scope beyond the
+    bare title is left alone, since that's genuinely useful context.
+    """
+    headline = (resume_content.get("headline") or "").strip()
+    experience = resume_content.get("experience") or []
+    if not headline or not experience:
+        return resume_content
+    most_recent_title = (experience[0].get("title") or "").strip()
+    if not most_recent_title:
+        return resume_content
+    if _NON_ALNUM.sub("", headline.lower()) == _NON_ALNUM.sub("", most_recent_title.lower()):
+        return {**resume_content, "headline": ""}
+    return resume_content
+
+
 def _render_html(
     resume_content: dict,
     template_id: str,
@@ -88,6 +113,7 @@ def _render_html(
             f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
         )
     resume_content = _sanitize_resume_content(resume_content)
+    resume_content = _dedupe_redundant_headline(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
     return template.render(**resume_content, line_spacing=line_spacing, paragraph_spacing=paragraph_spacing)
 
