@@ -1,85 +1,80 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — "Executive Precision Light" design system, refined by a
-     follow-up style-tile image that relabeled the 4 anchor swatches:
-     primary #0066FF (was #0050CB), secondary #41466E (was #575B85),
-     and tertiary #CC4204 (was tertiary-container's value — tertiary and
-     tertiary-container are swapped from the original DESIGN.md to
-     match, since the tile's "Tertiary" swatch is the brighter of the
-     two and its accent-icon usage sample matches the old darker
-     tertiary-container tone). Neutral surface-container-low (#F8FAFC)
-     was already correct from the original DESIGN.md. Every other
-     derived token (containers, fixed/fixed-dim, on-* variants) is left
-     as generated from the original seed colors — close enough in hue
-     that regenerating the full M3 ramp isn't warranted for this small
-     a shift. Token names are unchanged, so no component needed to
-     change structurally. success-accent stays pinned to primary per
-     this app's convention. */
-  --color-primary: #0066ff;
-  --color-surface-container: #f1f5f9;
-  --color-tertiary-container: #a33200;
-  --color-tertiary-fixed: #ffdbd0;
-  --color-background: #f7f9fb;
-  --color-primary-container: #e0ebff;
-  --color-surface-container-high: #e2e8f0;
-  --color-inverse-on-surface: #eff1f3;
-  --color-tertiary-fixed-dim: #ffb59d;
-  --color-inverse-primary: #b3c5ff;
-  --color-on-tertiary-container: #fff6f4;
+  /* Colors — "Ascent Dashboard" design system (DESIGN.md +
+     stitch_career_copilot_dashboard mockups for Analytics, Cover
+     Letters, Interview Center, Resume Builder), a full M3-shaped token
+     set given as literal hex values, mapped 1:1 by name onto this
+     app's existing tokens. Supersedes "Executive Precision Light".
+     Token names are unchanged, so no component needed to change
+     structurally beyond the 4 pages the mockups actually redesign.
+     success-accent stays pinned to primary per this app's convention;
+     success/success-container/etc. aren't part of the spec and are
+     left untouched. */
+  --color-primary: #004ac6;
+  --color-surface-container: #ededf9;
+  --color-tertiary-container: #bc4800;
+  --color-tertiary-fixed: #ffdbcd;
+  --color-background: #faf8ff;
+  --color-primary-container: #2563eb;
+  --color-surface-container-high: #e7e7f3;
+  --color-inverse-on-surface: #f0f0fb;
+  --color-tertiary-fixed-dim: #ffb596;
+  --color-inverse-primary: #b4c5ff;
+  --color-on-tertiary-container: #ffede6;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #b3c5ff;
-  --color-secondary: #41466e;
-  --color-on-primary-fixed: #001849;
+  --color-primary-fixed-dim: #b4c5ff;
+  --color-secondary: #4648d4;
+  --color-on-primary-fixed: #00174b;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
-  --color-surface-dim: #f1f5f9;
-  --color-on-primary-fixed-variant: #003fa4;
-  --color-on-background: #191c1e;
+  --color-surface-dim: #d9d9e5;
+  --color-on-primary-fixed-variant: #003ea8;
+  --color-on-background: #191b23;
   --color-error-container: #ffdad6;
-  --color-on-surface-variant: #475569;
-  --color-surface-tint: #0054d6;
-  --color-outline-variant: #e2e8f0;
-  --color-surface-container-low: #f8fafc;
-  --color-secondary-fixed-dim: #bfc3f3;
-  --color-surface-bright: #ffffff;
+  --color-on-surface-variant: #434655;
+  --color-surface-tint: #0053db;
+  --color-outline-variant: #c3c6d7;
+  --color-surface-container-low: #f3f3fe;
+  --color-secondary-fixed-dim: #c0c1ff;
+  --color-surface-bright: #faf8ff;
   --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #390c00;
-  --color-secondary-container: #cacefe;
+  --color-on-tertiary-fixed: #360f00;
+  --color-secondary-container: #6063ee;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #cbd5e1;
-  --color-on-surface: #0f172a;
-  --color-on-primary-container: #0047b3;
-  --color-primary-fixed: #dae1ff;
-  --color-surface: #ffffff;
-  --color-on-tertiary-fixed-variant: #832600;
-  --color-on-secondary-fixed-variant: #3f446c;
+  --color-surface-container-highest: #e1e2ed;
+  --color-on-surface: #191b23;
+  --color-on-primary-container: #eeefff;
+  --color-primary-fixed: #dbe1ff;
+  --color-surface: #faf8ff;
+  --color-on-tertiary-fixed-variant: #7d2d00;
+  --color-on-secondary-fixed-variant: #2f2ebe;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #2d3133;
-  --color-surface-variant: #e0e3e5;
-  --color-outline: #94a3b8;
-  --color-success-accent: #0066ff;
+  --color-inverse-surface: #2e3039;
+  --color-surface-variant: #e1e2ed;
+  --color-outline: #737686;
+  --color-success-accent: #004ac6;
   --color-success: #146c2e;
   --color-success-container: #c6f6d0;
   --color-on-success-container: #002106;
   --color-on-success: #ffffff;
-  --color-tertiary: #cc4204;
-  --color-on-secondary-container: #525780;
-  --color-secondary-fixed: #dfe0ff;
-  --color-on-secondary-fixed: #13183e;
+  --color-tertiary: #943700;
+  --color-on-secondary-container: #fffbff;
+  --color-secondary-fixed: #e1e0ff;
+  --color-on-secondary-fixed: #07006c;
 
   /* Border radius — left as-is: this app's existing DEFAULT/lg/xl/2xl
      scale (4/8/12/16px) already lands on the same pixel values the spec
-     calls for (buttons/inputs at 8px via rounded-lg, large cards at
-     16px via rounded-2xl), just under different tier names, so
-     remapping names would touch every rounded-* class for no visual
-     change. */
+     calls for (buttons/inputs/standard cards at 8px via rounded-lg,
+     major sections at 16px via rounded-2xl), just under different tier
+     names, so remapping names would touch every rounded-* class for no
+     visual change. */
 
-  /* Spacing — xl/xxl widened per the spec's explicit "major vertical
-     sections separated by 48px/80px, not data-dense" direction; these
-     two are used pervasively (gap-xl, pb-xxl, etc.) so this alone
-     opens up breathing room app-wide. */
+  /* Spacing — left as-is. The mockups' "bento-gap" (16px) is this
+     app's existing --spacing-md, already used for exactly this
+     purpose, so the 4 redesigned pages reuse gap-md directly instead
+     of adding a duplicate token. */
   --spacing-lg: 24px;
   --spacing-gutter: 24px;
   --spacing-xl: 48px;
@@ -89,26 +84,27 @@
   --spacing-xs: 4px;
   --spacing-sidebar-width: 280px;
 
-  /* Font sizes — Hanken Grotesk already matches the spec's typeface, so
-     only sizes/weights/leading/tracking move, mapped by closest
-     semantic tier onto this app's existing token names (display-lg →
-     headline-xl per the spec's own "use display-lg for section
-     entries" guidance; headline-lg → headline-lg; title-md →
-     headline-md; label-md → label-md). body-sm/label-sm/caption have
-     no direct equivalent in the spec, so they keep close to their
-     current size and only pick up the lighter-weight, wider-tracking
-     rhythm the spec uses elsewhere. */
+  /* Font sizes — mapped by closest semantic tier onto this app's
+     existing token names (display-lg → headline-xl; body-base →
+     body-md; body-sm → body-sm; headline-md updated to the spec's
+     24px/600 tier). headline-lg/body-lg/label-md/label-sm/caption
+     aren't part of this spec and keep their prior values. label-caps
+     is new — the spec's small mono metadata/status-tag style
+     (JetBrains Mono, uppercase, wide tracking), added as an
+     additional token rather than replacing label-sm/caption, since
+     only the 4 redesigned pages use it so far. */
   --text-headline-xl: 48px;
-  --text-headline-xl--line-height: 1.166667;
+  --text-headline-xl--line-height: 1.1;
   --text-headline-xl--font-weight: 700;
   --text-headline-xl--letter-spacing: -0.02em;
   --text-headline-lg: 32px;
   --text-headline-lg--line-height: 1.25;
   --text-headline-lg--font-weight: 600;
   --text-headline-lg--letter-spacing: -0.01em;
-  --text-headline-md: 20px;
-  --text-headline-md--line-height: 1.4;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 1.3;
   --text-headline-md--font-weight: 600;
+  --text-headline-md--letter-spacing: -0.01em;
   --text-body-lg: 18px;
   --text-body-lg--line-height: 1.555556;
   --text-body-lg--font-weight: 400;
@@ -116,7 +112,7 @@
   --text-body-md--line-height: 1.5;
   --text-body-md--font-weight: 400;
   --text-body-sm: 14px;
-  --text-body-sm--line-height: 1.428571;
+  --text-body-sm--line-height: 1.4;
   --text-body-sm--font-weight: 400;
   --text-label-md: 14px;
   --text-label-md--line-height: 1.428571;
@@ -130,17 +126,23 @@
   --text-caption--line-height: 1.454545;
   --text-caption--font-weight: 500;
   --text-caption--letter-spacing: 0.01em;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 1;
+  --text-label-caps--font-weight: 500;
+  --text-label-caps--letter-spacing: 0.05em;
 
-  /* Font family */
-  --font-sans: var(--font-hanken), sans-serif;
+  /* Font family — Inter replaces Hanken Grotesk as the app's primary
+     typeface; JetBrains Mono is added for the label-caps tier only. */
+  --font-sans: var(--font-inter), sans-serif;
+  --font-label-caps: var(--font-jetbrains-mono), monospace;
 }
 
 :root {
-  font-family: var(--font-hanken), sans-serif;
+  font-family: var(--font-inter), sans-serif;
 }
 
 html, body {
-  background-color: #f7f9fb; /* --color-background */
+  background-color: #faf8ff; /* --color-background */
   height: 100%;
 }
 

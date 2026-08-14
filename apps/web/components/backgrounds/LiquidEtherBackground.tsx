@@ -7,7 +7,7 @@ const LiquidEther = dynamic(() => import("./LiquidEther.jsx"), { ssr: false });
 // Brand royal-blue → navy gradient (see app/globals.css --color-primary /
 // --color-primary-container / --color-primary-fixed-dim) instead of React
 // Bits' default purple/pink preset.
-const BRAND_COLORS = ["#003fa4", "#0066ff", "#b3c5ff"];
+const BRAND_COLORS = ["#003ea8", "#004ac6", "#b4c5ff"];
 
 export function LiquidEtherBackground() {
   return (

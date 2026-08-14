@@ -17,7 +17,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body style={{ background: "#f7f9fb", color: "#0f172a", fontFamily: "sans-serif" }}>
+      <body style={{ background: "#faf8ff", color: "#191b23", fontFamily: "sans-serif" }}>
         <div
           style={{
             minHeight: "100vh",
@@ -31,7 +31,7 @@ export default function GlobalError({
             style={{
               background: "#ffffff",
               borderRadius: "16px",
-              border: "1px solid #e2e8f0",
+              border: "1px solid #c3c6d7",
               boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
               padding: "32px",
               textAlign: "center",
@@ -42,7 +42,7 @@ export default function GlobalError({
             <p style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
               Something went wrong
             </p>
-            <p style={{ color: "#475569", marginBottom: "24px" }}>
+            <p style={{ color: "#434655", marginBottom: "24px" }}>
               The application failed to load. Please try again.
             </p>
             <button
@@ -50,7 +50,7 @@ export default function GlobalError({
               style={{
                 padding: "12px 24px",
                 borderRadius: "8px",
-                background: "#0066ff",
+                background: "#004ac6",
                 color: "#ffffff",
                 fontWeight: 600,
                 border: "none",
