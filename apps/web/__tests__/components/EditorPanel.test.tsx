@@ -571,6 +571,69 @@ describe("EditorPanel", () => {
     expect(mergedContent?.skills).toEqual(expect.arrayContaining(["Kubernetes"]));
   });
 
+  it("Auto-select Top N picks the best-fit skills by tier, favoring existing skills over suggestions on ties", async () => {
+    const manyOriginalSkills = Array.from({ length: 25 }, (_, i) => `Original Skill ${i}`);
+    const original = {
+      ...SAMPLE_CONTENT,
+      skills: manyOriginalSkills,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", end: "Present", bullets: ["Built things"] }],
+    };
+    useResumeStore.getState().setResume("resume-1", original, "ats_clean");
+    vi.mocked(apiClient.createJd).mockResolvedValue({
+      id: "jd-1",
+      user_id: "u1",
+      title: "Senior Backend Engineer",
+      raw_text: "Senior Backend Engineer role",
+      parsed_skills: [],
+      status: "applied",
+      created_at: new Date().toISOString(),
+    } as any);
+    vi.mocked(apiClient.tailorResume).mockResolvedValue({
+      session_id: "session-1",
+      status: "pending",
+    });
+    vi.mocked(apiClient.getSession).mockResolvedValue({
+      session_id: "session-1",
+      resume_id: "resume-1",
+      jd_id: "jd-1",
+      status: "completed",
+      ats_score: 70,
+      matched_skills: [],
+      // "Kubernetes" is a real JD gap → High. "Original Skill 0" and
+      // "Docker" are ATS keywords for this company → Medium. Everything
+      // else (24 more original skills, "GraphQL") is Low.
+      missing_skills: ["Kubernetes"],
+      tailored_content: {
+        ...original,
+        experience: [{ ...original.experience[0], bullets: ["Built things using React"] }],
+      },
+      company_keywords: ["Original Skill 0", "Docker"],
+      suggested_skills: ["Kubernetes", "Docker", "GraphQL"],
+    } as any);
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/preview.pdf" } as any);
+
+    render(<EditorPanel />);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste the job description/),
+      "Senior Backend Engineer role"
+    );
+    await userEvent.click(screen.getByText("Tailor Resume"));
+    await waitFor(() => expect(useTailoringStore.getState().sessionId).toBe("session-1"));
+
+    await userEvent.click(await screen.findByText("Auto-select Top 20 for this JD"));
+    await userEvent.click(screen.getByText("Preview Tailored Resume"));
+
+    await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
+    const mergedContent = vi.mocked(apiClient.generatePdf).mock.calls[0][2];
+    expect(mergedContent?.skills).toHaveLength(20);
+    expect(mergedContent?.skills).toEqual(
+      expect.arrayContaining(["Kubernetes", "Original Skill 0", "Docker"])
+    );
+    // Low-tier "GraphQL" (a suggestion) loses the tie-break to the 17
+    // remaining Low-tier ORIGINAL skills that fill out the rest of the cap.
+    expect(mergedContent?.skills).not.toContain("GraphQL");
+  });
+
   it("rewrites the professional summary for the JD, and separately via a custom instruction", async () => {
     const original = {
       ...SAMPLE_CONTENT,

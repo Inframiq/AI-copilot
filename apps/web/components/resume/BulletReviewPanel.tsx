@@ -12,6 +12,7 @@ import {
   FloppyDisk,
   Copy,
   MagnifyingGlass,
+  Target,
 } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
@@ -23,6 +24,7 @@ export function BulletReviewPanel() {
   const bulletDecisions = useTailoringStore((s) => s.bulletDecisions);
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
   const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
+  const applyBulletDecisions = useTailoringStore((s) => s.applyBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
   const updatePendingSummary = useTailoringStore((s) => s.updatePendingSummary);
   const generatePreview = useTailoringStore((s) => s.generatePreview);
@@ -276,6 +278,7 @@ export function BulletReviewPanel() {
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
           originalSkills={originalContent?.skills ?? []}
+          applyBulletDecisions={applyBulletDecisions}
         />
         <div className="flex gap-sm">
           {jdText.trim() && (
@@ -501,6 +504,7 @@ export function BulletReviewPanel() {
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
           originalSkills={originalContent?.skills ?? []}
+          applyBulletDecisions={applyBulletDecisions}
         />
 
         {/* 2. Writing Style slider removed here — it duplicates the one
@@ -772,6 +776,7 @@ function SkillsBlock({
   companyKeywords,
   bulletDecisions,
   setBulletDecision,
+  applyBulletDecisions,
 }: {
   originalSkills: string[];
   suggestedSkills: string[];
@@ -780,6 +785,7 @@ function SkillsBlock({
   companyKeywords: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
+  applyBulletDecisions: (decisions: Record<string, "accept" | "reject">) => void;
 }) {
   if (originalSkills.length === 0 && suggestedSkills.length === 0) return null;
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
@@ -802,13 +808,41 @@ function SkillsBlock({
 
   // High = a real gap the JD asks for (or one you flagged yourself on the
   // JD page); Medium = not a gap, but a keyword this company's ATS scans
-  // for; Low = a plausible AI suggestion tied to neither. Only meaningful
-  // for suggested skills — existing ones are already on the resume.
+  // for; Low = a plausible AI suggestion (or existing skill) tied to
+  // neither. Shown as a dot on suggested chips; also used to rank existing
+  // skills for "Auto-select Top 20" below, even though it isn't displayed
+  // there.
   function tierOf(skill: string): SkillTier {
     const l = skill.toLowerCase();
     if (prioritySet.has(l) || missingSet.has(l)) return "High";
     if (keywordSet.has(l)) return "Medium";
     return "Low";
+  }
+
+  // One-click best-fit selection — still fully an explicit, undoable user
+  // action (never runs on its own), but picks the shared budget's contents
+  // FOR the user instead of the fully manual, one-chip-at-a-time flow above.
+  // Ranks every candidate (existing skills + suggestions) by tier, breaking
+  // ties in favor of existing skills — they're already verified true about
+  // the candidate, unlike a speculative AI suggestion — then takes the top
+  // MAX_MERGED_SKILLS and sets every OTHER candidate to rejected, so this
+  // is a full replace of the current selection, not just an addition.
+  function handleAutoSelectTop() {
+    const tierRank: Record<SkillTier, number> = { High: 0, Medium: 1, Low: 2 };
+    const candidates = [
+      ...originalSkills.map((skill) => ({ skill, isOriginal: true, tier: tierOf(skill) })),
+      ...suggestedSkills.map((skill) => ({ skill, isOriginal: false, tier: tierOf(skill) })),
+    ].sort((a, b) => {
+      const byTier = tierRank[a.tier] - tierRank[b.tier];
+      if (byTier !== 0) return byTier;
+      return a.isOriginal === b.isOriginal ? 0 : a.isOriginal ? -1 : 1;
+    });
+    const top = new Set(candidates.slice(0, MAX_MERGED_SKILLS).map((c) => c.skill));
+
+    const decisions: Record<string, "accept" | "reject"> = {};
+    for (const skill of originalSkills) decisions[`skill_keep:${skill}`] = top.has(skill) ? "accept" : "reject";
+    for (const skill of suggestedSkills) decisions[`skill_add:${skill}`] = top.has(skill) ? "accept" : "reject";
+    applyBulletDecisions(decisions);
   }
 
   function renderKeepChip(skill: string) {
@@ -873,7 +907,18 @@ function SkillsBlock({
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-md">
       <div>
-        <p className="text-label-sm text-on-surface font-bold">Skills</p>
+        <div className="flex items-start justify-between gap-sm">
+          <p className="text-label-sm text-on-surface font-bold">Skills</p>
+          <button
+            type="button"
+            onClick={handleAutoSelectTop}
+            title="Ranks every current + suggested skill by fit for this JD and selects the top ones — you can still adjust any pick afterward"
+            className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-colors"
+          >
+            <Target size={13} />
+            Auto-select Top {MAX_MERGED_SKILLS} for this JD
+          </button>
+        </div>
         <p className="text-caption text-on-surface-variant">
           {originalSkills.length > MAX_MERGED_SKILLS ? (
             <>

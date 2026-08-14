@@ -139,6 +139,7 @@ interface TailoringState {
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
+  applyBulletDecisions: (decisions: Record<string, BulletDecision>) => void;
   updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
   updatePendingSummary: (text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
@@ -237,6 +238,15 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   setAllBulletDecisions: (changes, decision) => {
     const decisions: Record<string, BulletDecision> = {};
     for (const c of changes) decisions[c.key] = decision;
+    set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions }, previewPdfUrl: null }));
+    useResumeStore.getState().setPdfSignedUrl(null);
+  },
+  // Merges an arbitrary key→decision map in one update — for bulk actions
+  // that set a MIX of accept/reject in a single click (e.g. "auto-select
+  // top N skills": some skills flip to accept, others flip to reject, all
+  // at once), unlike setAllBulletDecisions above which applies one uniform
+  // decision to a list of keys.
+  applyBulletDecisions: (decisions) => {
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions }, previewPdfUrl: null }));
     useResumeStore.getState().setPdfSignedUrl(null);
   },
