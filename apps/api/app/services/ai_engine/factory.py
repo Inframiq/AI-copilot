@@ -22,6 +22,8 @@ def get_ai_provider() -> AIProvider:
         from app.services.ai_engine.openai_provider import OpenAIProvider
         return OpenAIProvider(
             api_key=settings.openai_api_key,
+            fast_model=settings.openai_model_fast,
+            premium_model=settings.openai_model_premium,
             max_output_tokens=settings.openai_max_output_tokens,
         )
 

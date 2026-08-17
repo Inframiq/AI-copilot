@@ -11,27 +11,39 @@ configuration (not just the code's hardcoded defaults).
 AI_PROVIDER=openai
 GEMINI_API_KEY=            # empty — Gemini path is unused
 OPENAI_API_KEY=<set>
-OPENAI_MAX_OUTPUT_TOKENS=4096
+OPENAI_MODEL_FAST=gpt-5.6-luna
+OPENAI_MODEL_PREMIUM=gpt-5.6-sol
+OPENAI_MAX_OUTPUT_TOKENS=16384
 ```
 
 `apps/api/app/services/ai_engine/factory.py` reads `AI_PROVIDER` and picks
 the provider class at runtime. With this `.env`, **every** agent call in the
-app goes through `OpenAIProvider` (`apps/api/app/services/ai_engine/openai_provider.py`),
-using a single hardcoded model: **`gpt-5.6-luna`** (a fixed budget-tier
-model, not read from `AI_MODEL_FAST`/`AI_MODEL_PRO` — see the comment at
-`openai_provider.py:5-9` for why).
+app goes through `OpenAIProvider` (`apps/api/app/services/ai_engine/openai_provider.py`).
 
-### `model_tier` is a no-op on this provider
+### `model_tier` now resolves to two models, deliberately not three
 
-`AIProvider.complete()` / `complete_structured()` both accept a
-`model_tier: "fast" | "pro"` argument. `GeminiProvider` actually uses it to
-pick between `gemini-2.5-flash` and `gemini-2.5-pro`. **`OpenAIProvider`
-accepts the parameter but never reads it** (`openai_provider.py:18,27`) — every
-call, regardless of the tier the caller requested, hits the same
-`gpt-5.6-luna` model with the same `max_output_tokens=4096`. This is
-invisible from the call sites in `tailoring.py` — they all say
-`model_tier="fast"` or `model_tier="pro"` as if it mattered, and it silently
-doesn't under this `.env`.
+`AIProvider.complete()` / `complete_structured()` accept a
+`model_tier: "fast" | "pro" | "premium"` argument. **`OpenAIProvider` maps
+"fast" and "pro" to the SAME budget model** (`gpt-5.6-luna`) and reserves
+`gpt-5.6-sol` (5x the input cost, 5x the output cost) for `"premium"`
+only (`openai_provider.py`'s `_model_for`). This was a deliberate
+cost/margin decision, not an oversight this time (compare the git history —
+`model_tier` used to be silently ignored entirely, mapping every tier onto
+`gpt-5.6-luna`): real per-call token estimates showed putting every "pro"-tier
+call on `sol` (Agent 2, Agent 3, prep questions, cover letter) costs
+~2.5x a $5-for-100-generations budget, while upgrading only Agent 2 — the
+JD+resume semantic mapper, the single call that most determines whether
+the tailoring makes sense — lands close to that budget.
+
+**Only one call site requests `"premium"`:** `tailoring.py`'s
+`_agent2_semantic_map` (Agent 2). Every other call in the table below still
+requests `"fast"` or `"pro"` and lands on `gpt-5.6-luna`, same as before —
+this is intentional, re-derive the cost math in the git history before
+changing which calls get `"premium"`.
+
+`GeminiProvider` (currently unused — `AI_PROVIDER=openai`) has no distinct
+premium model; `model_tier="premium"` falls back to its `"pro"` model
+(`gemini-2.5-pro`) rather than silently downgrading to `"fast"`.
 
 ### Confirmed bug (2026-08-13): 4096 output tokens is too low, and it was silently killing entire tailoring runs
 
@@ -85,14 +97,15 @@ heavily on resume/JD length (the variable input) and model output length
 |---|-------|---------|------------------------|-------------------------------------|---------------------|
 | 0 | Company Intel (`_agent0_company_intel`) | Optional — only when a company name is given to Analyze/Tailor | `"fast"` | `gpt-5.6-luna` | 1,866 chars (~466 tokens) |
 | 1 | JD Deconstructor (`_agent1_parse_jd`) | Every "Analyze Description" and every "Tailor Resume" | `"fast"` | `gpt-5.6-luna` | 1,284 chars (~321 tokens) |
-| 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | `"pro"` | `gpt-5.6-luna` | 3,288 chars (~822 tokens) |
+| 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | **`gpt-5.6-sol`** | 3,288 chars (~822 tokens) |
 | 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | `"pro"` | `gpt-5.6-luna` | 2,302 chars (~575 tokens, varies slightly with humanize tone) |
 | — | Prep Questions (`generate_prep_questions`) | Every "Tailor Resume" only, runs in parallel with Agent 3 | `"pro"` | `gpt-5.6-luna` | ~500 chars (~125 tokens) + the missing-skills list |
 | — | Rewrite/Humanize bullet (`/ai/rewrite-bullet`, `apps/api/app/routers/ai.py`) | Per-click "Rewrite"/"Humanize" button in the tailoring review panel | `"fast"` | `gpt-5.6-luna` | 250–350 chars (~70–90 tokens) |
 
 **Per "Tailor Resume" click:** Agent 1 → Agent 2 → [Agent 3 + Prep Questions
 in parallel], plus optional Agent 0 if a company name was entered. That's
-4-5 calls to `gpt-5.6-luna`, all sharing the same 4096-output-token ceiling.
+one `gpt-5.6-sol` call (Agent 2) plus 3-4 `gpt-5.6-luna` calls, all sharing
+the same 16384-output-token ceiling.
 
 **Per "Analyze Description" click:** just Agent 1 (+ optional Agent 0) — no
 resume rewriting, no pro-tier-in-name-only calls.

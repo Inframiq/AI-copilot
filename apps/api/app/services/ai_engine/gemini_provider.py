@@ -22,7 +22,12 @@ class GeminiProvider(AIProvider):
         self._pro = genai.GenerativeModel(pro_model, generation_config=gen_cfg)
 
     def _model(self, tier: str):
-        return self._pro if tier == "pro" else self._fast
+        # No distinct premium model here — "premium" falls back to "pro"
+        # (the best available), not "fast" (a silent downgrade for the one
+        # call that's supposed to be getting an upgrade). See base.py.
+        if tier in ("pro", "premium"):
+            return self._pro
+        return self._fast
 
     async def complete(self, system: str, user: str, model_tier: str = "fast") -> str:
         prompt = f"{system}\n\n{user}"

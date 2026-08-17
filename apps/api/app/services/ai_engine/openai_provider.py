@@ -2,29 +2,36 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 
-# Budget tier only. gpt-5.6-luna is OpenAI's cheapest/fastest GPT-5.6
-# model ($1/$6 per 1M tokens vs. Sol's $5/$30) — hardcoded rather than
-# read from AI_MODEL_FAST/AI_MODEL_PRO so those env vars can't silently
-# upgrade this provider onto a pricier tier. It's only reachable via the
-# Responses API, not /chat/completions.
-_MODEL = "gpt-5.6-luna"
-
 
 class OpenAIProvider(AIProvider):
-    def __init__(self, api_key: str, max_output_tokens: int = 4096):
+    def __init__(
+        self,
+        api_key: str,
+        fast_model: str,
+        premium_model: str,
+        max_output_tokens: int = 4096,
+    ):
         self._client = AsyncOpenAI(api_key=api_key)
+        self._fast_model = fast_model
+        self._premium_model = premium_model
         self._max_output_tokens = max_output_tokens
 
-    # `model_tier` is accepted (to satisfy the AIProvider interface) but
-    # deliberately unused below — this provider only has the one budget
-    # model. Every caller in tailoring.py passes "fast" or "pro" as if it
-    # mattered; here it doesn't. See docs/ai-pipeline.md for the full
-    # implication (all agents share one model + one output-token ceiling)
-    # and the risk that follows (Agent 3's 4096-token cap vs. the 16384
-    # GeminiProvider uses for the same, output-heavy call).
+    # "fast" and "pro" both resolve to the budget model — deliberate, not an
+    # oversight. Real per-call token estimates (docs/ai-pipeline.md) showed
+    # putting every "pro"-tier call (Agent 2, Agent 3, prep questions, cover
+    # letter) on the pricier model blows a $5-for-100-generations budget by
+    # 2.5x; putting only Agent 2 (the JD+resume semantic mapping — the call
+    # that most determines whether the tailoring makes sense) on it lands
+    # close to that budget while still upgrading the highest-leverage step.
+    # So Agent 2 is the only caller that requests "premium"
+    # (tailoring.py's _agent2_semantic_map) — everything else keeps
+    # requesting "pro" and silently gets the budget model, same as before.
+    def _model_for(self, model_tier: str) -> str:
+        return self._premium_model if model_tier == "premium" else self._fast_model
+
     async def complete(self, system: str, user: str, model_tier: str = "fast") -> str:
         response = await self._client.responses.create(
-            model=_MODEL,
+            model=self._model_for(model_tier),
             instructions=system,
             input=user,
             max_output_tokens=self._max_output_tokens,
@@ -38,9 +45,10 @@ class OpenAIProvider(AIProvider):
         self, system: str, user: str, schema: type[BaseModel], model_tier: str = "fast"
     ) -> BaseModel:
         # gpt-5.6-luna rejects the `temperature` param on the Responses API
-        # (400 Unsupported parameter) — this model has no sampling knob to set.
+        # (400 Unsupported parameter) — neither budget nor premium GPT-5.6
+        # tiers expose a sampling knob to set here.
         response = await self._client.responses.parse(
-            model=_MODEL,
+            model=self._model_for(model_tier),
             instructions=system,
             input=user,
             text_format=schema,

@@ -56,6 +56,22 @@ async def test_extract_jd_skills_returns_parsed_jd():
     assert "Python" in result.required
 
 
+@pytest.mark.asyncio
+async def test_agent2_semantic_map_requests_premium_tier():
+    # Agent 2 (JD+resume semantic mapping) is the one call in the pipeline
+    # that requests the pricier model — every other agent still requests
+    # "fast"/"pro" and lands on the budget model under OpenAIProvider. See
+    # docs/ai-pipeline.md and OpenAIProvider._model_for for why.
+    from app.services.tailoring import _agent2_semantic_map
+
+    plan = MappingPlan(mapping_plan=[], plausible_skills_to_add=[])
+    provider = make_mock_provider(structured_return=plan)
+
+    await _agent2_semantic_map(make_jd_analysis(), {"experience": []}, provider)
+
+    assert provider.complete_structured.call_args.kwargs["model_tier"] == "premium"
+
+
 def make_mock_db_with_rows(rows):
     session = MagicMock()
     result = MagicMock()

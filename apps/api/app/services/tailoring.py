@@ -432,8 +432,11 @@ async def _agent2_semantic_map(
         "original_resume": indexed_resume,
         "priority_skills_from_user": priority_skills or [],
     }
+    # "premium" (not "pro") deliberately — this is the one call in the
+    # pipeline that gets OpenAIProvider's pricier model. See the tier
+    # decision recorded on OpenAIProvider._model_for.
     return await provider.complete_structured(
-        _AGENT2_SYSTEM, json.dumps(payload), MappingPlan, model_tier="pro"
+        _AGENT2_SYSTEM, json.dumps(payload), MappingPlan, model_tier="premium"
     )
 
 
