@@ -180,6 +180,53 @@ def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():
     assert "should have — bullet-count" in prompt
 
 
+def test_agent3_system_prompt_embeds_seniority_signals_when_given():
+    prompt = _build_agent3_system(50, seniority_indicators=["5+ years", "lead a team of 4"])
+    assert "5+ years" in prompt
+    assert "lead a team of 4" in prompt
+    assert "SENIORITY-AWARE EMPHASIS" in prompt
+
+
+def test_agent3_system_prompt_handles_missing_seniority_signals():
+    prompt = _build_agent3_system(50, seniority_indicators=None)
+    assert "none extracted for this JD" in prompt
+
+
+def test_agent3_system_prompt_reframes_keyword_injection_as_byproduct():
+    # Round-2 research finding: keyword injection must serve demonstrating
+    # jd_responsibility_addressed, not be the goal itself — locks in the
+    # reframed rule 1 so this doesn't silently regress back to raw injection.
+    prompt = _build_agent3_system(50)
+    assert "byproduct of demonstrating jd_responsibility_addressed" in prompt
+    assert "PRESERVE SPECIFICS" in prompt
+
+
+def test_agent2_system_prompt_requires_responsibility_first_reasoning():
+    assert "RESPONSIBILITY-FIRST REASONING" in _AGENT2_SYSTEM
+    assert "jd_responsibility_addressed" in _AGENT2_SYSTEM
+    assert "core_responsibilities" in _AGENT2_SYSTEM
+
+
+def test_bullet_mapping_reasoning_and_responsibility_fields_default_empty():
+    bm = BulletMapping(
+        original_bullet_id="exp0_b0", original_text="Did work",
+        target_jd_keywords_to_inject=[], preserved_metrics=[],
+        strategic_instruction="REINFORCE",
+    )
+    assert bm.reasoning == ""
+    assert bm.jd_responsibility_addressed == ""
+
+
+def test_rewritten_bullet_reasoning_field_defaults_empty():
+    rb = RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Did work well")
+    assert rb.reasoning == ""
+
+
+def test_jd_analysis_core_responsibilities_defaults_empty_list():
+    analysis = make_jd_analysis()
+    assert analysis.core_responsibilities == []
+
+
 @pytest.mark.asyncio
 async def test_analyze_jd_match_dedupes_overlapping_skills():
     # "Python" appears in both exact_technical_tools and ats_filter_phrases
@@ -232,6 +279,46 @@ async def test_run_tailoring_pipeline_returns_result():
     assert isinstance(result, TailoringResult)
     assert result.ats_score >= 0
     assert result.tailored_content["experience"][0]["bullets"] == ["Leveraged Python extensively"]
+
+
+@pytest.mark.asyncio
+async def test_run_tailoring_pipeline_passes_seniority_indicators_to_agent3():
+    # Agent 3's seniority-aware emphasis rule only works if run_tailoring_pipeline
+    # actually threads analysis.jd_analysis.seniority_indicators through to it.
+    captured_system_prompts: dict[type, str] = {}
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Python"], seniority_indicators=["lead a team of 8"],
+        ),
+        MappingPlan: MappingPlan(
+            mapping_plan=[
+                BulletMapping(
+                    original_bullet_id="exp0_b0", original_text="Used Python",
+                    target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                    strategic_instruction="REINFORCE",
+                )
+            ],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Led Python delivery")],
+            updated_skills=["Python"],
+        ),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+    }
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, **kwargs):
+        captured_system_prompts[schema] = system
+        return responses[schema]
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    db = make_mock_db_with_rows([])
+
+    await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider, db)
+
+    assert "lead a team of 8" in captured_system_prompts[WriterOutput]
 
 
 @pytest.mark.asyncio

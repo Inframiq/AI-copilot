@@ -21,6 +21,12 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
     2. Apply the keyword regex on the escaped string and insert our own
        controlled <strong> tags.
     3. Return Markup so Jinja2 does not escape the result a second time.
+
+    The pattern is anchored with alphanumeric lookaround (not \\b) — the same
+    approach as ats.py's _exact_pattern — so "Java" doesn't partially match
+    inside "JavaScript" and "React" doesn't get truncated inside "ReactJS",
+    while symbol-suffixed skills like "C++" or "Node.js" still match in full
+    (a bare \\b breaks on those since +/. aren't word characters).
     """
     if not keywords or not text:
         return Markup(escape(text or ""))
@@ -37,7 +43,7 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
 
     pattern = "|".join(re.escape(k) for k in sorted_kw)
     highlighted = re.sub(
-        f"(?i)({pattern})",
+        f"(?i)(?<![A-Za-z0-9])({pattern})(?![A-Za-z0-9])",
         r'<strong class="kw">\1</strong>',
         safe_text,
     )

@@ -123,6 +123,77 @@ consumption. Any token-count figures quoted below are still **estimates
 from fixed system-prompt sizes** (measured directly, ~4 chars/token
 heuristic), not observed data.
 
+### Content-quality prompt upgrade (2026-08-17): responsibility-alignment, not just keyword injection
+
+Three rounds of research (ATS mechanics, keyword-vs-responsibility alignment,
+and higher-leverage LLM-quality techniques) drove a set of prompt/schema
+changes aimed at two confirmed problems: (1) `pdf.py`'s keyword highlighter
+had no word-boundary anchoring (`Java` falsely bolded inside `JavaScript`,
+`React` truncated inside `ReactJS`) — fixed by porting `ats.py`'s
+`_exact_pattern` alphanumeric-lookaround approach into
+`_highlight_keywords`; and (2) tailored bullets read as keyword-stuffed
+rather than genuinely tied to what the JD's role actually does.
+
+**Reasoning-first structured output** (`BulletMapping` and `RewrittenBullet`
+in `tailoring.py`): both models now declare a `reasoning: str = ""` field
+*first*, before any other field. The Responses API generates structured
+fields in schema-declaration order, so this forces Agent 2 to reason about
+which JD responsibility a bullet serves (and Agent 3 to reason about
+fact-lock/specificity) before committing to the rest of the entry — same API
+call, no new cost, small output-token increase (well inside the existing
+16384 ceiling on both calls, which was already sized for one full JSON entry
+per resume bullet).
+
+**New responsibility-alignment fields, threaded through all three agents:**
+- Agent 1 (`_AGENT1_SYSTEM` / `JDAnalysis`) now extracts `core_responsibilities`
+  — the JD's actual duty lines ("owns X", "partners with Y on Z"), distinct
+  from the tool/theme/methodology lists it already pulled out.
+- Agent 2 (`_AGENT2_SYSTEM` / `BulletMapping`) now names
+  `jd_responsibility_addressed` per bullet — which specific responsibility
+  (if any) the transformation serves — before choosing REINFORCE/REFRAME/
+  INJECT/SKIP (rule 3, "RESPONSIBILITY-FIRST REASONING"). Rule 5,
+  "SPECIFICITY OVER JD-MIRRORING", is the explicit anti-genericness guardrail:
+  a bullet that becomes vaguer just to match the JD is a failure even if it
+  scores better. INJECT also now carries a density cap (rule 4) — the same
+  keyword can't be injected into more than 2-3 bullets unless the JD itself
+  repeats it 3+ times, guarding against a term getting stuffed everywhere.
+- Agent 3 (`_build_agent3_system`) rule 1 reframes keyword injection as a
+  byproduct of demonstrating `jd_responsibility_addressed`, not the goal
+  itself; rule 3, "PRESERVE SPECIFICS", is the last-line-of-defense version
+  of the same anti-genericness guardrail, applied at final-text time.
+
+**Other prompt additions to Agent 3, same call, no new cost:**
+- Rule 4 adds action-verb variety (don't open more than one bullet with the
+  same verb unless no synonym fits — a known LLM regression-to-a-few-verbs
+  failure mode).
+- Rule 5 adds acronym/full-form pairing on first use (e.g. "Search Engine
+  Optimization (SEO)") — some ATS platforms index only the literal string
+  present.
+- Rule 6 adds tense consistency (past tense throughout, including the
+  current role) — ATS itself barely cares which tense, but mixed tense
+  across 40-80 independently-rewritten bullets is a real LLM risk.
+- Rule 12, "SENIORITY-AWARE EMPHASIS", passes `seniority_indicators` (already
+  extracted by Agent 1, previously unused beyond keyword injection) into
+  Agent 3 so IC/management/executive bullets get different rhetorical
+  emphasis (technical depth vs. team scope vs. strategic outcomes), not just
+  different keywords. `run_tailoring_pipeline` threads
+  `analysis.jd_analysis.seniority_indicators` into `_agent3_write` for this.
+- A `<examples>` block gives Agent 3 one concrete bad (keyword-stuffed) and
+  one good (specific + responsibility-demonstrating) bullet transformation —
+  few-shot exemplars for single-turn stylistic control, evidenced as a strong
+  complement to (not replacement for) rule-based instructions.
+
+**Explicitly not implemented this round** (flagged as real gaps, deliberately
+deferred — see git history / conversation record for the reasoning): embedding-based
+semantic matching for `ats_score`/`missing_skills` (lowest ROI of the
+research findings — `ats.py`'s existing 3-pass matcher already beats naive
+keyword-only matching, and true embeddings would need a new API dependency
+for a UI metric, not the bullet text users read); auto-tailoring the
+Summary/Objective field inside `run_tailoring_pipeline` (needs a new agent
+call, real added cost per run); and reintroducing a JD-title-matching
+headline field (conflicts with an earlier explicit product decision to
+remove it).
+
 ## Every agent / prompt call site
 
 | # | Agent | Trigger | `model_tier` requested | Model actually used (this `.env`) | System prompt size | `max_output_tokens` (`call_name`) |
