@@ -1,8 +1,11 @@
 import re
 import json
+import logging
 import google.generativeai as genai
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
+
+logger = logging.getLogger("app")
 
 
 def _strip_fence(raw: str) -> str:
@@ -29,24 +32,46 @@ class GeminiProvider(AIProvider):
             return self._pro
         return self._fast
 
-    async def complete(self, system: str, user: str, model_tier: str = "fast") -> str:
+    def _log_usage(self, call_name: str, model_tier: str, usage) -> None:
+        if usage is None:
+            return
+        logger.info(
+            "ai_usage call=%s tier=%s prompt_tokens=%s output_tokens=%s total_tokens=%s",
+            call_name, model_tier,
+            getattr(usage, "prompt_token_count", None),
+            getattr(usage, "candidates_token_count", None),
+            getattr(usage, "total_token_count", None),
+        )
+
+    async def complete(
+        self,
+        system: str,
+        user: str,
+        model_tier: str = "fast",
+        max_output_tokens: int | None = None,
+        call_name: str = "unknown",
+    ) -> str:
         prompt = f"{system}\n\n{user}"
-        response = await self._model(model_tier).generate_content_async(prompt)
-        # response.usage_metadata (prompt/candidates/total token counts) is
-        # available here but not captured — no token-usage telemetry exists
-        # anywhere in this codebase today. See docs/ai-pipeline.md. (Also
-        # note: this provider is currently unused — AI_PROVIDER=openai in
-        # .env — so this path isn't exercised in production right now.)
+        gen_cfg = genai.GenerationConfig(max_output_tokens=max_output_tokens) if max_output_tokens else None
+        response = await self._model(model_tier).generate_content_async(prompt, generation_config=gen_cfg)
+        self._log_usage(call_name, model_tier, getattr(response, "usage_metadata", None))
         return response.text
 
     async def complete_structured(
-        self, system: str, user: str, schema: type[BaseModel], model_tier: str = "fast"
+        self,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        model_tier: str = "fast",
+        max_output_tokens: int | None = None,
+        call_name: str = "unknown",
     ) -> BaseModel:
         prompt = (
             f"{system}\n\nRespond ONLY with valid JSON matching this schema: "
             f"{schema.model_json_schema()}\n\n{user}"
         )
-        response = await self._model(model_tier).generate_content_async(prompt)
+        gen_cfg = genai.GenerationConfig(max_output_tokens=max_output_tokens) if max_output_tokens else None
+        response = await self._model(model_tier).generate_content_async(prompt, generation_config=gen_cfg)
         text = _strip_fence(response.text)
-        # Same unused response.usage_metadata as above.
+        self._log_usage(call_name, model_tier, getattr(response, "usage_metadata", None))
         return schema.model_validate(json.loads(text))

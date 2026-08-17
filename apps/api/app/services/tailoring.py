@@ -28,6 +28,28 @@ from app.db.models import SkillQuestionBank
 
 logger = logging.getLogger("app")
 
+# Per-call output-token ceilings, replacing the single blanket
+# OPENAI_MAX_OUTPUT_TOKENS cap every call used before. Agent 2 and Agent 3
+# emit one JSON entry per resume bullet, so their legitimate output scales
+# with resume size (a full rewrite can need 8k-16k tokens — this is the
+# proven-safe cap from GeminiProvider's Agent 3 comment) and both keep the
+# full ceiling. Every other call here has a small, roughly fixed-shape
+# output (a handful of keyword lists, a few questions, one short letter);
+# giving those the same 16384-token ceiling only gives gpt-5.6-luna (a
+# reasoning model, whose invisible reasoning tokens share this same budget
+# and are billed the same as visible output) unnecessary headroom to reason
+# longer than the task needs, with no quality upside. Each cap below still
+# carries a wide safety margin over the realistic max output so this does
+# not reintroduce the 4096-was-too-low truncation bug — see
+# docs/ai-pipeline.md.
+_MAX_TOKENS_COMPANY_INTEL = 3000
+_MAX_TOKENS_JD_PARSE = 3000
+_MAX_TOKENS_SEMANTIC_MAP = 16384
+_MAX_TOKENS_BULLET_WRITE = 16384
+_MAX_TOKENS_COVER_LETTER = 3000
+_MAX_TOKENS_PREP_SKILL_QUESTIONS = 8000
+_MAX_TOKENS_PREP_JD_QUESTIONS = 2500
+
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -286,6 +308,8 @@ async def _agent0_company_intel(company_name: str, provider: AIProvider) -> Comp
         f"Company: {safe_name}",
         CompanyIntel,
         model_tier="fast",
+        max_output_tokens=_MAX_TOKENS_COMPANY_INTEL,
+        call_name="agent0_company_intel",
     )
 
 
@@ -339,7 +363,8 @@ async def _agent1_parse_jd(
             f"<job_description>\n{jd_text}\n</job_description>"
         )
     return await provider.complete_structured(
-        _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast"
+        _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast",
+        max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="agent1_parse_jd",
     )
 
 
@@ -436,7 +461,8 @@ async def _agent2_semantic_map(
     # pipeline that gets OpenAIProvider's pricier model. See the tier
     # decision recorded on OpenAIProvider._model_for.
     return await provider.complete_structured(
-        _AGENT2_SYSTEM, json.dumps(payload), MappingPlan, model_tier="premium"
+        _AGENT2_SYSTEM, json.dumps(payload), MappingPlan, model_tier="premium",
+        max_output_tokens=_MAX_TOKENS_SEMANTIC_MAP, call_name="agent2_semantic_map",
     )
 
 
@@ -544,6 +570,8 @@ async def _agent3_write(
         json.dumps(payload),
         WriterOutput,
         model_tier="pro",
+        max_output_tokens=_MAX_TOKENS_BULLET_WRITE,
+        call_name="agent3_write",
     )
 
 
@@ -608,6 +636,8 @@ async def write_cover_letter(
         json.dumps(payload),
         CoverLetterOutput,
         model_tier="pro",
+        max_output_tokens=_MAX_TOKENS_COVER_LETTER,
+        call_name="cover_letter",
     )
 
 
@@ -629,7 +659,8 @@ async def _generate_questions_for_skills(
         "Return JSON with a 'questions' array only."
     )
     wrapper = await provider.complete_structured(
-        system, json.dumps(resume_content), SkillQuestionsWrapper, model_tier="pro"
+        system, json.dumps(resume_content), SkillQuestionsWrapper, model_tier="pro",
+        max_output_tokens=_MAX_TOKENS_PREP_SKILL_QUESTIONS, call_name="prep_questions_skills",
     )
     return wrapper.questions
 
@@ -657,7 +688,8 @@ async def _generate_jd_specific_questions(
         "Return JSON with a 'questions' array only."
     )
     wrapper = await provider.complete_structured(
-        system, json.dumps(resume_content), JDQuestionsWrapper, model_tier="pro"
+        system, json.dumps(resume_content), JDQuestionsWrapper, model_tier="pro",
+        max_output_tokens=_MAX_TOKENS_PREP_JD_QUESTIONS, call_name="prep_questions_jd_specific",
     )
     return wrapper.questions
 
@@ -976,4 +1008,7 @@ async def extract_jd_skills(jd_text: str, provider: AIProvider) -> ParsedJD:
         "You are an expert technical recruiter. Extract skills from the job description. "
         "Return structured JSON with keys 'required' and 'nice_to_have', each a list of strings."
     )
-    return await provider.complete_structured(system, jd_text, ParsedJD, model_tier="fast")
+    return await provider.complete_structured(
+        system, jd_text, ParsedJD, model_tier="fast",
+        max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="extract_jd_skills_legacy",
+    )

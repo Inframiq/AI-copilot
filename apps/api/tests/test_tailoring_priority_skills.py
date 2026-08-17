@@ -19,7 +19,7 @@ def make_provider_dispatching_by_schema(responses: dict[type, object]):
     and their relative call order isn't guaranteed."""
     provider = MagicMock()
 
-    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+    async def fake_complete_structured(system, user, schema, **kwargs):
         return responses[schema]
 
     provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
@@ -42,7 +42,7 @@ async def test_priority_skills_reach_agent2_payload():
     prompt's override rule has something to act on."""
     captured_user_msg = {}
 
-    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+    async def fake_complete_structured(system, user, schema, **kwargs):
         if schema is MappingPlan:
             captured_user_msg["value"] = user
             return MappingPlan(mapping_plan=[], plausible_skills_to_add=[])

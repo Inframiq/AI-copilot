@@ -28,7 +28,7 @@ def make_provider_dispatching_by_schema(responses: dict[type, object]):
     and their relative call order isn't guaranteed."""
     provider = MagicMock()
 
-    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+    async def fake_complete_structured(system, user, schema, **kwargs):
         return responses[schema]
 
     provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
@@ -262,7 +262,7 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
     }
     provider = MagicMock()
 
-    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+    async def fake_complete_structured(system, user, schema, **kwargs):
         if schema is SkillQuestionsWrapper:
             raise ValueError("Invalid JSON: EOF while parsing a string")
         return responses[schema]
@@ -289,7 +289,7 @@ async def test_run_tailoring_pipeline_reraises_agent3_failure():
     }
     provider = MagicMock()
 
-    async def fake_complete_structured(system, user, schema, model_tier="fast"):
+    async def fake_complete_structured(system, user, schema, **kwargs):
         if schema is WriterOutput:
             raise ValueError("Invalid JSON: EOF while parsing a string")
         return responses[schema]

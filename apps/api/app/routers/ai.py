@@ -271,7 +271,13 @@ async def rewrite_bullet(
         jd_block = f"\nJob Description context:\n{body.jd_context}" if body.jd_context else ""
         user_msg = f"{label.capitalize()}:\n{body.bullet_text}{jd_block}"
 
-    rewritten = await provider.complete(system, user_msg, model_tier="fast")
+    # Small, fixed-shape output (one bullet or an 80-word-cap summary) — a
+    # tight ceiling avoids giving the reasoning model unneeded headroom to
+    # burn extra (billed) reasoning tokens. See tailoring.py's per-call
+    # token-ceiling comment / docs/ai-pipeline.md.
+    rewritten = await provider.complete(
+        system, user_msg, model_tier="fast", max_output_tokens=1200, call_name="rewrite_bullet"
+    )
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
     if is_summary:
