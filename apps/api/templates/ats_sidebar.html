@@ -17,15 +17,29 @@
     letter-spacing: 0.04em; border-left: 4px solid #4c6178; padding-left: 8px; margin-bottom: 5px; }
   .section-body { padding-left: 12px; }
   p.summary { margin: 0; font-size: 9.5pt; }
-  ul.skills-grid { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 24px; font-size: 9.5pt; }
+  /* Not multi-column — CSS `columns` reflows list items top-to-bottom
+     per visual column, which reorders them ahead of later sections in
+     ATS-extracted text (confirmed by direct render+extract testing:
+     second-column skills landed after the next section's heading). */
+  ul.skills-grid { list-style: none; margin: 0; padding: 0; font-size: 9.5pt; }
   ul.skills-grid li { margin-bottom: 2px; }
   ul.skills-grid li:before { content: "· "; color: #4c6178; font-weight: bold; }
   .skills-category { font-size: 9.5pt; font-weight: 700; margin: 4px 0 2px; }
   .job { margin-bottom: 7px; }
   .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 7px; }
-  .job-title-line { font-size: 10pt; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  /* Plain inline flow, not flex/float/a right-aligned table column — any
+     mechanism that visually right-aligns or right-pushes text (flex
+     justify-content, float:right, and even a table cell with a
+     wider-than-content column) makes WeasyPrint emit that text's PDF
+     content stream out of DOM order, dumping every date range at the very
+     end of ATS-extracted text (confirmed by direct render+extract testing
+     across many content-width combinations — this is content-length-
+     dependent, not something a "safer" table structure sidesteps). Pure
+     normal-flow inline text is the only combination that stayed correct
+     regardless of title/company length. */
+  .job-title-line { font-size: 10pt; }
   .job-title-line .title { font-weight: 700; font-size: 10.5pt; }
-  .job-title-line .dates { font-weight: 400; color: #444; white-space: nowrap; }
+  .job-title-line .dates { font-weight: 400; color: #444; }
   .job-company { font-weight: 700; font-style: italic; font-size: 9.5pt; margin-bottom: 2px; }
   table.bullets { width: 100%; border-collapse: collapse; margin: 2px 0 10px 0; font-size: 9.5pt; }
   /* Without this, WeasyPrint can split a <tr> across a page break — the
@@ -98,10 +112,7 @@
     <div class="section-body">
       {% for job in experience %}
       <div class="job">
-        <div class="job-title-line">
-          <span class="title">{{ job.title }}</span>
-          <span class="dates">{{ job.start }} – {{ job.end or "Current" }}</span>
-        </div>
+        <div class="job-title-line"><span class="title">{{ job.title }}</span> <span class="dates">| {{ job.start }} – {{ job.end or "Current" }}</span></div>
         <div class="job-company">{{ job.company }}</div>
         <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>
@@ -118,10 +129,7 @@
     <div class="section-body">
       {% for p in projects %}
       <div class="job">
-        <div class="job-title-line">
-          <span class="title">{{ p.name }}</span>
-          <span class="dates">{% if p.start %}{{ p.start }} – {{ p.end or "Current" }}{% endif %}</span>
-        </div>
+        <div class="job-title-line"><span class="title">{{ p.name }}</span>{% if p.start %} <span class="dates">| {{ p.start }} – {{ p.end or "Current" }}</span>{% endif %}</div>
         {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link }}</div>{% endif %}
         <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>

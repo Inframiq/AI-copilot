@@ -10,7 +10,17 @@
   h1 { font-size: 17pt; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.02em; line-height: 1.1; }
   .contact { font-size: 9.5pt; color: #454651; margin-bottom: 10px; }
   h2 { font-size: 11pt; font-weight: 700; color: #000a56; border-bottom: 1.5pt solid #5c6bc0; margin: 13px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.08em; page-break-after: avoid; }
-  .job-header { display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px; }
+  /* Plain inline flow, not flex/float/a right-aligned table column — any
+     mechanism that visually right-aligns or right-pushes text (flex
+     justify-content, float:right, and even a table cell with a
+     wider-than-content column) makes WeasyPrint emit that text's PDF
+     content stream out of DOM order, dumping every date range at the very
+     end of ATS-extracted text (confirmed by direct render+extract testing
+     across many content-width combinations — this is content-length-
+     dependent, not something a "safer" table structure sidesteps). Pure
+     normal-flow inline text is the only combination that stayed correct
+     regardless of title/company length. */
+  .job-header { margin-top: 5px; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .company { font-size: 9.5pt; color: #454651; }
   .dates { font-size: 9.5pt; color: #666; }
@@ -45,10 +55,7 @@
   {% if experience %}
   <h2>Experience</h2>
   {% for job in experience %}
-  <div class="job-header">
-    <div><span class="job-title">{{ job.title }}</span> &nbsp;·&nbsp; <b class="company">{{ job.company }}</b></div>
-    <span class="dates">{{ job.start }} – {{ job.end or "Present" }}</span>
-  </div>
+  <div class="job-header"><span class="job-title">{{ job.title }}</span> &nbsp;·&nbsp; <b class="company">{{ job.company }}</b> <span class="dates">&nbsp;·&nbsp; {{ job.start }} – {{ job.end or "Present" }}</span></div>
   <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
   {% endif %}
@@ -58,10 +65,7 @@
   {% if projects %}
   <h2>Projects</h2>
   {% for p in projects %}
-  <div class="job-header">
-    <div><span class="job-title">{{ p.name }}</span>{% if p.tech_stack %} &nbsp;·&nbsp; <b class="company">{{ p.tech_stack }}</b>{% endif %}</div>
-    <span class="dates">{% if p.start %}{{ p.start }} – {{ p.end or "Present" }}{% endif %}</span>
-  </div>
+  <div class="job-header"><span class="job-title">{{ p.name }}</span>{% if p.tech_stack %} &nbsp;·&nbsp; <b class="company">{{ p.tech_stack }}</b>{% endif %}{% if p.start %} <span class="dates">&nbsp;·&nbsp; {{ p.start }} – {{ p.end or "Present" }}</span>{% endif %}</div>
   {% if p.link %}<div class="company">{{ p.link }}</div>{% endif %}
   <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
@@ -72,10 +76,7 @@
   {% if education %}
   <h2>Education</h2>
   {% for edu in education %}
-  <div class="job-header">
-    <div><span class="job-title">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company">{{ edu.institution }}</span></div>
-    <span class="dates">{{ edu.year }}</span>
-  </div>
+  <div class="job-header"><span class="job-title">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company">{{ edu.institution }}</span> <span class="dates">&nbsp;·&nbsp; {{ edu.year }}</span></div>
   {% endfor %}
   {% endif %}
 {% endmacro %}

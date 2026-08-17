@@ -227,6 +227,24 @@ def test_jd_analysis_core_responsibilities_defaults_empty_list():
     assert analysis.core_responsibilities == []
 
 
+def test_banned_generic_phrases_includes_top_ai_tell_words():
+    # 2026 research: "spearheaded"/"leveraged"/"orchestrated" are the most
+    # independently-cited AI-generated-resume tells — "spearheaded" was
+    # previously an example verb in this very prompt (fixed below).
+    for word in ("spearheaded", "leveraged", "orchestrated"):
+        assert word in BANNED_GENERIC_PHRASES
+
+
+def test_agent3_system_prompt_does_not_model_a_banned_verb():
+    prompt = _build_agent3_system(50)
+    assert "Spearheaded" not in prompt
+
+
+def test_agent3_system_prompt_does_not_mandate_quantification_on_every_bullet():
+    prompt = _build_agent3_system(50)
+    assert "not on every bullet" in prompt.lower()
+
+
 @pytest.mark.asyncio
 async def test_analyze_jd_match_dedupes_overlapping_skills():
     # "Python" appears in both exact_technical_tools and ats_filter_phrases

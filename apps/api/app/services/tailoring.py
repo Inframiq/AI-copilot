@@ -574,11 +574,17 @@ specific and dial back the JD-mirroring instead — a bullet so generic it could
 belong to any candidate is a worse outcome than one that's slightly less \
 keyword-dense but still reads as this person's real work.
 4. BULLET STRUCTURE: Start every bullet with a strong past-tense action verb \
-(e.g., Architected, Spearheaded, Engineered, Reduced, Drove). \
-Format: [Action Verb] + [Method/Tool with JD keyword] + [Quantified Impact]. \
+(e.g., Architected, Engineered, Reduced, Drove, Launched). \
+Format: [Action Verb] + [Method/Tool with JD keyword] + [Impact]. \
 Do not open more than one bullet in the full set with the same verb unless no \
 reasonable synonym fits — repeated verbs read as a thin vocabulary to both \
-recruiters and ATS scoring; vary word choice across the whole rewritten set.
+recruiters and ATS scoring; vary word choice across the whole rewritten set. \
+QUANTIFY WHEN THE FACTS SUPPORT IT, NOT ON EVERY BULLET: preserved_metrics \
+gives you real numbers to echo — use them. But when a bullet genuinely has no \
+number behind it, do not invent one (rule 2) and do not pad it with vague \
+filler to sound quantified. A specific, concrete bullet with no number \
+("Redesigned the onboarding flow to cut new-hire ramp time") beats a bullet \
+that fabricates or forces a weak metric just to fit the format.
 5. ACRONYM CLARITY: the first time a keyword with a well-known acronym form \
 appears across the bullet set (e.g., SEO, CI/CD, SDLC, API), pair the full \
 term with its acronym if the bullet's length budget allows (e.g., "Search \

@@ -194,6 +194,61 @@ call, real added cost per run); and reintroducing a JD-title-matching
 headline field (conflicts with an earlier explicit product decision to
 remove it).
 
+### Document-level ATS parseability audit + fix (2026-08-17)
+
+A follow-up deep-research pass (three parallel tracks: recruiter psychology,
+document/template-level ATS parseability, and per-platform ATS behavior)
+found a critical, previously-unknown bug via direct empirical testing —
+rendering real resumes through the actual pipeline and extracting text with
+pdfminer, the same way an ATS would, rather than trusting how the PDF looks
+on screen.
+
+**The bug:** every one of the 5 templates used `display:flex;
+justify-content:space-between` (or, for `ats_sidebar`'s skills list, CSS
+`columns: 2`) to lay out a title on the left and a date range / skill on the
+right. WeasyPrint 68.0 emits PDF text content streams for anything visually
+right-pushed or column-reflowed by *paint position*, not DOM order — so
+every job/education date range was silently dumped at the very end of
+ATS-extracted text, disconnected from the role it belongs to. This is
+invisible on screen; it only shows up when the text layer is actually
+extracted. Real impact: any ATS computing years-of-experience or associating
+a date with a role got garbage, for every resume this tool ever generated.
+
+**Why the fix took two attempts:** the first fix replaced the flex row with
+a two-cell `<table>` (mirroring the technique already safely used for
+bullets) and *appeared* to work — but only by luck of test data length.
+Direct empirical bisection (see `tests/test_pdf_ats_text_order.py`'s
+docstring) found the real root cause is broader: **any** mechanism that
+visually right-aligns or right-pushes text with slack space — flex
+`justify-content`, `float: right`, and even a plain table cell whose column
+is wider than its content — makes WeasyPrint reorder that text's paint
+position. It reproduces with short titles/companies and not with long ones,
+so a spot-check with realistic sample data would not have caught it. The
+only combination that stayed correct regardless of content length is **pure
+inline normal-flow text** — no separate box/column for the date at all. All
+5 templates now render title+dates as `<div>{{ title }} <span>| {{
+dates }}</span></div>`, not a flex row or table. `ats_sidebar`'s skills list
+also dropped `columns: 2` for the same class of reason (second-column items
+extracted after the next section's heading).
+
+`tests/test_pdf_ats_text_order.py` is a permanent regression test —
+parametrized across all 5 templates, using deliberately SHORT title/company
+content (the case that actually catches this bug class) — asserting every
+date stays adjacent to its role in pdfminer-extracted text. Requires
+`pdfminer.six` (dev-only, `requirements-dev.txt`) and the same system-level
+WeasyPrint libraries `test_pdf.py` already needs; skips gracefully if either
+is unavailable.
+
+**Also fixed the same pass:** `BANNED_GENERIC_PHRASES`
+(`resume_spec.py`) now bans "spearheaded", "leveraged", "orchestrated",
+"pivotal", "delve" — independently cited across 5+ 2026 sources as the
+most-flagged AI-generated-resume tells; "spearheaded" was previously an
+example verb in Agent 3's own prompt (now swapped for "Launched"). Agent 3
+rule 4 also now explicitly says quantification isn't mandatory on every
+bullet — a specific, concrete bullet with no number is better than one that
+forces or fabricates a weak metric to fit the `[Action Verb] + [Method] +
+[Impact]` format.
+
 ## Every agent / prompt call site
 
 | # | Agent | Trigger | `model_tier` requested | Model actually used (this `.env`) | System prompt size | `max_output_tokens` (`call_name`) |

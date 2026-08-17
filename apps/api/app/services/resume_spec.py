@@ -102,6 +102,14 @@ BANNED_GENERIC_PHRASES = [
     "proven track record",
     "synergy",
     "think outside the box",
+    # Independently cited across 5+ 2026 sources as the most-flagged
+    # AI-generated-resume tells — one (spearheaded) was previously an
+    # example verb in the Agent 3 prompt itself. See docs/ai-pipeline.md.
+    "spearheaded",
+    "leveraged",
+    "orchestrated",
+    "pivotal",
+    "delve",
 ]
 
 # Content classification tiers used by the relevance filter (resume_generator.py).
