@@ -123,4 +123,55 @@ describe("PreviewPanel", () => {
     expect(screen.getByText("Generate PDF")).toBeInTheDocument();
     expect(screen.queryByText("Regenerate PDF")).not.toBeInTheDocument();
   });
+
+  it("hides spacing controls until a preview actually exists, in normal mode", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    render(<PreviewPanel />);
+    expect(screen.queryByLabelText("Line spacing")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Paragraph spacing")).not.toBeInTheDocument();
+  });
+
+  it("hides spacing controls in tailoring mode until a tailored preview exists", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    act(() => {
+      useTailoringStore.setState({ pendingContent: SAMPLE_CONTENT, bulletDecisions: {}, suggestedSkills: [] });
+    });
+    render(<PreviewPanel />);
+    expect(screen.queryByLabelText("Line spacing")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Paragraph spacing")).not.toBeInTheDocument();
+  });
+
+  it("shows spacing controls in tailoring mode once a tailored preview exists — previously always hidden in this mode", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    act(() => {
+      useTailoringStore.setState({ pendingContent: SAMPLE_CONTENT, bulletDecisions: {}, suggestedSkills: [] });
+      useResumeStore.getState().setPdfSignedUrl("https://example.com/tailored.pdf");
+    });
+    render(<PreviewPanel />);
+    expect(screen.getByLabelText("Line spacing")).toBeInTheDocument();
+    expect(screen.getByLabelText("Paragraph spacing")).toBeInTheDocument();
+  });
+
+  it("regenerating a tailored preview after a spacing change reuses generatePreview with the new spacing", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    act(() => {
+      useTailoringStore.setState({ pendingContent: SAMPLE_CONTENT, bulletDecisions: {}, suggestedSkills: [] });
+      useResumeStore.getState().setPdfSignedUrl("https://example.com/tailored.pdf");
+    });
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/tailored-v2.pdf",
+    });
+
+    render(<PreviewPanel />);
+    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "1.4" } });
+    expect(screen.getByText("Regenerate Preview")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Regenerate Preview"));
+
+    await waitFor(() =>
+      expect(apiClient.generatePdf).toHaveBeenLastCalledWith(
+        "resume-1", "ats_clean", expect.any(Object), 1.4, 12
+      )
+    );
+  });
 });

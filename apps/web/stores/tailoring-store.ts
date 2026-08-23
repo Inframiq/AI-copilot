@@ -492,10 +492,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
     set({ isApplying: true, error: null, mergedContent });
     try {
+      const resumeStoreState = useResumeStore.getState();
       const { signed_url } = await apiClient.generatePdf(
         resumeId,
-        useResumeStore.getState().templateId,
+        resumeStoreState.templateId,
         mergedContent,
+        resumeStoreState.lineSpacing,
+        resumeStoreState.paragraphSpacing,
       );
       set({ previewPdfUrl: signed_url, isApplying: false });
       // Also drive the Studio page's dedicated PDF Preview panel — it reads

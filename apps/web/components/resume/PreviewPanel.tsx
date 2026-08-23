@@ -23,7 +23,7 @@ export function PreviewPanel() {
   // tick would fire a WeasyPrint render per pixel of slider movement.
   const [spacingStale, setSpacingStale] = useState(false);
 
-  const { sessionId, pendingContent } = useTailoringStore();
+  const { sessionId, pendingContent, generatePreview } = useTailoringStore();
   const isTailoringMode = pendingContent !== null;
   const router = useRouter();
 
@@ -59,6 +59,24 @@ export function PreviewPanel() {
       setSpacingStale(false);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  // Tailoring mode's first preview is owned by BulletReviewPanel (it needs
+  // the merged accept/reject/humanize state, not just the saved resume), but
+  // once that preview exists, re-rendering it for a spacing change only
+  // needs generatePreview() re-run — same merged content, new spacing.
+  async function handleRegenerateTailoredPreview() {
+    if (!resumeId) return;
+    setIsGenerating(true);
+    setGenError(null);
+    try {
+      await generatePreview(resumeId);
+      setSpacingStale(false);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Regeneration failed");
     } finally {
       setIsGenerating(false);
     }
@@ -102,10 +120,12 @@ export function PreviewPanel() {
           </div>
         )}
 
-        {/* Spacing controls — hidden in tailoring mode, same as Generate PDF,
-            since BulletReviewPanel owns that flow. Sliders only mark the
-            preview stale; Regenerate PDF actually re-renders. */}
-        {!isTailoringMode && (
+        {/* Spacing controls — only relevant once a preview actually exists;
+            before that there's nothing rendered yet for them to affect.
+            Shown in both modes (previously hidden whenever isTailoringMode
+            was true, even after a tailored preview had already rendered —
+            backwards: gone exactly when they'd have something to adjust). */}
+        {pdfSignedUrl && (
           <div className="flex items-center gap-md flex-wrap">
             <div className="flex items-center gap-xs">
               <label htmlFor="line-spacing" className="text-label-sm text-on-surface-variant whitespace-nowrap">
@@ -171,6 +191,30 @@ export function PreviewPanel() {
                 <DownloadSimple size={16} />
               )}
               {isGenerating ? "Generating…" : spacingStale ? "Regenerate PDF" : "Generate PDF"}
+            </button>
+          )}
+          {/* Tailoring mode's equivalent — BulletReviewPanel owns the first
+              preview render (it needs the merged bullet decisions), but once
+              that preview exists, a spacing change only needs generatePreview
+              re-run, not the full accept/reject flow again. */}
+          {isTailoringMode && pdfSignedUrl && (
+            <button
+              onClick={handleRegenerateTailoredPreview}
+              disabled={isGenerating}
+              className={`flex items-center gap-xs px-md py-sm rounded-lg text-label-sm border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                spacingStale
+                  ? "text-on-primary bg-primary border-primary hover:bg-primary-container"
+                  : "text-on-surface-variant border-outline-variant hover:bg-surface-container-low"
+              }`}
+            >
+              {isGenerating ? (
+                <SpinnerGap size={16} className="animate-spin" />
+              ) : spacingStale ? (
+                <ArrowsClockwise size={16} />
+              ) : (
+                <DownloadSimple size={16} />
+              )}
+              {isGenerating ? "Generating…" : spacingStale ? "Regenerate Preview" : "Preview Up To Date"}
             </button>
           )}
           {sessionId && (

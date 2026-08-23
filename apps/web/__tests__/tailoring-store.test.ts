@@ -300,7 +300,9 @@ describe("useTailoringStore", () => {
       "ats_clean",
       expect.objectContaining({
         experience: [expect.objectContaining({ bullets: ["Did stuff, tailored"] })],
-      })
+      }),
+      1.25,
+      12
     );
     // Nothing persisted, and the original resume is untouched.
     expect(apiClient.updateResume).not.toHaveBeenCalled();
@@ -314,6 +316,29 @@ describe("useTailoringStore", () => {
     // the bullet list, never in the panel it's supposed to occupy.
     expect(useResumeStore.getState().pdfSignedUrl).toBe(
       "https://example.com/tailored.pdf"
+    );
+  });
+
+  it("generatePreview uses the current spacing settings, not always the defaults", async () => {
+    // Previously omitted entirely, so adjusting the spacing sliders while
+    // reviewing a tailored resume had no effect on the rendered preview.
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean", 1.5, 20);
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce(mockCompletedSession);
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    await useTailoringStore.getState().generatePreview("resume-abc");
+
+    expect(apiClient.generatePdf).toHaveBeenCalledWith(
+      "resume-abc",
+      "ats_clean",
+      expect.any(Object),
+      1.5,
+      20
     );
   });
 
