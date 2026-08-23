@@ -21,7 +21,9 @@ class CoverLetterStartOut(BaseModel):
 
 class CoverLetterOut(BaseModel):
     id: uuid.UUID
-    resume_id: uuid.UUID
+    # Null once the resume this was generated from has since been deleted —
+    # the letter's own `content` survives regardless (see models.py).
+    resume_id: uuid.UUID | None
     jd_id: uuid.UUID
     tailoring_session_id: uuid.UUID | None
     content: str | None

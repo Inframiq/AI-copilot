@@ -275,7 +275,10 @@ export const apiClient = {
 
   getSession: (sessionId: string): Promise<{
     session_id: string;
-    resume_id: string;
+    // Null once the input resume this was tailored against has since been
+    // deleted — tailored_content below is a self-contained snapshot and
+    // doesn't depend on it.
+    resume_id: string | null;
     jd_id: string;
     status: "pending" | "completed" | "failed";
     tailored_content: ResumeContent | null;
@@ -293,7 +296,7 @@ export const apiClient = {
   // cross-user question bank.
   getLatestSession: (): Promise<{
     session_id: string | null;
-    resume_id?: string;
+    resume_id?: string | null;
     jd_id?: string;
     status?: "pending" | "completed" | "failed";
     tailored_content?: ResumeContent | null;

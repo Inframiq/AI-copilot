@@ -115,7 +115,9 @@ export interface JDDetails {
 
 export interface CoverLetter {
   id: string;
-  resume_id: string;
+  // Null once the resume this was generated from has since been deleted —
+  // the letter's own `content` survives regardless.
+  resume_id: string | null;
   jd_id: string;
   tailoring_session_id: string | null;
   content: string | null;

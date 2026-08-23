@@ -33,7 +33,17 @@ class Resume(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
 
-    sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="resume", cascade="all, delete-orphan")
+    # No delete cascade here deliberately — a tailoring session's own
+    # tailored_content/ats_score/prep-questions are a self-contained
+    # snapshot that doesn't need this resume (the input it was originally
+    # run against) to still exist. TailoringSession.resume_id is nullable
+    # with ON DELETE SET NULL at the DB level (see migration 012); without
+    # removing this cascade, SQLAlchemy would still delete every session
+    # tied to this resume on `db.delete(resume)` regardless of that DB
+    # constraint, silently wiping a JD's saved tailoring/interview-prep
+    # work as collateral damage of deleting an unrelated draft resume —
+    # exactly what happened before this was caught.
+    sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="resume")
 
 
 class ResumeDeletionLog(Base):
@@ -87,8 +97,12 @@ class TailoringSession(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    resume_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="CASCADE")
+    # Nullable + SET NULL (not CASCADE) — see the comment on Resume.sessions.
+    # This is the resume tailoring was RUN against (the input), distinct
+    # from JobDescription.tailored_resume_id (what the user explicitly
+    # chose to save/keep for this JD).
+    resume_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True
     )
     jd_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="CASCADE")
@@ -103,7 +117,7 @@ class TailoringSession(Base):
     suggested_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
-    resume: Mapped["Resume"] = relationship(back_populates="sessions")
+    resume: Mapped["Resume | None"] = relationship(back_populates="sessions")
     jd: Mapped["JobDescription"] = relationship(back_populates="sessions")
     questions: Mapped[list["PrepQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
@@ -113,8 +127,15 @@ class CoverLetter(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    resume_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="CASCADE")
+    # Nullable + SET NULL (not CASCADE) — a cover letter's own `content` is a
+    # self-contained snapshot that doesn't need the resume it was generated
+    # from to still exist. See the comment on Resume.sessions for why this
+    # matters: deleting a draft resume must not silently wipe every cover
+    # letter ever written from it. (Only PDF export's contact-info lookup
+    # degrades gracefully to blank if this is null — regenerating a letter
+    # from scratch still needs a real resume, checked at the router level.)
+    resume_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True
     )
     jd_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="CASCADE")

@@ -331,7 +331,9 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
         return {"session_id": None}
     return {
         "session_id": str(session.id),
-        "resume_id": str(session.resume_id),
+        # None once the input resume has since been deleted — tailored_content
+        # below is a self-contained snapshot and doesn't depend on it.
+        "resume_id": str(session.resume_id) if session.resume_id else None,
         "jd_id": str(session.jd_id),
         "status": session.status,
         "tailored_content": session.tailored_content,
@@ -359,7 +361,9 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
         "session_id": str(session.id),
-        "resume_id": str(session.resume_id),
+        # None once the input resume has since been deleted — tailored_content
+        # below is a self-contained snapshot and doesn't depend on it.
+        "resume_id": str(session.resume_id) if session.resume_id else None,
         "jd_id": str(session.jd_id),
         "status": session.status,
         "tailored_content": session.tailored_content,

@@ -57,6 +57,14 @@ export default function CoverLetterEditorPage({
 
   async function handleRegenerate(nextHumanizeLevel: number) {
     if (!letter || isRegenerating) return;
+    // The resume this letter was generated from has since been deleted —
+    // regenerating needs a real resume to run the AI against, unlike
+    // viewing/editing/exporting the existing letter, which only needs its
+    // own already-saved content.
+    if (!letter.resume_id) {
+      setError("Can't regenerate — the resume this letter was written from has been deleted.");
+      return;
+    }
     setIsRegenerating(true);
     setError(null);
     try {
@@ -152,7 +160,7 @@ export default function CoverLetterEditorPage({
           value={sliderValue ?? letter.humanize_level}
           onChange={setSliderValue}
           onCommit={handleRegenerate}
-          disabled={isRegenerating}
+          disabled={isRegenerating || !letter.resume_id}
         />
         {error && <p className="text-caption text-error">{error}</p>}
         <div className="flex flex-wrap gap-sm">
@@ -181,7 +189,8 @@ export default function CoverLetterEditorPage({
           </button>
           <button
             onClick={() => handleRegenerate(sliderValue ?? letter.humanize_level)}
-            disabled={isRegenerating}
+            disabled={isRegenerating || !letter.resume_id}
+            title={!letter.resume_id ? "The resume this letter was written from has been deleted" : undefined}
             className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
           >
             <Sparkle size={16} className={isRegenerating ? "animate-pulse" : ""} />
