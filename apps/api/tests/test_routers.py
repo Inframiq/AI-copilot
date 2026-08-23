@@ -279,6 +279,27 @@ async def test_delete_resume_204():
         app.dependency_overrides.pop(get_db, None)
 
 
+def _make_delete_resume_mocks(existing, master_check_hit: bool):
+    """execute() is called 3x by delete_resume: (1) SELECT the resume,
+    (2) SELECT to check if it's the career_profiles master resume,
+    (3) UPDATE career_profiles to clear that reference. Dispatch by call
+    order via side_effect rather than a single shared return_value, so each
+    call gets a result shaped like what it actually needs."""
+    select_resume_result = MagicMock()
+    select_resume_result.scalar_one_or_none.return_value = existing
+
+    master_check_result = MagicMock()
+    master_check_result.first.return_value = ("hit",) if master_check_hit else None
+
+    update_result = MagicMock()
+
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(
+        side_effect=[select_resume_result, master_check_result, update_result]
+    )
+    return override, mock_session
+
+
 @pytest.mark.asyncio
 async def test_delete_resume_clears_dangling_career_profile_master_resume_id():
     # career_profiles lives outside this backend's ORM (written directly from
@@ -289,8 +310,6 @@ async def test_delete_resume_clears_dangling_career_profile_master_resume_id():
     from app.db.models import Resume
     from datetime import datetime, timezone
 
-    override, mock_session = make_mock_db()
-    mock_result = MagicMock()
     existing = Resume(
         id=uuid.uuid4(),
         user_id=uuid.UUID(TEST_USER_ID),
@@ -301,8 +320,7 @@ async def test_delete_resume_clears_dangling_career_profile_master_resume_id():
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
-    mock_result.scalar_one_or_none.return_value = existing
-    mock_session.execute.return_value = mock_result
+    override, mock_session = _make_delete_resume_mocks(existing, master_check_hit=True)
 
     app.dependency_overrides[get_db] = override
     try:
@@ -313,13 +331,92 @@ async def test_delete_resume_clears_dangling_career_profile_master_resume_id():
             )
         assert r.status_code == 204
 
-        # Second execute() call is the raw career_profiles cleanup UPDATE.
-        assert mock_session.execute.await_count == 2
-        update_call = mock_session.execute.await_args_list[1]
+        assert mock_session.execute.await_count == 3
+        update_call = mock_session.execute.await_args_list[2]
         compiled_sql = str(update_call.args[0])
         assert "UPDATE career_profiles" in compiled_sql
         assert "master_resume_id" in compiled_sql
         assert update_call.args[1] == {"rid": str(existing.id)}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_resume_writes_audit_log_entry():
+    # The server-side audit trail (ResumeDeletionLog) must record who
+    # deleted what, when, and whether it was the user's linked master
+    # resume — so a future "my resume disappeared" report can be answered
+    # from this log instead of a from-scratch live-debugging session.
+    from app.db.models import Resume, ResumeDeletionLog
+    from datetime import datetime, timezone
+
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="My Resume",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = _make_delete_resume_mocks(existing, master_check_hit=True)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.delete(
+                f"/resumes/{existing.id}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 204
+
+        logged = [
+            call.args[0] for call in mock_session.add.call_args_list
+            if isinstance(call.args[0], ResumeDeletionLog)
+        ]
+        assert len(logged) == 1
+        entry = logged[0]
+        assert entry.resume_id == existing.id
+        assert entry.user_id == existing.user_id
+        assert entry.title == "My Resume"
+        assert entry.was_master_resume is True
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_resume_audit_log_records_false_when_not_master_resume():
+    from app.db.models import Resume, ResumeDeletionLog
+    from datetime import datetime, timezone
+
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Some Other Resume",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = _make_delete_resume_mocks(existing, master_check_hit=False)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.delete(
+                f"/resumes/{existing.id}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 204
+
+        logged = [
+            call.args[0] for call in mock_session.add.call_args_list
+            if isinstance(call.args[0], ResumeDeletionLog)
+        ]
+        assert len(logged) == 1
+        assert logged[0].was_master_resume is False
     finally:
         app.dependency_overrides.pop(get_db, None)
 

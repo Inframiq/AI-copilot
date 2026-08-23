@@ -1,11 +1,12 @@
 import asyncio
 import base64
+import logging
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.db.session import get_db, AsyncSessionLocal
-from app.db.models import Resume, JobDescription
+from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
@@ -18,6 +19,7 @@ from supabase import create_client
 from app.core.config import settings
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
+logger = logging.getLogger("app")
 
 _PARSE_TIMEOUT_SECONDS = 15
 
@@ -152,6 +154,25 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Snapshot whether this resume was the user's linked master resume BEFORE
+    # nulling that reference below, so the audit log answers "was this the
+    # one my profile pointed at" directly instead of requiring a timestamp
+    # cross-reference after the fact — exactly what took a live-debugging
+    # session to reconstruct the last time this happened.
+    master_check = await db.execute(
+        text("SELECT 1 FROM career_profiles WHERE user_id = :uid AND master_resume_id = :rid"),
+        {"uid": str(resume.user_id), "rid": str(resume_id)},
+    )
+    was_master_resume = master_check.first() is not None
+
+    db.add(ResumeDeletionLog(
+        resume_id=resume_id,
+        user_id=resume.user_id,
+        title=resume.title,
+        was_master_resume=was_master_resume,
+    ))
+
     await db.delete(resume)
     # career_profiles lives outside this backend's ORM models — it's written
     # directly from the frontend via the Supabase client (lib/career-profile-
@@ -165,6 +186,10 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
         {"rid": str(resume_id)},
     )
     await db.commit()
+    logger.info(
+        "resume_deleted resume_id=%s user_id=%s title=%r was_master_resume=%s",
+        resume_id, resume.user_id, resume.title, was_master_resume,
+    )
 
 
 async def _persist_pdf_to_storage(pdf_bytes: bytes, user_id: str, resume_id: uuid.UUID) -> None:

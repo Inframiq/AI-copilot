@@ -36,6 +36,27 @@ class Resume(Base):
     sessions: Mapped[list["TailoringSession"]] = relationship(back_populates="resume", cascade="all, delete-orphan")
 
 
+class ResumeDeletionLog(Base):
+    """Server-side audit trail for resume deletions — written by
+    DELETE /resumes/{id} (routers/resumes.py) right before the Resume row
+    itself is removed, so there's a durable record of who deleted what and
+    when even after the resume is gone. resume_id is deliberately NOT a
+    foreign key (the whole point is this row outlives the resume it
+    describes)."""
+
+    __tablename__ = "resume_deletion_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    resume_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Whether career_profiles.master_resume_id pointed at this resume at the
+    # moment of deletion — the exact condition behind the 2026-08-23 "my
+    # resume disappeared" incident, answerable directly from this log now.
+    was_master_resume: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
 
