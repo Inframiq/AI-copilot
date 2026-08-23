@@ -8,7 +8,7 @@ vi.mock("@/lib/supabase", () => ({
   }),
 }));
 
-import { apiClient } from "../lib/api-client";
+import { apiClient, ApiError } from "../lib/api-client";
 
 function jsonResponse(body: unknown, init: Partial<Response> = {}) {
   return {
@@ -69,6 +69,22 @@ describe("apiClient", () => {
       jsonResponse({ detail: "Resume not found" }, { ok: false, status: 404 })
     );
     await expect(apiClient.getResume("missing-id")).rejects.toThrow("Resume not found");
+  });
+
+  it("throws an ApiError carrying the HTTP status, so callers can distinguish 404 from other failures", async () => {
+    // Profile page's master-resume lookup relies on this to tell "the linked
+    // resume was deleted" (404) apart from a network/server error.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ detail: "Resume not found" }, { ok: false, status: 404 })
+    );
+    let caught: unknown;
+    try {
+      await apiClient.getResume("missing-id");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).status).toBe(404);
   });
 
   it("falls back to statusText when the error body isn't valid JSON", async () => {

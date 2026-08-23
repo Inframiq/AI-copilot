@@ -3,7 +3,7 @@ import base64
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription
 from app.core.security import get_current_user
@@ -153,6 +153,17 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
     await db.delete(resume)
+    # career_profiles lives outside this backend's ORM models — it's written
+    # directly from the frontend via the Supabase client (lib/career-profile-
+    # client.ts) — but it's the same physical Postgres database, so a raw
+    # UPDATE here keeps its master_resume_id from dangling once this resume
+    # is gone. Without this, the Profile page's fetch of that id 404s, gets
+    # silently swallowed, and renders identically to "never uploaded a
+    # resume" even though the user's career profile data is still intact.
+    await db.execute(
+        text("UPDATE career_profiles SET master_resume_id = NULL WHERE master_resume_id = :rid"),
+        {"rid": str(resume_id)},
+    )
     await db.commit()
 
 

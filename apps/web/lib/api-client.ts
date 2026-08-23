@@ -30,6 +30,18 @@ async function getToken(): Promise<string> {
   return session.access_token;
 }
 
+/** Carries the HTTP status alongside the message, so callers can distinguish
+ * "not found" from other failures (network error, auth, server error)
+ * instead of just knowing *something* went wrong. */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -46,7 +58,7 @@ async function request<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Request failed");
+    throw new ApiError(res.status, err.detail ?? "Request failed");
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

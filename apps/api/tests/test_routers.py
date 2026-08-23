@@ -280,6 +280,51 @@ async def test_delete_resume_204():
 
 
 @pytest.mark.asyncio
+async def test_delete_resume_clears_dangling_career_profile_master_resume_id():
+    # career_profiles lives outside this backend's ORM (written directly from
+    # the frontend via Supabase) but shares the same Postgres database.
+    # Deleting a resume that's set as a user's master_resume_id must clear
+    # that reference — otherwise the Profile page's fetch of it 404s and
+    # silently renders as if the user never uploaded a resume at all.
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Old",
+        content={},
+        template_id="ats_clean",
+        pdf_url=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    mock_result.scalar_one_or_none.return_value = existing
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.delete(
+                f"/resumes/{existing.id}",
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 204
+
+        # Second execute() call is the raw career_profiles cleanup UPDATE.
+        assert mock_session.execute.await_count == 2
+        update_call = mock_session.execute.await_args_list[1]
+        compiled_sql = str(update_call.args[0])
+        assert "UPDATE career_profiles" in compiled_sql
+        assert "master_resume_id" in compiled_sql
+        assert update_call.args[1] == {"rid": str(existing.id)}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_list_jds_returns_200_with_valid_token():
     override, mock_session = make_mock_db()
     from app.db.models import JobDescription

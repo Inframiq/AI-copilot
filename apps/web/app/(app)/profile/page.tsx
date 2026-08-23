@@ -41,7 +41,7 @@ import {
   type ExpType,
   type RoleStatus,
 } from "@/lib/career-profile-client";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 
@@ -124,6 +124,11 @@ export default function ProfilePage() {
   const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
+  // True when master_resume_id points at a resume that's since been deleted
+  // (e.g. via the Resume Builder's delete button) — distinct from simply
+  // never having uploaded one, so the UI can say what actually happened
+  // instead of silently reverting to the same empty upload prompt.
+  const [masterResumeDeleted, setMasterResumeDeleted] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   // collapsed state per entry
@@ -153,10 +158,16 @@ export default function ProfilePage() {
 
   // ── load master resume title ───────────────────────────────────────────────
   useEffect(() => {
-    if (!masterResumeId) { setMasterResumeTitle(null); return; }
+    if (!masterResumeId) { setMasterResumeTitle(null); setMasterResumeDeleted(false); return; }
+    setMasterResumeDeleted(false);
     apiClient.getResume(masterResumeId)
       .then(r => { setMasterResumeTitle(r.title); setMasterResumeTemplateId(r.template_id); })
-      .catch(() => setMasterResumeTitle(null));
+      .catch(err => {
+        setMasterResumeTitle(null);
+        // A 404 means the resume this profile pointed at was deleted —
+        // surface that distinctly rather than looking like "never uploaded."
+        setMasterResumeDeleted(err instanceof ApiError && err.status === 404);
+      });
   }, [masterResumeId]);
 
   // ── save-on-leave ────────────────────────────────────────────────────────
@@ -383,6 +394,19 @@ export default function ProfilePage() {
         <SectionHeader title="Resume" />
         <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
+
+        {masterResumeDeleted && (
+          <div className="flex items-start gap-md p-md rounded-xl bg-tertiary-container/20 border border-tertiary/30 mb-md">
+            <FilePdf size={20} className="text-tertiary shrink-0 mt-xs" />
+            <div>
+              <p className="text-label-md text-on-surface font-semibold">Your uploaded resume was deleted</p>
+              <p className="text-caption text-on-surface-variant mt-xs">
+                The resume file linked to your profile no longer exists — it was likely removed from Resume Builder.
+                Your profile details below are unaffected; upload a new resume to link one again.
+              </p>
+            </div>
+          </div>
+        )}
 
         {masterResumeId && masterResumeTitle ? (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-md p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
