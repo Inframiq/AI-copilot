@@ -31,6 +31,7 @@ import {
 import {
   getCareerProfile,
   upsertCareerProfile,
+  inferExpType,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -261,7 +262,7 @@ export default function ProfilePage() {
       const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
       const newExperiences: ExperienceEntry[] = Array.isArray(c.experience)
         ? (c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
-            id: newId(), type: "full-time" as ExpType,
+            id: newId(), type: inferExpType(e.title, e.company),
             company: e.company, title: e.title,
             start: e.start, end: e.end || "Present",
             current: !e.end || e.end === "Present",

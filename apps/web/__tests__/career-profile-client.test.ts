@@ -37,6 +37,8 @@ import {
   upsertCareerProfile,
   setProfileMasterResume,
   profileToResumeContent,
+  resumeContentToCareerProfileInput,
+  inferExpType,
   type CareerProfile,
 } from "../lib/career-profile-client";
 
@@ -189,6 +191,51 @@ describe("career-profile-client", () => {
         end: undefined,
         bullets: [],
       });
+    });
+  });
+
+  describe("inferExpType", () => {
+    it("detects 'Intern' as a whole word in the title", () => {
+      expect(inferExpType("Talent Acquisition Intern", "K12 Techno Services")).toBe("internship");
+    });
+
+    it("detects 'Internship' as a whole word in the title", () => {
+      expect(inferExpType("Software Engineering Internship", "Acme")).toBe("internship");
+    });
+
+    it("detects intern mentioned in the company instead of the title", () => {
+      expect(inferExpType("Analyst", "Acme Internship Program")).toBe("internship");
+    });
+
+    it("is case-insensitive", () => {
+      expect(inferExpType("INTERN", "Acme")).toBe("internship");
+    });
+
+    it("does not false-positive on 'International' containing 'intern' as a substring", () => {
+      expect(inferExpType("International Business Analyst", "Acme")).toBe("full-time");
+    });
+
+    it("defaults to full-time when neither title nor company mentions intern", () => {
+      expect(inferExpType("Software Engineer", "Acme")).toBe("full-time");
+    });
+  });
+
+  describe("resumeContentToCareerProfileInput", () => {
+    it("infers internship type from an uploaded resume's parsed job title", () => {
+      const result = resumeContentToCareerProfileInput(
+        {
+          contact: { name: "Jane Doe", email: "jane@example.com" },
+          experience: [
+            { company: "K12 Techno Services", title: "Talent Acquisition Intern", start: "Apr 2022", end: "Jun 2022", bullets: [] },
+            { company: "Acme Corp", title: "Senior Engineer", start: "Jan 2022", bullets: [] },
+          ],
+          education: [],
+          skills: [],
+        } as any,
+        null
+      );
+      expect(result.experience[0].type).toBe("internship");
+      expect(result.experience[1].type).toBe("full-time");
     });
   });
 });

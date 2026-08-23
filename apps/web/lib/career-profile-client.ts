@@ -120,6 +120,15 @@ export async function setProfileMasterResume(resumeId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Infer full-time vs internship from a parsed role's title/company text —
+ * used when seeding an experience entry from an uploaded resume, which has
+ * no structured "type" field of its own to carry over. Matches "intern" or
+ * "internship" as a whole word (case-insensitive) so "International" doesn't
+ * false-positive. */
+export function inferExpType(title: string, company: string): ExpType {
+  return /\bintern(ship)?\b/i.test(`${title} ${company}`) ? "internship" : "full-time";
+}
+
 /** Convert a parsed/uploaded resume's content into a CareerProfileInput, so an
  * uploaded resume can seed the career profile (used by onboarding and the
  * profile page's "upload resume" flow). */
@@ -142,7 +151,7 @@ export function resumeContentToCareerProfileInput(
     experience: Array.isArray(c.experience)
       ? c.experience.map((e) => ({
           id: crypto.randomUUID(),
-          type: "full-time" as ExpType,
+          type: inferExpType(e.title, e.company),
           company: e.company,
           title: e.title,
           start: e.start,
