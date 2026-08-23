@@ -174,4 +174,34 @@ describe("PreviewPanel", () => {
       )
     );
   });
+
+  it("shows the matching preset label when spacing matches one, and Custom otherwise", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
+    render(<PreviewPanel />);
+    await userEvent.click(screen.getByText("Generate PDF"));
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+
+    // Default (1.25, 12) matches none of the three presets exactly.
+    expect(screen.getByLabelText("Spacing")).toHaveValue("Custom");
+
+    fireEvent.change(screen.getByLabelText("Spacing"), { target: { value: "Compact" } });
+    expect(useResumeStore.getState().lineSpacing).toBe(1.0);
+    expect(useResumeStore.getState().paragraphSpacing).toBe(8);
+    expect(screen.getByLabelText("Spacing")).toHaveValue("Compact");
+  });
+
+  it("picking a spacing preset marks the preview stale, same as a manual slider change", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
+    render(<PreviewPanel />);
+    await userEvent.click(screen.getByText("Generate PDF"));
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Spacing"), { target: { value: "Spacious" } });
+
+    expect(useResumeStore.getState().lineSpacing).toBe(1.4);
+    expect(useResumeStore.getState().paragraphSpacing).toBe(18);
+    expect(screen.getByText("Regenerate PDF")).toBeInTheDocument();
+  });
 });

@@ -9,7 +9,11 @@
   body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; margin: 0; color: #111; }
   h1 { font-size: 16pt; font-weight: 700; margin: 0 0 3px; line-height: 1.1; }
   .contact { font-size: 9.5pt; color: #333; margin-bottom: 10px; }
-  h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid #111; margin: 13px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
+  /* Top margin is section_gap (1.5x paragraph_spacing) — the gap between
+     one section's content and the next section's header. Bottom margin
+     (header-to-first-item) stays a small fixed value; that pairing is
+     meant to stay tight regardless of the paragraph_spacing setting. */
+  h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid #111; margin: {{ section_gap }}px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
      justify-content, float:right, and even a table cell with a
@@ -20,17 +24,25 @@
      dependent, not something a "safer" table structure sidesteps). Pure
      normal-flow inline text is the only combination that stayed correct
      regardless of title/company length. */
-  .job-row { margin-top: 5px; }
+  /* No top margin here — the previous entry's table.bullets already
+     supplies the gap (its bottom margin is paragraph_spacing), so adding
+     one here too would double it for every entry after the first. */
+  .job-row { margin-top: 0; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .company { font-size: 9.5pt; color: #444; }
   .dates { font-size: 9.5pt; color: #555; }
+  /* Education has no bullets table to borrow spacing from, so its row
+     needs its own top margin, unlike .job-row above. */
+  .edu-row { margin-top: {{ paragraph_spacing }}px; }
   table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; }
   /* Without this, WeasyPrint can split a <tr> across a page break — the
      bullet dot's <td> renders at the bottom of one page and its text <td>
      at the top of the next, as two orphaned fragments of the same row. */
   table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
-  .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
-  .btxt { padding: 0 0 3px 0; text-align: justify; }
+  /* Bottom padding (space before the next bullet) is bullet_gap, derived
+     from line_spacing — previously a fixed 3px regardless of the slider. */
+  .bdot { width: 11px; padding: 0 5px {{ bullet_gap }}px 0; vertical-align: top; font-weight: bold; }
+  .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: justify; }
   .kw { font-weight: 700; }
   .skills { margin: 4px 0 6px; }
   p.summary { margin: 4px 0 {{ paragraph_spacing }}px; }
@@ -76,7 +88,7 @@
   {% if education %}
   <h2>Education</h2>
   {% for edu in education %}
-  <div class="job-row"><span class="job-title">{{ edu.degree }}</span>, {{ edu.institution }} <span class="dates">&nbsp;|&nbsp; {{ edu.year }}</span></div>
+  <div class="edu-row"><span class="job-title">{{ edu.degree }}</span>, {{ edu.institution }} <span class="dates">&nbsp;|&nbsp; {{ edu.year }}</span></div>
   {% endfor %}
   {% endif %}
 {% endmacro %}

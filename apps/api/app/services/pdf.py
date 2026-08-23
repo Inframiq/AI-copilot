@@ -75,6 +75,31 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     return resume_content
 
 
+def _derived_spacing(line_spacing: float, paragraph_spacing: int) -> dict:
+    """Values the templates need beyond the two raw user-facing settings.
+
+    line_spacing/paragraph_spacing only ever mapped to `body { line-height }`
+    and the bottom margin of a bullet list — nothing tied the gap *between*
+    individual bullets, between distinct experience/education entries, or
+    above section headers to either setting, so those stayed fixed no matter
+    what the sliders were set to. Per real resume-formatting guidance
+    (Teal, WashU Career Engagement, Hireflow — see docs/ai-pipeline.md-style
+    reasoning in the commit message): bullet-to-bullet gaps belong in a
+    narrow 3-6px band scaled off line_spacing (line spacing governing "space
+    within a unit of text" naturally extends to the gap between sibling
+    bullets); section-to-section separation should run 1.5-2x a single
+    paragraph gap, scaled off paragraph_spacing.
+
+    bullet_gap: 3px at line_spacing's floor (1.0) up to 6px at its ceiling
+    (1.6) — see the line-spacing <input type=range> bounds in
+    PreviewPanel.tsx.
+    section_gap: 1.5x paragraph_spacing, rounded to a whole px.
+    """
+    bullet_gap = round(3 + (line_spacing - 1.0) * 5, 1)
+    section_gap = round(paragraph_spacing * 1.5)
+    return {"bullet_gap": bullet_gap, "section_gap": section_gap}
+
+
 def _render_html(
     resume_content: dict,
     template_id: str,
@@ -95,7 +120,12 @@ def _render_html(
         )
     resume_content = _sanitize_resume_content(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
-    return template.render(**resume_content, line_spacing=line_spacing, paragraph_spacing=paragraph_spacing)
+    return template.render(
+        **resume_content,
+        line_spacing=line_spacing,
+        paragraph_spacing=paragraph_spacing,
+        **_derived_spacing(line_spacing, paragraph_spacing),
+    )
 
 
 def generate_pdf(

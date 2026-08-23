@@ -11,8 +11,12 @@
   .photo { width: 76px; height: 76px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
   .name { font-size: 18pt; font-weight: 800; color: #1f5fbf; margin: 0 0 2px; line-height: 1.1; }
   .contact-line { font-size: 9pt; color: #333; }
+  /* Top margin is section_gap (1.5x paragraph_spacing) — the gap between
+     one section's content and the next section's header. Bottom margin
+     (header-to-first-item) stays a small fixed value; that pairing is
+     meant to stay tight regardless of the paragraph_spacing setting. */
   h2 { font-size: 11pt; font-weight: 800; color: #1f5fbf; text-transform: uppercase; letter-spacing: 0.05em;
-    border-bottom: 1.5pt solid #1f5fbf; padding-bottom: 2px; margin: 13px 0 5px; page-break-after: avoid; }
+    border-bottom: 1.5pt solid #1f5fbf; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
   p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: 9.5pt; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
@@ -24,7 +28,12 @@
      dependent, not something a "safer" table structure sidesteps). Pure
      normal-flow inline text is the only combination that stayed correct
      regardless of title/company length. */
-  .job-row, .edu-row { margin-top: 5px; }
+  /* .job-row has no top margin — the previous entry's table.bullets already
+     supplies the gap (bottom margin = paragraph_spacing), so adding one here
+     too would double it for every entry after the first. .edu-row has no
+     bullets table to borrow from, so it needs its own top margin. */
+  .job-row { margin-top: 0; }
+  .edu-row { margin-top: {{ paragraph_spacing }}px; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .job-dates { font-size: 9pt; color: #444; }
   table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: 9.5pt; }
@@ -32,8 +41,10 @@
      bullet dot's <td> renders at the bottom of one page and its text <td>
      at the top of the next, as two orphaned fragments of the same row. */
   table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
-  .bdot { width: 11px; padding: 0 5px 3px 0; vertical-align: top; font-weight: bold; }
-  .btxt { padding: 0 0 3px 0; text-align: justify; }
+  /* Bottom padding (space before the next bullet) is bullet_gap, derived
+     from line_spacing — previously a fixed 3px regardless of the slider. */
+  .bdot { width: 11px; padding: 0 5px {{ bullet_gap }}px 0; vertical-align: top; font-weight: bold; }
+  .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: justify; }
   .kw { font-weight: 700; }
   .edu-degree { font-weight: 700; font-size: 10.5pt; }
   .edu-institution { font-size: 9.5pt; color: #444; }

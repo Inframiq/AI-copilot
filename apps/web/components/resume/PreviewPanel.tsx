@@ -7,6 +7,20 @@ import { useRouter } from "next/navigation";
 import { ArrowSquareOut, ArrowsClockwise, DownloadSimple, SpinnerGap } from "@phosphor-icons/react";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
+// Real resume-formatting guidance (Teal, WashU Career Engagement, Hireflow —
+// see the commit that introduced this) converges on: 1.0-1.15 line spacing
+// within bullets/body text, 8-12pt after each section, and section-to-
+// section separation running 1.5-2x that. These three presets are single
+// values within (Compact, Standard) or just past (Spacious) that range,
+// snapped to the sliders' step sizes (0.05 / 2px) so picking one lands
+// exactly on a reachable slider position, not an in-between value the
+// slider itself could never produce.
+const SPACING_PRESETS = [
+  { label: "Compact", lineSpacing: 1.0, paragraphSpacing: 8 },
+  { label: "Standard", lineSpacing: 1.15, paragraphSpacing: 12 },
+  { label: "Spacious", lineSpacing: 1.4, paragraphSpacing: 18 },
+] as const;
+
 export function PreviewPanel() {
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
@@ -127,6 +141,31 @@ export function PreviewPanel() {
             backwards: gone exactly when they'd have something to adjust). */}
         {pdfSignedUrl && (
           <div className="flex items-center gap-md flex-wrap">
+            <div className="flex items-center gap-xs">
+              <label htmlFor="spacing-preset" className="text-label-sm text-on-surface-variant whitespace-nowrap">
+                Spacing
+              </label>
+              <select
+                id="spacing-preset"
+                value={
+                  SPACING_PRESETS.find(
+                    (p) => p.lineSpacing === lineSpacing && p.paragraphSpacing === paragraphSpacing
+                  )?.label ?? "Custom"
+                }
+                onChange={(e) => {
+                  const preset = SPACING_PRESETS.find((p) => p.label === e.target.value);
+                  if (preset) handleSpacingChange(preset.lineSpacing, preset.paragraphSpacing);
+                }}
+                className="px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer"
+              >
+                {!SPACING_PRESETS.some(
+                  (p) => p.lineSpacing === lineSpacing && p.paragraphSpacing === paragraphSpacing
+                ) && <option value="Custom">Custom</option>}
+                {SPACING_PRESETS.map((p) => (
+                  <option key={p.label} value={p.label}>{p.label}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-center gap-xs">
               <label htmlFor="line-spacing" className="text-label-sm text-on-surface-variant whitespace-nowrap">
                 Line spacing
