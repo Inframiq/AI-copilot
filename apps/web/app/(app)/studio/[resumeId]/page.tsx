@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Trash, X } from "@phosphor-icons/react";
+import { CheckCircle, ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { useResumeStore } from "@/stores/resume-store";
@@ -22,6 +22,10 @@ export default function StudioPage({
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
+  const isDirty = useResumeStore((s) => s.isDirty);
+  const isSaving = useResumeStore((s) => s.isSaving);
+  const saveError = useResumeStore((s) => s.saveError);
+  const saveNow = useResumeStore((s) => s.saveNow);
   // A tailoring session already exists once the user has come from
   // "Tailor Resume" on either JD page — nagging them to go tailor again
   // right after they just did is the bug being fixed here.
@@ -207,9 +211,27 @@ export default function StudioPage({
               <PencilSimple size={16} className="opacity-0 group-hover:opacity-60 transition-opacity" />
             </button>
           )}
-          <span className="px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
-            Draft
-          </span>
+          {saveError ? (
+            <button
+              onClick={() => saveNow()}
+              title={saveError}
+              className="flex items-center gap-1 px-2 py-1 bg-error-container/30 text-error rounded text-caption font-semibold hover:bg-error-container/50 transition-colors"
+            >
+              <WarningCircle size={14} weight="fill" /> Failed to save · Retry
+            </button>
+          ) : isSaving ? (
+            <span className="flex items-center gap-1 px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
+              <Spinner size={12} className="animate-spin" /> Saving…
+            </span>
+          ) : isDirty ? (
+            <span className="px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
+              Unsaved changes
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
+              <CheckCircle size={12} weight="fill" /> Saved
+            </span>
+          )}
           {titleError && <span className="text-caption text-error">{titleError}</span>}
         </div>
         <div className="flex items-center gap-3">

@@ -155,4 +155,76 @@ describe("useResumeStore", () => {
       "https://cdn.example.com/r.pdf"
     );
   });
+
+  it("isSaving is true while the debounced save is in flight, then false on success", async () => {
+    vi.useFakeTimers();
+    let resolveSave!: () => void;
+    vi.mocked(apiClient.updateResume).mockReturnValueOnce(
+      new Promise((resolve) => { resolveSave = () => resolve({} as any); })
+    );
+
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useResumeStore.getState().updateContent({ skills: ["Vitest"] });
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(useResumeStore.getState().isSaving).toBe(true);
+
+    resolveSave();
+    await vi.runAllTimersAsync();
+    expect(useResumeStore.getState().isSaving).toBe(false);
+    expect(useResumeStore.getState().saveError).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it("records saveError with a message when the save fails, without throwing out of the debounce", async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient.updateResume).mockRejectedValueOnce(new Error("Network error"));
+
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useResumeStore.getState().updateContent({ skills: ["Vitest"] });
+
+    // Must not reject/throw unhandled even though saveNow() itself re-throws —
+    // _triggerAutoSave's debounced call swallows it after recording state.
+    await expect(vi.runAllTimersAsync()).resolves.not.toThrow();
+
+    const state = useResumeStore.getState();
+    expect(state.isSaving).toBe(false);
+    expect(state.saveError).toBe("Network error");
+    // The edit is still unsaved — a failed save must not silently mark it clean.
+    expect(state.isDirty).toBe(true);
+
+    vi.useRealTimers();
+  });
+
+  it("a new edit clears a previous saveError optimistically", async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient.updateResume).mockRejectedValueOnce(new Error("Network error"));
+
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useResumeStore.getState().updateContent({ skills: ["Vitest"] });
+    await vi.runAllTimersAsync();
+    expect(useResumeStore.getState().saveError).toBe("Network error");
+
+    vi.mocked(apiClient.updateResume).mockResolvedValueOnce({} as any);
+    useResumeStore.getState().updateContent({ skills: ["Vitest", "Retry"] });
+    expect(useResumeStore.getState().saveError).toBeNull();
+
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+  });
+
+  it("saveNow can be called directly to retry after a failure", async () => {
+    vi.mocked(apiClient.updateResume).mockRejectedValueOnce(new Error("Network error"));
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useResumeStore.getState().updateContent({ skills: ["Vitest"] });
+
+    await expect(useResumeStore.getState().saveNow()).rejects.toThrow("Network error");
+    expect(useResumeStore.getState().saveError).toBe("Network error");
+
+    vi.mocked(apiClient.updateResume).mockResolvedValueOnce({} as any);
+    await useResumeStore.getState().saveNow();
+    expect(useResumeStore.getState().saveError).toBeNull();
+    expect(useResumeStore.getState().isDirty).toBe(false);
+  });
 });
