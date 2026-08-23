@@ -92,8 +92,14 @@ export default function StudioIndexPage() {
       } else {
         // Pre-fill from the career profile (Profile page) so a new resume
         // starts with what's already known about the user instead of a
-        // blank slate — falls back to empty only if no profile exists yet.
-        const profile = await getCareerProfile().catch(() => null);
+        // blank slate. getCareerProfile() itself already returns null (no
+        // throw) for the ordinary "no profile yet" case — anything that
+        // reaches this catch is a real failure (network/auth/DB), not a new
+        // user, so it's logged rather than silently treated the same way.
+        const profile = await getCareerProfile().catch((err) => {
+          console.error("Failed to load career profile for new-resume prefill:", err);
+          return null;
+        });
         const content = profile
           ? profileToResumeContent(profile)
           : { contact: { name: "", email: "" }, experience: [], education: [], skills: [] };

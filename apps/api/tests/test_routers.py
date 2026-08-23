@@ -422,6 +422,79 @@ async def test_delete_resume_audit_log_records_false_when_not_master_resume():
 
 
 @pytest.mark.asyncio
+async def test_delete_resume_removes_storage_files():
+    # Without this, every deleted resume's original upload and generated PDF
+    # sit in Supabase Storage forever with nothing left pointing at them.
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Old",
+        content={},
+        template_id="ats_clean",
+        pdf_url="resumes/some-uid/some-rid.pdf",
+        original_file_path="resumes/some-uid/some-rid/original.pdf",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = _make_delete_resume_mocks(existing, master_check_hit=False)
+    mock_sb = MagicMock()
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes._supabase", return_value=mock_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.delete(
+                    f"/resumes/{existing.id}",
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 204
+        mock_sb.storage.from_.assert_called_with("resumes")
+        mock_sb.storage.from_.return_value.remove.assert_called_once_with([
+            "resumes/some-uid/some-rid/original.pdf",
+            "resumes/some-uid/some-rid.pdf",
+        ])
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_resume_succeeds_even_if_storage_cleanup_fails():
+    # Storage cleanup is best-effort — the resume row is already gone
+    # regardless, so a storage hiccup must not turn into a failed delete.
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    existing = Resume(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Old",
+        content={},
+        template_id="ats_clean",
+        pdf_url="resumes/some-uid/some-rid.pdf",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    override, mock_session = _make_delete_resume_mocks(existing, master_check_hit=False)
+    mock_sb = MagicMock()
+    mock_sb.storage.from_.return_value.remove.side_effect = Exception("storage down")
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes._supabase", return_value=mock_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.delete(
+                    f"/resumes/{existing.id}",
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_list_jds_returns_200_with_valid_token():
     override, mock_session = make_mock_db()
     from app.db.models import JobDescription

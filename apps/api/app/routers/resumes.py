@@ -173,6 +173,10 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
         was_master_resume=was_master_resume,
     ))
 
+    # Captured before delete/commit — accessing ORM attributes on `resume`
+    # after that point isn't reliable.
+    storage_paths = [p for p in (resume.original_file_path, resume.pdf_url) if p]
+
     await db.delete(resume)
     # career_profiles lives outside this backend's ORM models — it's written
     # directly from the frontend via the Supabase client (lib/career-profile-
@@ -190,6 +194,18 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
         "resume_deleted resume_id=%s user_id=%s title=%r was_master_resume=%s",
         resume_id, resume.user_id, resume.title, was_master_resume,
     )
+
+    # Best-effort — the resume row is already gone regardless of whether
+    # this succeeds. Without this, every deleted resume's PDF and original
+    # upload sit in Supabase Storage forever with nothing pointing at them.
+    if storage_paths:
+        try:
+            _supabase().storage.from_("resumes").remove(storage_paths)
+        except Exception:
+            logger.warning(
+                "Failed to remove storage objects for deleted resume %s: %s",
+                resume_id, storage_paths,
+            )
 
 
 async def _persist_pdf_to_storage(pdf_bytes: bytes, user_id: str, resume_id: uuid.UUID) -> None:
