@@ -247,10 +247,33 @@ async def _write_summary(
 
 # ── Compression pass (targets only the reported violations) ─────────────────
 
+def _parse_experience_label(name: str) -> tuple[str, int | None]:
+    """'{company}' -> (company, None); '{company} #{n}' -> (company, n) —
+    the disambiguator resume_validator.py adds only when a candidate has
+    multiple roles at the same company (see its Experience-label comment).
+    """
+    m = re.match(r"^(.*) #(\d+)$", name)
+    if m:
+        return m.group(1), int(m.group(2))
+    return name, None
+
+
+def _find_experience_entry(content: dict, name: str) -> dict | None:
+    """Locate the exact role a violation label refers to — company alone
+    isn't enough once a candidate has multiple roles at the same company;
+    without the occurrence index, this would silently grab (or later,
+    delete) the wrong role's data. See _parse_experience_label."""
+    company, occurrence = _parse_experience_label(name)
+    matches = [j for j in content.get("experience", []) if j.get("company") == company]
+    if occurrence is not None:
+        return matches[occurrence - 1] if 0 < occurrence <= len(matches) else None
+    return matches[0] if matches else None
+
+
 def _find_container(content: dict, section_label: str) -> dict | None:
     if section_label.startswith("Experience ("):
         name = section_label[len("Experience ("):-1]
-        return next((j for j in content.get("experience", []) if j.get("company") == name), None)
+        return _find_experience_entry(content, name)
     if section_label.startswith("Project ("):
         name = section_label[len("Project ("):-1]
         return next((p for p in content.get("projects", []) if p.get("name") == name), None)
@@ -318,7 +341,13 @@ def _shrink_skills(content: dict, section: str) -> None:
 def _drop_empty(content: dict, section: str) -> None:
     if section.startswith("Experience ("):
         name = section[len("Experience ("):-1]
-        content["experience"] = [j for j in content.get("experience", []) if j.get("company") != name]
+        # Remove only the specific role this label identifies — matching by
+        # company name alone would delete every role at that company,
+        # including any others that still have real content, whenever a
+        # candidate holds multiple roles at the same employer.
+        entry = _find_experience_entry(content, name)
+        if entry is not None:
+            content["experience"] = [j for j in content.get("experience", []) if j is not entry]
     elif section.startswith("Project ("):
         name = section[len("Project ("):-1]
         content["projects"] = [p for p in content.get("projects", []) if p.get("name") != name]

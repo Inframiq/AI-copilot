@@ -721,4 +721,95 @@ describe("EditorPanel", () => {
     );
     expect(await screen.findByText("Summary rewritten per custom instructions.")).toBeInTheDocument();
   });
+
+  describe("Experience tab — multiple roles at the same company", () => {
+    async function openExperienceTab() {
+      await userEvent.click(screen.getByRole("tab", { name: "experience" }));
+    }
+
+    it("offers to merge two adjacent roles at the same company", async () => {
+      useResumeStore.getState().setResume("resume-1", {
+        ...SAMPLE_CONTENT,
+        experience: [
+          { company: "Acme Corp", title: "Senior Engineer", start: "2023", end: "Present", bullets: ["Led the platform team"] },
+          { company: "Acme Corp", title: "Engineer", start: "2020", end: "2022", bullets: ["Built the checkout service"] },
+        ],
+      }, "ats_clean");
+      render(<EditorPanel />);
+      await openExperienceTab();
+
+      expect(screen.getByText(/Same company as the role above/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Merge into one entry" })).toBeInTheDocument();
+    });
+
+    it("does not offer to merge roles at different companies", async () => {
+      useResumeStore.getState().setResume("resume-1", {
+        ...SAMPLE_CONTENT,
+        experience: [
+          { company: "Acme Corp", title: "Engineer", start: "2023", end: "Present", bullets: ["Led the platform team"] },
+          { company: "Beta Inc", title: "Intern", start: "2020", end: "2022", bullets: ["Built the checkout service"] },
+        ],
+      }, "ats_clean");
+      render(<EditorPanel />);
+      await openExperienceTab();
+
+      expect(screen.queryByText(/Same company as the role above/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Merge into one entry" })).not.toBeInTheDocument();
+    });
+
+    it("does not offer to merge same-named companies that are not adjacent (a boomerang return)", async () => {
+      useResumeStore.getState().setResume("resume-1", {
+        ...SAMPLE_CONTENT,
+        experience: [
+          { company: "Acme Corp", title: "Staff Engineer", start: "2023", end: "Present", bullets: ["Led the platform team"] },
+          { company: "Beta Inc", title: "Lead", start: "2021", end: "2022", bullets: ["Ran the growth team"] },
+          { company: "Acme Corp", title: "Engineer", start: "2018", end: "2020", bullets: ["Built the checkout service"] },
+        ],
+      }, "ats_clean");
+      render(<EditorPanel />);
+      await openExperienceTab();
+
+      expect(screen.queryByText(/Same company as the role above/)).not.toBeInTheDocument();
+    });
+
+    it("matches company names case/whitespace-insensitively", async () => {
+      useResumeStore.getState().setResume("resume-1", {
+        ...SAMPLE_CONTENT,
+        experience: [
+          { company: "Acme Corp", title: "Senior Engineer", start: "2023", end: "Present", bullets: ["Led the platform team"] },
+          { company: " acme corp ", title: "Engineer", start: "2020", end: "2022", bullets: ["Built the checkout service"] },
+        ],
+      }, "ats_clean");
+      render(<EditorPanel />);
+      await openExperienceTab();
+
+      expect(screen.getByRole("button", { name: "Merge into one entry" })).toBeInTheDocument();
+    });
+
+    it("merging combines the two roles into one, keeping the recent role's title/end date, the older role's start date, and both roles' bullets", async () => {
+      useResumeStore.getState().setResume("resume-1", {
+        ...SAMPLE_CONTENT,
+        experience: [
+          { company: "Acme Corp", title: "Senior Engineer", start: "2023", end: "Present", bullets: ["Led the platform team"] },
+          { company: "Acme Corp", title: "Engineer", start: "2020", end: "2022", bullets: ["Built the checkout service"] },
+          { company: "Beta Inc", title: "Intern", start: "2018", end: "2019", bullets: ["Helped out"] },
+        ],
+      }, "ats_clean");
+      render(<EditorPanel />);
+      await openExperienceTab();
+
+      await userEvent.click(screen.getByRole("button", { name: "Merge into one entry" }));
+
+      const experience = useResumeStore.getState().content!.experience;
+      expect(experience).toHaveLength(2);
+      expect(experience[0]).toEqual({
+        company: "Acme Corp",
+        title: "Senior Engineer",
+        start: "2020",
+        end: "Present",
+        bullets: ["Led the platform team", "Built the checkout service"],
+      });
+      expect(experience[1].company).toBe("Beta Inc");
+    });
+  });
 });

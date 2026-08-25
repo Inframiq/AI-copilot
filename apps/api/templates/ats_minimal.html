@@ -35,6 +35,12 @@
   .edu-row { margin-top: {{ paragraph_spacing }}px; }
   .job-title { font-weight: 700; font-size: 10.5pt; }
   .job-dates { font-size: 9pt; color: #555; }
+  /* Multiple roles at one company (promotion/internal transfer): the
+     company name renders once as a header, and each role underneath gets
+     its own title+dates line (.role-row) instead of repeating the company
+     for every role. */
+  .company-header { font-weight: 700; font-size: 10.5pt; margin-top: 0; }
+  .role-row { margin: 2px 0 0 10px; }
   table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: 9.5pt; }
   /* Without this, WeasyPrint can split a <tr> across a page break — the
      bullet dot's <td> renders at the bottom of one page and its text <td>
@@ -71,9 +77,19 @@
 {% macro render_experience() %}
   {% if experience %}
   <h2>Work Experience</h2>
-  {% for job in experience %}
-  <div class="job-row"><span class="job-title">{{ job.title }} &mdash; <b>{{ job.company }}</b></span> <span class="job-dates">| {{ job.start }} - {{ job.end or "Present" }}</span></div>
-  <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+  {% for group in experience_groups %}
+    {% if group.roles | length > 1 %}
+    {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
+    <div class="company-header">{{ group.company }}</div>
+    {% for job in group.roles %}
+    <div class="role-row"><span class="job-title">{{ job.title }}</span> <span class="job-dates">| {{ job.start }} - {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    {% endfor %}
+    {% else %}
+    {% set job = group.roles[0] %}
+    <div class="job-row"><span class="job-title">{{ job.title }} &mdash; <b>{{ job.company }}</b></span> <span class="job-dates">| {{ job.start }} - {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    {% endif %}
   {% endfor %}
   {% endif %}
 {% endmacro %}

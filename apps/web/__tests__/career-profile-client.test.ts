@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Chainable Supabase query double: .select()/.eq()/.upsert() return `this`,
 // .maybeSingle()/.single() resolve the configured result, and the object
@@ -39,6 +39,9 @@ import {
   profileToResumeContent,
   resumeContentToCareerProfileInput,
   inferExpType,
+  sameCompany,
+  formatRoleDuration,
+  formatCompanyTotalDuration,
   type CareerProfile,
 } from "../lib/career-profile-client";
 
@@ -236,6 +239,102 @@ describe("career-profile-client", () => {
       );
       expect(result.experience[0].type).toBe("internship");
       expect(result.experience[1].type).toBe("full-time");
+    });
+  });
+
+  describe("sameCompany", () => {
+    it("matches identical company names", () => {
+      expect(sameCompany("Acme Corp", "Acme Corp")).toBe(true);
+    });
+
+    it("is case and whitespace insensitive", () => {
+      expect(sameCompany("Acme Corp", " acme corp ")).toBe(true);
+    });
+
+    it("does not match different companies", () => {
+      expect(sameCompany("Acme Corp", "Beta Inc")).toBe(false);
+    });
+
+    it("blank/missing company never matches anything, even itself", () => {
+      expect(sameCompany("", "")).toBe(false);
+      expect(sameCompany(undefined, undefined)).toBe(false);
+      expect(sameCompany("Acme Corp", "")).toBe(false);
+    });
+  });
+
+  describe("formatRoleDuration", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-06-15"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("computes years and months for a Month YYYY range", () => {
+      expect(formatRoleDuration("Jan 2022", "Dec 2022", false)).toBe("1 yr");
+    });
+
+    it("computes a mixed years+months duration", () => {
+      expect(formatRoleDuration("Jan 2020", "Mar 2022", false)).toBe("2 yrs 3 mos");
+    });
+
+    it("treats current=true as running through today", () => {
+      // Jan 2026 -> Jun 2026 (system time) inclusive = 6 months
+      expect(formatRoleDuration("Jan 2026", undefined, true)).toBe("6 mos");
+    });
+
+    it("treats a literal 'Present' end string as current even without the toggle", () => {
+      expect(formatRoleDuration("Jan 2026", "Present", false)).toBe("6 mos");
+    });
+
+    it("accepts bare-year dates, treating a year-only value as January of that year", () => {
+      // "2020" -> "2022" = Jan 2020 through Jan 2022 inclusive = 25 months.
+      expect(formatRoleDuration("2020", "2022", false)).toBe("2 yrs 1 mo");
+    });
+
+    it("returns null for unparseable dates rather than guessing", () => {
+      expect(formatRoleDuration("Sometime last year", "Dec 2022", false)).toBeNull();
+      expect(formatRoleDuration("Jan 2022", "TBD", false)).toBeNull();
+    });
+
+    it("returns null for a malformed inverted range (end before start)", () => {
+      expect(formatRoleDuration("Dec 2022", "Jan 2022", false)).toBeNull();
+    });
+
+    it("returns null when start is missing", () => {
+      expect(formatRoleDuration(undefined, "Dec 2022", false)).toBeNull();
+    });
+  });
+
+  describe("formatCompanyTotalDuration", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-06-15"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("spans from the earliest role's start to the latest role's end", () => {
+      const roles = [
+        { start: "Jan 2023", end: "Present", current: true },
+        { start: "Jun 2020", end: "Dec 2022", current: false },
+      ];
+      // Jun 2020 -> Jun 2026 inclusive = 73 months = 6 yrs 1 mo
+      expect(formatCompanyTotalDuration(roles)).toBe("6 yrs 1 mo");
+    });
+
+    it("does not use a role order dependency — earliest/latest are found regardless of list order", () => {
+      const roles = [
+        { start: "Jun 2020", end: "Dec 2022" },
+        { start: "Jan 2023", end: "Dec 2023" },
+      ];
+      expect(formatCompanyTotalDuration(roles)).toBe(formatCompanyTotalDuration([...roles].reverse()));
+    });
+
+    it("returns null for an empty group", () => {
+      expect(formatCompanyTotalDuration([])).toBeNull();
+    });
+
+    it("returns null when no role's dates are parseable", () => {
+      expect(formatCompanyTotalDuration([{ start: "unknown", end: "unknown" }])).toBeNull();
     });
   });
 });

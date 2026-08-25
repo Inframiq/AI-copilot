@@ -7,6 +7,7 @@ after each edit until it's clean or gives up.
 """
 import difflib
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 
 from app.services.pdf import count_pdf_pages
@@ -148,9 +149,24 @@ def validate_resume(
     # ── Experience ────────────────────────────────────────────────────────────
     experience = resume_content.get("experience") or []
     exp_limits = HARD_LIMITS["experience_bullets_per_role"]
+    # A candidate can hold multiple roles at the same company (promotion,
+    # internal transfer) — "Experience (Acme Corp)" alone can't tell those
+    # apart, so resume_generator.py's compression pass (_find_container,
+    # _drop_empty) would either edit the wrong role's bullets or delete
+    # every role at that company when only one was meant to be touched.
+    # Disambiguate with a "#N" suffix only when a company actually repeats,
+    # so the single-role-per-company case (the overwhelming majority) keeps
+    # the exact same label as before.
+    company_counts = Counter(job.get("company", "unknown") for job in experience)
+    company_occurrence: dict[str, int] = {}
     for job in experience:
         bullets = job.get("bullets") or []
-        role_label = f"Experience ({job.get('company', 'unknown')})"
+        company = job.get("company", "unknown")
+        if company_counts[company] > 1:
+            company_occurrence[company] = company_occurrence.get(company, 0) + 1
+            role_label = f"Experience ({company} #{company_occurrence[company]})"
+        else:
+            role_label = f"Experience ({company})"
         if len(bullets) == 0:
             violations.append(Violation(role_label, "empty section — role has no bullets", None))
         elif len(bullets) > exp_limits["max"]:

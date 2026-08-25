@@ -239,3 +239,89 @@ async def test_many_projects_and_certifications_get_capped():
 
     assert len(result.resume_content["projects"]) == HARD_LIMITS["projects"]["max"]
     assert len(result.resume_content["certifications"]) == HARD_LIMITS["certifications"]["max"]
+
+
+# ── Multiple roles at the same company (promotion / internal transfer) ──────
+# Before this fix, every fixer keyed a role by company name alone —
+# "Experience (Acme Corp)" — which can't tell two roles at Acme Corp apart.
+# _find_container silently grabbed the first match (editing the wrong
+# role's bullets) and _drop_empty deleted every role at that company, even
+# ones that still had real content, whenever only one was meant to go.
+
+from app.services.resume_validator import validate_resume  # noqa: E402
+from app.services.resume_generator import (  # noqa: E402
+    _parse_experience_label,
+    _find_experience_entry,
+    _drop_empty,
+    _compress,
+)
+from app.services.resume_validator import Violation  # noqa: E402
+
+weasyprint = pytest.importorskip("weasyprint")
+
+
+def test_parse_experience_label_without_disambiguator():
+    assert _parse_experience_label("Acme Corp") == ("Acme Corp", None)
+
+
+def test_parse_experience_label_with_disambiguator():
+    assert _parse_experience_label("Acme Corp #2") == ("Acme Corp", 2)
+
+
+def test_find_experience_entry_locates_the_correct_occurrence():
+    content = {"experience": [
+        _job("Acme Corp", 2, offset=0),
+        _job("Acme Corp", 2, offset=10),
+        _job("Beta Inc", 2, offset=20),
+    ]}
+    first = _find_experience_entry(content, "Acme Corp #1")
+    second = _find_experience_entry(content, "Acme Corp #2")
+    assert first is content["experience"][0]
+    assert second is content["experience"][1]
+    assert first is not second
+
+
+def test_find_experience_entry_without_disambiguator_still_works_for_unique_company():
+    content = {"experience": [_job("Acme Corp", 2), _job("Beta Inc", 2, offset=10)]}
+    assert _find_experience_entry(content, "Beta Inc") is content["experience"][1]
+
+
+def test_validate_resume_disambiguates_labels_only_when_a_company_repeats():
+    content = {
+        "contact": {"name": "Jane Doe", "email": "jane@example.com"},
+        "experience": [
+            _job("Acme Corp", 2, offset=0),
+            _job("Acme Corp", 0, offset=10),  # empty — triggers a violation
+            _job("Beta Inc", 0, offset=20),   # empty, but company is unique
+        ],
+        "education": [],
+        "skills": ["Python"],
+    }
+    result = validate_resume(content, "experienced")
+    labels = {v.section for v in result.violations}
+    # The repeated company gets disambiguated...
+    assert "Experience (Acme Corp #2)" in labels
+    # ...but a company that appears once keeps the plain, pre-existing format.
+    assert "Experience (Beta Inc)" in labels
+    assert "Experience (Beta Inc #1)" not in labels
+
+
+def test_drop_empty_removes_only_the_targeted_role_not_every_role_at_that_company():
+    content = {"experience": [
+        _job("Acme Corp", 0, offset=0),   # the one being dropped
+        _job("Acme Corp", 2, offset=10),  # must survive — still has real bullets
+    ]}
+    _drop_empty(content, "Experience (Acme Corp #1)")
+    assert len(content["experience"]) == 1
+    assert content["experience"][0]["bullets"]  # the surviving role's content is intact
+
+
+def test_compress_empty_section_violation_preserves_the_other_role_at_same_company():
+    content = {"experience": [
+        _job("Acme Corp", 0, offset=0),
+        _job("Acme Corp", 3, offset=10),
+    ]}
+    violations = [Violation("Experience (Acme Corp #1)", "empty section — role has no bullets", None)]
+    compressed = _compress(content, violations)
+    assert len(compressed["experience"]) == 1
+    assert len(compressed["experience"][0]["bullets"]) == 3

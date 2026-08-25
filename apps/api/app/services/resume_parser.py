@@ -147,6 +147,15 @@ Rules:
 - "projects" is for personal/academic/hackathon projects listed under a
   "Projects" (or similar) heading — do NOT duplicate work performed under
   an employer, which belongs in "experience" instead.
+- MULTIPLE ROLES AT ONE COMPANY: if the resume lists more than one job
+  title under the same employer (a promotion, an internal transfer — often
+  shown as one company heading with two or more role/date sub-blocks
+  underneath it), extract EACH role as its own separate entry in
+  "experience" — same "company" value repeated, but each with its own
+  "title", "start", "end", and only that role's own bullets. Never merge
+  multiple roles into a single entry (that silently drops the earlier
+  role's title, dates, and bullets), and never let one role's bullets leak
+  into another role's entry.
 """
 
 

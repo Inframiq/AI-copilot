@@ -100,6 +100,34 @@ def _derived_spacing(line_spacing: float, paragraph_spacing: int) -> dict:
     return {"bullet_gap": bullet_gap, "section_gap": section_gap}
 
 
+def _group_experience_by_company(experience: list) -> list[dict]:
+    """Group consecutive experience entries that share a company (a
+    promotion or internal transfer produces one entry per role, same
+    company repeated) so templates can render one company header with each
+    role nested under it, instead of repeating the full company/dates line
+    for every role.
+
+    Only ADJACENT entries are grouped — matching by company name anywhere
+    in the list, regardless of position, would silently reorder a
+    candidate's actual employment history for the rare case of a boomerang
+    return to a former employer with an unrelated job in between.
+    Comparison is case-insensitive/trimmed so "Acme Corp" and "acme corp "
+    still group, but distinct employers never do.
+
+    Returns a list of {"company": str, "roles": [entry, ...]} — a group of
+    one role is the normal case and renders identically to before this
+    existed; a group of 2+ is what triggers the nested rendering.
+    """
+    groups: list[dict] = []
+    for entry in experience or []:
+        company = (entry.get("company") or "").strip()
+        if groups and company and groups[-1]["company"].strip().lower() == company.lower():
+            groups[-1]["roles"].append(entry)
+        else:
+            groups.append({"company": entry.get("company", ""), "roles": [entry]})
+    return groups
+
+
 def _render_html(
     resume_content: dict,
     template_id: str,
@@ -124,6 +152,7 @@ def _render_html(
         **resume_content,
         line_spacing=line_spacing,
         paragraph_spacing=paragraph_spacing,
+        experience_groups=_group_experience_by_company(resume_content.get("experience") or []),
         **_derived_spacing(line_spacing, paragraph_spacing),
     )
 

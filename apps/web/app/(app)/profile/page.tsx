@@ -32,6 +32,9 @@ import {
   getCareerProfile,
   upsertCareerProfile,
   inferExpType,
+  sameCompany,
+  formatRoleDuration,
+  formatCompanyTotalDuration,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -572,9 +575,36 @@ export default function ProfilePage() {
           <div className="relative pl-lg md:pl-xl flex flex-col gap-md before:content-[''] before:absolute before:left-[7px] md:before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-outline-variant/30">
             {experiences.map((exp, idx) => {
               const collapsed = collapsedExp[exp.id] ?? false;
+              const roleDuration = formatRoleDuration(exp.start, exp.current ? undefined : exp.end, exp.current);
+              // A role belongs to a "company group" when it's adjacent to
+              // another entry with the same company — same rule the Resume
+              // Builder (EditorPanel's merge offer) and the PDF templates
+              // (pdf.py's _group_experience_by_company) already use, so all
+              // three screens agree on which roles "belong together." The
+              // group total is only shown once, on the group's first (most
+              // recent) entry, not repeated on every role in it.
+              const isContinuationOfPrevious = sameCompany(exp.company, experiences[idx - 1]?.company);
+              const isStartOfMultiRoleGroup = !isContinuationOfPrevious
+                && sameCompany(exp.company, experiences[idx + 1]?.company);
+              let companyTotalDuration: string | null = null;
+              if (isStartOfMultiRoleGroup) {
+                const groupRoles = [exp];
+                for (let j = idx + 1; j < experiences.length && sameCompany(experiences[j].company, exp.company); j++) {
+                  groupRoles.push(experiences[j]);
+                }
+                companyTotalDuration = formatCompanyTotalDuration(
+                  groupRoles.map(r => ({ start: r.start, end: r.current ? undefined : r.end, current: r.current }))
+                );
+              }
               return (
                 <div key={exp.id} className="relative">
                   <div className={`absolute -left-[27px] md:-left-[31px] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`} />
+                  {isStartOfMultiRoleGroup && (
+                    <p className="text-caption text-primary/80 font-medium mb-xs flex items-center gap-xs">
+                      <Buildings size={11} />
+                      Multiple roles at {exp.company}{companyTotalDuration ? ` · ${companyTotalDuration} total` : ""}
+                    </p>
+                  )}
                   <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
                   {/* Header */}
                   <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
@@ -597,6 +627,7 @@ export default function ProfilePage() {
                           <p className="text-caption text-on-surface-variant flex items-center gap-xs mt-0.5">
                             <Buildings size={12} className="text-primary/60" />
                             {exp.company}{(exp.start || exp.end) ? ` · ${exp.start}${exp.current ? " - Present" : exp.end ? ` - ${exp.end}` : ""}` : ""}
+                            {roleDuration ? ` · ${roleDuration}` : ""}
                           </p>
                         </>
                       ) : (
