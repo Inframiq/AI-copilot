@@ -49,12 +49,19 @@ describe("CoverLettersPage", () => {
     vi.mocked(getCareerProfile).mockResolvedValue(null);
   });
 
+  it("shows only a Job Description picker — no separate Resume dropdown to mismatch", async () => {
+    renderWithQueryClient(<CoverLettersPage />);
+    await screen.findByText("Backend Engineer");
+    expect(screen.getByLabelText("Job Description")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Resume")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no saved cover letters yet", async () => {
     renderWithQueryClient(<CoverLettersPage />);
     expect(await screen.findByText(/No cover letters yet/)).toBeInTheDocument();
   });
 
-  it("auto-selects the resume already tailored for the chosen JD — no separate manual match-up required", async () => {
+  it("resolves and generates against the resume already tailored for the chosen JD", async () => {
     vi.mocked(apiClient.getJdDetails).mockResolvedValue({ ...EMPTY_JD_DETAILS, resume_id: "resume-2" });
     vi.mocked(apiClient.generateCoverLetter).mockResolvedValue({ cover_letter_id: "cl-1", status: "pending" });
 
@@ -63,8 +70,8 @@ describe("CoverLettersPage", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Job Description"), "jd-1");
 
-    await waitFor(() => expect(screen.getByLabelText("Resume")).toHaveValue("resume-2"));
-    expect(screen.getByText(/Auto-selected: the resume tailored for this job description/)).toBeInTheDocument();
+    expect(await screen.findByText("Tailored — Acme")).toBeInTheDocument();
+    expect(screen.getByText(/tailored for this job description/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("Generate Cover Letter"));
     await waitFor(() =>
@@ -82,11 +89,11 @@ describe("CoverLettersPage", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Job Description"), "jd-1");
 
-    await waitFor(() => expect(screen.getByLabelText("Resume")).toHaveValue("resume-1"));
-    expect(screen.getByText(/Auto-selected: your master resume/)).toBeInTheDocument();
+    expect(await screen.findByText("Master Resume")).toBeInTheDocument();
+    expect(screen.getByText(/your master resume/)).toBeInTheDocument();
   });
 
-  it("does not auto-fill anything when there's neither a tailored resume nor a master resume", async () => {
+  it("blocks generation and explains why when neither a tailored resume nor a master resume exists", async () => {
     vi.mocked(apiClient.getJdDetails).mockResolvedValue(EMPTY_JD_DETAILS);
     vi.mocked(getCareerProfile).mockResolvedValue(null);
 
@@ -95,40 +102,22 @@ describe("CoverLettersPage", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Job Description"), "jd-1");
 
-    await waitFor(() => expect(apiClient.getJdDetails).toHaveBeenCalledWith("jd-1"));
-    expect(screen.getByLabelText("Resume")).toHaveValue("");
+    expect(await screen.findByText(/No resume is linked to this job description/)).toBeInTheDocument();
     expect(screen.getByText("Generate Cover Letter").closest("button")).toBeDisabled();
   });
 
-  it("manually picking a different resume overrides the auto-fill and clears its hint", async () => {
-    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ ...EMPTY_JD_DETAILS, resume_id: "resume-2" });
-
-    renderWithQueryClient(<CoverLettersPage />);
-    await screen.findByText("Master Resume");
-    await screen.findByText("Backend Engineer");
-
-    await userEvent.selectOptions(screen.getByLabelText("Job Description"), "jd-1");
-    await waitFor(() => expect(screen.getByLabelText("Resume")).toHaveValue("resume-2"));
-
-    await userEvent.selectOptions(screen.getByLabelText("Resume"), "resume-1");
-
-    expect(screen.getByLabelText("Resume")).toHaveValue("resume-1");
-    expect(screen.queryByText(/Auto-selected/)).not.toBeInTheDocument();
-  });
-
-  it("still allows generating with a fully manual resume + JD pick (no auto-fill data available)", async () => {
+  it("still allows generating when the JD-details lookup itself fails, as long as a master resume exists", async () => {
     vi.mocked(apiClient.getJdDetails).mockRejectedValue(new Error("not found"));
+    vi.mocked(getCareerProfile).mockResolvedValue({ master_resume_id: "resume-1" } as any);
     vi.mocked(apiClient.generateCoverLetter).mockResolvedValue({ cover_letter_id: "cl-1", status: "pending" });
 
     renderWithQueryClient(<CoverLettersPage />);
-    await screen.findByText("Master Resume");
     await screen.findByText("Backend Engineer");
 
     await userEvent.selectOptions(screen.getByLabelText("Job Description"), "jd-1");
-    await waitFor(() => expect(apiClient.getJdDetails).toHaveBeenCalled());
-    await userEvent.selectOptions(screen.getByLabelText("Resume"), "resume-1");
-    await userEvent.click(screen.getByText("Generate Cover Letter"));
+    expect(await screen.findByText("Master Resume")).toBeInTheDocument();
 
+    await userEvent.click(screen.getByText("Generate Cover Letter"));
     await waitFor(() =>
       expect(apiClient.generateCoverLetter).toHaveBeenCalledWith("resume-1", "jd-1", 50, undefined, undefined)
     );
