@@ -499,6 +499,72 @@ async def test_get_original_file_404_when_no_original():
         app.dependency_overrides.pop(get_db, None)
 
 
+# ── GET /resumes/{id}/pdf ──────────────────────────────────────────────────
+# Lets Studio show a saved resume's last-generated PDF immediately on open
+# (e.g. via a JD's "Generated for This JD" → Open) instead of presenting
+# "No PDF generated yet" for a resume that plainly already has one. Cheap
+# signed-URL lookup — no WeasyPrint render, unlike POST to this same path.
+
+
+@pytest.mark.asyncio
+async def test_get_latest_pdf_returns_signed_url_when_one_exists():
+    override, mock_session = make_mock_db()
+    resume = make_resume(pdf_url="resumes/user/rid.pdf")
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.resumes.get_signed_url", return_value="https://signed.example/rid.pdf"
+        ) as mock_get_signed_url, patch("app.routers.resumes._supabase", return_value=MagicMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.get(f"/resumes/{resume.id}/pdf", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["signed_url"] == "https://signed.example/rid.pdf"
+        # Signs the resume's own generated PDF, not the untouched upload.
+        mock_get_signed_url.assert_called_once()
+        assert mock_get_signed_url.call_args.args[0] == "resumes/user/rid.pdf"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_pdf_404_when_never_generated():
+    # Distinguishable from a transient failure so the frontend can fall back
+    # to the ordinary "no preview yet" empty state rather than an error.
+    override, mock_session = make_mock_db()
+    resume = make_resume(pdf_url=None)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/resumes/{resume.id}/pdf", headers=make_auth_header())
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_pdf_404_for_another_users_resume():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None  # query filters by user_id, so a mismatch yields no row
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/resumes/{uuid.uuid4()}/pdf", headers=make_auth_header())
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 @pytest.mark.asyncio
 async def test_parse_upload_requires_auth():
     limiter.reset()

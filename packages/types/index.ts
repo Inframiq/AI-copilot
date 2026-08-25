@@ -60,7 +60,11 @@ export interface Resume {
   /** Space in px after each bullet list / summary / plain list (0–24). */
   paragraph_spacing: number;
   ats_score?: number;
-  pdf_path?: string;
+  // Storage path (not a signed URL) — null until this resume's PDF has been
+  // generated at least once. Presence, not the raw path, is what the
+  // frontend needs: it decides whether to fetch the last-generated preview
+  // on load via GET /resumes/{id}/pdf instead of showing an empty preview.
+  pdf_url?: string | null;
   original_file_name?: string | null;
   created_at: string;
   updated_at: string;

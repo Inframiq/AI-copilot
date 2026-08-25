@@ -79,6 +79,17 @@ export const apiClient = {
       `/resumes/${id}/original`
     ),
 
+  /** Signed URL for the most recently generated PDF, if one exists — a
+   * cheap storage lookup, not a re-render. Throws an ApiError with
+   * status 404 when this resume has never had a PDF generated. */
+  getLatestResumePdf: (
+    id: string
+  ): Promise<{ signed_url: string; file_name: string | null }> =>
+    request<{ signed_url: string; file_name: string | null }>(
+      "GET",
+      `/resumes/${id}/pdf`
+    ),
+
   createResume: (payload: {
     title: string;
     template_id?: string;

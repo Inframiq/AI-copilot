@@ -20,6 +20,7 @@ export default function StudioPage({
   const queryClient = useQueryClient();
   const setResume = useResumeStore((s) => s.setResume);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
+  const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
   const isDirty = useResumeStore((s) => s.isDirty);
@@ -64,6 +65,22 @@ export default function StudioPage({
       setResume(resume.id, resume.content, resume.template_id, resume.line_spacing, resume.paragraph_spacing);
     }
   }, [resume, storeResumeId, setResume]);
+
+  // A saved resume that's already had a PDF generated (e.g. opened via
+  // "Open" from a JD's "Generated for This JD" card) should show that PDF
+  // immediately, not present "No PDF generated yet" and make the user
+  // click Generate for content that's already sitting in storage. Cheap
+  // signed-URL lookup, not a re-render — runs once per resume load, right
+  // after setResume above resets pdfSignedUrl to null for it.
+  useEffect(() => {
+    if (!resume || resume.id !== storeResumeId || pdfSignedUrl || !resume.pdf_url) return;
+    let cancelled = false;
+    apiClient.getLatestResumePdf(resume.id)
+      .then(({ signed_url }) => { if (!cancelled) setPdfSignedUrl(signed_url); })
+      .catch(() => {}); // 404 (never generated) or a transient failure — Generate PDF still works as a fallback
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume?.id, storeResumeId]);
 
   function startEditingTitle() {
     setTitleDraft(resume?.title ?? "");

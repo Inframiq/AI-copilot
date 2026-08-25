@@ -126,6 +126,29 @@ async def get_original_resume_file(
     return OriginalFileOut(signed_url=signed_url, file_name=resume.original_file_name)
 
 
+@router.get("/{resume_id}/pdf", response_model=OriginalFileOut)
+async def get_latest_resume_pdf(
+    resume_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """Signed URL for the most recently generated PDF, if this resume has
+    one — a cheap storage lookup, not a re-render. Lets Studio show a saved
+    resume's existing preview the moment it's opened instead of presenting
+    "No PDF generated yet" for a resume that plainly already has one; the
+    user can still hit Generate/Regenerate PDF (POST to this same path) at
+    any time to render fresh content. 404 (not an empty/null body) when
+    nothing has ever been generated, so the frontend can tell "never
+    generated" apart from "the lookup itself failed" the same way it
+    already does for /original."""
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+    )
+    resume = result.scalar_one_or_none()
+    if not resume or not resume.pdf_url:
+        raise HTTPException(status_code=404, detail="No PDF generated yet for this resume")
+    signed_url = get_signed_url(resume.pdf_url, _supabase())
+    return OriginalFileOut(signed_url=signed_url, file_name=None)
+
+
 @router.patch("/{resume_id}", response_model=ResumeOut)
 async def update_resume(
     resume_id: uuid.UUID,
