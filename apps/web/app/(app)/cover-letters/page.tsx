@@ -102,7 +102,7 @@ export default function CoverLettersPage() {
 
       <Card className="flex flex-col gap-md">
         <h2 className="text-headline-md text-on-surface font-semibold">New Cover Letter</h2>
-        <div className="flex flex-col gap-xs max-w-md">
+        <div className="flex flex-col gap-xs max-w-[28rem]">
           <label htmlFor="jd-select" className="text-label-sm text-on-surface-variant font-semibold">Job Description</label>
           <select
             id="jd-select"
