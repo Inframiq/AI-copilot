@@ -10,6 +10,7 @@ import {
   Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { PrepQuestionWithJdOut, Resume, JobDescription, SkillQuestionOut } from "@career-copilot/types";
 
@@ -56,20 +57,34 @@ export default function InterviewIndexPage() {
   // from its latest completed session — so the list below can be grouped
   // and filtered by JD instead of only ever showing the single most
   // recently active session.
-  const { data: myQuestions = [], isLoading } = useQuery<PrepQuestionWithJdOut[]>({
+  const myQuestionsQuery = useQuery<PrepQuestionWithJdOut[]>({
     queryKey: ["myQuestions"],
     queryFn: () => apiClient.getMyQuestions(),
   });
+  const myQuestions = myQuestionsQuery.data ?? [];
+  const isLoading = myQuestionsQuery.isLoading;
   const hasAnyQuestions = myQuestions.length > 0;
 
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn:  () => apiClient.getResumes(),
   });
-  const { data: jds = [] } = useQuery<JobDescription[]>({
+  const resumes = resumesQuery.data ?? [];
+  const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn:  () => apiClient.getJds(),
   });
+  const jds = jdsQuery.data ?? [];
+
+  const connectionError =
+    myQuestionsQuery.isError || resumesQuery.isError || jdsQuery.isError;
+  const isRetrying =
+    myQuestionsQuery.isFetching || resumesQuery.isFetching || jdsQuery.isFetching;
+  const retryAll = () => {
+    myQuestionsQuery.refetch();
+    resumesQuery.refetch();
+    jdsQuery.refetch();
+  };
   const { data: bankQuestions = [], isLoading: bankLoading } = useQuery<SkillQuestionOut[]>({
     queryKey: ["questionBank", activeTab],
     queryFn: () => apiClient.getQuestionBank(activeTab),
@@ -166,6 +181,13 @@ export default function InterviewIndexPage() {
 
       {/* ── Left Column ───────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col gap-lg min-w-0">
+
+        <ConnectionErrorBanner
+          show={connectionError}
+          onRetry={retryAll}
+          isRetrying={isRetrying}
+          message="Can't reach the server — your generated interview questions aren't loading. Your data is safe."
+        />
 
         {/* Header */}
         <div>

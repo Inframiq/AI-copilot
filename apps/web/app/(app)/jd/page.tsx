@@ -27,6 +27,7 @@ import {
   Check,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { SaveAnalysisModal } from "@/components/jd/SaveAnalysisModal";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
@@ -147,10 +148,11 @@ export default function JDIndexPage() {
     queryFn: () => apiClient.getLearningItems(),
   });
 
-  const { data: jds = [] } = useQuery<JobDescription[]>({
+  const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn: () => apiClient.getJds(),
   });
+  const jds = jdsQuery.data ?? [];
 
   async function handleJdStatusChange(id: string, status: JDStatus) {
     const jd = jds.find((j) => j.id === id);
@@ -357,6 +359,13 @@ export default function JDIndexPage() {
 
   return (
     <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+      <ConnectionErrorBanner
+        show={jdsQuery.isError}
+        onRetry={() => jdsQuery.refetch()}
+        isRetrying={jdsQuery.isFetching}
+        message="Can't reach the server — your saved analyses aren't loading right now. Your data is safe."
+      />
+
       {/* Page Header */}
       <section className="pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
         <div>

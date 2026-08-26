@@ -6,6 +6,7 @@ import { EnvelopeSimple, FilePdf, Sparkle, WarningCircle } from "@phosphor-icons
 import { apiClient } from "@/lib/api-client";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { Card } from "@/components/ui/Card";
+import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import type { CoverLetter, Resume, JobDescription } from "@career-copilot/types";
 
 export default function CoverLettersPage() {
@@ -19,18 +20,31 @@ export default function CoverLettersPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: letters = [] } = useQuery<CoverLetter[]>({
+  const lettersQuery = useQuery<CoverLetter[]>({
     queryKey: ["coverLetters"],
     queryFn: () => apiClient.getCoverLetters(),
   });
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const letters = lettersQuery.data ?? [];
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
   });
-  const { data: jds = [] } = useQuery<JobDescription[]>({
+  const resumes = resumesQuery.data ?? [];
+  const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn: () => apiClient.getJds(),
   });
+  const jds = jdsQuery.data ?? [];
+
+  const connectionError =
+    lettersQuery.isError || resumesQuery.isError || jdsQuery.isError;
+  const isRetrying =
+    lettersQuery.isFetching || resumesQuery.isFetching || jdsQuery.isFetching;
+  const retryAll = () => {
+    lettersQuery.refetch();
+    resumesQuery.refetch();
+    jdsQuery.refetch();
+  };
   const { data: careerProfile } = useQuery({
     queryKey: ["careerProfile"],
     queryFn: getCareerProfile,
@@ -91,6 +105,8 @@ export default function CoverLettersPage() {
 
   return (
     <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+      <ConnectionErrorBanner show={connectionError} onRetry={retryAll} isRetrying={isRetrying} />
+
       <section className="pb-md">
         <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
           Cover Letters

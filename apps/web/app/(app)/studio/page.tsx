@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash } from "@phosphor-icons/react";
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
+import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 import { getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
@@ -30,11 +31,13 @@ export default function StudioIndexPage() {
   const [showPrompt, setShowPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: resumes = [], isLoading } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
     staleTime: 2 * 60 * 1000,
   });
+  const resumes = resumesQuery.data ?? [];
+  const isLoading = resumesQuery.isLoading;
 
   // Single source of truth: always re-derive from the "resumes" query data,
   // for both the initial load AND any later mutation (delete, etc.) that
@@ -128,6 +131,11 @@ export default function StudioIndexPage() {
   if (showPrompt && existingResumes.length > 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-[32rem] mx-auto w-full">
+        <ConnectionErrorBanner
+          show={resumesQuery.isError}
+          onRetry={() => resumesQuery.refetch()}
+          isRetrying={resumesQuery.isFetching}
+        />
         <div className="text-center">
           <h2 className="text-headline-md text-on-surface font-semibold mb-sm">
             You have saved resumes
@@ -204,6 +212,12 @@ export default function StudioIndexPage() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-4xl mx-auto w-full">
+      <ConnectionErrorBanner
+        show={resumesQuery.isError}
+        onRetry={() => resumesQuery.refetch()}
+        isRetrying={resumesQuery.isFetching}
+      />
+
       {/* Header */}
       <div className="text-center">
         <h2 className="text-headline-md text-on-surface font-semibold mb-sm">

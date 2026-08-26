@@ -122,4 +122,15 @@ describe("CoverLettersPage", () => {
       expect(apiClient.generateCoverLetter).toHaveBeenCalledWith("resume-1", "jd-1", 50, undefined, undefined)
     );
   });
+
+  it("shows a 'can't reach the server' banner instead of a silent empty state when the API is unreachable", async () => {
+    vi.mocked(apiClient.getCoverLetters).mockRejectedValue(new Error("Failed to fetch"));
+    vi.mocked(apiClient.getResumes).mockRejectedValue(new Error("Failed to fetch"));
+    vi.mocked(apiClient.getJds).mockRejectedValue(new Error("Failed to fetch"));
+
+    renderWithQueryClient(<CoverLettersPage />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/can't reach the server/i);
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
 });

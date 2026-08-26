@@ -14,6 +14,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { Resume, JobDescription, LearningItem, PrepQuestionOut } from "@career-copilot/types";
 
@@ -80,23 +81,38 @@ export default function DashboardPage() {
     setOnboardingDismissed(true);
   }
 
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
     staleTime: 2 * 60 * 1000,
   });
+  const resumes = resumesQuery.data ?? [];
 
-  const { data: jds = [] } = useQuery<JobDescription[]>({
+  const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn: () => apiClient.getJds(),
     staleTime: 2 * 60 * 1000,
   });
+  const jds = jdsQuery.data ?? [];
 
-  const { data: learningItems = [] } = useQuery<LearningItem[]>({
+  const learningQuery = useQuery<LearningItem[]>({
     queryKey: ["learning"],
     queryFn: () => apiClient.getLearningItems(),
     staleTime: 2 * 60 * 1000,
   });
+  const learningItems = learningQuery.data ?? [];
+
+  // Any core query failing means the dashboard's numbers below are partial —
+  // surface that instead of rendering confident zeros over a backend outage.
+  const connectionError =
+    resumesQuery.isError || jdsQuery.isError || learningQuery.isError;
+  const isRetrying =
+    resumesQuery.isFetching || jdsQuery.isFetching || learningQuery.isFetching;
+  const retryAll = () => {
+    resumesQuery.refetch();
+    jdsQuery.refetch();
+    learningQuery.refetch();
+  };
 
   const { data: questions = [] } = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
@@ -225,6 +241,12 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-[1440px] w-full mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+      <ConnectionErrorBanner
+        show={connectionError}
+        onRetry={retryAll}
+        isRetrying={isRetrying}
+      />
+
       {/* Hero Greeting */}
       <section className="pt-xl pb-md">
         <h1 className="text-headline-xl text-on-surface mb-sm font-bold" style={{ letterSpacing: "-0.02em" }}>
