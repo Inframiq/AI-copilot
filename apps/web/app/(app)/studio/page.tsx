@@ -14,6 +14,16 @@ const PICKER_TEMPLATES = RESUME_TEMPLATES.filter((t) =>
   ["ats_clean", "ats_modern", "ats_professional", "ats_minimal"].includes(t.id)
 );
 
+// A single stable reference reused as the query's "no data yet" fallback.
+// A fresh `[]` literal in the destructuring default (the previous code) is a
+// new array every render, which the effect below depends on — once the
+// query settles into an error state (data stays undefined forever, unlike
+// the loading state which the effect explicitly skips), every render feeds
+// the effect a "changed" dependency, every effect run calls setState, and
+// every setState triggers the next render: an infinite loop that pegs the
+// main thread and freezes the page on whatever was last painted.
+const EMPTY_RESUMES: Resume[] = [];
+
 type Mode = "blank" | "upload";
 
 export default function StudioIndexPage() {
@@ -36,7 +46,8 @@ export default function StudioIndexPage() {
     queryFn: () => apiClient.getResumes(),
     staleTime: 2 * 60 * 1000,
   });
-  const resumes = resumesQuery.data ?? [];
+  // EMPTY_RESUMES, not a fresh `?? []` literal — see its definition above.
+  const resumes = resumesQuery.data ?? EMPTY_RESUMES;
   const isLoading = resumesQuery.isLoading;
 
   // Single source of truth: always re-derive from the "resumes" query data,

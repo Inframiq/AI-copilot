@@ -52,6 +52,11 @@ class PrepQuestionOut(BaseModel):
     question: str
     answer_framework: str
     is_gap_based: bool
+    # "requirement" | "overlap" | "gap" — see PrepQuestion.source in models.py.
+    source: str
+    # Short grounding shown to the user (e.g. "Kubernetes (matched)") —
+    # see PrepQuestion.basis.
+    basis: str
     order_index: int
     practiced_at: datetime | None = None
     model_config = {"from_attributes": True}

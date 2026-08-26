@@ -148,6 +148,8 @@ async def _run_tailoring_background(
                     question=q.question,
                     answer_framework=q.answer_framework,
                     is_gap_based=q.is_gap_based,
+                    source=q.source,
+                    basis=q.basis,
                     order_index=q.order_index,
                 )
                 for q in result.prep_questions
@@ -435,6 +437,8 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
             question=q.question,
             answer_framework=q.answer_framework,
             is_gap_based=q.is_gap_based,
+            source=q.source,
+            basis=q.basis,
             order_index=q.order_index,
             practiced_at=q.practiced_at,
             jd_id=session_jd[q.session_id][0],

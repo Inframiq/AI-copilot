@@ -25,9 +25,19 @@ export function QuestionCard({ question }: { question: PrepQuestionOut }) {
           <p className="text-body-md text-on-surface">{question.answer_framework}</p>
         </div>
       ) : (
-        <p className="text-body-lg text-on-surface font-medium">
-          {question.question}
-        </p>
+        <div>
+          <p className="text-body-lg text-on-surface font-medium">
+            {question.question}
+          </p>
+          {question.basis && (
+            <p className="text-caption text-primary/80 mt-sm flex items-start gap-xs">
+              <span className="shrink-0 font-semibold">
+                {question.source === "overlap" ? "From your resume:" : question.source === "gap" ? "Bridging a gap:" : "From the JD:"}
+              </span>
+              <span className="text-on-surface-variant">{question.basis}</span>
+            </p>
+          )}
+        </div>
       )}
 
       <p className="text-caption text-on-surface-variant mt-md text-right">

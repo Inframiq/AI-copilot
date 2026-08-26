@@ -946,6 +946,8 @@ async def test_get_my_questions_annotates_each_question_with_its_jd():
         question="Tell me about a distributed systems project.",
         answer_framework="STAR: ...",
         is_gap_based=False,
+        source="requirement",
+        basis="",
         order_index=0,
         practiced_at=None,
     )

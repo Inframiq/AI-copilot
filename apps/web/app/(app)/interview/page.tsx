@@ -289,7 +289,15 @@ export default function InterviewIndexPage() {
                           </div>
                           <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
                           {q.answer_framework && (
-                            <p className="text-body-sm text-on-surface-variant mb-md">{q.answer_framework}</p>
+                            <p className="text-body-sm text-on-surface-variant mb-sm">{q.answer_framework}</p>
+                          )}
+                          {q.basis && (
+                            <p className="text-caption text-primary/80 mb-md flex items-start gap-xs">
+                              <span className="shrink-0 font-semibold">
+                                {q.source === "overlap" ? "From your resume:" : q.source === "gap" ? "Bridging a gap:" : "From the JD:"}
+                              </span>
+                              <span className="text-on-surface-variant">{q.basis}</span>
+                            </p>
                           )}
                           <div className="flex items-center gap-sm mb-lg">
                             <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">

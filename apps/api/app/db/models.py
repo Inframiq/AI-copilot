@@ -165,6 +165,17 @@ class PrepQuestion(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer_framework: Mapped[str] = mapped_column(Text, nullable=False)
     is_gap_based: Mapped[bool] = mapped_column(Boolean, default=True)
+    # "requirement" (seeded from a JD core_responsibilities entry) |
+    # "overlap" (seeded from a matched_skill + real resume evidence) |
+    # "gap" (seeded from a missing_skill, reframed to bridge from a related
+    # skill the candidate does have — never raw trivia on the gap itself).
+    # See tailoring.py's InterviewQuestionData / _agent4_generate_interview_questions.
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="requirement")
+    # Short, human-readable grounding — the specific responsibility/skill
+    # this question was generated from (e.g. "Owns checkout flow
+    # reliability" or "Kubernetes (matched)") — surfaced to the user so a
+    # personalized question visibly IS personalized, not just claimed to be.
+    basis: Mapped[str] = mapped_column(Text, nullable=False, default="")
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     practiced_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 

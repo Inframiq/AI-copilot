@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     extract_jd_skills, ParsedJD,
     get_or_generate_prep_questions, PrepQuestionData, SkillQuestionData, SkillQuestionsWrapper,
-    JDQuestionData, JDQuestionsWrapper,
+    InterviewQuestionData, InterviewQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
     JDAnalysis, MappingPlan, BulletMapping,
@@ -78,37 +78,19 @@ def make_mock_db_with_rows(rows):
     result.scalars.return_value.all.return_value = rows
     session.execute = AsyncMock(return_value=result)
     session.add = MagicMock()
+    session.add_all = MagicMock()
     session.commit = AsyncMock()
     return session
 
 
 @pytest.mark.asyncio
-async def test_get_or_generate_prep_questions_returns_list():
-    provider = make_mock_provider(
-        structured_return=SkillQuestionsWrapper(
-            questions=[
-                SkillQuestionData(
-                    skill="AWS", topic="Technical",
-                    question="How would you approach AWS?", answer_framework="Use STAR",
-                )
-            ]
-        )
-    )
-    db = make_mock_db_with_rows([])
-
-    result = await get_or_generate_prep_questions(["AWS"], {"experience": []}, provider, db)
-
-    assert len(result) == 1
-    assert result[0].topic == "Technical"
-
-
-@pytest.mark.asyncio
-async def test_get_or_generate_prep_questions_adds_jd_specific_questions_when_jd_analysis_given():
-    """Skill-bank questions alone don't reference this specific JD's domain/
-    seniority — when jd_analysis is passed, a few fresh, uncached questions
-    anchored to that JD's actual parsed themes should be added on top."""
+async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_analysis_given():
+    """The real, personalized flow: questions come from Agent 4, grounded in
+    this JD's parsed themes and the candidate's matched/missing skills —
+    not from the shared, cross-user skill-name bank."""
     jd_analysis = make_jd_analysis(
         domain_expertise_themes=["fintech compliance"], seniority_indicators=["Staff+"],
+        core_responsibilities=["Own the payments reconciliation pipeline"],
     )
     provider = make_provider_dispatching_by_schema({
         SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[
@@ -117,10 +99,26 @@ async def test_get_or_generate_prep_questions_adds_jd_specific_questions_when_jd
                 question="Generic AWS question", answer_framework="Use STAR",
             ),
         ]),
-        JDQuestionsWrapper: JDQuestionsWrapper(questions=[
-            JDQuestionData(
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[
+            InterviewQuestionData(
+                source="requirement",
+                basis="Own the payments reconciliation pipeline",
                 topic="Technical",
-                question="How would you handle fintech compliance at Staff+ level?",
+                question="Tell me about a time you owned a reconciliation pipeline.",
+                answer_framework="Use STAR",
+            ),
+            InterviewQuestionData(
+                source="overlap",
+                basis="AWS — built the payments ingestion service on AWS Lambda",
+                topic="Technical",
+                question="Walk me through how you built that AWS Lambda ingestion service.",
+                answer_framework="Use STAR",
+            ),
+            InterviewQuestionData(
+                source="gap",
+                basis="Kubernetes",
+                topic="Technical",
+                question="Tell me about a time your Docker experience would carry over to Kubernetes.",
                 answer_framework="Use STAR",
             ),
         ]),
@@ -128,37 +126,67 @@ async def test_get_or_generate_prep_questions_adds_jd_specific_questions_when_jd
     db = make_mock_db_with_rows([])
 
     result = await get_or_generate_prep_questions(
-        ["AWS"], {"experience": []}, provider, db,
-        jd_analysis=jd_analysis, company_name="Acme Corp",
+        ["Kubernetes"], {"experience": []}, provider, db,
+        jd_analysis=jd_analysis, company_name="Acme Corp", matched_skills=["AWS"],
     )
 
-    jd_specific = [q for q in result if not q.is_gap_based]
-    gap_based = [q for q in result if q.is_gap_based]
-    assert len(jd_specific) == 1
-    assert jd_specific[0].question == "How would you handle fintech compliance at Staff+ level?"
-    assert len(gap_based) == 1
+    assert len(result) == 3
+    sources = {q.source for q in result}
+    assert sources == {"requirement", "overlap", "gap"}
+    gap_q = next(q for q in result if q.source == "gap")
+    assert gap_q.is_gap_based is True
+    assert gap_q.basis == "Kubernetes"
+    req_q = next(q for q in result if q.source == "requirement")
+    assert req_q.is_gap_based is False
 
 
 @pytest.mark.asyncio
-async def test_get_or_generate_prep_questions_skips_jd_specific_when_no_jd_analysis():
-    """Backward-compatible default — omitting jd_analysis (as the one existing
-    caller in this file still does) must not attempt a second LLM call or
-    require a JDQuestionsWrapper response."""
-    provider = make_mock_provider(
-        structured_return=SkillQuestionsWrapper(
-            questions=[
-                SkillQuestionData(
-                    skill="AWS", topic="Technical",
-                    question="How would you approach AWS?", answer_framework="Use STAR",
-                )
-            ]
-        )
-    )
+async def test_get_or_generate_prep_questions_returns_empty_when_no_jd_analysis():
+    """There's no meaningful question to generate without a JD to ground it —
+    omitting jd_analysis must not attempt the Agent 4 call (no
+    InterviewQuestionsWrapper response is registered here, so a stray call
+    would KeyError)."""
+    provider = make_provider_dispatching_by_schema({
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[
+            SkillQuestionData(
+                skill="aws", topic="Technical",
+                question="Generic AWS question", answer_framework="Use STAR",
+            ),
+        ]),
+    })
     db = make_mock_db_with_rows([])
 
     result = await get_or_generate_prep_questions(["AWS"], {"experience": []}, provider, db)
 
-    assert all(q.is_gap_based for q in result)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_or_generate_prep_questions_survives_skill_bank_failure():
+    """The skill bank is a best-effort side feature for a separate browse UI —
+    a failure filling it must never take down the user's real questions."""
+    jd_analysis = make_jd_analysis(core_responsibilities=["Own the pipeline"])
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, **kwargs):
+        if schema is SkillQuestionsWrapper:
+            raise RuntimeError("boom")
+        return InterviewQuestionsWrapper(questions=[
+            InterviewQuestionData(
+                source="requirement", basis="Own the pipeline", topic="Technical",
+                question="Tell me about a time you owned a pipeline.", answer_framework="Use STAR",
+            ),
+        ])
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    db = make_mock_db_with_rows([])
+
+    result = await get_or_generate_prep_questions(
+        ["AWS"], {"experience": []}, provider, db, jd_analysis=jd_analysis,
+    )
+
+    assert len(result) == 1
+    assert result[0].source == "requirement"
 
 
 def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():
@@ -287,6 +315,12 @@ async def test_run_tailoring_pipeline_returns_result():
         SkillQuestionsWrapper: SkillQuestionsWrapper(
             questions=[SkillQuestionData(skill="AWS", topic="Technical", question="Q?", answer_framework="A")]
         ),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(
+            questions=[InterviewQuestionData(
+                source="requirement", basis="Python", topic="Technical",
+                question="Tell me about a time you used Python.", answer_framework="A",
+            )]
+        ),
     }
     provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
@@ -323,6 +357,7 @@ async def test_run_tailoring_pipeline_passes_seniority_indicators_to_agent3():
             updated_skills=["Python"],
         ),
         SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
 
@@ -364,11 +399,12 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
             updated_skills=["Python"],
         ),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
 
     async def fake_complete_structured(system, user, schema, **kwargs):
-        if schema is SkillQuestionsWrapper:
+        if schema is InterviewQuestionsWrapper:
             raise ValueError("Invalid JSON: EOF while parsing a string")
         return responses[schema]
 
@@ -391,6 +427,7 @@ async def test_run_tailoring_pipeline_reraises_agent3_failure():
         JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
         SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
 
@@ -419,6 +456,7 @@ async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
         WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
         SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}]}

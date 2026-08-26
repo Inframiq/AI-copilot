@@ -48,7 +48,7 @@ _MAX_TOKENS_SEMANTIC_MAP = 16384
 _MAX_TOKENS_BULLET_WRITE = 16384
 _MAX_TOKENS_COVER_LETTER = 3000
 _MAX_TOKENS_PREP_SKILL_QUESTIONS = 8000
-_MAX_TOKENS_PREP_JD_QUESTIONS = 2500
+_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 6000
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -122,6 +122,8 @@ class PrepQuestionData(BaseModel):
     question: str
     answer_framework: str
     is_gap_based: bool = True
+    source: str = "requirement"
+    basis: str = ""
     order_index: int
 
 
@@ -139,14 +141,21 @@ class SkillQuestionsWrapper(BaseModel):
     questions: list[SkillQuestionData]
 
 
-class JDQuestionData(BaseModel):
+class InterviewQuestionData(BaseModel):
+    """One question from the redesigned per-JD/per-resume prep generator —
+    see _agent4_generate_interview_questions. source distinguishes which
+    of the three required categories this question came from; basis names
+    the specific responsibility/skill/resume detail it's grounded in, so
+    the UI can show *why* this question was asked, not just that it was."""
+    source: str  # "requirement" | "overlap" | "gap"
+    basis: str
     topic: str
     question: str
     answer_framework: str
 
 
-class JDQuestionsWrapper(BaseModel):
-    questions: list[JDQuestionData]
+class InterviewQuestionsWrapper(BaseModel):
+    questions: list[InterviewQuestionData]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -756,11 +765,18 @@ async def write_cover_letter(
 
 # ── Prep questions (runs in parallel with Agent 3) ────────────────────────────
 
+_PREP_SOURCE_VALUES = {"requirement", "overlap", "gap"}
+
+
 async def _generate_questions_for_skills(
     skills: list[str], resume_content: dict, provider: AIProvider
 ) -> list[SkillQuestionData]:
     """LLM call scoped to skills with no cached bank entry yet — never called
-    for a skill get_or_generate_prep_questions already found in the cache."""
+    for a skill _fill_skill_bank already found cached. Feeds ONLY the shared,
+    cross-user SkillQuestionBank (Interview Center's pre-session browse
+    view) — a real tailoring run's own prep questions come from
+    _agent4_generate_interview_questions instead, which is grounded in this
+    specific JD and resume rather than a bare skill name."""
     system = (
         "You are an expert interview coach. For EACH of the following skills a "
         f"candidate is missing, generate exactly 2 targeted interview questions: {skills}. "
@@ -778,31 +794,158 @@ async def _generate_questions_for_skills(
     return wrapper.questions
 
 
-async def _generate_jd_specific_questions(
-    jd_analysis: "JDAnalysis", company_name: str | None, resume_content: dict, provider: AIProvider
-) -> list[JDQuestionData]:
-    """LLM call anchored to this specific JD's parsed themes/seniority/company —
-    unlike _generate_questions_for_skills, these are never cached or reused
-    across users, since they're tied to this exact role rather than a bare
-    skill name. Deliberately small (3 questions) and additive: the bulk of
-    prep questions still come from the cheap, cached skill bank."""
-    at_company = f" at {company_name.strip()}" if company_name and company_name.strip() else ""
-    system = (
-        f"You are an expert interview coach preparing a candidate for a specific role{at_company}. "
-        "Based on this job's parsed requirements — "
-        f"technical tools: {jd_analysis.exact_technical_tools}, "
-        f"methodologies/frameworks: {jd_analysis.methodologies_and_frameworks}, "
-        f"domain expertise themes: {jd_analysis.domain_expertise_themes}, "
-        f"seniority indicators: {jd_analysis.seniority_indicators} — "
-        "generate exactly 3 interview questions that probe this specific role's domain and "
-        "seniority level, not generic skill trivia any candidate for any job could be asked. "
-        "For each provide: topic (exactly one of \"Technical\", \"Behavioral\", \"HR & Culture\"), "
-        "question, answer_framework (use the STAR method — Situation, Task, Action, Result). "
-        "Return JSON with a 'questions' array only."
+async def _fill_skill_bank(
+    missing_skills: list[str], resume_content: dict, provider: AIProvider, db: AsyncSession
+) -> None:
+    """Best-effort: keeps the shared, cross-user SkillQuestionBank growing
+    for Interview Center's pre-session browse view (GET /ai/questions/browse)
+    — a separate, lower-stakes experience from a real tailoring run's own
+    prep questions, which this no longer feeds (see
+    get_or_generate_prep_questions). Callers should treat failures here as
+    non-fatal: a slow-growing browse bank is never worth risking the user's
+    real, personalized questions."""
+    safe_missing = _sanitize_skill_list(missing_skills)
+    normalized: dict[str, str] = {}
+    for s in safe_missing:
+        key = s.strip().lower()
+        if key and key not in normalized:
+            normalized[key] = s.strip()
+    if not normalized:
+        return
+
+    cached_keys = set(
+        (await db.execute(
+            select(SkillQuestionBank.skill).where(SkillQuestionBank.skill.in_(normalized.keys()))
+        )).scalars().all()
     )
+    uncovered_display = [display for key, display in normalized.items() if key not in cached_keys]
+    if not uncovered_display:
+        return
+    uncovered_keys = {d.strip().lower() for d in uncovered_display}
+
+    generated = await _generate_questions_for_skills(uncovered_display, resume_content, provider)
+    new_rows: list[SkillQuestionBank] = []
+    for q in generated:
+        key = q.skill.strip().lower()
+        if key not in uncovered_keys:
+            continue  # LLM echoed a skill we never asked about (or one already
+            # cached) — drop it, don't cache garbage or duplicate a covered skill.
+        topic = q.topic if q.topic in _TOPIC_VALUES else "Technical"
+        new_rows.append(SkillQuestionBank(
+            skill=key, topic=topic, question=q.question, answer_framework=q.answer_framework
+        ))
+    if new_rows:
+        db.add_all(new_rows)
+        await db.commit()
+
+
+def _build_interview_prep_system(seniority_indicators: list[str]) -> str:
+    seniority_block = json.dumps(seniority_indicators) if seniority_indicators else "(none extracted for this JD)"
+    return f"""\
+<system_role>
+You are an expert interview coach building a real, personalized prep set \
+for one candidate applying to one specific role. Every question must be \
+something a real interviewer would plausibly ask FOR THIS ROLE and THIS \
+CANDIDATE — never generic trivia any candidate for any job could be asked.
+</system_role>
+
+<rules>
+1. BEHAVIORAL-EVENT FRAMING — MANDATORY: every question must ask for a \
+SPECIFIC PAST EXAMPLE, never a hypothetical. Use "Tell me about a time...", \
+"Walk me through...", "Describe a situation where...". NEVER use "How would \
+you..." or "What would you do if..." — past behavior is what real \
+interviewers actually probe for; hypotheticals invite rehearsed, generic \
+answers.
+2. THREE REQUIRED CATEGORIES — generate questions across all three that \
+have real input to draw from (skip a category only if its input list below \
+is empty; do not force a question with nothing to ground it):
+   - "requirement": seeded from jd_core_responsibilities — one question per \
+responsibility (do not exceed the number of responsibilities given), \
+probing whether the candidate has real experience matching that specific \
+duty. Set basis to the exact responsibility text this question targets.
+   - "overlap": seeded from matched_skills AND the candidate's actual \
+resume_content — must reference or allude to a SPECIFIC real accomplishment \
+from resume_content (not just repeat the skill name in the abstract), \
+inviting the candidate to elaborate — e.g. "Walk me through how you [the \
+specific thing their resume shows] — what made that work for [the JD's \
+need]?". NEVER phrase this as skepticism or a demand for proof ("prove you \
+really did X") — it must read as a genuine invitation to elaborate on real \
+evidence, not an interrogation. Set basis to "<skill> — <the specific \
+resume detail referenced>".
+   - "gap": seeded from missing_skills, but NEVER a trivia/knowledge-check \
+question on the missing skill itself ("explain how X works", "what is Y" \
+are FORBIDDEN). Instead, ask the candidate to connect an ADJACENT skill \
+they DO have (drawn from matched_skills or resume_content) to the gap — \
+e.g. "You haven't listed direct Kubernetes experience, but you've run \
+production Docker deployments — tell me about a time that container \
+experience would carry over to a Kubernetes environment." Set basis to the \
+missing skill name.
+3. FACT LOCK: only reference resume content that literally appears in \
+resume_content. Never invent an accomplishment, metric, tool, or project \
+the candidate's resume doesn't actually show — an "overlap" question \
+grounded in a fabricated detail is worse than not asking it at all.
+4. SENIORITY-AWARE MIX: this JD's seniority signals are {seniority_block}. \
+As seniority increases, bias the overall mix toward behavioral/ownership- \
+framed questions over narrow technical-trivia framing — at senior levels \
+the technical bar is largely assumed, and the real signal being tested is \
+scope, ambiguity-handling, and influence over others' work. If signals are \
+sparse or absent, default to a balanced technical+behavioral mix rather \
+than guessing a level the JD doesn't clearly support.
+5. TOPIC: exactly one of "Technical", "Behavioral", "HR & Culture" per \
+question.
+6. ANSWER FRAMEWORK: STAR method (Situation, Task, Action, Result) — a \
+short structural cue for how to organize an answer, not a full model answer \
+or a restatement of the question.
+7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+</rules>
+
+<output_schema>
+{{
+  "questions": [
+    {{
+      "source": "requirement | overlap | gap",
+      "basis": "string — the specific responsibility/skill/resume detail this question is grounded in",
+      "topic": "string",
+      "question": "string",
+      "answer_framework": "string"
+    }}
+  ]
+}}
+</output_schema>"""
+
+
+async def _agent4_generate_interview_questions(
+    jd_analysis: "JDAnalysis",
+    matched_skills: list[str],
+    missing_skills: list[str],
+    resume_content: dict,
+    company_name: str | None,
+    provider: AIProvider,
+) -> list[InterviewQuestionData]:
+    """The real, personalized prep-question generator for one JD + one
+    resume — replaces the old design where most questions came from a
+    generic, cross-user skill-name cache with no JD or resume grounding.
+    See _build_interview_prep_system for the full rule set (behavioral-
+    event framing, the three required categories, FACT LOCK, seniority-
+    aware mix)."""
+    at_company = f" at {company_name.strip()}" if company_name and company_name.strip() else None
+    payload = {
+        "target_role_context": at_company,
+        "jd_core_responsibilities": jd_analysis.core_responsibilities,
+        "jd_domain_expertise_themes": jd_analysis.domain_expertise_themes,
+        "jd_exact_technical_tools": jd_analysis.exact_technical_tools,
+        "jd_methodologies_and_frameworks": jd_analysis.methodologies_and_frameworks,
+        "matched_skills": matched_skills[:15],
+        "missing_skills": missing_skills[:10],
+        "resume_content": resume_content,
+    }
     wrapper = await provider.complete_structured(
-        system, json.dumps(resume_content), JDQuestionsWrapper, model_tier="pro",
-        max_output_tokens=_MAX_TOKENS_PREP_JD_QUESTIONS, call_name="prep_questions_jd_specific",
+        _build_interview_prep_system(jd_analysis.seniority_indicators),
+        json.dumps(payload),
+        InterviewQuestionsWrapper,
+        model_tier="pro",
+        max_output_tokens=_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS,
+        call_name="prep_questions_interview",
     )
     return wrapper.questions
 
@@ -814,112 +957,48 @@ async def get_or_generate_prep_questions(
     db: AsyncSession,
     jd_analysis: "JDAnalysis | None" = None,
     company_name: str | None = None,
+    matched_skills: list[str] | None = None,
 ) -> list[PrepQuestionData]:
-    """Cache-aside prep-question lookup: reuses bank rows for skills already
-    seen (from any prior user's tailoring run), and only calls the LLM for
-    skills genuinely new to the bank — same pattern as the jd.parsed["agent1"]
-    cache in routers/ai.py, applied to prep questions instead of JD parsing.
+    """This user's real, personalized interview prep set for one JD —
+    grounded in the JD's actual responsibilities (source="requirement"),
+    the candidate's real matched-skill evidence (source="overlap"), and a
+    reframed take on their skill gaps (source="gap"), via
+    _agent4_generate_interview_questions. See that function's system prompt
+    for the full rule set. There is no meaningful question to generate
+    without a JD to ground it — jd_analysis is effectively required (the
+    real caller always supplies it); omitting it returns [].
 
-    When jd_analysis is given, also generates a few fresh, uncached questions
-    anchored to this specific JD's domain/seniority/company (see
-    _generate_jd_specific_questions) and places them first — the skill-bank
-    questions alone are deliberately generic and shared across users, so on
-    their own they don't feel tied to the JD being targeted.
+    Also best-effort keeps the separate, lower-stakes SkillQuestionBank
+    growing (see _fill_skill_bank) for Interview Center's pre-session
+    browse view — a failure there is logged and swallowed, never allowed
+    to affect the real questions returned here.
     """
-    safe_missing = _sanitize_skill_list(missing_skills)
-    normalized: list[tuple[str, str]] = []
-    seen_keys: set[str] = set()
-    for s in safe_missing:
-        key = s.strip().lower()
-        if key and key not in seen_keys:
-            seen_keys.add(key)
-            normalized.append((key, s.strip()))
-    if not normalized:
+    try:
+        await _fill_skill_bank(missing_skills, resume_content, provider, db)
+    except Exception:
+        logger.warning("Skill-bank fill failed (non-fatal — browse view only)", exc_info=True)
+
+    if jd_analysis is None:
         return []
 
-    keys = [key for key, _ in normalized]
-    cached_rows = (
-        await db.execute(
-            select(SkillQuestionBank)
-            .where(SkillQuestionBank.skill.in_(keys))
-            .order_by(SkillQuestionBank.skill, SkillQuestionBank.created_at)
-        )
-    ).scalars().all()
-    covered_keys = {row.skill for row in cached_rows}
-    uncovered_display = [display for key, display in normalized if key not in covered_keys]
-    uncovered_keys = {key for key, display in normalized if display in uncovered_display}
+    safe_matched = _sanitize_skill_list(matched_skills or [])
+    safe_missing = _sanitize_skill_list(missing_skills)
+    questions = await _agent4_generate_interview_questions(
+        jd_analysis, safe_matched, safe_missing, resume_content, company_name, provider
+    )
 
-    new_rows: list[SkillQuestionBank] = []
-    if uncovered_display:
-        generated = await _generate_questions_for_skills(uncovered_display, resume_content, provider)
-        for q in generated:
-            key = q.skill.strip().lower()
-            if key not in uncovered_keys:
-                continue  # LLM echoed a skill we never asked about (or one already
-                # cached) — drop it, don't cache garbage or duplicate a covered skill.
-            topic = q.topic if q.topic in _TOPIC_VALUES else "Technical"
-            row = SkillQuestionBank(
-                skill=key, topic=topic, question=q.question, answer_framework=q.answer_framework
-            )
-            db.add(row)
-            new_rows.append(row)
-        if new_rows:
-            await db.commit()
-
-    # Round-robin across skills (at most 2 questions per skill) so a user
-    # missing many skills gets breadth across all of them, not every question
-    # for the first few skills encountered. `all_rows`' input order is
-    # deterministic (cached_rows ordered by skill/created_at above, new_rows
-    # generated in normalized/uncovered_display order), so this selection is
-    # reproducible for identical cached input.
-    by_skill: dict[str, list[SkillQuestionBank]] = {}
-    order: list[str] = []
-    for row in list(cached_rows) + new_rows:
-        if row.skill not in by_skill:
-            by_skill[row.skill] = []
-            order.append(row.skill)
-        by_skill[row.skill].append(row)
-
-    # Capped at 7 (not 10) now that up to 3 JD-specific questions are
-    # prepended below, keeping the total around the same as before.
-    selected: list[SkillQuestionBank] = []
-    round_idx = 0
-    while len(selected) < 7 and round_idx < 2:
-        for skill in order:
-            if len(selected) >= 7:
-                break
-            bucket = by_skill[skill]
-            if round_idx < len(bucket):
-                selected.append(bucket[round_idx])
-        round_idx += 1
-
-    jd_specific: list[JDQuestionData] = []
-    if jd_analysis is not None:
-        jd_specific = await _generate_jd_specific_questions(
-            jd_analysis, company_name, resume_content, provider
-        )
-
-    result: list[PrepQuestionData] = [
-        PrepQuestionData(
+    result: list[PrepQuestionData] = []
+    for i, q in enumerate(questions):
+        source = q.source if q.source in _PREP_SOURCE_VALUES else "requirement"
+        result.append(PrepQuestionData(
             topic=q.topic if q.topic in _TOPIC_VALUES else "Technical",
             question=q.question,
             answer_framework=q.answer_framework,
-            is_gap_based=False,
+            is_gap_based=(source == "gap"),
+            source=source,
+            basis=q.basis,
             order_index=i + 1,
-        )
-        for i, q in enumerate(jd_specific)
-    ]
-    offset = len(result)
-    result += [
-        PrepQuestionData(
-            topic=row.topic,
-            question=row.question,
-            answer_framework=row.answer_framework,
-            is_gap_based=True,
-            order_index=offset + i + 1,
-        )
-        for i, row in enumerate(selected)
-    ]
+        ))
     return result
 
 
@@ -1074,6 +1153,7 @@ async def run_tailoring_pipeline(
         get_or_generate_prep_questions(
             analysis.missing_skills, resume_content, provider, db,
             jd_analysis=analysis.jd_analysis, company_name=company_name,
+            matched_skills=analysis.matched_skills,
         ),
         return_exceptions=True,
     )

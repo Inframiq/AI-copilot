@@ -156,6 +156,12 @@ export interface PrepQuestionOut {
   question: string;
   answer_framework: string;
   is_gap_based: boolean;
+  // "requirement" | "overlap" | "gap" — which of the three generation
+  // categories this question came from (see PrepQuestion.source, backend).
+  source: string;
+  // Short grounding shown to the user (e.g. "Kubernetes (matched)") — see
+  // PrepQuestion.basis, backend.
+  basis: string;
   order_index: number;
   practiced_at: string | null;
 }

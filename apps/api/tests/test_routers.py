@@ -665,6 +665,8 @@ async def test_mark_question_practiced_sets_practiced_at():
         question="How would you scale this?",
         answer_framework="Discuss horizontal scaling...",
         is_gap_based=True,
+        source="gap",
+        basis="",
         order_index=0,
         practiced_at=None,
     )
