@@ -68,6 +68,7 @@ describe("useTailoringStore", () => {
       parsed_skills: [],
       status: "applied",
       created_at: new Date().toISOString(),
+      ats_score: null,
     } satisfies JobDescription);
   });
 

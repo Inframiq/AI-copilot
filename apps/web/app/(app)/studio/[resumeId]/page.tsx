@@ -34,6 +34,7 @@ export default function StudioPage({
   const [showAIPanel, setShowAIPanel] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -156,6 +157,8 @@ export default function StudioPage({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
+      setPdfDownloaded(true);
+      setTimeout(() => setPdfDownloaded(false), 2500);
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : "PDF generation failed");
     } finally {
@@ -283,6 +286,9 @@ export default function StudioPage({
             </button>
             {pdfError && (
               <span className="text-caption text-error">{pdfError}</span>
+            )}
+            {pdfDownloaded && !pdfError && (
+              <span className="text-caption text-success-accent">Downloaded ✓</span>
             )}
           </div>
         </div>

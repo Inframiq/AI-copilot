@@ -511,9 +511,11 @@ async def test_list_jds_returns_200_with_valid_token():
     )
     mock_scalars = MagicMock()
     mock_scalars.all.return_value = [jd]
-    mock_result = MagicMock()
-    mock_result.scalars.return_value = mock_scalars
-    mock_session.execute.return_value = mock_result
+    jds_result = MagicMock()
+    jds_result.scalars.return_value = mock_scalars
+    scores_result = MagicMock()
+    scores_result.all.return_value = []
+    mock_session.execute = AsyncMock(side_effect=[jds_result, scores_result])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -524,6 +526,41 @@ async def test_list_jds_returns_200_with_valid_token():
         assert len(body) == 1
         assert body[0]["title"] == "Senior Engineer"
         assert body[0]["parsed_skills"] == ["Python", "Docker"]
+        assert body[0]["ats_score"] is None
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_list_jds_includes_latest_session_ats_score():
+    override, mock_session = make_mock_db()
+    from app.db.models import JobDescription
+    from datetime import datetime, timezone
+
+    jd_id = uuid.UUID("00000000-0000-0000-0000-000000000004")
+    jd = JobDescription(
+        id=jd_id,
+        user_id=uuid.UUID(TEST_USER_ID),
+        title="Senior Engineer",
+        raw_text="We need a senior engineer.",
+        parsed={"required": [], "nice_to_have": []},
+        status="applied",
+        created_at=datetime.now(timezone.utc),
+    )
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [jd]
+    jds_result = MagicMock()
+    jds_result.scalars.return_value = mock_scalars
+    scores_result = MagicMock()
+    scores_result.all.return_value = [(jd_id, 82)]
+    mock_session.execute = AsyncMock(side_effect=[jds_result, scores_result])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/jd", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()[0]["ats_score"] == 82
     finally:
         app.dependency_overrides.pop(get_db, None)
 

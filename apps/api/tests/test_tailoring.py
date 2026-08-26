@@ -10,6 +10,7 @@ from app.services.tailoring import (
     WriterOutput, RewrittenBullet,
     _build_agent3_system,
     _sanitize_skill_list, _looks_like_a_skill, _AGENT2_SYSTEM,
+    _cap_balanced, _MAX_PREP_QUESTIONS,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 
@@ -138,6 +139,55 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
     assert gap_q.basis == "Kubernetes"
     req_q = next(q for q in result if q.source == "requirement")
     assert req_q.is_gap_based is False
+
+
+def _make_interview_question(source: str, i: int) -> InterviewQuestionData:
+    return InterviewQuestionData(
+        source=source, basis=f"{source}-{i}", topic="Technical",
+        question=f"{source} question {i}", answer_framework="Use STAR",
+    )
+
+
+def test_cap_balanced_returns_input_unchanged_when_under_limit():
+    questions = [_make_interview_question("requirement", i) for i in range(5)]
+    assert _cap_balanced(questions, _MAX_PREP_QUESTIONS) == questions
+
+
+def test_cap_balanced_round_robins_across_categories_instead_of_dropping_one():
+    # 10 requirement + 10 overlap + 10 gap, capped to 15 — a naive
+    # front-truncation would keep only requirement questions and drop
+    # overlap/gap entirely; round-robin must keep a mix of all three.
+    questions = (
+        [_make_interview_question("requirement", i) for i in range(10)]
+        + [_make_interview_question("overlap", i) for i in range(10)]
+        + [_make_interview_question("gap", i) for i in range(10)]
+    )
+    capped = _cap_balanced(questions, 15)
+    assert len(capped) == 15
+    sources = {q.source for q in capped}
+    assert sources == {"requirement", "overlap", "gap"}
+    counts = {s: sum(1 for q in capped if q.source == s) for s in sources}
+    assert counts == {"requirement": 5, "overlap": 5, "gap": 5}
+
+
+@pytest.mark.asyncio
+async def test_get_or_generate_prep_questions_caps_at_fifteen():
+    jd_analysis = make_jd_analysis(
+        core_responsibilities=[f"Responsibility {i}" for i in range(10)],
+    )
+    provider = make_provider_dispatching_by_schema({
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(
+            questions=[_make_interview_question("requirement", i) for i in range(20)]
+        ),
+    })
+    db = make_mock_db_with_rows([])
+
+    result = await get_or_generate_prep_questions(
+        [], {"experience": []}, provider, db, jd_analysis=jd_analysis,
+    )
+
+    assert len(result) == 15
 
 
 @pytest.mark.asyncio

@@ -67,7 +67,7 @@ export default function LandingPage() {
               {
                 icon: Brain,
                 title: "Interview Prep",
-                desc: "Gap-based questions targeting your missing skills, not generic advice you've already heard.",
+                desc: "Questions grounded in the job description and your own resume — not generic advice you've already heard.",
               },
             ].map(({ icon: Icon, title, desc }) => (
               <div

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
@@ -36,6 +36,11 @@ export function PreviewPanel() {
   // Spacing sliders only mark the preview stale — regenerating on every drag
   // tick would fire a WeasyPrint render per pixel of slider movement.
   const [spacingStale, setSpacingStale] = useState(false);
+  // The iframe's own PDF viewer renders a blank/dark frame for a moment
+  // after the signed URL loads, before the PDF itself paints — without this,
+  // that gap reads as "did this break" rather than "still loading".
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  useEffect(() => setIframeLoaded(false), [pdfSignedUrl]);
 
   const { sessionId, pendingContent, generatePreview } = useTailoringStore();
   const isTailoringMode = pendingContent !== null;
@@ -272,12 +277,19 @@ export function PreviewPanel() {
       <div className="flex-1 bg-surface-container overflow-y-auto relative">
         <div className="relative z-10 flex justify-center items-start p-md min-h-full">
           {pdfSignedUrl ? (
-            <iframe
-              src={pdfSignedUrl}
-              className="w-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
-              style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}
-              title="Resume Preview"
-            />
+            <div className="relative w-full" style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}>
+              {!iframeLoaded && (
+                <div className="absolute inset-0 rounded-xl border border-outline-variant/20 bg-surface-container-lowest flex items-center justify-center">
+                  <SpinnerGap size={28} className="text-primary animate-spin" />
+                </div>
+              )}
+              <iframe
+                src={pdfSignedUrl}
+                onLoad={() => setIframeLoaded(true)}
+                className="absolute inset-0 w-full h-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
+                title="Resume Preview"
+              />
+            </div>
           ) : (
             <div className="w-full rounded-xl border-2 border-dashed border-outline-variant/50 flex items-center justify-center bg-white/70"
               style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}

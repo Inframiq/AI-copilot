@@ -80,6 +80,10 @@ export interface JobDescription {
   parsed_skills: string[];
   status: JDStatus;
   created_at: string;
+  // Latest completed tailoring session's ATS match score for this JD, or
+  // null if it's never been tailored against. See JDOut.ats_score (backend)
+  // for why this lives on the JD rather than on Resume.
+  ats_score: number | null;
 }
 
 export interface ExternalContact {

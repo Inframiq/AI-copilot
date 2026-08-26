@@ -79,12 +79,48 @@ async def create_jd(
 
 @router.get("", response_model=list[JDOut])
 async def list_jds(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    uid = uuid.UUID(user["sub"])
     result = await db.execute(
         select(JobDescription)
-        .where(JobDescription.user_id == uuid.UUID(user["sub"]))
+        .where(JobDescription.user_id == uid)
         .order_by(JobDescription.created_at.desc())
     )
-    return result.scalars().all()
+    jds = result.scalars().all()
+
+    # Latest completed session's score per JD, same "latest per group" pattern
+    # as get_jd_details below — batched here instead of one query per JD.
+    latest_scores: dict[uuid.UUID, int | None] = {}
+    if jds:
+        latest_per_jd = (
+            select(
+                TailoringSession.jd_id,
+                func.max(TailoringSession.created_at).label("latest_created_at"),
+            )
+            .where(
+                TailoringSession.user_id == uid,
+                TailoringSession.status == "completed",
+                TailoringSession.jd_id.in_([jd.id for jd in jds]),
+            )
+            .group_by(TailoringSession.jd_id)
+            .subquery()
+        )
+        score_result = await db.execute(
+            select(TailoringSession.jd_id, TailoringSession.ats_score).join(
+                latest_per_jd,
+                (TailoringSession.jd_id == latest_per_jd.c.jd_id)
+                & (TailoringSession.created_at == latest_per_jd.c.latest_created_at),
+            )
+        )
+        latest_scores = dict(score_result.all())
+
+    return [
+        JDOut(
+            id=jd.id, user_id=jd.user_id, title=jd.title, raw_text=jd.raw_text,
+            parsed=jd.parsed, status=jd.status, created_at=jd.created_at,
+            ats_score=latest_scores.get(jd.id),
+        )
+        for jd in jds
+    ]
 
 
 @router.get("/{jd_id}", response_model=JDOut)

@@ -766,6 +766,40 @@ async def write_cover_letter(
 # ── Prep questions (runs in parallel with Agent 3) ────────────────────────────
 
 _PREP_SOURCE_VALUES = {"requirement", "overlap", "gap"}
+_MAX_PREP_QUESTIONS = 15
+
+
+def _cap_balanced(questions: list["InterviewQuestionData"], limit: int) -> list["InterviewQuestionData"]:
+    """Hard cap enforced in code — the system prompt's own cap (rule 2) is a
+    cost/latency optimization, not a guarantee an LLM will actually respect.
+    Round-robins across categories (in the order they first appear) so
+    capping never just chops off whichever category the model happened to
+    write last, e.g. always dropping every "gap" question."""
+    if len(questions) <= limit:
+        return questions
+    buckets: dict[str, list["InterviewQuestionData"]] = {}
+    order: list[str] = []
+    for q in questions:
+        key = q.source if q.source in _PREP_SOURCE_VALUES else "requirement"
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(q)
+    selected: list["InterviewQuestionData"] = []
+    round_idx = 0
+    while len(selected) < limit:
+        progressed = False
+        for key in order:
+            if len(selected) >= limit:
+                break
+            bucket = buckets[key]
+            if round_idx < len(bucket):
+                selected.append(bucket[round_idx])
+                progressed = True
+        if not progressed:
+            break
+        round_idx += 1
+    return selected
 
 
 async def _generate_questions_for_skills(
@@ -856,7 +890,12 @@ SPECIFIC PAST EXAMPLE, never a hypothetical. Use "Tell me about a time...", \
 you..." or "What would you do if..." — past behavior is what real \
 interviewers actually probe for; hypotheticals invite rehearsed, generic \
 answers.
-2. THREE REQUIRED CATEGORIES — generate questions across all three that \
+2. CAP: generate AT MOST 15 questions total across all three categories \
+combined. If the input lists below could support more than that, prioritize \
+the most role-critical responsibilities/skills and the clearest resume \
+evidence — breadth of coverage matters less than every question being \
+worth asking.
+3. THREE REQUIRED CATEGORIES — generate questions across all three that \
 have real input to draw from (skip a category only if its input list below \
 is empty; do not force a question with nothing to ground it):
    - "requirement": seeded from jd_core_responsibilities — one question per \
@@ -880,23 +919,23 @@ e.g. "You haven't listed direct Kubernetes experience, but you've run \
 production Docker deployments — tell me about a time that container \
 experience would carry over to a Kubernetes environment." Set basis to the \
 missing skill name.
-3. FACT LOCK: only reference resume content that literally appears in \
+4. FACT LOCK: only reference resume content that literally appears in \
 resume_content. Never invent an accomplishment, metric, tool, or project \
 the candidate's resume doesn't actually show — an "overlap" question \
 grounded in a fabricated detail is worse than not asking it at all.
-4. SENIORITY-AWARE MIX: this JD's seniority signals are {seniority_block}. \
+5. SENIORITY-AWARE MIX: this JD's seniority signals are {seniority_block}. \
 As seniority increases, bias the overall mix toward behavioral/ownership- \
 framed questions over narrow technical-trivia framing — at senior levels \
 the technical bar is largely assumed, and the real signal being tested is \
 scope, ambiguity-handling, and influence over others' work. If signals are \
 sparse or absent, default to a balanced technical+behavioral mix rather \
 than guessing a level the JD doesn't clearly support.
-5. TOPIC: exactly one of "Technical", "Behavioral", "HR & Culture" per \
+6. TOPIC: exactly one of "Technical", "Behavioral", "HR & Culture" per \
 question.
-6. ANSWER FRAMEWORK: STAR method (Situation, Task, Action, Result) — a \
+7. ANSWER FRAMEWORK: STAR method (Situation, Task, Action, Result) — a \
 short structural cue for how to organize an answer, not a full model answer \
 or a restatement of the question.
-7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -986,6 +1025,7 @@ async def get_or_generate_prep_questions(
     questions = await _agent4_generate_interview_questions(
         jd_analysis, safe_matched, safe_missing, resume_content, company_name, provider
     )
+    questions = _cap_balanced(questions, _MAX_PREP_QUESTIONS)
 
     result: list[PrepQuestionData] = []
     for i, q in enumerate(questions):

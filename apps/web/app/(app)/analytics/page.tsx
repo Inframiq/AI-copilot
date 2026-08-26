@@ -15,16 +15,19 @@ import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { Resume, JobDescription } from "@career-copilot/types";
 
-function buildAtsTrend(resumes: Resume[]) {
-  if (resumes.length === 0) return [];
-  const scored = resumes
-    .filter((r) => r.ats_score != null)
-    .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime());
+// ATS scores live on the JD (each JD's latest completed tailoring session),
+// not on Resume — a resume has no single score, since it can be tailored
+// against many JDs with different results. See JobDescription.ats_score.
+function buildAtsTrend(jds: JobDescription[]) {
+  if (jds.length === 0) return [];
+  const scored = jds
+    .filter((jd) => jd.ats_score != null)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   if (scored.length === 0) return [];
   const byMonth: Record<string, number[]> = {};
-  scored.forEach((r) => {
-    const key = new Date(r.updated_at).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-    byMonth[key] = [...(byMonth[key] || []), r.ats_score!];
+  scored.forEach((jd) => {
+    const key = new Date(jd.created_at).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    byMonth[key] = [...(byMonth[key] || []), jd.ats_score!];
   });
   return Object.entries(byMonth)
     .slice(-6)
@@ -58,16 +61,17 @@ export default function AnalyticsPage() {
     queryFn: () => apiClient.getJds(),
   });
 
+  const scoredJds = jds.filter((jd) => jd.ats_score != null);
   const avgAts =
-    resumes.length > 0
-      ? Math.round(resumes.reduce((sum, r) => sum + (r.ats_score ?? 0), 0) / resumes.length)
+    scoredJds.length > 0
+      ? Math.round(scoredJds.reduce((sum, jd) => sum + (jd.ats_score ?? 0), 0) / scoredJds.length)
       : null;
   const topAts =
-    resumes.length > 0
-      ? Math.max(...resumes.map((r) => r.ats_score ?? 0))
+    scoredJds.length > 0
+      ? Math.max(...scoredJds.map((jd) => jd.ats_score ?? 0))
       : null;
 
-  const atsTrend = buildAtsTrend(resumes);
+  const atsTrend = buildAtsTrend(jds);
   const weeklyApps = buildWeeklyApps(jds);
   const maxApps = Math.max(...weeklyApps.map((w) => w.count), 1);
   const maxScore = 100;
@@ -80,7 +84,7 @@ export default function AnalyticsPage() {
 
   const funnel = [
     { stage: "Applied", count: jds.length, color: "bg-primary" },
-    { stage: "ATS Passed", count: resumes.filter((r) => (r.ats_score ?? 0) >= 70).length, color: "bg-primary/75" },
+    { stage: "ATS Passed", count: jds.filter((jd) => (jd.ats_score ?? 0) >= 70).length, color: "bg-primary/75" },
     { stage: "Interview", count: reachedInterview, color: "bg-primary/55" },
     { stage: "Final Round", count: reachedFinalRound, color: "bg-primary/35" },
     { stage: "Offer", count: reachedOffer, color: "bg-primary/20" },
@@ -241,30 +245,31 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Resume Performance Table */}
-      {resumes.length > 0 && (
+      {/* JD Match Scores — one row per job description, since ATS score is a
+          property of "this resume against that job", not of a resume file. */}
+      {jds.length > 0 && (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg">Resume Performance</h2>
+          <h2 className="text-headline-md text-on-surface font-semibold mb-lg">JD Match Scores</h2>
           <div className="flex flex-col gap-sm">
-            {resumes.map((r) => (
+            {jds.map((jd) => (
               <div
-                key={r.id}
-                onClick={() => router.push(`/studio/${r.id}`)}
+                key={jd.id}
+                onClick={() => router.push(`/jd/${jd.id}`)}
                 className="flex items-center gap-md p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-sm transition-all cursor-pointer"
               >
                 <div className="w-10 h-10 bg-surface-container rounded-lg flex items-center justify-center text-primary shrink-0">
                   <FileDashed size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-label-md text-on-surface truncate">{r.title}</p>
+                  <p className="text-label-md text-on-surface truncate">{jd.title}</p>
                   <p className="text-caption text-on-surface-variant">
-                    {new Date(r.updated_at).toLocaleDateString()}
+                    {new Date(jd.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="flex items-center gap-md shrink-0">
                   <div className="text-right">
                     <p className="text-label-md text-primary font-bold">
-                      {r.ats_score != null ? `${r.ats_score}%` : "—"}
+                      {jd.ats_score != null ? `${jd.ats_score}%` : "—"}
                     </p>
                     <p className="text-caption text-on-surface-variant">ATS Score</p>
                   </div>

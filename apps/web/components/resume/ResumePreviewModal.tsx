@@ -14,6 +14,10 @@ interface Props {
 export function ResumePreviewModal({ resumeId, templateId, title, onClose }: Props) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The iframe's own PDF viewer renders a blank/dark frame for a moment
+  // after pdfUrl loads, before the PDF itself paints — without this, that
+  // gap reads as "did this break" rather than "still loading".
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -68,12 +72,19 @@ export function ResumePreviewModal({ resumeId, templateId, title, onClose }: Pro
                 <p className="text-body-sm text-error">{error}</p>
               </div>
             ) : pdfUrl ? (
-              <iframe
-                src={pdfUrl}
-                className="w-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
-                style={{ aspectRatio: "1 / 1.414" }}
-                title="Resume Preview"
-              />
+              <div className="relative w-full" style={{ aspectRatio: "1 / 1.414" }}>
+                {!iframeLoaded && (
+                  <div className="absolute inset-0 rounded-xl border border-outline-variant/20 bg-surface-container-lowest flex items-center justify-center">
+                    <SpinnerGap size={28} className="text-primary animate-spin" />
+                  </div>
+                )}
+                <iframe
+                  src={pdfUrl}
+                  onLoad={() => setIframeLoaded(true)}
+                  className="absolute inset-0 w-full h-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
+                  title="Resume Preview"
+                />
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-sm py-xxl">
                 <SpinnerGap size={28} className="text-primary animate-spin" />

@@ -298,6 +298,12 @@ async def test_parse_upload_creates_resume():
 
     mock_session.refresh = fake_refresh
 
+    # _dedupe_title's title-collision check — no resume_id in this request,
+    # so this is the only db.execute call before the row is created.
+    no_titles_result = MagicMock()
+    no_titles_result.scalars.return_value.all.return_value = []
+    mock_session.execute = AsyncMock(return_value=no_titles_result)
+
     app.dependency_overrides[get_db] = override
     try:
         mock_sb = MagicMock()
@@ -330,6 +336,54 @@ async def test_parse_upload_creates_resume():
         mock_sb.storage.from_.assert_called_with("resumes")
         upload_call = mock_sb.storage.from_.return_value.upload.call_args
         assert upload_call.args[1] == _FAKE_PDF_BYTES
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_parse_upload_dedupes_title_on_collision():
+    """Re-uploading the same resume (or any upload that happens to parse to
+    the same candidate name) must not silently produce a second row
+    indistinguishable from the first in a list."""
+    limiter.reset()
+    override, mock_session = make_mock_db()
+
+    created = make_resume(title="Test Candidate's Resume (2)", content={"contact": {"name": "Test Candidate"}})
+
+    async def fake_refresh(obj):
+        obj.id = created.id
+        obj.created_at = created.created_at
+        obj.updated_at = created.updated_at
+        obj.line_spacing = created.line_spacing
+        obj.paragraph_spacing = created.paragraph_spacing
+
+    mock_session.refresh = fake_refresh
+
+    collision_result = MagicMock()
+    collision_result.scalars.return_value.all.return_value = ["Test Candidate's Resume"]
+    mock_session.execute = AsyncMock(return_value=collision_result)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        mock_sb = MagicMock()
+        with patch(
+            "app.routers.resumes.extract_text", return_value="Test Candidate\n..."
+        ), patch(
+            "app.routers.resumes.parse_resume_text",
+            new=AsyncMock(return_value={
+                "contact": {"name": "Test Candidate", "email": "t@t.com"},
+                "experience": [], "education": [], "skills": [],
+            }),
+        ), patch("app.routers.resumes._supabase", return_value=mock_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 201
+        assert r.json()["title"] == "Test Candidate's Resume (2)"
     finally:
         app.dependency_overrides.pop(get_db, None)
 

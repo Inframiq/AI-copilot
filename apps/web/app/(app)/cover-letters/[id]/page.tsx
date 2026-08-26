@@ -24,12 +24,30 @@ export default function CoverLetterEditorPage({
   const [error, setError] = useState<string | null>(null);
   const [sliderValue, setSliderValue] = useState<number | null>(null);
 
-  const { data: letter, isError } = useQuery<CoverLetter>({
+  const { data: letter, isError, refetch } = useQuery<CoverLetter>({
     queryKey: ["coverLetter", id],
     queryFn: () => apiClient.getCoverLetter(id),
     // Poll while generation is in flight; stop once it lands on a terminal status.
     refetchInterval: (query) => (query.state.data?.status === "pending" ? 3000 : false),
+    // Without this, TanStack Query pauses the interval whenever the tab
+    // isn't focused/visible — generation can finish server-side while the
+    // user's tabbed away, and the UI never picks it up until something else
+    // (a manual reload) triggers a fresh fetch. Confirmed live: a letter sat
+    // on "Generating…" for 90+ seconds while the DB already had it at
+    // status=completed; a reload showed it instantly.
+    refetchIntervalInBackground: true,
   });
+
+  // Defense in depth on top of refetchIntervalInBackground above — if
+  // polling ever stalls for any other reason, don't leave the user staring
+  // at a spinner with no way out.
+  const [pollingStalled, setPollingStalled] = useState(false);
+  useEffect(() => {
+    setPollingStalled(false);
+    if (letter?.status !== "pending") return;
+    const timer = setTimeout(() => setPollingStalled(true), 20_000);
+    return () => clearTimeout(timer);
+  }, [letter?.status, id]);
 
   // Seed the draft from the fetched content exactly once it arrives — never
   // re-seed on a later refetch (that would blow away unsaved edits). Tracks
@@ -129,6 +147,19 @@ export default function CoverLetterEditorPage({
       <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
         <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         <p className="text-body-md text-on-surface-variant">Generating your cover letter…</p>
+        {pollingStalled && (
+          <>
+            <p className="text-body-sm text-on-surface-variant max-w-[24rem]">
+              This is taking longer than expected — it may already be done.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="text-label-md text-primary hover:underline"
+            >
+              Check again
+            </button>
+          </>
+        )}
       </div>
     );
   }

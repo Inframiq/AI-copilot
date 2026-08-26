@@ -34,6 +34,24 @@ def _supabase():
     return _sb_client
 
 
+async def _dedupe_title(db: AsyncSession, user_id: uuid.UUID, base_title: str) -> str:
+    """Appends "(2)", "(3)", ... when base_title collides with one of this
+    user's existing resume titles — otherwise every upload/generate of the
+    same underlying resume (re-uploading the same PDF, regenerating from the
+    same profile) produces an identically-titled row with no way to tell
+    them apart in a list."""
+    existing = (
+        await db.execute(select(Resume.title).where(Resume.user_id == user_id))
+    ).scalars().all()
+    if base_title not in existing:
+        return base_title
+    existing_set = set(existing)
+    n = 2
+    while f"{base_title} ({n})" in existing_set:
+        n += 1
+    return f"{base_title} ({n})"
+
+
 # Upload only accepts PDF — the uploaded file is stored untouched as the
 # user's master copy and shown verbatim in Preview, so there's no DOCX/DOC
 # conversion path (and no need for a LibreOffice dependency). Users with a
@@ -351,9 +369,13 @@ async def generate_resume_endpoint(
         resume = existing
         response.status_code = status.HTTP_200_OK
     else:
+        # Only dedupe the auto-generated fallback title — an explicit
+        # body.title is the caller's deliberate choice (e.g. "Save As"),
+        # same as create_jd honoring an explicit title on a content match.
+        final_title = title if body.title else await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
         resume = Resume(
             user_id=uuid.UUID(user["sub"]),
-            title=title[:255],
+            title=final_title[:255],
             template_id=body.template_id,
             content=generated.resume_content,
         )
@@ -467,6 +489,7 @@ async def parse_and_create_resume(
         response.status_code = status.HTTP_200_OK
         return existing_resume
 
+    title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
     resume = Resume(
         id=resume_id,
         user_id=uuid.UUID(user["sub"]),

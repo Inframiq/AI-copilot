@@ -27,6 +27,12 @@ class JDOut(BaseModel):
     parsed: dict | None
     status: str
     created_at: datetime
+    # Latest completed tailoring session's score for this JD — not a column
+    # on JobDescription itself, populated separately in list_jds/get_jd.
+    # Lives on the JD (not Resume, which has no ats_score column at all)
+    # because match quality is a property of "this resume against this job",
+    # and one resume can be tailored against many JDs with different scores.
+    ats_score: int | None = None
     model_config = {"from_attributes": True}
 
     @computed_field
