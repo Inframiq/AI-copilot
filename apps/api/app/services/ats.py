@@ -106,6 +106,144 @@ def _skill_matches(skill: str, full_text: str, skills_text: str) -> bool:
     return False
 
 
+_VERDICT_VALUE = {"matched": 1.0, "partial": 0.5, "missing": 0.0}
+_RESPONSIBILITY_WEIGHT = 0.5
+_NICE_TO_HAVE_WEIGHT = 0.5
+# Title alignment is, per every ATS-scoring writeup, the single highest-weight
+# individual signal — a current/recent title matching the posting's title is
+# the biggest driver of getting surfaced.  Weighted well above one skill
+# phrase but not so high it dominates a 10-20 phrase JD.
+_TITLE_WEIGHT = 2.0
+
+# Words that denote seniority level rather than the role itself.  Stripped out
+# to compare the *role*; the level is compared separately.
+_SENIORITY_WORDS = {
+    "intern", "trainee", "junior", "jr", "entry", "entrylevel", "grad",
+    "associate", "mid", "midlevel", "midsenior", "senior", "snr", "sr",
+    "staff", "principal", "distinguished", "fellow", "lead",
+}
+# Level ordinals we drop from the role comparison but don't map to a level word.
+_LEVEL_ORDINALS = {"ii", "iii", "iv", "2", "3", "4"}
+_SENIORITY_ALIASES = {"jr": "junior", "sr": "senior", "snr": "senior"}
+
+
+def blend_scores(
+    skill_verdicts: dict[str, str],
+    responsibility_verdicts: dict[str, str] | None = None,
+    nice_to_have_verdicts: dict[str, str] | None = None,
+    title_verdict: str | None = None,
+) -> DeltaResult:
+    """Turn per-phrase verdicts into a blended ATS score.
+
+    This is the hybrid scorer that runs *after* the lexical pre-filter
+    (``compute_delta``) and an optional LLM semantic-verification pass:
+
+        skill_verdicts          — every JD skill/keyword phrase mapped to
+                                  "matched" | "partial" | "missing".  Phrases
+                                  the lexical pass already matched exactly are
+                                  passed in pre-marked "matched"; the rest carry
+                                  whatever the semantic verifier decided.
+        responsibility_verdicts — the JD's core_responsibilities, same verdict
+                                  vocabulary.  Weighted at half a skill phrase
+                                  and never surfaced as skill chips.
+        nice_to_have_verdicts   — skills the JD frames as preferred / "a plus"
+                                  rather than required.  Half weight; still
+                                  surfaced in the matched / missing chips.
+        title_verdict           — one verdict for whether the candidate's
+                                  recent title(s) align with the role the JD is
+                                  hiring for.  Weighted at ``_TITLE_WEIGHT``.
+                                  ``None`` → the JD had no extractable title, so
+                                  the signal is left out of the score entirely.
+
+    Score = round(100 × Σ(weightᵢ · valueᵢ) / Σ(weightᵢ)), where value is
+    1.0 / 0.5 / 0.0 for matched / partial / missing and weight is 1.0 for a
+    required skill, 0.5 for a responsibility or nice-to-have, and
+    ``_TITLE_WEIGHT`` for the title.  An unknown verdict counts as "missing".
+
+    matched — required + nice-to-have phrases with verdict "matched".
+    missing — required + nice-to-have phrases with verdict "partial" or
+              "missing" (a partial match is still a gap worth strengthening).
+    """
+    matched: list[str] = []
+    missing: list[str] = []
+    weighted_hit = 0.0
+    weighted_total = 0.0
+
+    def _add_chip_group(verdicts: dict[str, str], weight: float) -> None:
+        nonlocal weighted_hit, weighted_total
+        for phrase, verdict in verdicts.items():
+            weighted_hit += weight * _VERDICT_VALUE.get(verdict, 0.0)
+            weighted_total += weight
+            (matched if verdict == "matched" else missing).append(phrase)
+
+    _add_chip_group(skill_verdicts, 1.0)
+    _add_chip_group(nice_to_have_verdicts or {}, _NICE_TO_HAVE_WEIGHT)
+
+    for verdict in (responsibility_verdicts or {}).values():
+        weighted_hit += _RESPONSIBILITY_WEIGHT * _VERDICT_VALUE.get(verdict, 0.0)
+        weighted_total += _RESPONSIBILITY_WEIGHT
+
+    if title_verdict is not None:
+        weighted_hit += _TITLE_WEIGHT * _VERDICT_VALUE.get(title_verdict, 0.0)
+        weighted_total += _TITLE_WEIGHT
+
+    score = round((weighted_hit / weighted_total) * 100) if weighted_total > 0 else 0
+    return DeltaResult(matched=matched, missing=missing, ats_score=score)
+
+
+def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":
+    """Split a job title into (seniority_level, role_token_set).
+
+    "Sr. Data Analyst II" → ("senior", {"data", "analyst"})
+    "Product Manager"     → (None, {"product", "manager"})
+    """
+    tokens = [t for t in re.split(r"[^a-z0-9]+", title.lower()) if t]
+    level: str | None = None
+    role: list[str] = []
+    for tok in tokens:
+        if tok in _SENIORITY_WORDS:
+            if level is None:
+                level = _SENIORITY_ALIASES.get(tok, tok)
+        elif tok not in _LEVEL_ORDINALS:
+            role.append(tok)
+    return level, frozenset(role)
+
+
+def title_match_verdict(jd_titles: list[str], resume_titles: list[str]) -> str:
+    """Best alignment between the role a JD is hiring for and the candidate's
+    recent title(s): "matched" | "partial" | "missing".
+
+    - "matched": every role word of a JD title appears in a resume title AND
+      the seniority level agrees (or the JD states no level).
+    - "partial": same role but a different seniority level, or ≥ ⌈2/3⌉ of the
+      JD title's role words overlap.
+    - "missing": neither, or an input is empty.
+    """
+    best = 0
+    rank = {"missing": 0, "partial": 1, "matched": 2}
+
+    parsed_resume = [_title_parts(t) for t in resume_titles if t and t.strip()]
+    for jd_title in jd_titles:
+        if not jd_title or not jd_title.strip():
+            continue
+        jd_level, jd_role = _title_parts(jd_title)
+        if not jd_role:
+            continue
+        for rt_level, rt_role in parsed_resume:
+            if not rt_role:
+                continue
+            level_ok = jd_level is None or jd_level == rt_level
+            if jd_role <= rt_role:
+                verdict = "matched" if level_ok else "partial"
+            elif len(jd_role & rt_role) / len(jd_role) >= 2 / 3:
+                verdict = "partial"
+            else:
+                verdict = "missing"
+            best = max(best, rank[verdict])
+
+    return {0: "missing", 1: "partial", 2: "matched"}[best]
+
+
 def compute_delta(jd_skills: list[str], resume: "str | dict") -> DeltaResult:
     """Compute which JD skills are present or missing in the resume.
 

@@ -567,6 +567,56 @@ async def test_analyze_uses_content_override_when_provided():
         app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.mark.asyncio
+async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
+    """Second analyze of the same resume+JD must not re-run the semantic
+    model — the stored verdicts are passed straight back in."""
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+    jd.parsed = {}
+
+    def _rows():
+        rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+        jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+        return [rr, jr]
+
+    mock_session.execute = AsyncMock(side_effect=_rows() + _rows())
+
+    fake_analysis = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python", "AWS"],
+            methodologies_and_frameworks=[],
+            domain_expertise_themes=[],
+            seniority_indicators=[],
+            ats_filter_phrases=[],
+        ),
+        matched_skills=["Python", "AWS"],
+        missing_skills=[],
+        ats_score=100,
+        company_keywords=[],
+        semantic_verdicts={"aws": "matched"},
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake_analysis)
+        ) as mock_analyze:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                body = {"resume_id": str(resume.id), "jd_id": str(jd.id)}
+                r1 = await client.post("/ai/analyze", json=body, headers=make_auth_header())
+                r2 = await client.post("/ai/analyze", json=body, headers=make_auth_header())
+
+        assert r1.status_code == r2.status_code == 200
+        assert mock_analyze.call_args_list[0].kwargs["cached_semantic_verdicts"] is None
+        assert mock_analyze.call_args_list[1].kwargs["cached_semantic_verdicts"] == {"aws": "matched"}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── POST /ai/tailor ───────────────────────────────────────────────────────────
 
 

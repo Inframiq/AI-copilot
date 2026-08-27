@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from app.schemas.ai import (
 )
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
+from app.services.ats import build_resume_text
 from app.services.resume_spec import HARD_LIMITS
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -44,41 +46,71 @@ async def analyze_jd(
 
     provider = get_ai_provider()
 
+    content_for_analysis = body.content if body.content is not None else resume_row.content
+    resume_fp = (
+        hashlib.sha1(build_resume_text(content_for_analysis)[0].encode("utf-8")).hexdigest()
+        if isinstance(content_for_analysis, dict)
+        else None
+    )
+
     # Reuse a previously cached Agent 1 parse when no company name is given —
     # the JD text hasn't changed, so re-parsing it produces the same logical
     # output but with random LLM variation.  Company-name analyses are always
     # re-run because company intel can be time-sensitive.
+    #
+    # The semantic-verdict cache is keyed by a fingerprint of the resume text
+    # (it depends on both resume and JD): a repeat analyze of an unchanged
+    # resume reuses the stored verdicts instead of re-hitting the model, so the
+    # score doesn't jitter between clicks.
     cached_jd_analysis: JDAnalysis | None = None
+    cached_semantic_verdicts: dict[str, str] | None = None
+    raw_cached = None
     if not body.company_name:
-        raw_cached = (jd_row.parsed or {}).get("agent1")
+        parsed_cache = jd_row.parsed or {}
+        raw_cached = parsed_cache.get("agent1")
         if raw_cached:
             try:
                 cached_jd_analysis = JDAnalysis(**raw_cached)
             except Exception:
                 cached_jd_analysis = None  # corrupt cache — fall back to re-parsing
+        sem_cache = parsed_cache.get("semantic")
+        if sem_cache and resume_fp and sem_cache.get("fingerprint") == resume_fp:
+            cached_semantic_verdicts = sem_cache.get("verdicts") or {}
 
     analysis = await analyze_jd_match(
-        body.content if body.content is not None else resume_row.content,
+        content_for_analysis,
         jd_row.raw_text,
         provider,
         company_name=body.company_name,
         cached_jd_analysis=cached_jd_analysis,
+        cached_semantic_verdicts=cached_semantic_verdicts,
     )
 
-    # Persist the Agent 1 result on the first call so all future no-company
-    # analyses are deterministic (same JD text → same skill list → same score).
-    if not body.company_name and not cached_jd_analysis:
+    # Persist Agent 1 + semantic verdicts so future no-company analyses are
+    # deterministic (same JD text → same skill list, same resume → same score).
+    if not body.company_name:
         existing = dict(jd_row.parsed) if jd_row.parsed else {}
-        existing["agent1"] = analysis.jd_analysis.model_dump()
-        jd_row.parsed = existing
-        attributes.flag_modified(jd_row, "parsed")
-        await db.commit()
+        changed = False
+        if not raw_cached:
+            existing["agent1"] = analysis.jd_analysis.model_dump()
+            changed = True
+        if resume_fp and cached_semantic_verdicts is None:
+            existing["semantic"] = {
+                "fingerprint": resume_fp,
+                "verdicts": analysis.semantic_verdicts,
+            }
+            changed = True
+        if changed:
+            jd_row.parsed = existing
+            attributes.flag_modified(jd_row, "parsed")
+            await db.commit()
 
     return AnalyzeOut(
         ats_score=analysis.ats_score,
         matched_skills=analysis.matched_skills,
         missing_skills=analysis.missing_skills,
         company_keywords=analysis.company_keywords,
+        title_match=analysis.title_match,
     )
 
 

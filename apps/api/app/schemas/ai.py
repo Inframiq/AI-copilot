@@ -43,6 +43,9 @@ class AnalyzeOut(BaseModel):
     matched_skills: list[str]
     missing_skills: list[str]
     company_keywords: list[str] = []
+    # "" when the JD had no extractable title, else matched|partial|missing —
+    # lets the UI explain a score driven down by title mismatch.
+    title_match: str = ""
 
 
 class PrepQuestionOut(BaseModel):

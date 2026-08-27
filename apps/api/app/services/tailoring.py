@@ -17,12 +17,14 @@ import json
 import asyncio
 import logging
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
-from app.services.ats import compute_delta
+from app.services.ats import (
+    compute_delta, blend_scores, build_resume_text, title_match_verdict,
+)
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
 
@@ -47,6 +49,7 @@ _MAX_TOKENS_JD_PARSE = 3000
 _MAX_TOKENS_SEMANTIC_MAP = 16384
 _MAX_TOKENS_BULLET_WRITE = 16384
 _MAX_TOKENS_COVER_LETTER = 3000
+_MAX_TOKENS_SEMANTIC_VERIFY = 4000
 _MAX_TOKENS_PREP_SKILL_QUESTIONS = 8000
 _MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 6000
 
@@ -71,6 +74,8 @@ class JDAnalysis(BaseModel):
     seniority_indicators: list[str]
     ats_filter_phrases: list[str]  # verbatim phrases ATS scanners grep for
     core_responsibilities: list[str] = []  # the JD's actual duty lines — scope of work, not tools/themes
+    target_job_titles: list[str] = []  # the role title(s) this JD is hiring for
+    nice_to_have_skills: list[str] = []  # skills the JD frames as preferred / "a plus", not required
 
 
 class BulletMapping(BaseModel):
@@ -365,7 +370,15 @@ methodologies_and_frameworks (named processes/tools like "Agile" or "CI/CD") —
 it captures WHAT the role actually does day to day, not what topics or tools it \
 touches. The resume mapper uses this to connect a candidate's real work to a \
 specific duty, not just graft on a keyword.
-7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+7. target_job_titles: the job title(s) this posting is hiring for — the \
+posting's own title plus any explicit equivalents it names \
+(e.g. ["Senior Data Analyst", "Analytics Engineer"]). 1–3 entries. Use the \
+literal title as written; do not invent a seniority level the JD doesn't state.
+8. nice_to_have_skills: skills/tools the JD explicitly frames as preferred, \
+desired, "bonus", "a plus", or "nice to have" rather than required. Put such \
+skills ONLY here — never also in exact_technical_tools, \
+methodologies_and_frameworks, or ats_filter_phrases.
+9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -375,7 +388,9 @@ specific duty, not just graft on a keyword.
   "domain_expertise_themes": ["string"],
   "seniority_indicators": ["string"],
   "ats_filter_phrases": ["string"],
-  "core_responsibilities": ["string"]
+  "core_responsibilities": ["string"],
+  "target_job_titles": ["string"],
+  "nice_to_have_skills": ["string"]
 }
 </output_schema>"""
 
@@ -399,6 +414,90 @@ async def _agent1_parse_jd(
         _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast",
         max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="agent1_parse_jd",
     )
+
+
+# ── Semantic presence verifier ──────────────────────────────────────────────
+# The lexical matcher in ats.compute_delta only recognises a JD phrase when the
+# resume contains it near-verbatim.  A resume that demonstrates "revenue
+# forecasting" by saying "forecasted quarterly revenue", or "CI/CD" by saying
+# "continuous integration", scores those as missing.  This pass hands the
+# lexically-unmatched phrases to a fast model and asks whether the resume shows
+# evidence of each — paraphrase, synonym, or abbreviation included.
+
+_VALID_VERDICTS = {"matched", "partial", "missing"}
+
+
+class SemanticVerdict(BaseModel):
+    phrase: str
+    verdict: str  # "matched" | "partial" | "missing"
+    evidence: str = ""  # short quote from the resume, for debugging / future UI
+
+
+class SemanticMatchResult(BaseModel):
+    verdicts: list[SemanticVerdict]
+
+
+_SEMANTIC_VERIFY_SYSTEM = """\
+<system_role>
+You are an ATS resume evaluator. For each job-description phrase you are given, \
+decide whether the RESUME TEXT provides evidence the candidate has done or knows \
+that thing — even when the wording differs.
+</system_role>
+
+<rules>
+1. Judge meaning, not string overlap. "forecasted quarterly revenue" IS evidence \
+of "revenue forecasting"; "continuous integration pipeline" IS evidence of \
+"CI/CD"; "led a squad of 6 engineers" IS evidence of "team leadership". \
+Recognise synonyms, abbreviations (K8s = Kubernetes, ML = machine learning), \
+and paraphrases.
+2. verdict values:
+   - "matched"  — the resume clearly demonstrates this phrase.
+   - "partial"  — the resume touches the same area but does not clearly \
+demonstrate it (adjacent tooling, a one-off mention, a related but weaker claim).
+   - "missing"  — no meaningful evidence.
+3. Do NOT invent evidence. If you are not sure, use "partial" or "missing".
+4. evidence: a short verbatim fragment from the resume that justifies a \
+"matched"/"partial" verdict, or "" for "missing".
+5. Return exactly one verdict per input phrase, using the phrase text verbatim.
+6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+</rules>
+
+<output_schema>
+{"verdicts": [{"phrase": "string", "verdict": "matched|partial|missing", "evidence": "string"}]}
+</output_schema>"""
+
+
+async def _verify_semantic_presence(
+    phrases: list[str], resume_text: str, provider: AIProvider
+) -> dict[str, str]:
+    """Return {phrase_lowercased: "matched"|"partial"|"missing"} for *phrases*.
+
+    Never raises: any provider failure or malformed response yields {}, which
+    leaves the caller on the pure lexical result.
+    """
+    phrases = [p.strip() for p in phrases if p and p.strip()]
+    if not phrases:
+        return {}
+
+    user_msg = json.dumps({"resume_text": resume_text, "jd_phrases": phrases})
+    try:
+        result = await provider.complete_structured(
+            _SEMANTIC_VERIFY_SYSTEM, user_msg, SemanticMatchResult,
+            model_tier="fast", max_output_tokens=_MAX_TOKENS_SEMANTIC_VERIFY,
+            call_name="verify_semantic_presence",
+        )
+        raw_verdicts = list(result.verdicts)
+    except Exception:
+        logger.warning("semantic presence verification failed", exc_info=True)
+        return {}
+
+    out: dict[str, str] = {}
+    for v in raw_verdicts:
+        verdict = str(getattr(v, "verdict", "")).strip().lower()
+        phrase = str(getattr(v, "phrase", "")).strip().lower()
+        if phrase:
+            out[phrase] = verdict if verdict in _VALID_VERDICTS else "missing"
+    return out
 
 
 # ── Agent 2: Semantic Mapper ──────────────────────────────────────────────────
@@ -1052,6 +1151,13 @@ class JDMatchAnalysis:
     missing_skills: list[str]
     ats_score: int
     company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
+    # {phrase_lowercased: matched|partial|missing} from the semantic pass — the
+    # caller persists this (keyed by resume fingerprint) so re-analyzing an
+    # unchanged resume reuses it instead of re-hitting the model.
+    semantic_verdicts: dict[str, str] = field(default_factory=dict)
+    # "" when the JD had no extractable title, else matched|partial|missing for
+    # whether the candidate's recent title(s) align with the role being hired.
+    title_match: str = ""
 
 
 @dataclass
@@ -1071,12 +1177,17 @@ async def analyze_jd_match(
     provider: AIProvider,
     company_name: str | None = None,
     cached_jd_analysis: "JDAnalysis | None" = None,
+    cached_semantic_verdicts: "dict[str, str] | None" = None,
 ) -> JDMatchAnalysis:
     """
     Agent 0 (fast)  ─── company intel (optional)
     Agent 1 (fast)  ─── parse JD into structured analysis (enriched by company intel)
          │
-         └── compute_delta (local, no AI) ── matched / missing / ats_score
+         ├── compute_delta (local, no AI) ── exact lexical matched / missing
+         └── _verify_semantic_presence (fast) ── paraphrase/synonym recovery on
+             the lexically-missing phrases + core_responsibilities
+                  │
+                  └── blend_scores ── final matched / missing / ats_score
 
     This is the "Analyze Description" step — read-only, doesn't touch the
     resume. run_tailoring_pipeline (the "Tailor Resume" step) continues on
@@ -1086,6 +1197,11 @@ async def analyze_jd_match(
     variant) to skip Agent 1 entirely.  The caller is responsible for only
     passing this when company_name is absent, since company intel changes the
     Agent 1 output.
+
+    cached_semantic_verdicts — {phrase_lowercased: verdict} from a previous
+    analyze of the *same resume text*; when given, the semantic model call is
+    skipped and these verdicts are used directly (keeps the score stable across
+    repeat clicks).  Only safe when the resume content is unchanged.
     """
     if cached_jd_analysis:
         # Use the pre-computed JD analysis — deterministic, no LLM call.
@@ -1098,20 +1214,73 @@ async def analyze_jd_match(
         company_intel = None
         jd_analysis = await _agent1_parse_jd(jd_text, provider)
 
-    # Flatten all skills for delta computation
-    all_jd_skills: list[str] = []
+    # ── bucket the JD's requirements ────────────────────────────────────────
+    # required   — hard requirements, full weight
+    # nice       — "preferred / a plus" skills, half weight (deduped against
+    #              required so a skill named in both doesn't get counted twice)
     seen_lower: set[str] = set()
-    for skill in (
+
+    def _dedupe(phrases: list[str]) -> list[str]:
+        out: list[str] = []
+        for p in phrases:
+            key = p.strip().lower()
+            if key and key not in seen_lower:
+                seen_lower.add(key)
+                out.append(p)
+        return out
+
+    required_skills = _dedupe(
         jd_analysis.exact_technical_tools
         + jd_analysis.methodologies_and_frameworks
         + jd_analysis.ats_filter_phrases
-    ):
-        key = skill.strip().lower()
-        if key and key not in seen_lower:
-            seen_lower.add(key)
-            all_jd_skills.append(skill)
+    )
+    nice_skills = _dedupe(jd_analysis.nice_to_have_skills or [])
 
-    delta = compute_delta(all_jd_skills, resume_content)
+    delta_required = compute_delta(required_skills, resume_content)
+    delta_nice = compute_delta(nice_skills, resume_content)
+
+    # ── semantic recovery on what the lexical pass couldn't match ────────────
+    responsibilities = [
+        r.strip() for r in (jd_analysis.core_responsibilities or []) if r and r.strip()
+    ]
+    to_verify = list(delta_required.missing) + list(delta_nice.missing) + responsibilities
+
+    if cached_semantic_verdicts is not None:
+        semantic_verdicts = dict(cached_semantic_verdicts)
+    elif to_verify:
+        resume_text, _ = build_resume_text(resume_content)
+        semantic_verdicts = await _verify_semantic_presence(
+            to_verify, resume_text, provider
+        )
+    else:
+        semantic_verdicts = {}
+
+    def _verdicts_for(phrases: list[str], lexical_matched: list[str]) -> dict[str, str]:
+        matched_set = {m.strip().lower() for m in lexical_matched}
+        out: dict[str, str] = {}
+        for p in phrases:
+            key = p.strip().lower()
+            out[p] = "matched" if key in matched_set else semantic_verdicts.get(key, "missing")
+        return out
+
+    skill_verdicts = _verdicts_for(required_skills, delta_required.matched)
+    nice_verdicts = _verdicts_for(nice_skills, delta_nice.matched)
+    responsibility_verdicts = {
+        r: semantic_verdicts.get(r.strip().lower(), "missing") for r in responsibilities
+    }
+
+    # ── job-title alignment (highest-weight individual ATS signal) ───────────
+    jd_titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
+    title_verdict: str | None = None
+    if jd_titles:
+        resume_titles = [str(resume_content.get("headline") or "")]
+        for exp in (resume_content.get("experience") or [])[:2]:
+            resume_titles.append(str(exp.get("title") or ""))
+        title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
+
+    blended = blend_scores(
+        skill_verdicts, responsibility_verdicts, nice_verdicts, title_verdict
+    )
 
     company_keywords: list[str] = []
     if company_intel and not company_intel.known_not_found:
@@ -1129,10 +1298,12 @@ async def analyze_jd_match(
 
     return JDMatchAnalysis(
         jd_analysis=jd_analysis,
-        matched_skills=delta.matched,
-        missing_skills=delta.missing,
-        ats_score=delta.ats_score,
+        matched_skills=blended.matched,
+        missing_skills=blended.missing,
+        ats_score=blended.ats_score,
         company_keywords=company_keywords,
+        semantic_verdicts=semantic_verdicts,
+        title_match=title_verdict or "",
     )
 
 

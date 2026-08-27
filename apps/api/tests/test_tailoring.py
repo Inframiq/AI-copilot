@@ -332,7 +332,7 @@ async def test_analyze_jd_match_dedupes_overlapping_skills():
         exact_technical_tools=["Python", "AWS"],
         ats_filter_phrases=["python"],
     )
-    provider = make_mock_provider(structured_return=jd_analysis)
+    provider = make_semantic_provider(jd_analysis, {"AWS": "missing"})
     resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
 
     result = await analyze_jd_match(resume, "Need Python and AWS.", provider)
@@ -340,6 +340,301 @@ async def test_analyze_jd_match_dedupes_overlapping_skills():
     assert isinstance(result, JDMatchAnalysis)
     assert result.matched_skills.count("Python") == 1
     assert result.ats_score == 50  # 1 of 2 unique skills matched, not 1 of 3
+
+
+# ── Hybrid ATS scoring: lexical pre-filter + LLM semantic verification ────────
+
+
+def make_semantic_provider(jd_analysis, verdicts: dict[str, str]):
+    """Provider that answers Agent 1 with *jd_analysis* and the semantic
+    verification call with *verdicts* (phrase -> matched/partial/missing)."""
+    from app.services.tailoring import SemanticMatchResult, SemanticVerdict
+
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, **kwargs):
+        if schema is JDAnalysis:
+            return jd_analysis
+        if schema is SemanticMatchResult:
+            return SemanticMatchResult(
+                verdicts=[
+                    SemanticVerdict(phrase=p, verdict=v) for p, v in verdicts.items()
+                ]
+            )
+        raise KeyError(schema)
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_recovers_paraphrased_skill_via_semantic_pass():
+    # The resume clearly does both things, worded differently — the lexical
+    # pass misses them, the semantic pass recovers them, score is 100.
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python"],
+        ats_filter_phrases=["revenue forecasting", "stakeholder management"],
+    )
+    provider = make_semantic_provider(
+        jd_analysis,
+        {"revenue forecasting": "matched", "stakeholder management": "matched"},
+    )
+    resume = {
+        "experience": [{"title": "Analyst", "bullets": [
+            "Used Python to forecast quarterly revenue for leadership",
+            "Managed relationships with senior stakeholders across product and finance",
+        ]}],
+        "skills": ["Python"],
+    }
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.ats_score == 100
+    assert set(result.matched_skills) == {"Python", "revenue forecasting", "stakeholder management"}
+    assert result.missing_skills == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_semantic_partial_stays_in_missing():
+    jd_analysis = make_jd_analysis(exact_technical_tools=["Python", "AWS"])
+    provider = make_semantic_provider(jd_analysis, {"AWS": "partial"})
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.ats_score == 75  # round(100 * 1.5 / 2)
+    assert result.matched_skills == ["Python"]
+    assert result.missing_skills == ["AWS"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_only_verifies_lexically_missing_phrases():
+    from unittest.mock import patch
+
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python", "AWS"],
+        core_responsibilities=["mentor junior engineers"],
+    )
+    provider = make_mock_provider(structured_return=jd_analysis)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    with patch(
+        "app.services.tailoring._verify_semantic_presence",
+        new=AsyncMock(return_value={}),
+    ) as mock_verify:
+        await analyze_jd_match(resume, "JD text", provider)
+
+    phrases_checked = mock_verify.call_args.args[0]
+    assert "Python" not in phrases_checked           # already matched lexically
+    assert "AWS" in phrases_checked                  # lexically missing
+    assert "mentor junior engineers" in phrases_checked  # responsibilities always checked
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_scores_core_responsibilities_at_half_weight():
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python"],
+        core_responsibilities=["mentor junior engineers on system design"],
+    )
+    provider = make_semantic_provider(
+        jd_analysis, {"mentor junior engineers on system design": "missing"}
+    )
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    # 1 skill matched (w1·v1) + 1 responsibility missing (w0.5·v0) -> 100·1/1.5
+    assert result.ats_score == 67
+    assert result.matched_skills == ["Python"]
+    assert result.missing_skills == []  # responsibilities are not skill chips
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_survives_semantic_verifier_failure():
+    jd_analysis = make_jd_analysis(exact_technical_tools=["Python", "AWS"])
+
+    provider = MagicMock()
+
+    async def fake_complete_structured(system, user, schema, **kwargs):
+        if schema is JDAnalysis:
+            return jd_analysis
+        raise RuntimeError("model exploded")
+
+    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    # Falls back to the pure lexical result — no crash, AWS still missing.
+    assert result.ats_score == 50
+    assert result.missing_skills == ["AWS"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_uses_cached_semantic_verdicts():
+    jd_analysis = make_jd_analysis(exact_technical_tools=["Python", "AWS"])
+    provider = make_mock_provider(structured_return=jd_analysis)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(
+        resume, "JD text", provider,
+        cached_jd_analysis=jd_analysis,
+        cached_semantic_verdicts={"aws": "matched"},
+    )
+
+    provider.complete_structured.assert_not_called()  # no LLM calls at all
+    assert result.ats_score == 100
+    assert set(result.matched_skills) == {"Python", "AWS"}
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_returns_semantic_verdicts_for_persistence():
+    jd_analysis = make_jd_analysis(exact_technical_tools=["Python", "AWS"])
+    provider = make_semantic_provider(jd_analysis, {"AWS": "matched"})
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.semantic_verdicts.get("aws") == "matched"
+
+
+# ── Nice-to-have weighting + job-title alignment ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_nice_to_have_scored_at_half_weight():
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python"],
+        nice_to_have_skills=["GraphQL"],
+    )
+    provider = make_semantic_provider(jd_analysis, {"GraphQL": "missing"})
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.ats_score == 67  # round(100 * 1.0 / 1.5)
+    assert result.matched_skills == ["Python"]
+    assert result.missing_skills == ["GraphQL"]  # still surfaced as a gap
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_nice_to_have_deduped_against_required():
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python"],
+        nice_to_have_skills=["python"],  # same skill, different casing
+    )
+    provider = make_mock_provider(structured_return=jd_analysis)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.ats_score == 100  # not diluted by a phantom half-weight item
+    assert result.matched_skills == ["Python"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_title_alignment_boosts_score():
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python", "AWS"],
+        target_job_titles=["Senior Data Analyst"],
+    )
+    provider = make_semantic_provider(jd_analysis, {"AWS": "missing"})
+    resume = {
+        "headline": "Senior Data Analyst",
+        "experience": [{"title": "Senior Data Analyst", "bullets": ["Used Python"]}],
+        "skills": ["Python"],
+    }
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    # 1 skill matched (w1) + 1 skill missing (w1) + title matched (w2)
+    #   -> round(100 * 3 / 4) == 75  (vs 50 without the title signal)
+    assert result.ats_score == 75
+    assert result.title_match == "matched"
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_wrong_title_lowers_score():
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python", "AWS"],
+        target_job_titles=["Senior Data Analyst"],
+    )
+    provider = make_semantic_provider(jd_analysis, {"AWS": "missing"})
+    resume = {
+        "headline": "Marketing Manager",
+        "experience": [{"title": "Marketing Manager", "bullets": ["Used Python"]}],
+        "skills": ["Python"],
+    }
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    # 1 skill matched (w1) + 1 missing (w1) + title missing (w2) -> round(100 * 1 / 4)
+    assert result.ats_score == 25
+    assert result.title_match == "missing"
+
+
+@pytest.mark.asyncio
+async def test_analyze_jd_match_without_target_title_is_unaffected_by_headline():
+    jd_analysis = make_jd_analysis(exact_technical_tools=["Python", "AWS"])  # no target_job_titles
+    provider = make_semantic_provider(jd_analysis, {"AWS": "missing"})
+    resume = {
+        "headline": "Marketing Manager",
+        "experience": [{"title": "Marketing Manager", "bullets": ["Used Python"]}],
+        "skills": ["Python"],
+    }
+
+    result = await analyze_jd_match(resume, "JD text", provider)
+
+    assert result.ats_score == 50  # title signal absent → pure skill ratio
+    assert result.title_match == ""
+
+
+# ── _verify_semantic_presence ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_verify_semantic_presence_maps_phrases_lowercased():
+    from app.services.tailoring import (
+        _verify_semantic_presence, SemanticMatchResult, SemanticVerdict,
+    )
+
+    provider = make_mock_provider(structured_return=SemanticMatchResult(verdicts=[
+        SemanticVerdict(phrase="Revenue Forecasting", verdict="matched"),
+        SemanticVerdict(phrase="Kubernetes", verdict="missing"),
+    ]))
+
+    out = await _verify_semantic_presence(["Revenue Forecasting", "Kubernetes"], "resume", provider)
+
+    assert out == {"revenue forecasting": "matched", "kubernetes": "missing"}
+
+
+@pytest.mark.asyncio
+async def test_verify_semantic_presence_skips_llm_when_no_phrases():
+    from app.services.tailoring import _verify_semantic_presence
+
+    provider = make_mock_provider()
+    out = await _verify_semantic_presence([], "resume", provider)
+    assert out == {}
+    provider.complete_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verify_semantic_presence_swallows_provider_error():
+    from app.services.tailoring import _verify_semantic_presence
+
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=RuntimeError("boom"))
+    out = await _verify_semantic_presence(["Python"], "resume", provider)
+    assert out == {}
+
+
+@pytest.mark.asyncio
+async def test_verify_semantic_presence_requests_fast_tier():
+    from app.services.tailoring import _verify_semantic_presence, SemanticMatchResult
+
+    provider = make_mock_provider(structured_return=SemanticMatchResult(verdicts=[]))
+    await _verify_semantic_presence(["Python"], "resume", provider)
+    assert provider.complete_structured.call_args.kwargs["model_tier"] == "fast"
 
 
 @pytest.mark.asyncio
