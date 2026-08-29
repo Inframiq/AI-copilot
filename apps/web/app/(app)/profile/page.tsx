@@ -7,6 +7,8 @@ import {
   UploadSimple,
   Plus,
   CaretDown,
+  ArrowUp,
+  ArrowDown,
   X,
   FloppyDisk,
   FilePdf,
@@ -35,6 +37,9 @@ import {
   sameCompany,
   formatRoleDuration,
   formatCompanyTotalDuration,
+  blankExperienceEntry,
+  insertRoleAfter,
+  moveExperience,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -56,11 +61,7 @@ const emptyContact = (): ContactInfo => ({
   name: "", email: "", phone: "", location: "", linkedin: "", github: "", website: "",
 });
 
-const emptyExp = (): ExperienceEntry => ({
-  id: newId(), type: "full-time", company: "", title: "",
-  start: "", end: "", current: false,
-  responsibilities: "", achievements: "", projects: "", impact: "",
-});
+const emptyExp = (): ExperienceEntry => blankExperienceEntry();
 
 const emptyEdu = (): EducationEntry => ({
   id: newId(), institution: "", degree: "", field: "", year: "", gpa: "", honors: "",
@@ -325,6 +326,14 @@ export default function ProfilePage() {
     setExperiences(prev => [...prev, e]);
     setCollapsedExp(prev => ({ ...prev, [e.id]: false }));
   };
+  // Insert a second role at the same company directly below `idx` so the two
+  // sit adjacent — the arrangement the "Multiple roles at {company}" grouping
+  // (and the PDF / résumé generator) recognise. New entry defaults to expanded
+  // via `collapsedExp[id] ?? false`.
+  const addRoleAtCompany = (idx: number) =>
+    setExperiences(prev => insertRoleAfter(prev, idx));
+  const moveExp = (idx: number, dir: "up" | "down") =>
+    setExperiences(prev => moveExperience(prev, idx, dir));
 
   // ── project helpers ────────────────────────────────────────────────────────
   const updateProj = (id: string, field: keyof ProjectEntry, value: string) =>
@@ -635,6 +644,16 @@ export default function ProfilePage() {
                       )}
                     </div>
                     <div className="flex items-center gap-xs ml-auto shrink-0">
+                      <button type="button" onClick={() => moveExp(idx, "up")} disabled={idx === 0}
+                        title="Move up"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
+                        <ArrowUp size={13} />
+                      </button>
+                      <button type="button" onClick={() => moveExp(idx, "down")} disabled={idx === experiences.length - 1}
+                        title="Move down"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
+                        <ArrowDown size={13} />
+                      </button>
                       <button type="button" onClick={() => setCollapsedExp(p => ({ ...p, [exp.id]: !collapsed }))}
                         className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                         <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
@@ -717,6 +736,13 @@ export default function ProfilePage() {
                     </div>
                   )}
                   </div>
+                  {exp.company.trim() && (
+                    <button type="button" onClick={() => addRoleAtCompany(idx)}
+                      className="mt-xs ml-md flex items-center gap-xs text-caption text-primary/80 hover:text-primary transition-colors">
+                      <Plus size={11} weight="bold" />
+                      Add another role at {exp.company.trim()}
+                    </button>
+                  )}
                 </div>
               );
             })}

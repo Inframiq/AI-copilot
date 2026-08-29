@@ -247,6 +247,64 @@ export function sameCompany(a?: string, b?: string): boolean {
   return na !== "" && na === nb;
 }
 
+/** A fresh, all-blank experience entry. `overrides` pre-fills fields — used
+ * to seed a second role at the same company (company + type carried over). */
+export function blankExperienceEntry(
+  overrides: Partial<ExperienceEntry> = {},
+): ExperienceEntry {
+  return {
+    id: crypto.randomUUID(),
+    type: "full-time",
+    company: "",
+    title: "",
+    start: "",
+    end: "",
+    current: false,
+    responsibilities: "",
+    achievements: "",
+    projects: "",
+    impact: "",
+    ...overrides,
+  };
+}
+
+/** Insert a new blank role directly after `index`, pre-filled with that
+ * role's company and type so the two sit adjacent — the only arrangement
+ * the "Multiple roles at {company}" grouping recognises (the PDF and résumé
+ * generator apply the same adjacency rule server-side). An out-of-range
+ * index returns an unchanged copy. */
+export function insertRoleAfter(
+  list: ExperienceEntry[],
+  index: number,
+): ExperienceEntry[] {
+  if (index < 0 || index >= list.length) return [...list];
+  const anchor = list[index];
+  const next = [...list];
+  next.splice(
+    index + 1,
+    0,
+    blankExperienceEntry({ company: anchor.company, type: anchor.type }),
+  );
+  return next;
+}
+
+/** Swap the entry at `index` with its neighbour in `direction`. Boundary
+ * moves and invalid indexes return an unchanged copy. Lets a user cluster
+ * two same-company roles together, or fix the order of an uploaded résumé. */
+export function moveExperience(
+  list: ExperienceEntry[],
+  index: number,
+  direction: "up" | "down",
+): ExperienceEntry[] {
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || index >= list.length || target < 0 || target >= list.length) {
+    return [...list];
+  }
+  const next = [...list];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 const MONTH_ABBREVIATIONS = [
   "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
 ];

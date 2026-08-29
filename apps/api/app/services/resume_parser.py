@@ -156,6 +156,20 @@ Rules:
   multiple roles into a single entry (that silently drops the earlier
   role's title, dates, and bullets), and never let one role's bullets leak
   into another role's entry.
+
+  Example — this resume text:
+      Northwind Traders
+      Senior Data Analyst | Mar 2022 – Present
+        - Owns the revenue forecasting models used by finance.
+      Data Analyst | Jul 2019 – Feb 2022
+        - Built the first self-serve reporting dashboards.
+  MUST parse to TWO experience entries:
+      {"company": "Northwind Traders", "title": "Senior Data Analyst",
+       "start": "Mar 2022", "end": "Present",
+       "bullets": ["Owns the revenue forecasting models used by finance."]},
+      {"company": "Northwind Traders", "title": "Data Analyst",
+       "start": "Jul 2019", "end": "Feb 2022",
+       "bullets": ["Built the first self-serve reporting dashboards."]}
 """
 
 

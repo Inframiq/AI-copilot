@@ -42,7 +42,11 @@ import {
   sameCompany,
   formatRoleDuration,
   formatCompanyTotalDuration,
+  blankExperienceEntry,
+  insertRoleAfter,
+  moveExperience,
   type CareerProfile,
+  type ExperienceEntry,
 } from "../lib/career-profile-client";
 
 const SAMPLE_PROFILE: CareerProfile = {
@@ -335,6 +339,107 @@ describe("career-profile-client", () => {
 
     it("returns null when no role's dates are parseable", () => {
       expect(formatCompanyTotalDuration([{ start: "unknown", end: "unknown" }])).toBeNull();
+    });
+  });
+
+  describe("blankExperienceEntry", () => {
+    it("returns an all-empty full-time entry with a unique id", () => {
+      const a = blankExperienceEntry();
+      const b = blankExperienceEntry();
+      expect(a.company).toBe("");
+      expect(a.title).toBe("");
+      expect(a.start).toBe("");
+      expect(a.end).toBe("");
+      expect(a.current).toBe(false);
+      expect(a.responsibilities).toBe("");
+      expect(a.achievements).toBe("");
+      expect(a.projects).toBe("");
+      expect(a.impact).toBe("");
+      expect(a.type).toBe("full-time");
+      expect(a.id).toBeTruthy();
+      expect(a.id).not.toBe(b.id);
+    });
+
+    it("applies overrides", () => {
+      const e = blankExperienceEntry({ company: "Acme Corp", type: "internship" });
+      expect(e.company).toBe("Acme Corp");
+      expect(e.type).toBe("internship");
+      expect(e.title).toBe(""); // untouched fields stay blank
+    });
+  });
+
+  describe("insertRoleAfter", () => {
+    const list = (): ExperienceEntry[] => [
+      blankExperienceEntry({ id: "a", company: "Acme Corp", type: "internship", title: "Senior Engineer" }),
+      blankExperienceEntry({ id: "b", company: "Beta Inc", title: "Engineer" }),
+    ];
+
+    it("inserts a new entry immediately after the given index", () => {
+      const out = insertRoleAfter(list(), 0);
+      expect(out.map((e) => e.id).slice(0, 1)).toEqual(["a"]);
+      expect(out[2].id).toBe("b");
+      expect(out).toHaveLength(3);
+    });
+
+    it("prefills the new entry's company and type from the entry at that index", () => {
+      const out = insertRoleAfter(list(), 0);
+      expect(out[1].company).toBe("Acme Corp");
+      expect(out[1].type).toBe("internship");
+      expect(out[1].title).toBe(""); // but not the title — it's a different role
+      expect(out[1].id).not.toBe("a");
+    });
+
+    it("appends at the end when index is the last entry", () => {
+      const out = insertRoleAfter(list(), 1);
+      expect(out).toHaveLength(3);
+      expect(out[2].company).toBe("Beta Inc");
+    });
+
+    it("does not mutate the input list", () => {
+      const input = list();
+      const copy = JSON.parse(JSON.stringify(input));
+      insertRoleAfter(input, 0);
+      expect(input).toEqual(copy);
+    });
+
+    it("returns an unchanged copy for an out-of-range index", () => {
+      expect(insertRoleAfter(list(), 5)).toHaveLength(2);
+      expect(insertRoleAfter(list(), -1)).toHaveLength(2);
+    });
+  });
+
+  describe("moveExperience", () => {
+    const list = (): ExperienceEntry[] => [
+      blankExperienceEntry({ id: "a" }),
+      blankExperienceEntry({ id: "b" }),
+      blankExperienceEntry({ id: "c" }),
+    ];
+
+    it("moves an entry up (swaps with the previous)", () => {
+      expect(moveExperience(list(), 1, "up").map((e) => e.id)).toEqual(["b", "a", "c"]);
+    });
+
+    it("moves an entry down (swaps with the next)", () => {
+      expect(moveExperience(list(), 1, "down").map((e) => e.id)).toEqual(["a", "c", "b"]);
+    });
+
+    it("is a no-op at the top boundary", () => {
+      expect(moveExperience(list(), 0, "up").map((e) => e.id)).toEqual(["a", "b", "c"]);
+    });
+
+    it("is a no-op at the bottom boundary", () => {
+      expect(moveExperience(list(), 2, "down").map((e) => e.id)).toEqual(["a", "b", "c"]);
+    });
+
+    it("does not mutate the input list", () => {
+      const input = list();
+      const copy = JSON.parse(JSON.stringify(input));
+      moveExperience(input, 1, "up");
+      expect(input).toEqual(copy);
+    });
+
+    it("returns an unchanged copy for an invalid index", () => {
+      expect(moveExperience(list(), 9, "up").map((e) => e.id)).toEqual(["a", "b", "c"]);
     });
   });
 });
