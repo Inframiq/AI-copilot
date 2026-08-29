@@ -42,6 +42,7 @@ export function BulletReviewPanel() {
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
+  const bulletImportance = useTailoringStore((s) => s.bulletImportance);
   // Not user-adjustable here anymore (the Writing Style slider that changed
   // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -398,6 +399,7 @@ export function BulletReviewPanel() {
             const isAccepted = (bulletDecisions[change.key] ?? "accept") === "accept";
             const isDecided = change.key in bulletDecisions;
             const loading = bulletLoading[change.key];
+            const importance = bulletImportance[change.key];
 
             return (
               <div
@@ -410,6 +412,12 @@ export function BulletReviewPanel() {
                     : "border-outline-variant/20 bg-surface opacity-60"
                 }`}
               >
+                {importance && (
+                  <div className="flex justify-end">
+                    <ImportanceBadge level={importance} />
+                  </div>
+                )}
+
                 {/* Original */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-on-surface-variant uppercase tracking-wider">
