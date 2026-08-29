@@ -533,6 +533,80 @@ async def _verify_semantic_presence(
     return out
 
 
+# ── Gap Filler: propose bullets + a headline for post-tailor gaps ─────────────
+
+_MAX_TOKENS_GAP_FILL = 4000
+
+
+class GapFillBullet(BaseModel):
+    gap: str
+    grounded: bool
+    experience_index: int | None = None
+    bullet_text: str
+
+
+class GapFillerOutput(BaseModel):
+    bullets: list[GapFillBullet] = []
+    headline: str = ""
+
+
+_GAP_FILLER_SYSTEM = """\
+<system_role>
+You help a candidate close specific gaps between their (already tailored) \
+résumé and a job description. For each gap you are given, propose ONE résumé \
+bullet that would close it.
+</system_role>
+
+<rules>
+1. If the résumé already shows related experience, reframe the CLOSEST real \
+experience into a bullet that names the gap explicitly — set grounded=true and \
+experience_index to that entry's index.
+2. If there is no basis in the résumé, write one plausible bullet for the \
+role, set grounded=false and experience_index=null. The user will only keep it \
+if it is actually true of them.
+3. Never invent numbers, employers, dates, or tools the résumé doesn't support. \
+A grounded bullet keeps the original metrics; a speculative bullet has none.
+4. If a gap has kind "title", and only then, also return a `headline` string: \
+a concise professional headline aligning the candidate to the target title \
+(e.g. "Senior Data Analyst | Analytics Engineering"). Otherwise headline "".
+5. One bullet per gap, in the same order. Output ONLY valid JSON matching the \
+schema.
+</rules>
+
+<output_schema>
+{"bullets": [{"gap": "string", "grounded": true, "experience_index": 0, "bullet_text": "string"}], "headline": "string"}
+</output_schema>"""
+
+
+async def _agent_gap_filler(
+    tailored_content: dict,
+    jd_analysis: JDAnalysis,
+    gaps: list[dict],
+    provider: AIProvider,
+) -> GapFillerOutput:
+    if not gaps:
+        return GapFillerOutput()
+    payload = json.dumps({
+        "resume": tailored_content,
+        "jd_themes": {
+            "tools": jd_analysis.exact_technical_tools,
+            "methodologies": jd_analysis.methodologies_and_frameworks,
+            "responsibilities": jd_analysis.core_responsibilities,
+            "target_job_titles": jd_analysis.target_job_titles,
+        },
+        "gaps": gaps,
+    })
+    try:
+        return await provider.complete_structured(
+            _GAP_FILLER_SYSTEM, payload, GapFillerOutput,
+            model_tier="fast", max_output_tokens=_MAX_TOKENS_GAP_FILL,
+            call_name="agent_gap_filler",
+        )
+    except Exception:
+        logger.warning("gap filler failed", exc_info=True)
+        return GapFillerOutput()
+
+
 # ── Agent 2: Semantic Mapper ──────────────────────────────────────────────────
 
 _AGENT2_SYSTEM = """\

@@ -959,3 +959,33 @@ async def test_write_cover_letter_passes_jd_and_resume_context_to_the_prompt():
     # matched_skills must pass through _sanitize_skill_list into the real sent payload
     assert "Python" in sent_payload
     assert "AWS" in sent_payload
+
+
+@pytest.mark.asyncio
+async def test_agent_gap_filler_requests_fast_tier_and_returns_output():
+    from app.services.tailoring import (
+        _agent_gap_filler, GapFillerOutput, GapFillBullet,
+    )
+    jd = make_jd_analysis(exact_technical_tools=["Kubernetes"])
+    provider = make_mock_provider(structured_return=GapFillerOutput(
+        bullets=[GapFillBullet(gap="Kubernetes", grounded=True, experience_index=0,
+                               bullet_text="Ran production workloads on Kubernetes.")],
+        headline="",
+    ))
+    out = await _agent_gap_filler(
+        {"experience": [{"title": "E", "bullets": ["x"]}]},
+        jd,
+        [{"gap": "Kubernetes", "kind": "skill", "importance": "high"}],
+        provider,
+    )
+    assert out.bullets[0].bullet_text.startswith("Ran production workloads")
+    assert provider.complete_structured.call_args.kwargs["model_tier"] == "fast"
+
+
+@pytest.mark.asyncio
+async def test_agent_gap_filler_no_gaps_skips_the_call():
+    from app.services.tailoring import _agent_gap_filler
+    provider = make_mock_provider()
+    out = await _agent_gap_filler({"experience": []}, make_jd_analysis(), [], provider)
+    assert out.bullets == [] and out.headline == ""
+    provider.complete_structured.assert_not_called()
