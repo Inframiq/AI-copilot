@@ -679,6 +679,47 @@ async def test_run_tailoring_pipeline_returns_result():
 
 
 @pytest.mark.asyncio
+async def test_run_tailoring_pipeline_scores_the_tailored_resume_not_the_original():
+    # The whole point of tailoring: the returned ats_score / matched / missing
+    # must reflect the *rewritten* resume, not the one the user started with.
+    responses = {
+        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[
+                BulletMapping(
+                    original_bullet_id="exp0_b0",
+                    original_text="Managed deployments",
+                    target_jd_keywords_to_inject=["Python", "Kubernetes"],
+                    preserved_metrics=[],
+                    strategic_instruction="INJECT",
+                )
+            ],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0",
+                rewritten_text="Managed deployments on Kubernetes using Python",
+            )],
+            updated_skills=[],
+        ),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Managed deployments"]}], "skills": []}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "Need Python and Kubernetes.", 50, provider, db)
+
+    # Original resume matches neither keyword (pre-tailor score would be 0).
+    # The rewritten bullet names both -> 100.
+    assert result.ats_score == 100
+    assert set(result.matched_skills) == {"Python", "Kubernetes"}
+    assert result.missing_skills == []
+
+
+@pytest.mark.asyncio
 async def test_run_tailoring_pipeline_passes_seniority_indicators_to_agent3():
     # Agent 3's seniority-aware emphasis rule only works if run_tailoring_pipeline
     # actually threads analysis.jd_analysis.seniority_indicators through to it.

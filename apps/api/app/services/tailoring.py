@@ -1382,6 +1382,33 @@ async def run_tailoring_pipeline(
     # ── patch rewritten bullets back into the original structure ─────────────
     tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)
 
+    # ── re-score against the *tailored* resume ──────────────────────────────
+    # The first analyze_jd_match ran on the resume the user started with — its
+    # score/matched/missing describe the BEFORE state and drive Agent 2's
+    # mapping + prep questions. What we hand back must describe the AFTER
+    # state, or "Tailor Resume" appears to do nothing to the ATS score.
+    # cached_jd_analysis reuses Agent 1 (same JD) so this is one fast
+    # semantic call, not a full re-parse.
+    post = await analyze_jd_match(
+        tailored_content, jd_text, provider, company_name,
+        cached_jd_analysis=analysis.jd_analysis,
+    )
+
+    # ── diagnostics: what did tailoring actually move? ──────────────────────
+    before_missing = {m.strip().lower() for m in analysis.missing_skills}
+    after_missing = {m.strip().lower() for m in post.missing_skills}
+    n_bullets = sum(len(e.get("bullets") or []) for e in (resume_content.get("experience") or []))
+    logger.info(
+        "tailoring delta: ats %d -> %d | title %r -> %r | "
+        "missing %d -> %d (closed: %s) | bullets rewritten %d/%d | skills unchanged (%d)",
+        analysis.ats_score, post.ats_score,
+        analysis.title_match or "n/a", post.title_match or "n/a",
+        len(analysis.missing_skills), len(post.missing_skills),
+        sorted(before_missing - after_missing) or "none",
+        len(tailored_raw.rewritten_bullets), n_bullets,
+        len(resume_content.get("skills") or []),
+    )
+
     # ── merge in the user's priority skills — a code-level guarantee, not
     #    just a prompt instruction, that they show up for review ─────────────
     suggested = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
@@ -1394,11 +1421,11 @@ async def run_tailoring_pipeline(
 
     return TailoringResult(
         tailored_content=tailored_content,
-        matched_skills=analysis.matched_skills,
-        missing_skills=analysis.missing_skills,
-        ats_score=analysis.ats_score,
+        matched_skills=post.matched_skills,
+        missing_skills=post.missing_skills,
+        ats_score=post.ats_score,
         prep_questions=questions,
-        company_keywords=analysis.company_keywords,
+        company_keywords=post.company_keywords,
         suggested_skills=suggested,
     )
 
