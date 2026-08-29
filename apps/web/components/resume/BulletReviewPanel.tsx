@@ -17,6 +17,8 @@ import {
 import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
+import { AtsGapFixPanel } from "./AtsGapFixPanel";
+import { ImportanceBadge } from "./ImportanceBadge";
 
 export function BulletReviewPanel() {
   const router = useRouter();
@@ -40,6 +42,7 @@ export function BulletReviewPanel() {
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
+  const bulletImportance = useTailoringStore((s) => s.bulletImportance);
   // Not user-adjustable here anymore (the Writing Style slider that changed
   // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -270,6 +273,7 @@ export function BulletReviewPanel() {
           prompt={summaryPrompt}
           setPrompt={setSummaryPrompt}
         />
+        <AtsGapFixPanel />
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
@@ -395,6 +399,7 @@ export function BulletReviewPanel() {
             const isAccepted = (bulletDecisions[change.key] ?? "accept") === "accept";
             const isDecided = change.key in bulletDecisions;
             const loading = bulletLoading[change.key];
+            const importance = bulletImportance[change.key];
 
             return (
               <div
@@ -407,6 +412,12 @@ export function BulletReviewPanel() {
                     : "border-outline-variant/20 bg-surface opacity-60"
                 }`}
               >
+                {importance && (
+                  <div className="flex justify-end">
+                    <ImportanceBadge level={importance} />
+                  </div>
+                )}
+
                 {/* Original */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-on-surface-variant uppercase tracking-wider">
@@ -495,7 +506,10 @@ export function BulletReviewPanel() {
       {/* ── Bottom action area ── */}
       <div className="flex flex-col gap-sm pt-xs border-t border-outline-variant/20 mt-xs">
 
-        {/* 1. Suggested skills */}
+        {/* 1. Gap → fix list (skills / bullets / headline) + running projected score */}
+        <AtsGapFixPanel />
+
+        {/* 1b. Existing-skills keep/drop + opt-in suggested skills */}
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}

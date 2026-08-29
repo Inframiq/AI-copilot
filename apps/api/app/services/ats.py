@@ -1,5 +1,9 @@
 import re
+from copy import deepcopy
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 
 @dataclass
@@ -191,6 +195,142 @@ def blend_scores(
     return DeltaResult(matched=matched, missing=missing, ats_score=score)
 
 
+@dataclass
+class JdScore:
+    matched: list[str]
+    missing: list[str]
+    ats_score: int
+    title_match: str  # "" | "matched" | "partial" | "missing"
+
+
+def _dedupe_ci(*groups: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for g in groups:
+        for p in g or []:
+            k = p.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                out.append(p)
+    return out
+
+
+def score_content(content: dict, jd_analysis, semantic_verdicts: dict[str, str]) -> JdScore:
+    """Blend a résumé's lexical + (pre-computed) semantic match against a
+    parsed JD into a 0-100 score. Pure — never calls a model. Missing
+    phrases fall back to whatever `semantic_verdicts` says, else "missing"."""
+    required = _dedupe_ci(
+        jd_analysis.exact_technical_tools,
+        jd_analysis.methodologies_and_frameworks,
+        jd_analysis.ats_filter_phrases,
+    )
+    nice = [p for p in _dedupe_ci(jd_analysis.nice_to_have_skills)
+            if p.strip().lower() not in {r.strip().lower() for r in required}]
+    responsibilities = [r.strip() for r in (jd_analysis.core_responsibilities or []) if r and r.strip()]
+
+    d_req = compute_delta(required, content)
+    d_nice = compute_delta(nice, content)
+
+    def verdicts_for(phrases: list[str], lexically_matched: list[str]) -> dict[str, str]:
+        matched_set = {m.strip().lower() for m in lexically_matched}
+        out: dict[str, str] = {}
+        for p in phrases:
+            k = p.strip().lower()
+            out[p] = "matched" if k in matched_set else semantic_verdicts.get(k, "missing")
+        return out
+
+    skill_verdicts = verdicts_for(required, d_req.matched)
+    nice_verdicts = verdicts_for(nice, d_nice.matched)
+    resp_verdicts = {r: semantic_verdicts.get(r.strip().lower(), "missing") for r in responsibilities}
+
+    jd_titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
+    title_verdict = None
+    if jd_titles:
+        resume_titles = [str(content.get("headline") or "")]
+        for exp in (content.get("experience") or [])[:2]:
+            resume_titles.append(str(exp.get("title") or ""))
+        title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
+
+    blended = blend_scores(skill_verdicts, resp_verdicts, nice_verdicts, title_verdict)
+    return JdScore(
+        matched=blended.matched,
+        missing=blended.missing,
+        ats_score=blended.ats_score,
+        title_match=title_verdict or "",
+    )
+
+
+_MAX_SKILLS = 20          # mirrors MAX_MERGED_SKILLS in apps/web/stores/tailoring-store.ts
+_MAX_BULLETS_PER_ROLE = 7  # HARD_LIMITS["experience_bullets_per_role"]["max"]
+
+
+class AtsFix(BaseModel):
+    id: str
+    type: Literal["skill", "bullet", "headline"]
+    gap: str
+    importance: Literal["high", "medium", "low"]
+    grounded: bool
+    text: str
+    experience_index: int | None = None
+    score_delta: int = 0
+    default_accept: bool = False
+
+
+def fix_slug(prefix: str, gap: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", gap.lower()).strip("-")[:60]
+    return f"{prefix}:{s}"
+
+
+def apply_fix(content: dict, fix: AtsFix) -> dict:
+    """Return a deep copy of `content` with the single fix folded in. No cap
+    checks here — see apply_fixes for those."""
+    out = deepcopy(content)
+    if fix.type == "skill":
+        out.setdefault("skills", [])
+        if fix.text not in out["skills"]:
+            out["skills"].append(fix.text)
+    elif fix.type == "headline":
+        out["headline"] = fix.text
+    elif fix.type == "bullet" and fix.experience_index is not None:
+        exps = out.get("experience") or []
+        if 0 <= fix.experience_index < len(exps):
+            exps[fix.experience_index].setdefault("bullets", []).append(fix.text)
+    return out
+
+
+def apply_fixes(content: dict, fixes: list[AtsFix]) -> dict:
+    """Fold a list of fixes in order. A skill fix that would push the list
+    past _MAX_SKILLS, or a bullet fix past _MAX_BULLETS_PER_ROLE for its
+    role, is skipped whole (never truncated mid-text)."""
+    out = deepcopy(content)
+    for fix in fixes:
+        if fix.type == "skill":
+            skills = out.setdefault("skills", [])
+            if fix.text not in skills and len(skills) < _MAX_SKILLS:
+                skills.append(fix.text)
+        elif fix.type == "headline":
+            out["headline"] = fix.text
+        elif fix.type == "bullet" and fix.experience_index is not None:
+            exps = out.get("experience") or []
+            if 0 <= fix.experience_index < len(exps):
+                bullets = exps[fix.experience_index].setdefault("bullets", [])
+                if len(bullets) < _MAX_BULLETS_PER_ROLE:
+                    bullets.append(fix.text)
+    return out
+
+
+def estimate_fix_delta(
+    content: dict,
+    jd_analysis,
+    semantic_verdicts: dict[str, str],
+    base_score: int,
+    fix: "AtsFix",
+) -> int:
+    """Points this one fix would add on its own, vs base_score. Pure."""
+    after = score_content(apply_fix(content, fix), jd_analysis, semantic_verdicts).ats_score
+    return max(0, after - base_score)
+
+
 def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":
     """Split a job title into (seniority_level, role_token_set).
 
@@ -242,6 +382,28 @@ def title_match_verdict(jd_titles: list[str], resume_titles: list[str]) -> str:
             best = max(best, rank[verdict])
 
     return {0: "missing", 1: "partial", 2: "matched"}[best]
+
+
+def default_importance(
+    term: str,
+    *,
+    titles: list[str],
+    hard_tools: list[str],
+    mediums: list[str],
+    nice: list[str],
+) -> str:
+    """Bucket-based importance for a JD term when Agent 1 didn't rate it
+    (old cache, or an item it missed). See the spec's fallback table."""
+    t = term.strip().lower()
+    if t == "job title" or any(t == x.strip().lower() for x in titles):
+        return "high"
+    if any(t == x.strip().lower() for x in hard_tools):
+        return "high"
+    if any(t == x.strip().lower() for x in nice):
+        return "low"
+    if any(t == x.strip().lower() for x in mediums):
+        return "medium"
+    return "medium"
 
 
 def compute_delta(jd_skills: list[str], resume: "str | dict") -> DeltaResult:

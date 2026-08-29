@@ -151,6 +151,23 @@ export interface AnalyzeOut {
   matched_skills: string[];
   missing_skills: string[];
   company_keywords: string[];
+  /** Per-term importance for this JD, keyed by the lowercased term. Absent on
+   * older responses / the reanalyze path. */
+  importance?: Record<string, "high" | "medium" | "low">;
+}
+
+/** One accept/reject entry in the post-tailor "gap → fix" list: a skill to
+ * add, a proposed résumé bullet, or a headline. Mirrors the backend AtsFix. */
+export interface AtsFix {
+  id: string;
+  type: "skill" | "bullet" | "headline";
+  gap: string;
+  importance: "high" | "medium" | "low";
+  grounded: boolean;
+  text: string;
+  experience_index: number | null;
+  score_delta: number;
+  default_accept: boolean;
 }
 
 export interface PrepQuestionOut {

@@ -12,8 +12,15 @@ vi.mock("@/lib/api-client", () => ({
     generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/tailored.pdf" }),
     createJd: vi.fn(),
     analyzeJd: vi.fn(),
+    projectScore: vi.fn(),
   },
 }));
+
+const K8S_FIX = {
+  id: "skill:k8s", type: "skill" as const, gap: "Kubernetes", importance: "high" as const,
+  grounded: true, text: "Kubernetes", experience_index: null,
+  score_delta: 10, default_accept: false,
+};
 
 const mockCompletedSession = {
   session_id: "session-xyz",
@@ -183,6 +190,61 @@ describe("useTailoringStore", () => {
 
       expect(useTailoringStore.getState().atsScore).toBe(91);
     });
+
+    it("stores jdImportance from the analyze response", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "jd text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 80,
+        matched_skills: ["Python"],
+        missing_skills: ["AWS"],
+        company_keywords: [],
+        importance: { python: "high", aws: "low" },
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      expect(useTailoringStore.getState().jdImportance).toEqual({ python: "high", aws: "low" });
+    });
+
+    it("defaults jdImportance to {} when the analyze response omits importance", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "jd text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 80,
+        matched_skills: ["Python"],
+        missing_skills: [],
+        company_keywords: [],
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      expect(useTailoringStore.getState().jdImportance).toEqual({});
+    });
+  });
+
+  it("setAnalysisResults hydrates jdImportance from its argument", () => {
+    useTailoringStore.getState().setAnalysisResults({
+      atsScore: 70,
+      matchedSkills: ["Python"],
+      missingSkills: ["AWS"],
+      companyKeywords: [],
+      jdImportance: { python: "high", aws: "medium" },
+    });
+
+    expect(useTailoringStore.getState().jdImportance).toEqual({ python: "high", aws: "medium" });
+  });
+
+  it("setJd to a genuinely different JD resets jdImportance", () => {
+    useTailoringStore.setState({ jdImportance: { python: "high" } });
+    useTailoringStore.getState().setJd("jd-2", "A different JD entirely");
+    expect(useTailoringStore.getState().jdImportance).toEqual({});
+  });
+
+  it("resetStore clears jdImportance", () => {
+    useTailoringStore.setState({ jdImportance: { python: "high" } });
+    useTailoringStore.getState().resetStore();
+    expect(useTailoringStore.getState().jdImportance).toEqual({});
   });
 
   it("runTailoring succeeds and hydrates session state", async () => {
@@ -868,6 +930,59 @@ describe("useTailoringStore", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("ats fixes", () => {
+    it("seeds fix decisions from default_accept and folds accepted skill fixes into merged content", async () => {
+      useResumeStore.getState().setResume(
+        "resume-abc",
+        { contact: { name: "", email: "" }, experience: [], education: [], skills: ["Python"] },
+        "ats_clean",
+      );
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+        ...mockCompletedSession,
+        tailored_content: { contact: { name: "", email: "" }, experience: [], education: [], skills: ["Python"] },
+        ats_fixes: [
+          K8S_FIX,
+          { ...K8S_FIX, id: "skill:tf", gap: "Terraform", text: "Terraform", default_accept: true },
+        ],
+        bullet_importance: { exp0_b0: "high" },
+      } as never);
+
+      await useTailoringStore.getState().runTailoring("resume-abc");
+
+      // Terraform default-accepts; Kubernetes starts rejected
+      expect(useTailoringStore.getState().bulletDecisions["fix:skill:k8s"]).toBe("reject");
+      expect(useTailoringStore.getState().bulletDecisions["fix:skill:tf"]).toBe("accept");
+      expect(useTailoringStore.getState().bulletImportance).toEqual({ exp0_b0: "high" });
+
+      useTailoringStore.getState().setFixDecision("skill:k8s", "accept");
+      await useTailoringStore.getState().generatePreview("resume-abc");
+
+      const merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.skills).toEqual(expect.arrayContaining(["Python", "Kubernetes", "Terraform"]));
+    });
+
+    it("setFixDecision calls projectScore with the accepted ids (debounced)", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(apiClient.projectScore).mockResolvedValue({ projected_score: 88 });
+        useTailoringStore.setState({
+          sessionId: "sess-1",
+          atsFixes: [K8S_FIX],
+          bulletDecisions: {},
+        } as never);
+
+        useTailoringStore.getState().setFixDecision("skill:k8s", "accept");
+        await vi.advanceTimersByTimeAsync(400);
+
+        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"]);
+        expect(useTailoringStore.getState().projectedAtsScore).toBe(88);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
 

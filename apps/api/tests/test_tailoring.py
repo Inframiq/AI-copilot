@@ -58,6 +58,37 @@ async def test_extract_jd_skills_returns_parsed_jd():
 
 
 @pytest.mark.asyncio
+async def test_agent1_backfills_importance_for_unrated_terms():
+    from app.services.tailoring import _agent1_parse_jd, JDAnalysis
+
+    raw = JDAnalysis(
+        exact_technical_tools=["Python", "AWS"],
+        methodologies_and_frameworks=["Agile"],
+        domain_expertise_themes=[],
+        seniority_indicators=[],
+        ats_filter_phrases=["revenue forecasting"],
+        core_responsibilities=["own the analytics roadmap"],
+        target_job_titles=["Senior Data Analyst"],
+        nice_to_have_skills=["Looker"],
+        importance={"python": "high"},  # model only rated one term
+    )
+    provider = make_mock_provider(structured_return=raw)
+
+    out = await _agent1_parse_jd("jd text", provider)
+
+    # model value kept
+    assert out.importance["python"] == "high"
+    # everything else backfilled by default_importance
+    assert out.importance["job title"] == "high"
+    assert out.importance["senior data analyst"] == "high"
+    assert out.importance["aws"] == "high"          # hard tool
+    assert out.importance["agile"] == "medium"
+    assert out.importance["revenue forecasting"] == "medium"
+    assert out.importance["own the analytics roadmap"] == "medium"
+    assert out.importance["looker"] == "low"
+
+
+@pytest.mark.asyncio
 async def test_agent2_semantic_map_requests_premium_tier():
     # Agent 2 (JD+resume semantic mapping) is the one call in the pipeline
     # that requests the pricier model — every other agent still requests
@@ -928,3 +959,84 @@ async def test_write_cover_letter_passes_jd_and_resume_context_to_the_prompt():
     # matched_skills must pass through _sanitize_skill_list into the real sent payload
     assert "Python" in sent_payload
     assert "AWS" in sent_payload
+
+
+@pytest.mark.asyncio
+async def test_agent_gap_filler_requests_fast_tier_and_returns_output():
+    from app.services.tailoring import (
+        _agent_gap_filler, GapFillerOutput, GapFillBullet,
+    )
+    jd = make_jd_analysis(exact_technical_tools=["Kubernetes"])
+    provider = make_mock_provider(structured_return=GapFillerOutput(
+        bullets=[GapFillBullet(gap="Kubernetes", grounded=True, experience_index=0,
+                               bullet_text="Ran production workloads on Kubernetes.")],
+        headline="",
+    ))
+    out = await _agent_gap_filler(
+        {"experience": [{"title": "E", "bullets": ["x"]}]},
+        jd,
+        [{"gap": "Kubernetes", "kind": "skill", "importance": "high"}],
+        provider,
+    )
+    assert out.bullets[0].bullet_text.startswith("Ran production workloads")
+    assert provider.complete_structured.call_args.kwargs["model_tier"] == "fast"
+
+
+@pytest.mark.asyncio
+async def test_agent_gap_filler_no_gaps_skips_the_call():
+    from app.services.tailoring import _agent_gap_filler
+    provider = make_mock_provider()
+    out = await _agent_gap_filler({"experience": []}, make_jd_analysis(), [], provider)
+    assert out.bullets == [] and out.headline == ""
+    provider.complete_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_ats_fixes_and_bullet_importance():
+    from app.services.tailoring import GapFillerOutput, GapFillBullet
+
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Python", "Kubernetes"],
+            core_responsibilities=["own the deploy pipeline"],
+            importance={"python": "high", "kubernetes": "high",
+                        "own the deploy pipeline": "medium", "job title": "low"},
+        ),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Managed deploys",
+                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                strategic_instruction="INJECT",
+                jd_responsibility_addressed="own the deploy pipeline",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
+                               rewritten_text="Managed deploys with Python")],
+            updated_skills=[],
+        ),
+        GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
+            gap="Kubernetes", grounded=False, experience_index=None,
+            bullet_text="Operated Kubernetes clusters in production.")]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "E", "bullets": ["Managed deploys"]}], "skills": []}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "need Python and Kubernetes", 50, provider, db)
+
+    ids = {f.id for f in result.ats_fixes}
+    # a skill fix for the still-missing Kubernetes, and a speculative bullet fix
+    assert any(f.type == "skill" and f.text == "Kubernetes" for f in result.ats_fixes)
+    k8s_bullet = next(f for f in result.ats_fixes if f.type == "bullet" and f.gap == "Kubernetes")
+    assert k8s_bullet.grounded is False
+    assert k8s_bullet.default_accept is False
+    assert k8s_bullet.importance == "high"
+    # sorted High -> Low
+    levels = [f.importance for f in result.ats_fixes]
+    assert levels == sorted(levels, key=lambda l: {"high": 0, "medium": 1, "low": 2}[l])
+    # bullet importance from the mapping plan (max of keyword + responsibility importance)
+    assert result.bullet_importance["exp0_b0"] == "high"

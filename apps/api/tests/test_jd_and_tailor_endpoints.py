@@ -617,6 +617,39 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
         app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.mark.asyncio
+async def test_analyze_returns_importance_map():
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+
+    fake = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python"], methodologies_and_frameworks=[],
+            domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+            importance={"python": "high", "job title": "medium"},
+        ),
+        matched_skills=["Python"], missing_skills=[], ats_score=100, company_keywords=[],
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/ai/analyze",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                    headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["importance"] == {"python": "high", "job title": "medium"}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── POST /ai/tailor ───────────────────────────────────────────────────────────
 
 
@@ -1132,3 +1165,83 @@ async def test_rewrite_bullet_requires_auth():
             json={"bullet_text": "Original bullet.", "mode": "rewrite"},
         )
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_session_returns_ats_fixes_and_bullet_importance():
+    from app.db.models import TailoringSession
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), jd_id=uuid.uuid4(),
+        status="completed", tailored_content={"experience": []}, ats_score=70,
+        matched_skills=[], missing_skills=[], company_keywords=[], suggested_skills=[],
+    )
+    sess.ats_fixes = [{"id": "skill:k8s", "type": "skill", "gap": "Kubernetes",
+                       "importance": "high", "grounded": True, "text": "Kubernetes",
+                       "experience_index": None, "score_delta": 5, "default_accept": False}]
+    sess.bullet_importance = {"exp0_b0": "high"}
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ats_fixes"][0]["gap"] == "Kubernetes"
+        assert body["bullet_importance"] == {"exp0_b0": "high"}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_project_score_applies_only_accepted_fixes_no_llm():
+    from app.db.models import TailoringSession, JobDescription
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    jd = JobDescription(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), title="T",
+        raw_text="need Python and Kubernetes",
+        parsed={"agent1": {
+            "exact_technical_tools": ["Python", "Kubernetes"],
+            "methodologies_and_frameworks": [], "domain_expertise_themes": [],
+            "seniority_indicators": [], "ats_filter_phrases": [],
+            "core_responsibilities": [], "target_job_titles": [],
+            "nice_to_have_skills": [], "importance": {},
+        }, "semantic": {"fingerprint": "x", "verdicts": {"kubernetes": "missing"}}},
+        status="applied",
+    )
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=jd.id,
+        status="completed", ats_score=50, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[],
+        tailored_content={"skills": ["Python"], "experience": [{"title": "E", "bullets": ["Used Python"]}]},
+    )
+    sess.jd = jd
+    sess.ats_fixes = [
+        {"id": "skill:kubernetes", "type": "skill", "gap": "Kubernetes", "importance": "high",
+         "grounded": True, "text": "Kubernetes", "experience_index": None,
+         "score_delta": 50, "default_accept": False},
+        {"id": "skill:terraform", "type": "skill", "gap": "Terraform", "importance": "low",
+         "grounded": True, "text": "Terraform", "experience_index": None,
+         "score_delta": 0, "default_accept": False},
+    ]
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+
+    provider_spy = MagicMock()
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=provider_spy):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/ai/project-score",
+                    json={"session_id": str(sess.id), "accepted_fix_ids": ["skill:kubernetes"]},
+                    headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["projected_score"] == 100   # Python + accepted Kubernetes
+        provider_spy.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)

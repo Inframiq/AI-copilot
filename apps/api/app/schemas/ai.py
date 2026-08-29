@@ -46,6 +46,7 @@ class AnalyzeOut(BaseModel):
     # "" when the JD had no extractable title, else matched|partial|missing —
     # lets the UI explain a score driven down by title mismatch.
     title_match: str = ""
+    importance: dict[str, str] = {}  # {jd_term_lowercased: "high"|"medium"|"low"}
 
 
 class PrepQuestionOut(BaseModel):
@@ -156,3 +157,12 @@ class GenerateResumeOut(BaseModel):
     template_id: str
     valid: bool
     violations: list[dict]
+
+
+class ProjectScoreRequest(BaseModel):
+    session_id: uuid.UUID
+    accepted_fix_ids: list[str] = []
+
+
+class ProjectScoreOut(BaseModel):
+    projected_score: int

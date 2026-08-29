@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
+    default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
@@ -76,6 +77,7 @@ class JDAnalysis(BaseModel):
     core_responsibilities: list[str] = []  # the JD's actual duty lines — scope of work, not tools/themes
     target_job_titles: list[str] = []  # the role title(s) this JD is hiring for
     nice_to_have_skills: list[str] = []  # skills the JD frames as preferred / "a plus", not required
+    importance: dict[str, str] = {}  # {term_lowercased: "high"|"medium"|"low"}; "job title" key for the title signal
 
 
 class BulletMapping(BaseModel):
@@ -378,7 +380,14 @@ literal title as written; do not invent a seniority level the JD doesn't state.
 desired, "bonus", "a plus", or "nice to have" rather than required. Put such \
 skills ONLY here — never also in exact_technical_tools, \
 methodologies_and_frameworks, or ats_filter_phrases.
-9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+9. importance: rate EVERY term you put in exact_technical_tools, \
+methodologies_and_frameworks, ats_filter_phrases, nice_to_have_skills and \
+core_responsibilities, plus a "job title" key, as "high" / "medium" / "low" \
+for THIS role. high = defines the role, a stated hard requirement, or \
+repeated/emphasised; medium = a normal requirement or day-to-day duty; \
+low = "nice to have", peripheral, or generic. Keys are the term verbatim \
+(lowercased); "job title" rates how much the posting hinges on title match.
+10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -390,7 +399,8 @@ methodologies_and_frameworks, or ats_filter_phrases.
   "ats_filter_phrases": ["string"],
   "core_responsibilities": ["string"],
   "target_job_titles": ["string"],
-  "nice_to_have_skills": ["string"]
+  "nice_to_have_skills": ["string"],
+  "importance": {"term": "high|medium|low"}
 }
 </output_schema>"""
 
@@ -410,10 +420,33 @@ async def _agent1_parse_jd(
             f"<company_intelligence>\n{intel_block}\n</company_intelligence>\n\n"
             f"<job_description>\n{jd_text}\n</job_description>"
         )
-    return await provider.complete_structured(
+    result = await provider.complete_structured(
         _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast",
         max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="agent1_parse_jd",
     )
+    return _backfill_importance(result)
+
+
+def _backfill_importance(jd: JDAnalysis) -> JDAnalysis:
+    """Guarantee every extracted term (and "job title") has an importance,
+    filling gaps from the deterministic bucket rule."""
+    given = {k.strip().lower(): v for k, v in (jd.importance or {}).items()
+             if v in ("high", "medium", "low")}
+    titles = jd.target_job_titles or []
+    hard = jd.exact_technical_tools or []
+    mediums = (jd.methodologies_and_frameworks or []) + (jd.ats_filter_phrases or []) \
+        + (jd.core_responsibilities or [])
+    nice = jd.nice_to_have_skills or []
+    terms = ["job title"] + titles + hard + mediums + nice
+    filled = dict(given)
+    for term in terms:
+        key = term.strip().lower()
+        if key and key not in filled:
+            filled[key] = default_importance(
+                term, titles=titles, hard_tools=hard, mediums=mediums, nice=nice,
+            )
+    jd.importance = filled
+    return jd
 
 
 # ── Semantic presence verifier ──────────────────────────────────────────────
@@ -498,6 +531,80 @@ async def _verify_semantic_presence(
         if phrase:
             out[phrase] = verdict if verdict in _VALID_VERDICTS else "missing"
     return out
+
+
+# ── Gap Filler: propose bullets + a headline for post-tailor gaps ─────────────
+
+_MAX_TOKENS_GAP_FILL = 4000
+
+
+class GapFillBullet(BaseModel):
+    gap: str
+    grounded: bool
+    experience_index: int | None = None
+    bullet_text: str
+
+
+class GapFillerOutput(BaseModel):
+    bullets: list[GapFillBullet] = []
+    headline: str = ""
+
+
+_GAP_FILLER_SYSTEM = """\
+<system_role>
+You help a candidate close specific gaps between their (already tailored) \
+résumé and a job description. For each gap you are given, propose ONE résumé \
+bullet that would close it.
+</system_role>
+
+<rules>
+1. If the résumé already shows related experience, reframe the CLOSEST real \
+experience into a bullet that names the gap explicitly — set grounded=true and \
+experience_index to that entry's index.
+2. If there is no basis in the résumé, write one plausible bullet for the \
+role, set grounded=false and experience_index=null. The user will only keep it \
+if it is actually true of them.
+3. Never invent numbers, employers, dates, or tools the résumé doesn't support. \
+A grounded bullet keeps the original metrics; a speculative bullet has none.
+4. If a gap has kind "title", and only then, also return a `headline` string: \
+a concise professional headline aligning the candidate to the target title \
+(e.g. "Senior Data Analyst | Analytics Engineering"). Otherwise headline "".
+5. One bullet per gap, in the same order. Output ONLY valid JSON matching the \
+schema.
+</rules>
+
+<output_schema>
+{"bullets": [{"gap": "string", "grounded": true, "experience_index": 0, "bullet_text": "string"}], "headline": "string"}
+</output_schema>"""
+
+
+async def _agent_gap_filler(
+    tailored_content: dict,
+    jd_analysis: JDAnalysis,
+    gaps: list[dict],
+    provider: AIProvider,
+) -> GapFillerOutput:
+    if not gaps:
+        return GapFillerOutput()
+    payload = json.dumps({
+        "resume": tailored_content,
+        "jd_themes": {
+            "tools": jd_analysis.exact_technical_tools,
+            "methodologies": jd_analysis.methodologies_and_frameworks,
+            "responsibilities": jd_analysis.core_responsibilities,
+            "target_job_titles": jd_analysis.target_job_titles,
+        },
+        "gaps": gaps,
+    })
+    try:
+        return await provider.complete_structured(
+            _GAP_FILLER_SYSTEM, payload, GapFillerOutput,
+            model_tier="fast", max_output_tokens=_MAX_TOKENS_GAP_FILL,
+            call_name="agent_gap_filler",
+        )
+    except Exception:
+        logger.warning("gap filler failed", exc_info=True)
+        return GapFillerOutput()
 
 
 # ── Agent 2: Semantic Mapper ──────────────────────────────────────────────────
@@ -1169,6 +1276,16 @@ class TailoringResult:
     prep_questions: list[PrepQuestionData]
     company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
     suggested_skills: list[str]  # skills Agent 2 suggests adding — user opts in via UI
+    ats_fixes: list[AtsFix] = field(default_factory=list)
+    bullet_importance: dict[str, str] = field(default_factory=dict)
+
+
+_IMPORTANCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _max_importance(levels: list[str]) -> str:
+    valid = [l for l in levels if l in _IMPORTANCE_RANK]
+    return min(valid, key=lambda l: _IMPORTANCE_RANK[l]) if valid else "medium"
 
 
 async def analyze_jd_match(
@@ -1214,73 +1331,26 @@ async def analyze_jd_match(
         company_intel = None
         jd_analysis = await _agent1_parse_jd(jd_text, provider)
 
-    # ── bucket the JD's requirements ────────────────────────────────────────
-    # required   — hard requirements, full weight
-    # nice       — "preferred / a plus" skills, half weight (deduped against
-    #              required so a skill named in both doesn't get counted twice)
-    seen_lower: set[str] = set()
+    # ── lexical + semantic + title blend, all via the pure score_content ────
+    resume_text, _ = build_resume_text(resume_content)
 
-    def _dedupe(phrases: list[str]) -> list[str]:
-        out: list[str] = []
-        for p in phrases:
-            key = p.strip().lower()
-            if key and key not in seen_lower:
-                seen_lower.add(key)
-                out.append(p)
-        return out
-
-    required_skills = _dedupe(
-        jd_analysis.exact_technical_tools
-        + jd_analysis.methodologies_and_frameworks
-        + jd_analysis.ats_filter_phrases
-    )
-    nice_skills = _dedupe(jd_analysis.nice_to_have_skills or [])
-
-    delta_required = compute_delta(required_skills, resume_content)
-    delta_nice = compute_delta(nice_skills, resume_content)
-
-    # ── semantic recovery on what the lexical pass couldn't match ────────────
+    # Which phrases still need the semantic pass (lexical misses + responsibilities)
+    probe = score_content(resume_content, jd_analysis, {})
     responsibilities = [
         r.strip() for r in (jd_analysis.core_responsibilities or []) if r and r.strip()
     ]
-    to_verify = list(delta_required.missing) + list(delta_nice.missing) + responsibilities
+    to_verify = list(probe.missing) + responsibilities
 
     if cached_semantic_verdicts is not None:
         semantic_verdicts = dict(cached_semantic_verdicts)
     elif to_verify:
-        resume_text, _ = build_resume_text(resume_content)
         semantic_verdicts = await _verify_semantic_presence(
             to_verify, resume_text, provider
         )
     else:
         semantic_verdicts = {}
 
-    def _verdicts_for(phrases: list[str], lexical_matched: list[str]) -> dict[str, str]:
-        matched_set = {m.strip().lower() for m in lexical_matched}
-        out: dict[str, str] = {}
-        for p in phrases:
-            key = p.strip().lower()
-            out[p] = "matched" if key in matched_set else semantic_verdicts.get(key, "missing")
-        return out
-
-    skill_verdicts = _verdicts_for(required_skills, delta_required.matched)
-    nice_verdicts = _verdicts_for(nice_skills, delta_nice.matched)
-    responsibility_verdicts = {
-        r: semantic_verdicts.get(r.strip().lower(), "missing") for r in responsibilities
-    }
-
-    # ── job-title alignment (highest-weight individual ATS signal) ───────────
-    jd_titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
-    title_verdict: str | None = None
-    if jd_titles:
-        resume_titles = [str(resume_content.get("headline") or "")]
-        for exp in (resume_content.get("experience") or [])[:2]:
-            resume_titles.append(str(exp.get("title") or ""))
-        title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
-
-    blended = blend_scores(
-        skill_verdicts, responsibility_verdicts, nice_verdicts, title_verdict
-    )
+    blended = score_content(resume_content, jd_analysis, semantic_verdicts)
 
     company_keywords: list[str] = []
     if company_intel and not company_intel.known_not_found:
@@ -1303,7 +1373,7 @@ async def analyze_jd_match(
         ats_score=blended.ats_score,
         company_keywords=company_keywords,
         semantic_verdicts=semantic_verdicts,
-        title_match=title_verdict or "",
+        title_match=blended.title_match,
     )
 
 
@@ -1409,6 +1479,77 @@ async def run_tailoring_pipeline(
         len(resume_content.get("skills") or []),
     )
 
+    # ── build the gap → fix list ────────────────────────────────────────────
+    imp = analysis.jd_analysis.importance or {}
+
+    def _imp(term: str) -> str:
+        return imp.get(term.strip().lower()) or default_importance(
+            term,
+            titles=analysis.jd_analysis.target_job_titles or [],
+            hard_tools=analysis.jd_analysis.exact_technical_tools or [],
+            mediums=(analysis.jd_analysis.methodologies_and_frameworks or [])
+                + (analysis.jd_analysis.ats_filter_phrases or [])
+                + (analysis.jd_analysis.core_responsibilities or []),
+            nice=analysis.jd_analysis.nice_to_have_skills or [],
+        )
+
+    gap_specs: list[dict] = []
+    for skill in post.missing_skills:
+        gap_specs.append({"gap": skill, "kind": "skill", "importance": _imp(skill)})
+    for resp in (analysis.jd_analysis.core_responsibilities or []):
+        if post.semantic_verdicts.get(resp.strip().lower(), "missing") in ("partial", "missing"):
+            gap_specs.append({"gap": resp, "kind": "responsibility", "importance": _imp(resp)})
+    if post.title_match in ("", "partial", "missing") and (analysis.jd_analysis.target_job_titles or []):
+        gap_specs.append({"gap": "job title", "kind": "title", "importance": _imp("job title")})
+
+    gap_out = await _agent_gap_filler(
+        tailored_content, analysis.jd_analysis, gap_specs, provider,
+    )
+
+    fixes: list[AtsFix] = []
+    # skill fixes: every missing skill + Agent 2's plausible-to-add set
+    skill_names: list[str] = list(post.missing_skills) + _sanitize_skill_list(
+        mapping_plan.plausible_skills_to_add
+    )
+    seen_skill = set()
+    for name in skill_names:
+        k = name.strip().lower()
+        if not k or k in seen_skill:
+            continue
+        seen_skill.add(k)
+        fixes.append(AtsFix(
+            id=fix_slug("skill", name), type="skill", gap=name,
+            importance=_imp(name), grounded=True, text=name, default_accept=False,
+        ))
+    # bullet fixes from the gap filler
+    for b in gap_out.bullets:
+        fixes.append(AtsFix(
+            id=fix_slug("bullet", b.gap), type="bullet", gap=b.gap,
+            importance=_imp(b.gap), grounded=b.grounded, text=b.bullet_text,
+            experience_index=b.experience_index,
+            default_accept=b.grounded,   # only a grounded bullet pre-accepts
+        ))
+    # headline fix
+    if gap_out.headline.strip():
+        fixes.append(AtsFix(
+            id="headline:job-title", type="headline", gap="job title",
+            importance=_imp("job title"), grounded=False,
+            text=gap_out.headline.strip(), default_accept=False,
+        ))
+
+    for f in fixes:
+        f.score_delta = estimate_fix_delta(
+            tailored_content, analysis.jd_analysis, post.semantic_verdicts,
+            post.ats_score, f,
+        )
+    fixes.sort(key=lambda f: (_IMPORTANCE_RANK[f.importance], -f.score_delta))
+
+    bullet_importance: dict[str, str] = {}
+    for m in mapping_plan.mapping_plan:
+        terms = [t for t in ([m.jd_responsibility_addressed] + list(m.target_jd_keywords_to_inject or [])) if t]
+        if terms:
+            bullet_importance[m.original_bullet_id] = _max_importance([_imp(t) for t in terms])
+
     # ── merge in the user's priority skills — a code-level guarantee, not
     #    just a prompt instruction, that they show up for review ─────────────
     suggested = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
@@ -1427,6 +1568,8 @@ async def run_tailoring_pipeline(
         prep_questions=questions,
         company_keywords=post.company_keywords,
         suggested_skills=suggested,
+        ats_fixes=fixes,
+        bullet_importance=bullet_importance,
     )
 
 
