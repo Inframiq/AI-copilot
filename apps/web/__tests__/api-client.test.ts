@@ -221,4 +221,21 @@ describe("apiClient", () => {
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(url).toContain("/jd/jd-1/cover-letter");
   });
+
+  it("projectScore posts session id + accepted ids and returns the score", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ projected_score: 82 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await apiClient.projectScore("sess-1", ["skill:k8s", "bullet:x"]);
+
+    expect(out).toEqual({ projected_score: 82 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/ai/project-score");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({
+      session_id: "sess-1", accepted_fix_ids: ["skill:k8s", "bullet:x"],
+    });
+  });
 });

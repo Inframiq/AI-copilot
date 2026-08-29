@@ -14,7 +14,10 @@ import type {
   CoverLetter,
   CoverLetterStart,
   JDCoverLetter,
+  AtsFix,
 } from "@career-copilot/types";
+
+export type { AtsFix } from "@career-copilot/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 if (!BASE && typeof window !== "undefined") {
@@ -298,7 +301,25 @@ export const apiClient = {
     missing_skills: string[];
     company_keywords: string[];
     suggested_skills: string[];
+    /** Accept/reject "gap → fix" list from the tailor pipeline. `[]` on
+     * sessions tailored before this feature shipped. */
+    ats_fixes?: AtsFix[];
+    /** {original_bullet_id: "high"|"medium"|"low"} for the résumé's existing
+     * bullets. `{}` on pre-feature sessions. */
+    bullet_importance?: Record<string, "high" | "medium" | "low">;
   }> => request("GET", `/ai/sessions/${sessionId}`),
+
+  // Pure re-score of a completed session's résumé with a chosen subset of its
+  // ats_fixes applied — powers the review screen's running "Projected ATS"
+  // number. No LLM call server-side.
+  projectScore: (
+    sessionId: string,
+    acceptedFixIds: string[]
+  ): Promise<{ projected_score: number }> =>
+    request<{ projected_score: number }>("POST", "/ai/project-score", {
+      session_id: sessionId,
+      accepted_fix_ids: acceptedFixIds,
+    }),
 
   // Most recent completed session across every JD — resolves Interview
   // Center to real, JD-specific questions on load even when the in-memory
