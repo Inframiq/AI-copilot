@@ -17,6 +17,8 @@ import {
 import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
+import { AtsGapFixPanel } from "./AtsGapFixPanel";
+import { ImportanceBadge } from "./ImportanceBadge";
 
 export function BulletReviewPanel() {
   const router = useRouter();
@@ -270,6 +272,7 @@ export function BulletReviewPanel() {
           prompt={summaryPrompt}
           setPrompt={setSummaryPrompt}
         />
+        <AtsGapFixPanel />
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
@@ -495,7 +498,10 @@ export function BulletReviewPanel() {
       {/* ── Bottom action area ── */}
       <div className="flex flex-col gap-sm pt-xs border-t border-outline-variant/20 mt-xs">
 
-        {/* 1. Suggested skills */}
+        {/* 1. Gap → fix list (skills / bullets / headline) + running projected score */}
+        <AtsGapFixPanel />
+
+        {/* 1b. Existing-skills keep/drop + opt-in suggested skills */}
         <SkillsBlock
           suggestedSkills={suggestedSkills}
           prioritySkills={prioritySkills}
