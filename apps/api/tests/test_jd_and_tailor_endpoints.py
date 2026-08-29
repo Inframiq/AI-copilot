@@ -1165,3 +1165,32 @@ async def test_rewrite_bullet_requires_auth():
             json={"bullet_text": "Original bullet.", "mode": "rewrite"},
         )
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_session_returns_ats_fixes_and_bullet_importance():
+    from app.db.models import TailoringSession
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), jd_id=uuid.uuid4(),
+        status="completed", tailored_content={"experience": []}, ats_score=70,
+        matched_skills=[], missing_skills=[], company_keywords=[], suggested_skills=[],
+    )
+    sess.ats_fixes = [{"id": "skill:k8s", "type": "skill", "gap": "Kubernetes",
+                       "importance": "high", "grounded": True, "text": "Kubernetes",
+                       "experience_index": None, "score_delta": 5, "default_accept": False}]
+    sess.bullet_importance = {"exp0_b0": "high"}
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ats_fixes"][0]["gap"] == "Kubernetes"
+        assert body["bullet_importance"] == {"exp0_b0": "high"}
+    finally:
+        app.dependency_overrides.pop(get_db, None)

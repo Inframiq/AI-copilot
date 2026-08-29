@@ -172,6 +172,8 @@ async def _run_tailoring_background(
         row.tailored_content = result.tailored_content
         row.company_keywords = result.company_keywords
         row.suggested_skills = result.suggested_skills
+        row.ats_fixes = [f.model_dump() for f in result.ats_fixes]
+        row.bullet_importance = result.bullet_importance
         row.status = "completed"
         session_db.add_all(
             [
@@ -377,6 +379,8 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
         "missing_skills": session.missing_skills,
         "company_keywords": session.company_keywords,
         "suggested_skills": session.suggested_skills,
+        "ats_fixes": session.ats_fixes or [],
+        "bullet_importance": session.bullet_importance or {},
     }
 
 
@@ -407,6 +411,8 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         "missing_skills": session.missing_skills,
         "company_keywords": session.company_keywords,
         "suggested_skills": session.suggested_skills,
+        "ats_fixes": session.ats_fixes or [],
+        "bullet_importance": session.bullet_importance or {},
     }
 
 

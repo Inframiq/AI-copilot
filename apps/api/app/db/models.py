@@ -115,6 +115,8 @@ class TailoringSession(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     company_keywords: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     suggested_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    ats_fixes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    bullet_importance: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     resume: Mapped["Resume | None"] = relationship(back_populates="sessions")
