@@ -196,3 +196,45 @@ def test_default_importance_nice_is_low():
 def test_default_importance_matches_case_insensitively():
     kw = dict(titles=["Data Analyst"], hard_tools=[], mediums=[], nice=[])
     assert default_importance("data analyst", **kw) == "high"
+
+
+from types import SimpleNamespace
+from app.services.ats import score_content, JdScore
+
+
+def _jd(**kw):
+    base = dict(exact_technical_tools=[], methodologies_and_frameworks=[],
+               ats_filter_phrases=[], nice_to_have_skills=[],
+               core_responsibilities=[], target_job_titles=[])
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_score_content_lexical_hit_plus_semantic_verdict():
+    jd = _jd(exact_technical_tools=["Python", "AWS"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    # AWS not in the résumé; semantic verifier said "partial"
+    out = score_content(content, jd, {"aws": "partial"})
+    assert isinstance(out, JdScore)
+    assert out.matched == ["Python"]
+    assert out.missing == ["AWS"]
+    assert out.ats_score == 75          # 1.0 + 0.5 over 2
+    assert out.title_match == ""        # no target_job_titles
+
+
+def test_score_content_scores_title_when_jd_has_one():
+    jd = _jd(exact_technical_tools=["Python"], target_job_titles=["Senior Data Analyst"])
+    content = {"headline": "Senior Data Analyst",
+               "experience": [{"title": "Senior Data Analyst", "bullets": ["Used Python"]}],
+               "skills": ["Python"]}
+    out = score_content(content, jd, {})
+    assert out.title_match == "matched"
+    assert out.ats_score == 100
+
+
+def test_score_content_nice_to_have_half_weight():
+    jd = _jd(exact_technical_tools=["Python"], nice_to_have_skills=["Looker"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    out = score_content(content, jd, {"looker": "missing"})
+    assert out.ats_score == 67          # 1.0 over 1.5
+    assert out.missing == ["Looker"]

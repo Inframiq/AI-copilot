@@ -191,6 +191,71 @@ def blend_scores(
     return DeltaResult(matched=matched, missing=missing, ats_score=score)
 
 
+@dataclass
+class JdScore:
+    matched: list[str]
+    missing: list[str]
+    ats_score: int
+    title_match: str  # "" | "matched" | "partial" | "missing"
+
+
+def _dedupe_ci(*groups: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for g in groups:
+        for p in g or []:
+            k = p.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                out.append(p)
+    return out
+
+
+def score_content(content: dict, jd_analysis, semantic_verdicts: dict[str, str]) -> JdScore:
+    """Blend a résumé's lexical + (pre-computed) semantic match against a
+    parsed JD into a 0-100 score. Pure — never calls a model. Missing
+    phrases fall back to whatever `semantic_verdicts` says, else "missing"."""
+    required = _dedupe_ci(
+        jd_analysis.exact_technical_tools,
+        jd_analysis.methodologies_and_frameworks,
+        jd_analysis.ats_filter_phrases,
+    )
+    nice = [p for p in _dedupe_ci(jd_analysis.nice_to_have_skills)
+            if p.strip().lower() not in {r.strip().lower() for r in required}]
+    responsibilities = [r.strip() for r in (jd_analysis.core_responsibilities or []) if r and r.strip()]
+
+    d_req = compute_delta(required, content)
+    d_nice = compute_delta(nice, content)
+
+    def verdicts_for(phrases: list[str], lexically_matched: list[str]) -> dict[str, str]:
+        matched_set = {m.strip().lower() for m in lexically_matched}
+        out: dict[str, str] = {}
+        for p in phrases:
+            k = p.strip().lower()
+            out[p] = "matched" if k in matched_set else semantic_verdicts.get(k, "missing")
+        return out
+
+    skill_verdicts = verdicts_for(required, d_req.matched)
+    nice_verdicts = verdicts_for(nice, d_nice.matched)
+    resp_verdicts = {r: semantic_verdicts.get(r.strip().lower(), "missing") for r in responsibilities}
+
+    jd_titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
+    title_verdict = None
+    if jd_titles:
+        resume_titles = [str(content.get("headline") or "")]
+        for exp in (content.get("experience") or [])[:2]:
+            resume_titles.append(str(exp.get("title") or ""))
+        title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
+
+    blended = blend_scores(skill_verdicts, resp_verdicts, nice_verdicts, title_verdict)
+    return JdScore(
+        matched=blended.matched,
+        missing=blended.missing,
+        ats_score=blended.ats_score,
+        title_match=title_verdict or "",
+    )
+
+
 def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":
     """Split a job title into (seniority_level, role_token_set).
 

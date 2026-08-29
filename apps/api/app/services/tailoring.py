@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
-    default_importance,
+    default_importance, score_content,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
@@ -1247,73 +1247,26 @@ async def analyze_jd_match(
         company_intel = None
         jd_analysis = await _agent1_parse_jd(jd_text, provider)
 
-    # ── bucket the JD's requirements ────────────────────────────────────────
-    # required   — hard requirements, full weight
-    # nice       — "preferred / a plus" skills, half weight (deduped against
-    #              required so a skill named in both doesn't get counted twice)
-    seen_lower: set[str] = set()
+    # ── lexical + semantic + title blend, all via the pure score_content ────
+    resume_text, _ = build_resume_text(resume_content)
 
-    def _dedupe(phrases: list[str]) -> list[str]:
-        out: list[str] = []
-        for p in phrases:
-            key = p.strip().lower()
-            if key and key not in seen_lower:
-                seen_lower.add(key)
-                out.append(p)
-        return out
-
-    required_skills = _dedupe(
-        jd_analysis.exact_technical_tools
-        + jd_analysis.methodologies_and_frameworks
-        + jd_analysis.ats_filter_phrases
-    )
-    nice_skills = _dedupe(jd_analysis.nice_to_have_skills or [])
-
-    delta_required = compute_delta(required_skills, resume_content)
-    delta_nice = compute_delta(nice_skills, resume_content)
-
-    # ── semantic recovery on what the lexical pass couldn't match ────────────
+    # Which phrases still need the semantic pass (lexical misses + responsibilities)
+    probe = score_content(resume_content, jd_analysis, {})
     responsibilities = [
         r.strip() for r in (jd_analysis.core_responsibilities or []) if r and r.strip()
     ]
-    to_verify = list(delta_required.missing) + list(delta_nice.missing) + responsibilities
+    to_verify = list(probe.missing) + responsibilities
 
     if cached_semantic_verdicts is not None:
         semantic_verdicts = dict(cached_semantic_verdicts)
     elif to_verify:
-        resume_text, _ = build_resume_text(resume_content)
         semantic_verdicts = await _verify_semantic_presence(
             to_verify, resume_text, provider
         )
     else:
         semantic_verdicts = {}
 
-    def _verdicts_for(phrases: list[str], lexical_matched: list[str]) -> dict[str, str]:
-        matched_set = {m.strip().lower() for m in lexical_matched}
-        out: dict[str, str] = {}
-        for p in phrases:
-            key = p.strip().lower()
-            out[p] = "matched" if key in matched_set else semantic_verdicts.get(key, "missing")
-        return out
-
-    skill_verdicts = _verdicts_for(required_skills, delta_required.matched)
-    nice_verdicts = _verdicts_for(nice_skills, delta_nice.matched)
-    responsibility_verdicts = {
-        r: semantic_verdicts.get(r.strip().lower(), "missing") for r in responsibilities
-    }
-
-    # ── job-title alignment (highest-weight individual ATS signal) ───────────
-    jd_titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
-    title_verdict: str | None = None
-    if jd_titles:
-        resume_titles = [str(resume_content.get("headline") or "")]
-        for exp in (resume_content.get("experience") or [])[:2]:
-            resume_titles.append(str(exp.get("title") or ""))
-        title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
-
-    blended = blend_scores(
-        skill_verdicts, responsibility_verdicts, nice_verdicts, title_verdict
-    )
+    blended = score_content(resume_content, jd_analysis, semantic_verdicts)
 
     company_keywords: list[str] = []
     if company_intel and not company_intel.known_not_found:
@@ -1336,7 +1289,7 @@ async def analyze_jd_match(
         ats_score=blended.ats_score,
         company_keywords=company_keywords,
         semantic_verdicts=semantic_verdicts,
-        title_match=title_verdict or "",
+        title_match=blended.title_match,
     )
 
 
