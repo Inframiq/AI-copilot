@@ -989,3 +989,54 @@ async def test_agent_gap_filler_no_gaps_skips_the_call():
     out = await _agent_gap_filler({"experience": []}, make_jd_analysis(), [], provider)
     assert out.bullets == [] and out.headline == ""
     provider.complete_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_ats_fixes_and_bullet_importance():
+    from app.services.tailoring import GapFillerOutput, GapFillBullet
+
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Python", "Kubernetes"],
+            core_responsibilities=["own the deploy pipeline"],
+            importance={"python": "high", "kubernetes": "high",
+                        "own the deploy pipeline": "medium", "job title": "low"},
+        ),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Managed deploys",
+                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                strategic_instruction="INJECT",
+                jd_responsibility_addressed="own the deploy pipeline",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
+                               rewritten_text="Managed deploys with Python")],
+            updated_skills=[],
+        ),
+        GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
+            gap="Kubernetes", grounded=False, experience_index=None,
+            bullet_text="Operated Kubernetes clusters in production.")]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "E", "bullets": ["Managed deploys"]}], "skills": []}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "need Python and Kubernetes", 50, provider, db)
+
+    ids = {f.id for f in result.ats_fixes}
+    # a skill fix for the still-missing Kubernetes, and a speculative bullet fix
+    assert any(f.type == "skill" and f.text == "Kubernetes" for f in result.ats_fixes)
+    k8s_bullet = next(f for f in result.ats_fixes if f.type == "bullet" and f.gap == "Kubernetes")
+    assert k8s_bullet.grounded is False
+    assert k8s_bullet.default_accept is False
+    assert k8s_bullet.importance == "high"
+    # sorted High -> Low
+    levels = [f.importance for f in result.ats_fixes]
+    assert levels == sorted(levels, key=lambda l: {"high": 0, "medium": 1, "low": 2}[l])
+    # bullet importance from the mapping plan (max of keyword + responsibility importance)
+    assert result.bullet_importance["exp0_b0"] == "high"

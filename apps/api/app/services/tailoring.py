@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
-    default_importance, score_content,
+    default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
@@ -1276,6 +1276,16 @@ class TailoringResult:
     prep_questions: list[PrepQuestionData]
     company_keywords: list[str]  # company-specific ATS keywords surfaced to the frontend
     suggested_skills: list[str]  # skills Agent 2 suggests adding — user opts in via UI
+    ats_fixes: list[AtsFix] = field(default_factory=list)
+    bullet_importance: dict[str, str] = field(default_factory=dict)
+
+
+_IMPORTANCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _max_importance(levels: list[str]) -> str:
+    valid = [l for l in levels if l in _IMPORTANCE_RANK]
+    return min(valid, key=lambda l: _IMPORTANCE_RANK[l]) if valid else "medium"
 
 
 async def analyze_jd_match(
@@ -1469,6 +1479,77 @@ async def run_tailoring_pipeline(
         len(resume_content.get("skills") or []),
     )
 
+    # ── build the gap → fix list ────────────────────────────────────────────
+    imp = analysis.jd_analysis.importance or {}
+
+    def _imp(term: str) -> str:
+        return imp.get(term.strip().lower()) or default_importance(
+            term,
+            titles=analysis.jd_analysis.target_job_titles or [],
+            hard_tools=analysis.jd_analysis.exact_technical_tools or [],
+            mediums=(analysis.jd_analysis.methodologies_and_frameworks or [])
+                + (analysis.jd_analysis.ats_filter_phrases or [])
+                + (analysis.jd_analysis.core_responsibilities or []),
+            nice=analysis.jd_analysis.nice_to_have_skills or [],
+        )
+
+    gap_specs: list[dict] = []
+    for skill in post.missing_skills:
+        gap_specs.append({"gap": skill, "kind": "skill", "importance": _imp(skill)})
+    for resp in (analysis.jd_analysis.core_responsibilities or []):
+        if post.semantic_verdicts.get(resp.strip().lower(), "missing") in ("partial", "missing"):
+            gap_specs.append({"gap": resp, "kind": "responsibility", "importance": _imp(resp)})
+    if post.title_match in ("", "partial", "missing") and (analysis.jd_analysis.target_job_titles or []):
+        gap_specs.append({"gap": "job title", "kind": "title", "importance": _imp("job title")})
+
+    gap_out = await _agent_gap_filler(
+        tailored_content, analysis.jd_analysis, gap_specs, provider,
+    )
+
+    fixes: list[AtsFix] = []
+    # skill fixes: every missing skill + Agent 2's plausible-to-add set
+    skill_names: list[str] = list(post.missing_skills) + _sanitize_skill_list(
+        mapping_plan.plausible_skills_to_add
+    )
+    seen_skill = set()
+    for name in skill_names:
+        k = name.strip().lower()
+        if not k or k in seen_skill:
+            continue
+        seen_skill.add(k)
+        fixes.append(AtsFix(
+            id=fix_slug("skill", name), type="skill", gap=name,
+            importance=_imp(name), grounded=True, text=name, default_accept=False,
+        ))
+    # bullet fixes from the gap filler
+    for b in gap_out.bullets:
+        fixes.append(AtsFix(
+            id=fix_slug("bullet", b.gap), type="bullet", gap=b.gap,
+            importance=_imp(b.gap), grounded=b.grounded, text=b.bullet_text,
+            experience_index=b.experience_index,
+            default_accept=b.grounded,   # only a grounded bullet pre-accepts
+        ))
+    # headline fix
+    if gap_out.headline.strip():
+        fixes.append(AtsFix(
+            id="headline:job-title", type="headline", gap="job title",
+            importance=_imp("job title"), grounded=False,
+            text=gap_out.headline.strip(), default_accept=False,
+        ))
+
+    for f in fixes:
+        f.score_delta = estimate_fix_delta(
+            tailored_content, analysis.jd_analysis, post.semantic_verdicts,
+            post.ats_score, f,
+        )
+    fixes.sort(key=lambda f: (_IMPORTANCE_RANK[f.importance], -f.score_delta))
+
+    bullet_importance: dict[str, str] = {}
+    for m in mapping_plan.mapping_plan:
+        terms = [t for t in ([m.jd_responsibility_addressed] + list(m.target_jd_keywords_to_inject or [])) if t]
+        if terms:
+            bullet_importance[m.original_bullet_id] = _max_importance([_imp(t) for t in terms])
+
     # ── merge in the user's priority skills — a code-level guarantee, not
     #    just a prompt instruction, that they show up for review ─────────────
     suggested = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
@@ -1487,6 +1568,8 @@ async def run_tailoring_pipeline(
         prep_questions=questions,
         company_keywords=post.company_keywords,
         suggested_skills=suggested,
+        ats_fixes=fixes,
+        bullet_importance=bullet_importance,
     )
 
 
