@@ -1521,12 +1521,19 @@ async def run_tailoring_pipeline(
             id=fix_slug("skill", name), type="skill", gap=name,
             importance=_imp(name), grounded=True, text=name, default_accept=False,
         ))
-    # bullet fixes from the gap filler
+    # bullet fixes from the gap filler. A speculative bullet has no role of its
+    # own (experience_index is None) — pin it to the most-recent role (index 0)
+    # so accepting it actually lands in the résumé and counts toward the score;
+    # the review UI still lets the user move it to a different role.
+    n_roles = len(tailored_content.get("experience") or [])
     for b in gap_out.bullets:
+        exp_idx = b.experience_index if b.experience_index is not None else 0
+        if n_roles == 0:
+            exp_idx = None
         fixes.append(AtsFix(
             id=fix_slug("bullet", b.gap), type="bullet", gap=b.gap,
             importance=_imp(b.gap), grounded=b.grounded, text=b.bullet_text,
-            experience_index=b.experience_index,
+            experience_index=exp_idx,
             default_accept=b.grounded,   # only a grounded bullet pre-accepts
         ))
     # headline fix

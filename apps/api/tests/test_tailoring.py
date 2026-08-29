@@ -1035,6 +1035,9 @@ async def test_pipeline_emits_ats_fixes_and_bullet_importance():
     assert k8s_bullet.grounded is False
     assert k8s_bullet.default_accept is False
     assert k8s_bullet.importance == "high"
+    # a role-less (speculative) gap-filler bullet is pinned to the most-recent
+    # role so accepting it actually lands somewhere; the UI can still move it.
+    assert k8s_bullet.experience_index == 0
     # sorted High -> Low
     levels = [f.importance for f in result.ats_fixes]
     assert levels == sorted(levels, key=lambda l: {"high": 0, "medium": 1, "low": 2}[l])
