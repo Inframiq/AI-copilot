@@ -58,6 +58,7 @@ function buildMergedContent(
   bulletDecisions: Record<string, BulletDecision>,
   suggestedSkills: string[],
   atsFixes: AtsFix[] = [],
+  fixExperienceIndex: Record<string, number> = {},
 ): ResumeContent {
   // Merge: use tailored bullet unless user rejected it.
   const mergedExperience = pendingContent.experience.map((job, jobIdx) => {
@@ -119,13 +120,13 @@ function buildMergedContent(
       }
     } else if (f.type === "headline") {
       headline = f.text;
-    } else if (
-      f.type === "bullet" &&
-      f.experience_index != null &&
-      expWithFixes[f.experience_index] &&
-      expWithFixes[f.experience_index].bullets.length < MAX_BULLETS_PER_ROLE
-    ) {
-      expWithFixes[f.experience_index].bullets.push(f.text);
+    } else if (f.type === "bullet") {
+      // User's per-fix role pick wins; else the fix's own index; else the
+      // most-recent role. A speculative bullet always lands somewhere now.
+      const idx = fixExperienceIndex[f.id] ?? f.experience_index ?? 0;
+      if (expWithFixes[idx] && expWithFixes[idx].bullets.length < MAX_BULLETS_PER_ROLE) {
+        expWithFixes[idx].bullets.push(f.text);
+      }
     }
   }
 
@@ -161,6 +162,9 @@ interface TailoringState {
   // Running ATS score for the résumé with the currently-accepted fixes folded
   // in — pure server re-score (POST /ai/project-score), null until computed.
   projectedAtsScore: number | null;
+  // Per-bullet-fix role override: {fixId: experienceIndex}. Set by the review
+  // screen's role dropdown; buildMergedContent places the bullet there.
+  fixExperienceIndex: Record<string, number>;
   prioritySkills: string[];  // user-picked "not matched" keywords to prioritize — set from the JD detail page before calling runTailoring
   humanizeLevel: number;
   isLoading: boolean;
@@ -196,6 +200,11 @@ interface TailoringState {
   /** Accept/reject a single "gap → fix" item (stored under `fix:${id}`) and
    * kick off a debounced projected-score re-score. */
   setFixDecision: (id: string, decision: BulletDecision) => void;
+  /** Pick which experience entry a bullet fix should be added under. */
+  setFixExperienceIndex: (id: string, experienceIndex: number) => void;
+  /** Re-run the debounced projected-score re-score for the current accepted
+   * fixes — for callers that change fix decisions in bulk (e.g. Auto-select). */
+  refreshProjectedScore: () => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
   applyBulletDecisions: (decisions: Record<string, BulletDecision>) => void;
   updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
@@ -237,6 +246,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   atsFixes: [],
   bulletImportance: {},
   projectedAtsScore: null,
+  fixExperienceIndex: {},
   prioritySkills: [],
   humanizeLevel: 50,
   isLoading: false,
@@ -270,6 +280,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsFixes: isDifferentJd ? [] : current.atsFixes,
       bulletImportance: isDifferentJd ? {} : current.bulletImportance,
       projectedAtsScore: isDifferentJd ? null : current.projectedAtsScore,
+      fixExperienceIndex: isDifferentJd ? {} : current.fixExperienceIndex,
       prioritySkills: isDifferentJd ? [] : current.prioritySkills,
       pendingContent: null,
       sessionId: isDifferentJd ? null : current.sessionId,
@@ -301,13 +312,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision }, previewPdfUrl: null }));
     useResumeStore.getState().setPdfSignedUrl(null);
   },
-  setFixDecision: (id, decision) => {
-    set((s) => ({
-      bulletDecisions: { ...s.bulletDecisions, [`fix:${id}`]: decision },
-      previewPdfUrl: null,
-    }));
-    useResumeStore.getState().setPdfSignedUrl(null);
-
+  refreshProjectedScore: () => {
     const { sessionId, atsFixes, bulletDecisions } = get();
     if (!sessionId) return;
     const acceptedIds = atsFixes
@@ -322,6 +327,21 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         /* transient failure — keep the last projected score on screen */
       }
     }, 400);
+  },
+  setFixDecision: (id, decision) => {
+    set((s) => ({
+      bulletDecisions: { ...s.bulletDecisions, [`fix:${id}`]: decision },
+      previewPdfUrl: null,
+    }));
+    useResumeStore.getState().setPdfSignedUrl(null);
+    get().refreshProjectedScore();
+  },
+  setFixExperienceIndex: (id, experienceIndex) => {
+    set((s) => ({
+      fixExperienceIndex: { ...s.fixExperienceIndex, [id]: experienceIndex },
+      previewPdfUrl: null,
+    }));
+    useResumeStore.getState().setPdfSignedUrl(null);
   },
   setAllBulletDecisions: (changes, decision) => {
     const decisions: Record<string, BulletDecision> = {};
@@ -450,6 +470,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsFixes: [],
       bulletImportance: {},
       projectedAtsScore: null,
+      fixExperienceIndex: {},
       sessionId: null,
       pendingContent: null,
       bulletDecisions: {},
@@ -588,11 +609,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   // store or the backend — the original resume stays exactly as it was
   // until the user explicitly calls saveTailoredResume.
   generatePreview: async (resumeId: string) => {
-    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes } = get();
+    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex } = get();
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes);
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex);
 
     set({ isApplying: true, error: null, mergedContent });
     try {
@@ -624,11 +645,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   // keyword density and the ATS Score shown otherwise never reflects that
   // until this is called. Never persists anything.
   reanalyzePreview: async (resumeId: string) => {
-    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, jdId, companyName } = get();
+    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, jdId, companyName } = get();
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent || !jdId) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes);
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex);
 
     set({ isReanalyzing: true, error: null });
     try {
@@ -714,6 +735,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsFixes: [],
       bulletImportance: {},
       projectedAtsScore: null,
+      fixExperienceIndex: {},
       mergedContent: null,
       previewPdfUrl: null,
     });
@@ -739,6 +761,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsFixes: [],
       bulletImportance: {},
       projectedAtsScore: null,
+      fixExperienceIndex: {},
       prioritySkills: [],
       humanizeLevel: 50,
       isLoading: false,

@@ -983,6 +983,61 @@ describe("useTailoringStore", () => {
         vi.useRealTimers();
       }
     });
+
+    const bulletFix = {
+      id: "bullet:kubernetes", type: "bullet" as const, gap: "Kubernetes", importance: "high" as const,
+      grounded: false, text: "Operated Kubernetes clusters.", experience_index: 0,
+      score_delta: 4, default_accept: false,
+    };
+    const twoRoles = {
+      contact: { name: "Jane", email: "jane@example.com" },
+      experience: [
+        { company: "Acme", title: "Senior Eng", start: "2021", bullets: ["Did A"] },
+        { company: "Beta", title: "Eng", start: "2018", bullets: ["Did B"] },
+      ],
+      education: [],
+      skills: [],
+    };
+
+    it("setFixExperienceIndex moves an accepted bullet fix to the chosen role in the preview", async () => {
+      useResumeStore.getState().setResume("resume-1", twoRoles, "ats_clean");
+      useTailoringStore.setState({
+        pendingContent: twoRoles,
+        atsFixes: [bulletFix],
+        bulletDecisions: { "fix:bullet:kubernetes": "accept" },
+      } as never);
+
+      await useTailoringStore.getState().generatePreview("resume-1");
+      let merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.experience[0].bullets).toContain("Operated Kubernetes clusters.");
+      expect(merged?.experience[1].bullets).not.toContain("Operated Kubernetes clusters.");
+
+      useTailoringStore.getState().setFixExperienceIndex("bullet:kubernetes", 1);
+      await useTailoringStore.getState().generatePreview("resume-1");
+      merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.experience[1].bullets).toContain("Operated Kubernetes clusters.");
+      expect(merged?.experience[0].bullets).not.toContain("Operated Kubernetes clusters.");
+    });
+
+    it("refreshProjectedScore re-scores with the current accepted fix ids (debounced)", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(apiClient.projectScore).mockResolvedValue({ projected_score: 91 });
+        useTailoringStore.setState({
+          sessionId: "sess-9",
+          atsFixes: [K8S_FIX, bulletFix],
+          bulletDecisions: { "fix:skill:k8s": "accept", "fix:bullet:kubernetes": "accept" },
+        } as never);
+
+        useTailoringStore.getState().refreshProjectedScore();
+        await vi.advanceTimersByTimeAsync(400);
+
+        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-9", ["skill:k8s", "bullet:kubernetes"]);
+        expect(useTailoringStore.getState().projectedAtsScore).toBe(91);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
 
