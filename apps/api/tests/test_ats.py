@@ -289,3 +289,24 @@ def test_apply_fixes_skips_a_bullet_past_the_role_cap_whole():
 
 def test_fix_slug_is_stable_and_url_safe():
     assert fix_slug("bullet", "Revenue Forecasting & Planning!") == "bullet:revenue-forecasting-planning"
+
+
+from app.services.ats import estimate_fix_delta
+
+
+def test_estimate_fix_delta_adding_a_matched_keyword_raises_score():
+    jd = _jd(exact_technical_tools=["Python", "Kubernetes"])
+    content = {"skills": ["Python"], "experience": [{"title": "E", "bullets": ["Used Python"]}]}
+    base = score_content(content, jd, {"kubernetes": "missing"}).ats_score  # 50
+    fix = AtsFix(id="s:k8s", type="skill", gap="Kubernetes", importance="high",
+                 grounded=True, text="Kubernetes")
+    delta = estimate_fix_delta(content, jd, {"kubernetes": "missing"}, base, fix)
+    assert delta == 50  # 50 -> 100
+
+
+def test_estimate_fix_delta_never_negative():
+    jd = _jd(exact_technical_tools=["Python"])
+    content = {"skills": ["Python"], "experience": []}
+    base = score_content(content, jd, {}).ats_score  # 100
+    fix = AtsFix(id="s:x", type="skill", gap="X", importance="low", grounded=True, text="X")
+    assert estimate_fix_delta(content, jd, {}, base, fix) == 0

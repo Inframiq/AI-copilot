@@ -319,6 +319,18 @@ def apply_fixes(content: dict, fixes: list[AtsFix]) -> dict:
     return out
 
 
+def estimate_fix_delta(
+    content: dict,
+    jd_analysis,
+    semantic_verdicts: dict[str, str],
+    base_score: int,
+    fix: "AtsFix",
+) -> int:
+    """Points this one fix would add on its own, vs base_score. Pure."""
+    after = score_content(apply_fix(content, fix), jd_analysis, semantic_verdicts).ats_score
+    return max(0, after - base_score)
+
+
 def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":
     """Split a job title into (seniority_level, role_token_set).
 
