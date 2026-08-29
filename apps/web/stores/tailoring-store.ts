@@ -13,6 +13,37 @@ const MAX_BULLETS_PER_ROLE = 7;
 // fix would otherwise fire a /ai/project-score call per click.
 let _projectScoreTimer: ReturnType<typeof setTimeout> | null = null;
 
+const _bulletTokens = (t: string) =>
+  new Set(
+    t
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(" ")
+      .filter((w) => w.length > 2),
+  );
+
+// Mirrors the backend's bullet_already_present (ats.py): true if `text` just
+// restates a bullet already in `existing` — exact after normalisation, or
+// ≥ 80% word overlap. Stops an accepted gap-filler bullet from landing next
+// to a near-identical one the résumé already has.
+export function bulletAlreadyPresent(existing: string[], text: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const target = norm(text);
+  if (!target) return false;
+  const newTokens = _bulletTokens(text);
+  for (const b of existing) {
+    if (norm(b) === target) return true;
+    if (newTokens.size === 0) continue;
+    const bTokens = _bulletTokens(b);
+    if (bTokens.size === 0) continue;
+    let inter = 0;
+    for (const w of newTokens) if (bTokens.has(w)) inter++;
+    const union = newTokens.size + bTokens.size - inter;
+    if (union > 0 && inter / union >= 0.8) return true;
+  }
+  return false;
+}
+
 // 'accept' = use tailored version, 'reject' = keep original
 export type BulletDecision = "accept" | "reject";
 
@@ -122,9 +153,14 @@ function buildMergedContent(
       headline = f.text;
     } else if (f.type === "bullet") {
       // User's per-fix role pick wins; else the fix's own index; else the
-      // most-recent role. A speculative bullet always lands somewhere now.
+      // most-recent role. A speculative bullet always lands somewhere now,
+      // unless it just restates a bullet that role already has.
       const idx = fixExperienceIndex[f.id] ?? f.experience_index ?? 0;
-      if (expWithFixes[idx] && expWithFixes[idx].bullets.length < MAX_BULLETS_PER_ROLE) {
+      if (
+        expWithFixes[idx] &&
+        expWithFixes[idx].bullets.length < MAX_BULLETS_PER_ROLE &&
+        !bulletAlreadyPresent(expWithFixes[idx].bullets, f.text)
+      ) {
         expWithFixes[idx].bullets.push(f.text);
       }
     }

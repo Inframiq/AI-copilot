@@ -1019,6 +1019,31 @@ describe("useTailoringStore", () => {
       expect(merged?.experience[0].bullets).not.toContain("Operated Kubernetes clusters.");
     });
 
+    it("does not add a bullet fix that restates a bullet already in the target role", async () => {
+      const content = {
+        contact: { name: "", email: "" },
+        experience: [
+          { company: "Acme", title: "Eng", start: "2021", bullets: ["Operated Kubernetes clusters in production"] },
+        ],
+        education: [],
+        skills: [],
+      };
+      useResumeStore.getState().setResume("resume-1", content, "ats_clean");
+      useTailoringStore.setState({
+        pendingContent: content,
+        atsFixes: [{
+          id: "bullet:k8s", type: "bullet", gap: "Kubernetes", importance: "high",
+          grounded: false, text: "Operated Kubernetes clusters in production.",
+          experience_index: 0, score_delta: 0, default_accept: false,
+        }],
+        bulletDecisions: { "fix:bullet:k8s": "accept" },
+      } as never);
+
+      await useTailoringStore.getState().generatePreview("resume-1");
+      const merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.experience[0].bullets).toEqual(["Operated Kubernetes clusters in production"]);
+    });
+
     it("refreshProjectedScore re-scores with the current accepted fix ids (debounced)", async () => {
       vi.useFakeTimers();
       try {
