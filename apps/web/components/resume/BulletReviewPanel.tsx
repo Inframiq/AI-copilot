@@ -16,9 +16,9 @@ import {
 } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, type AtsFix } from "@/lib/api-client";
 import { AtsGapFixPanel } from "./AtsGapFixPanel";
-import { ImportanceBadge } from "./ImportanceBadge";
+import { ImportanceBadge, type ImportanceLevel } from "./ImportanceBadge";
 
 export function BulletReviewPanel() {
   const router = useRouter();
@@ -44,6 +44,9 @@ export function BulletReviewPanel() {
   const missingSkills = useTailoringStore((s) => s.missingSkills);
   const bulletImportance = useTailoringStore((s) => s.bulletImportance);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
+  const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
+  const setFixDecision = useTailoringStore((s) => s.setFixDecision);
+  const refreshProjectedScore = useTailoringStore((s) => s.refreshProjectedScore);
   // Not user-adjustable here anymore (the Writing Style slider that changed
   // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -102,13 +105,13 @@ export function BulletReviewPanel() {
     return out;
   }, [pendingContent, originalContent]);
 
-  // Skills already offered as an accept/reject row in AtsGapFixPanel — drop
-  // them from SkillsBlock's "Suggested Skills to Add" so each skill is chosen
-  // in exactly one place. Empty for sessions tailored before ats_fixes shipped,
-  // so those keep the full suggested list.
+  // JD-gap skills come through as `type:"skill"` fixes. They render inside the
+  // single SkillsBlock (as chips carrying their own importance + "+N%"), so
+  // drop any plain suggestion with the same name — each skill is chosen once.
+  const skillFixes = useMemo(() => atsFixes.filter((f) => f.type === "skill"), [atsFixes]);
   const fixSkillNames = useMemo(
-    () => new Set(atsFixes.filter((f) => f.type === "skill").map((f) => f.text.toLowerCase())),
-    [atsFixes],
+    () => new Set(skillFixes.map((f) => f.text.toLowerCase())),
+    [skillFixes],
   );
   const dedupedSuggestedSkills = useMemo(
     () => suggestedSkills.filter((s) => !fixSkillNames.has(s.toLowerCase())),
@@ -290,11 +293,14 @@ export function BulletReviewPanel() {
         <AtsGapFixPanel />
         <SkillsBlock
           suggestedSkills={dedupedSuggestedSkills}
+          skillFixes={skillFixes}
           prioritySkills={prioritySkills}
           missingSkills={missingSkills}
           companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
+          setFixDecision={setFixDecision}
+          refreshProjectedScore={refreshProjectedScore}
           originalSkills={originalContent?.skills ?? []}
           applyBulletDecisions={applyBulletDecisions}
         />
@@ -330,7 +336,15 @@ export function BulletReviewPanel() {
           <p className="text-caption text-on-surface-variant">
             {acceptedBullets} of {bulletChanges.length} bullet
             {bulletChanges.length !== 1 ? "s" : ""} accepted
-            {atsScore !== null && ` · ATS Score: ${atsScore}%`}
+            {atsScore !== null && (
+              <>
+                {" · ATS Score: "}
+                {atsScore}%
+                {projectedAtsScore !== null && projectedAtsScore !== atsScore && (
+                  <span className="text-primary font-semibold"> → {projectedAtsScore}%</span>
+                )}
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-xs">
@@ -526,11 +540,14 @@ export function BulletReviewPanel() {
         {/* 1b. Existing-skills keep/drop + opt-in suggested skills */}
         <SkillsBlock
           suggestedSkills={dedupedSuggestedSkills}
+          skillFixes={skillFixes}
           prioritySkills={prioritySkills}
           missingSkills={missingSkills}
           companyKeywords={companyKeywords}
           bulletDecisions={bulletDecisions}
           setBulletDecision={setBulletDecision}
+          setFixDecision={setFixDecision}
+          refreshProjectedScore={refreshProjectedScore}
           originalSkills={originalContent?.skills ?? []}
           applyBulletDecisions={applyBulletDecisions}
         />
@@ -796,29 +813,58 @@ const TIER_DOT_CLASS: Record<SkillTier, string> = {
   Low: "bg-on-surface-variant/40",
 };
 
+const IMPORTANCE_TIER: Record<ImportanceLevel, SkillTier> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
 function SkillsBlock({
   originalSkills,
   suggestedSkills,
+  skillFixes,
   prioritySkills,
   missingSkills,
   companyKeywords,
   bulletDecisions,
   setBulletDecision,
+  setFixDecision,
+  refreshProjectedScore,
   applyBulletDecisions,
 }: {
   originalSkills: string[];
   suggestedSkills: string[];
+  skillFixes: AtsFix[];
   prioritySkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
   bulletDecisions: Record<string, string>;
   setBulletDecision: (key: string, d: "accept" | "reject") => void;
+  setFixDecision: (id: string, d: "accept" | "reject") => void;
+  refreshProjectedScore: () => void;
   applyBulletDecisions: (decisions: Record<string, "accept" | "reject">) => void;
 }) {
-  if (originalSkills.length === 0 && suggestedSkills.length === 0) return null;
+  if (originalSkills.length === 0 && suggestedSkills.length === 0 && skillFixes.length === 0) {
+    return null;
+  }
   const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
   const missingSet = new Set(missingSkills.map((s) => s.toLowerCase()));
   const keywordSet = new Set(companyKeywords.map((s) => s.toLowerCase()));
+
+  // The unified "Skills to Add" candidates: JD-gap skill fixes first (they
+  // carry their own importance + "+N%"), then plain AI suggestions. The caller
+  // already stripped any suggestion whose name matches a fix, so no dupes.
+  const fixByName = new Map(skillFixes.map((f) => [f.text.toLowerCase(), f]));
+  const addCandidates = [...skillFixes.map((f) => f.text), ...suggestedSkills];
+
+  // A candidate's accept/reject key: fix-backed skills flow through the same
+  // `fix:${id}` decision + projected-score path the gap panel uses; plain
+  // suggestions keep the legacy `skill_add:` key.
+  const addKey = (skill: string) => {
+    const fix = fixByName.get(skill.toLowerCase());
+    return fix ? `fix:${fix.id}` : `skill_add:${skill}`;
+  };
+  const isAddSelected = (skill: string) => bulletDecisions[addKey(skill)] === "accept";
 
   // Both "which existing skills to keep" and "which suggested skills to
   // add" draw from the same MAX_MERGED_SKILLS budget — matches
@@ -828,9 +874,7 @@ function SkillsBlock({
   const keptCount = originalSkills.filter(
     (s) => (bulletDecisions[`skill_keep:${s}`] ?? keepDefault) === "accept",
   ).length;
-  const addedCount = suggestedSkills.filter(
-    (s) => bulletDecisions[`skill_add:${s}`] === "accept",
-  ).length;
+  const addedCount = addCandidates.filter(isAddSelected).length;
   const totalSelected = keptCount + addedCount;
   const atCap = totalSelected >= MAX_MERGED_SKILLS;
 
@@ -841,6 +885,8 @@ function SkillsBlock({
   // skills for "Auto-select Top 20" below, even though it isn't displayed
   // there.
   function tierOf(skill: string): SkillTier {
+    const fix = fixByName.get(skill.toLowerCase());
+    if (fix) return IMPORTANCE_TIER[fix.importance];
     const l = skill.toLowerCase();
     if (prioritySet.has(l) || missingSet.has(l)) return "High";
     if (keywordSet.has(l)) return "Medium";
@@ -859,7 +905,7 @@ function SkillsBlock({
     const tierRank: Record<SkillTier, number> = { High: 0, Medium: 1, Low: 2 };
     const candidates = [
       ...originalSkills.map((skill) => ({ skill, isOriginal: true, tier: tierOf(skill) })),
-      ...suggestedSkills.map((skill) => ({ skill, isOriginal: false, tier: tierOf(skill) })),
+      ...addCandidates.map((skill) => ({ skill, isOriginal: false, tier: tierOf(skill) })),
     ].sort((a, b) => {
       const byTier = tierRank[a.tier] - tierRank[b.tier];
       if (byTier !== 0) return byTier;
@@ -869,8 +915,10 @@ function SkillsBlock({
 
     const decisions: Record<string, "accept" | "reject"> = {};
     for (const skill of originalSkills) decisions[`skill_keep:${skill}`] = top.has(skill) ? "accept" : "reject";
-    for (const skill of suggestedSkills) decisions[`skill_add:${skill}`] = top.has(skill) ? "accept" : "reject";
+    for (const skill of addCandidates) decisions[addKey(skill)] = top.has(skill) ? "accept" : "reject";
     applyBulletDecisions(decisions);
+    // applyBulletDecisions doesn't re-score on its own — kick the projected total.
+    refreshProjectedScore();
   }
 
   function renderKeepChip(skill: string) {
@@ -900,17 +948,22 @@ function SkillsBlock({
   }
 
   function renderAddChip(skill: string) {
-    const key = `skill_add:${skill}`;
+    const fix = fixByName.get(skill.toLowerCase());
+    const key = addKey(skill);
     const selected = bulletDecisions[key] === "accept";
     const isPriority = prioritySet.has(skill.toLowerCase());
     const disabled = !selected && atCap;
     const tier = tierOf(skill);
+    const toggle = () =>
+      fix
+        ? setFixDecision(fix.id, selected ? "reject" : "accept")
+        : setBulletDecision(key, selected ? "reject" : "accept");
     return (
       <button
         key={skill}
         disabled={disabled}
         title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority`}
-        onClick={() => setBulletDecision(key, selected ? "reject" : "accept")}
+        onClick={toggle}
         className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
           selected
             ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
@@ -923,14 +976,17 @@ function SkillsBlock({
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TIER_DOT_CLASS[tier]}`} />
         {isPriority && <span aria-label="You picked this keyword">★</span>}
         {skill}
+        {fix && fix.score_delta > 0 && (
+          <span className="text-primary font-semibold">+{fix.score_delta}%</span>
+        )}
       </button>
     );
   }
 
   const originalTechnical = originalSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
   const originalSoft = originalSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
-  const suggestedTechnical = suggestedSkills.filter((s) => !SOFT_SKILL_PATTERN.test(s));
-  const suggestedSoft = suggestedSkills.filter((s) => SOFT_SKILL_PATTERN.test(s));
+  const suggestedTechnical = addCandidates.filter((s) => !SOFT_SKILL_PATTERN.test(s));
+  const suggestedSoft = addCandidates.filter((s) => SOFT_SKILL_PATTERN.test(s));
 
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface p-md flex flex-col gap-md">
@@ -962,7 +1018,7 @@ function SkillsBlock({
             {totalSelected} / {MAX_MERGED_SKILLS} selected
             {atCap && " — limit reached, deselect one to select another"}
           </span>
-          {suggestedSkills.length > 0 && (
+          {addCandidates.length > 0 && (
             <span className="flex items-center gap-xs">
               <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.High}`} /> High
               <span className={`w-1.5 h-1.5 rounded-full ${TIER_DOT_CLASS.Medium}`} /> Medium
@@ -990,10 +1046,10 @@ function SkillsBlock({
         </div>
       )}
 
-      {suggestedSkills.length > 0 && (
+      {addCandidates.length > 0 && (
         <div className="flex flex-col gap-sm">
           <p className="text-label-sm text-on-surface font-bold">
-            Suggested Skills to Add
+            Skills to Add for this JD
             {prioritySkills.length > 0 && (
               <span className="font-normal text-caption text-on-surface-variant"> — ★ marks the keywords you picked on the JD page</span>
             )}

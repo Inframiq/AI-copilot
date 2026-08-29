@@ -5,38 +5,58 @@ import { AtsGapFixPanel } from "@/components/resume/AtsGapFixPanel";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { AtsFix } from "@/lib/api-client";
 
-const fixes: AtsFix[] = [
-  { id: "skill:k8s", type: "skill", gap: "Kubernetes", importance: "high",
-    grounded: true, text: "Kubernetes", experience_index: null, score_delta: 12, default_accept: false },
-  { id: "bullet:leadership", type: "bullet", gap: "team leadership", importance: "low",
-    grounded: false, text: "Led a team of 4 engineers.", experience_index: 0, score_delta: 3, default_accept: false },
-];
+const bulletFix: AtsFix = {
+  id: "bullet:k8s", type: "bullet", gap: "Kubernetes", importance: "high",
+  grounded: false, text: "Operated Kubernetes clusters.", experience_index: 0,
+  score_delta: 5, default_accept: false,
+};
+const skillFix: AtsFix = {
+  id: "skill:redis", type: "skill", gap: "Redis", importance: "medium",
+  grounded: true, text: "Redis", experience_index: null, score_delta: 3, default_accept: false,
+};
 
 describe("AtsGapFixPanel", () => {
   beforeEach(() => {
     useTailoringStore.getState().resetStore();
-    useTailoringStore.setState({ atsScore: 60, projectedAtsScore: 72, atsFixes: fixes, bulletDecisions: {} } as never);
+    useTailoringStore.setState({
+      atsScore: 60,
+      atsFixes: [bulletFix, skillFix],
+      bulletDecisions: {},
+      pendingContent: {
+        contact: { name: "", email: "" },
+        experience: [
+          { company: "Acme", title: "Senior Eng", start: "2021", bullets: [] },
+          { company: "Beta", title: "Eng", start: "2018", bullets: [] },
+        ],
+        education: [],
+        skills: [],
+      },
+    } as never);
   });
-
   afterEach(() => cleanup());
 
-  it("shows current → projected score and one row per fix, sorted High first", () => {
-    const { getAllByTestId, getByText } = render(<AtsGapFixPanel />);
-    expect(getByText(/60/)).toBeTruthy();
-    expect(getByText(/72/)).toBeTruthy();
-    const badges = getAllByTestId("importance-badge");
-    expect(badges[0].getAttribute("data-level")).toBe("high");
+  it("renders bullet/headline fixes only — skill fixes belong in the skills section", () => {
+    const { queryByText } = render(<AtsGapFixPanel />);
+    expect(queryByText(/Operated Kubernetes clusters/)).not.toBeNull();
+    expect(queryByText(/Add skill/)).toBeNull();
   });
 
-  it("marks a speculative bullet and defaults it to not-accepted", () => {
-    const { getByText } = render(<AtsGapFixPanel />);
-    expect(getByText(/only add if you.*actually done this/i)).toBeTruthy();
+  it("has a role picker per bullet fix that calls setFixExperienceIndex", () => {
+    const { getByLabelText } = render(<AtsGapFixPanel />);
+    const select = getByLabelText(/role for Kubernetes/i) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(useTailoringStore.getState().fixExperienceIndex["bullet:k8s"]).toBe(1);
   });
 
   it("accept button calls setFixDecision", () => {
-    const { getAllByRole } = render(<AtsGapFixPanel />);
-    const acceptBtns = getAllByRole("button", { name: /accept/i });
-    fireEvent.click(acceptBtns[0]);
-    expect(useTailoringStore.getState().bulletDecisions["fix:skill:k8s"]).toBe("accept");
+    const { getByRole } = render(<AtsGapFixPanel />);
+    fireEvent.click(getByRole("button", { name: /Accept Kubernetes/i }));
+    expect(useTailoringStore.getState().bulletDecisions["fix:bullet:k8s"]).toBe("accept");
+  });
+
+  it("renders nothing when there are no bullet or headline fixes", () => {
+    useTailoringStore.setState({ atsFixes: [skillFix] } as never);
+    const { container } = render(<AtsGapFixPanel />);
+    expect(container.textContent).toBe("");
   });
 });

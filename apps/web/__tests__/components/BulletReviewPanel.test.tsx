@@ -64,7 +64,7 @@ describe("BulletReviewPanel", () => {
     grounded: true, text: "Kubernetes", experience_index: null, score_delta: 8, default_accept: false,
   };
 
-  it("hides a SkillsBlock suggested skill that already appears as a panel skill fix", () => {
+  it("shows a JD-gap skill fix once, as a chip in the single skills section", () => {
     useResumeStore.getState().setResume("resume-1", emptyContent, "ats_clean");
     useTailoringStore.setState({
       pendingContent: emptyContent,
@@ -72,9 +72,23 @@ describe("BulletReviewPanel", () => {
       atsFixes: [skillFix],
     } as never);
 
-    const { queryByRole } = render(<BulletReviewPanel />);
-    expect(queryByRole("button", { name: /Redis/ })).not.toBeNull();
-    expect(queryByRole("button", { name: /Kubernetes/ })).toBeNull();
+    const { queryAllByRole } = render(<BulletReviewPanel />);
+    const k8s = queryAllByRole("button", { name: /Kubernetes/ });
+    expect(k8s.length).toBe(1); // the fix chip, not also a plain suggestion
+    expect(queryAllByRole("button", { name: /Redis/ }).length).toBe(1);
+  });
+
+  it("accepting the gap-skill chip records a fix: decision", () => {
+    useResumeStore.getState().setResume("resume-1", emptyContent, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: emptyContent,
+      suggestedSkills: ["Redis"],
+      atsFixes: [skillFix],
+    } as never);
+
+    const { getByRole } = render(<BulletReviewPanel />);
+    getByRole("button", { name: /Kubernetes/ }).click();
+    expect(useTailoringStore.getState().bulletDecisions["fix:skill:kubernetes"]).toBe("accept");
   });
 
   it("keeps every suggested skill when there are no ats fixes (legacy session)", () => {
@@ -88,5 +102,31 @@ describe("BulletReviewPanel", () => {
     const { queryByRole } = render(<BulletReviewPanel />);
     expect(queryByRole("button", { name: /Redis/ })).not.toBeNull();
     expect(queryByRole("button", { name: /Kubernetes/ })).not.toBeNull();
+  });
+
+  it("shows current → projected ATS score in the review header", () => {
+    useResumeStore.getState().setResume(
+      "resume-1",
+      {
+        contact: { name: "Jane", email: "jane@example.com" },
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did the thing"] }],
+        education: [],
+        skills: [],
+      },
+      "ats_clean",
+    );
+    useTailoringStore.setState({
+      atsScore: 60,
+      projectedAtsScore: 72,
+      pendingContent: {
+        contact: { name: "Jane", email: "jane@example.com" },
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did the thing better"] }],
+        education: [],
+        skills: [],
+      },
+    } as never);
+
+    const { container } = render(<BulletReviewPanel />);
+    expect(container.textContent).toMatch(/ATS Score:\s*60%\s*→\s*72%/);
   });
 });
