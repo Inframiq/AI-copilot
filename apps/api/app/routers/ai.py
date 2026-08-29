@@ -13,10 +13,11 @@ from app.core.rate_limit import limiter
 from app.schemas.ai import (
     TailorRequest, TailorOut, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut, SkillQuestionOut,
+    ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
-from app.services.ats import build_resume_text
+from app.services.ats import build_resume_text, score_content, apply_fixes, AtsFix
 from app.services.resume_spec import HARD_LIMITS
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -342,6 +343,41 @@ async def browse_questions(
     query = query.order_by(SkillQuestionBank.created_at.desc()).limit(50)
     rows = (await db.execute(query)).scalars().all()
     return rows
+
+
+@router.post("/project-score", response_model=ProjectScoreOut)
+@limiter.limit("30/minute")
+async def project_score(
+    request: Request,
+    body: ProjectScoreRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-score a completed tailoring session's résumé with a chosen subset
+    of its ats_fixes applied. Pure computation — no model call."""
+    uid = uuid.UUID(user["sub"])
+    session = (
+        await db.execute(
+            select(TailoringSession).where(
+                TailoringSession.id == body.session_id,
+                TailoringSession.user_id == uid,
+            )
+        )
+    ).scalar_one_or_none()
+    if not session or session.status != "completed" or not session.tailored_content:
+        raise HTTPException(status_code=404, detail="Completed session not found")
+
+    jd_row = session.jd
+    agent1 = (jd_row.parsed or {}).get("agent1") if jd_row else None
+    if not agent1:
+        raise HTTPException(status_code=409, detail="Session JD has no cached analysis")
+    jd_analysis = JDAnalysis(**agent1)
+    verdicts = (jd_row.parsed or {}).get("semantic", {}).get("verdicts", {}) or {}
+
+    accepted = set(body.accepted_fix_ids)
+    fixes = [AtsFix(**f) for f in (session.ats_fixes or []) if f.get("id") in accepted]
+    merged = apply_fixes(session.tailored_content, fixes)
+    return ProjectScoreOut(projected_score=score_content(merged, jd_analysis, verdicts).ats_score)
 
 
 @router.get("/sessions/latest")

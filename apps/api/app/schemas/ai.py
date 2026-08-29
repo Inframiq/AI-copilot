@@ -157,3 +157,12 @@ class GenerateResumeOut(BaseModel):
     template_id: str
     valid: bool
     violations: list[dict]
+
+
+class ProjectScoreRequest(BaseModel):
+    session_id: uuid.UUID
+    accepted_fix_ids: list[str] = []
+
+
+class ProjectScoreOut(BaseModel):
+    projected_score: int
