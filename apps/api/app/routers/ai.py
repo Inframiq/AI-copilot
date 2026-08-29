@@ -111,6 +111,7 @@ async def analyze_jd(
         missing_skills=analysis.missing_skills,
         company_keywords=analysis.company_keywords,
         title_match=analysis.title_match,
+        importance=analysis.jd_analysis.importance,
     )
 
 

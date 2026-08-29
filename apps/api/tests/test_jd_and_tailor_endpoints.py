@@ -617,6 +617,39 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
         app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.mark.asyncio
+async def test_analyze_returns_importance_map():
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    jd = make_jd()
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+
+    fake = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python"], methodologies_and_frameworks=[],
+            domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+            importance={"python": "high", "job title": "medium"},
+        ),
+        matched_skills=["Python"], missing_skills=[], ats_score=100, company_keywords=[],
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/ai/analyze",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                    headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["importance"] == {"python": "high", "job title": "medium"}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── POST /ai/tailor ───────────────────────────────────────────────────────────
 
 

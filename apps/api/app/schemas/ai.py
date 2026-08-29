@@ -46,6 +46,7 @@ class AnalyzeOut(BaseModel):
     # "" when the JD had no extractable title, else matched|partial|missing —
     # lets the UI explain a score driven down by title mismatch.
     title_match: str = ""
+    importance: dict[str, str] = {}  # {jd_term_lowercased: "high"|"medium"|"low"}
 
 
 class PrepQuestionOut(BaseModel):
