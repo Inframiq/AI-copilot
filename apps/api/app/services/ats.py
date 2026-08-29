@@ -1,5 +1,9 @@
 import re
+from copy import deepcopy
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 
 @dataclass
@@ -254,6 +258,65 @@ def score_content(content: dict, jd_analysis, semantic_verdicts: dict[str, str])
         ats_score=blended.ats_score,
         title_match=title_verdict or "",
     )
+
+
+_MAX_SKILLS = 20          # mirrors MAX_MERGED_SKILLS in apps/web/stores/tailoring-store.ts
+_MAX_BULLETS_PER_ROLE = 7  # HARD_LIMITS["experience_bullets_per_role"]["max"]
+
+
+class AtsFix(BaseModel):
+    id: str
+    type: Literal["skill", "bullet", "headline"]
+    gap: str
+    importance: Literal["high", "medium", "low"]
+    grounded: bool
+    text: str
+    experience_index: int | None = None
+    score_delta: int = 0
+    default_accept: bool = False
+
+
+def fix_slug(prefix: str, gap: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", gap.lower()).strip("-")[:60]
+    return f"{prefix}:{s}"
+
+
+def apply_fix(content: dict, fix: AtsFix) -> dict:
+    """Return a deep copy of `content` with the single fix folded in. No cap
+    checks here — see apply_fixes for those."""
+    out = deepcopy(content)
+    if fix.type == "skill":
+        out.setdefault("skills", [])
+        if fix.text not in out["skills"]:
+            out["skills"].append(fix.text)
+    elif fix.type == "headline":
+        out["headline"] = fix.text
+    elif fix.type == "bullet" and fix.experience_index is not None:
+        exps = out.get("experience") or []
+        if 0 <= fix.experience_index < len(exps):
+            exps[fix.experience_index].setdefault("bullets", []).append(fix.text)
+    return out
+
+
+def apply_fixes(content: dict, fixes: list[AtsFix]) -> dict:
+    """Fold a list of fixes in order. A skill fix that would push the list
+    past _MAX_SKILLS, or a bullet fix past _MAX_BULLETS_PER_ROLE for its
+    role, is skipped whole (never truncated mid-text)."""
+    out = deepcopy(content)
+    for fix in fixes:
+        if fix.type == "skill":
+            skills = out.setdefault("skills", [])
+            if fix.text not in skills and len(skills) < _MAX_SKILLS:
+                skills.append(fix.text)
+        elif fix.type == "headline":
+            out["headline"] = fix.text
+        elif fix.type == "bullet" and fix.experience_index is not None:
+            exps = out.get("experience") or []
+            if 0 <= fix.experience_index < len(exps):
+                bullets = exps[fix.experience_index].setdefault("bullets", [])
+                if len(bullets) < _MAX_BULLETS_PER_ROLE:
+                    bullets.append(fix.text)
+    return out
 
 
 def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":

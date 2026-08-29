@@ -238,3 +238,54 @@ def test_score_content_nice_to_have_half_weight():
     out = score_content(content, jd, {"looker": "missing"})
     assert out.ats_score == 67          # 1.0 over 1.5
     assert out.missing == ["Looker"]
+
+
+from app.services.ats import AtsFix, apply_fix, apply_fixes, fix_slug
+
+
+def _fix(**kw):
+    base = dict(id="x", type="skill", gap="g", importance="medium",
+                grounded=True, text="Kubernetes")
+    base.update(kw)
+    return AtsFix(**base)
+
+
+def test_apply_fix_skill_appends_and_does_not_mutate():
+    content = {"skills": ["Python"], "experience": []}
+    out = apply_fix(content, _fix(type="skill", text="Kubernetes"))
+    assert out["skills"] == ["Python", "Kubernetes"]
+    assert content["skills"] == ["Python"]  # original untouched
+
+
+def test_apply_fix_bullet_appends_to_the_named_experience():
+    content = {"skills": [], "experience": [
+        {"title": "A", "bullets": ["b1"]},
+        {"title": "B", "bullets": ["b2"]},
+    ]}
+    out = apply_fix(content, _fix(type="bullet", text="Shipped X", experience_index=1))
+    assert out["experience"][1]["bullets"] == ["b2", "Shipped X"]
+    assert out["experience"][0]["bullets"] == ["b1"]
+
+
+def test_apply_fix_headline_replaces():
+    out = apply_fix({"headline": "old", "skills": [], "experience": []},
+                    _fix(type="headline", text="Senior Data Analyst"))
+    assert out["headline"] == "Senior Data Analyst"
+
+
+def test_apply_fixes_skips_a_skill_past_the_cap_whole():
+    content = {"skills": [f"s{i}" for i in range(20)], "experience": []}
+    out = apply_fixes(content, [_fix(id="a", type="skill", text="OverflowSkill")])
+    assert "OverflowSkill" not in out["skills"]
+    assert len(out["skills"]) == 20
+
+
+def test_apply_fixes_skips_a_bullet_past_the_role_cap_whole():
+    content = {"skills": [], "experience": [{"title": "A", "bullets": [f"b{i}" for i in range(7)]}]}
+    out = apply_fixes(content, [_fix(id="a", type="bullet", text="Eighth", experience_index=0)])
+    assert "Eighth" not in out["experience"][0]["bullets"]
+    assert len(out["experience"][0]["bullets"]) == 7
+
+
+def test_fix_slug_is_stable_and_url_safe():
+    assert fix_slug("bullet", "Revenue Forecasting & Planning!") == "bullet:revenue-forecasting-planning"
