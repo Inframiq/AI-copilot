@@ -43,6 +43,7 @@ export function BulletReviewPanel() {
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
   const bulletImportance = useTailoringStore((s) => s.bulletImportance);
+  const atsFixes = useTailoringStore((s) => s.atsFixes);
   // Not user-adjustable here anymore (the Writing Style slider that changed
   // this was removed as redundant) — still read for per-bullet Humanize.
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -100,6 +101,19 @@ export function BulletReviewPanel() {
     });
     return out;
   }, [pendingContent, originalContent]);
+
+  // Skills already offered as an accept/reject row in AtsGapFixPanel — drop
+  // them from SkillsBlock's "Suggested Skills to Add" so each skill is chosen
+  // in exactly one place. Empty for sessions tailored before ats_fixes shipped,
+  // so those keep the full suggested list.
+  const fixSkillNames = useMemo(
+    () => new Set(atsFixes.filter((f) => f.type === "skill").map((f) => f.text.toLowerCase())),
+    [atsFixes],
+  );
+  const dedupedSuggestedSkills = useMemo(
+    () => suggestedSkills.filter((s) => !fixSkillNames.has(s.toLowerCase())),
+    [suggestedSkills, fixSkillNames],
+  );
 
   const acceptedBullets = bulletChanges.filter(
     (c) => (bulletDecisions[c.key] ?? "accept") === "accept",
@@ -275,7 +289,7 @@ export function BulletReviewPanel() {
         />
         <AtsGapFixPanel />
         <SkillsBlock
-          suggestedSkills={suggestedSkills}
+          suggestedSkills={dedupedSuggestedSkills}
           prioritySkills={prioritySkills}
           missingSkills={missingSkills}
           companyKeywords={companyKeywords}
@@ -511,7 +525,7 @@ export function BulletReviewPanel() {
 
         {/* 1b. Existing-skills keep/drop + opt-in suggested skills */}
         <SkillsBlock
-          suggestedSkills={suggestedSkills}
+          suggestedSkills={dedupedSuggestedSkills}
           prioritySkills={prioritySkills}
           missingSkills={missingSkills}
           companyKeywords={companyKeywords}

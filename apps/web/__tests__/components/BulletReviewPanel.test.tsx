@@ -51,4 +51,42 @@ describe("BulletReviewPanel", () => {
       getAllByTestId("importance-badge").some((b) => b.getAttribute("data-level") === "high"),
     ).toBe(true);
   });
+
+  const emptyContent = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [],
+    education: [],
+    skills: [],
+  };
+
+  const skillFix = {
+    id: "skill:kubernetes", type: "skill", gap: "Kubernetes", importance: "high",
+    grounded: true, text: "Kubernetes", experience_index: null, score_delta: 8, default_accept: false,
+  };
+
+  it("hides a SkillsBlock suggested skill that already appears as a panel skill fix", () => {
+    useResumeStore.getState().setResume("resume-1", emptyContent, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: emptyContent,
+      suggestedSkills: ["Kubernetes", "Redis"],
+      atsFixes: [skillFix],
+    } as never);
+
+    const { queryByRole } = render(<BulletReviewPanel />);
+    expect(queryByRole("button", { name: /Redis/ })).not.toBeNull();
+    expect(queryByRole("button", { name: /Kubernetes/ })).toBeNull();
+  });
+
+  it("keeps every suggested skill when there are no ats fixes (legacy session)", () => {
+    useResumeStore.getState().setResume("resume-1", emptyContent, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: emptyContent,
+      suggestedSkills: ["Kubernetes", "Redis"],
+      atsFixes: [],
+    } as never);
+
+    const { queryByRole } = render(<BulletReviewPanel />);
+    expect(queryByRole("button", { name: /Redis/ })).not.toBeNull();
+    expect(queryByRole("button", { name: /Kubernetes/ })).not.toBeNull();
+  });
 });
