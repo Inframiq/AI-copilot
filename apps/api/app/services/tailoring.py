@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
+    default_importance,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
@@ -76,6 +77,7 @@ class JDAnalysis(BaseModel):
     core_responsibilities: list[str] = []  # the JD's actual duty lines — scope of work, not tools/themes
     target_job_titles: list[str] = []  # the role title(s) this JD is hiring for
     nice_to_have_skills: list[str] = []  # skills the JD frames as preferred / "a plus", not required
+    importance: dict[str, str] = {}  # {term_lowercased: "high"|"medium"|"low"}; "job title" key for the title signal
 
 
 class BulletMapping(BaseModel):
@@ -378,7 +380,14 @@ literal title as written; do not invent a seniority level the JD doesn't state.
 desired, "bonus", "a plus", or "nice to have" rather than required. Put such \
 skills ONLY here — never also in exact_technical_tools, \
 methodologies_and_frameworks, or ats_filter_phrases.
-9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+9. importance: rate EVERY term you put in exact_technical_tools, \
+methodologies_and_frameworks, ats_filter_phrases, nice_to_have_skills and \
+core_responsibilities, plus a "job title" key, as "high" / "medium" / "low" \
+for THIS role. high = defines the role, a stated hard requirement, or \
+repeated/emphasised; medium = a normal requirement or day-to-day duty; \
+low = "nice to have", peripheral, or generic. Keys are the term verbatim \
+(lowercased); "job title" rates how much the posting hinges on title match.
+10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>
 
 <output_schema>
@@ -390,7 +399,8 @@ methodologies_and_frameworks, or ats_filter_phrases.
   "ats_filter_phrases": ["string"],
   "core_responsibilities": ["string"],
   "target_job_titles": ["string"],
-  "nice_to_have_skills": ["string"]
+  "nice_to_have_skills": ["string"],
+  "importance": {"term": "high|medium|low"}
 }
 </output_schema>"""
 
@@ -410,10 +420,33 @@ async def _agent1_parse_jd(
             f"<company_intelligence>\n{intel_block}\n</company_intelligence>\n\n"
             f"<job_description>\n{jd_text}\n</job_description>"
         )
-    return await provider.complete_structured(
+    result = await provider.complete_structured(
         _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast",
         max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="agent1_parse_jd",
     )
+    return _backfill_importance(result)
+
+
+def _backfill_importance(jd: JDAnalysis) -> JDAnalysis:
+    """Guarantee every extracted term (and "job title") has an importance,
+    filling gaps from the deterministic bucket rule."""
+    given = {k.strip().lower(): v for k, v in (jd.importance or {}).items()
+             if v in ("high", "medium", "low")}
+    titles = jd.target_job_titles or []
+    hard = jd.exact_technical_tools or []
+    mediums = (jd.methodologies_and_frameworks or []) + (jd.ats_filter_phrases or []) \
+        + (jd.core_responsibilities or [])
+    nice = jd.nice_to_have_skills or []
+    terms = ["job title"] + titles + hard + mediums + nice
+    filled = dict(given)
+    for term in terms:
+        key = term.strip().lower()
+        if key and key not in filled:
+            filled[key] = default_importance(
+                term, titles=titles, hard_tools=hard, mediums=mediums, nice=nice,
+            )
+    jd.importance = filled
+    return jd
 
 
 # ── Semantic presence verifier ──────────────────────────────────────────────

@@ -58,6 +58,37 @@ async def test_extract_jd_skills_returns_parsed_jd():
 
 
 @pytest.mark.asyncio
+async def test_agent1_backfills_importance_for_unrated_terms():
+    from app.services.tailoring import _agent1_parse_jd, JDAnalysis
+
+    raw = JDAnalysis(
+        exact_technical_tools=["Python", "AWS"],
+        methodologies_and_frameworks=["Agile"],
+        domain_expertise_themes=[],
+        seniority_indicators=[],
+        ats_filter_phrases=["revenue forecasting"],
+        core_responsibilities=["own the analytics roadmap"],
+        target_job_titles=["Senior Data Analyst"],
+        nice_to_have_skills=["Looker"],
+        importance={"python": "high"},  # model only rated one term
+    )
+    provider = make_mock_provider(structured_return=raw)
+
+    out = await _agent1_parse_jd("jd text", provider)
+
+    # model value kept
+    assert out.importance["python"] == "high"
+    # everything else backfilled by default_importance
+    assert out.importance["job title"] == "high"
+    assert out.importance["senior data analyst"] == "high"
+    assert out.importance["aws"] == "high"          # hard tool
+    assert out.importance["agile"] == "medium"
+    assert out.importance["revenue forecasting"] == "medium"
+    assert out.importance["own the analytics roadmap"] == "medium"
+    assert out.importance["looker"] == "low"
+
+
+@pytest.mark.asyncio
 async def test_agent2_semantic_map_requests_premium_tier():
     # Agent 2 (JD+resume semantic mapping) is the one call in the pipeline
     # that requests the pricier model — every other agent still requests
