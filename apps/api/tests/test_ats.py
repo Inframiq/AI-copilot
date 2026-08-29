@@ -291,6 +291,23 @@ def test_fix_slug_is_stable_and_url_safe():
     assert fix_slug("bullet", "Revenue Forecasting & Planning!") == "bullet:revenue-forecasting-planning"
 
 
+def test_apply_fix_skips_a_bullet_that_duplicates_an_existing_one():
+    content = {"skills": [], "experience": [
+        {"title": "E", "bullets": ["Led migration of core services to Kubernetes in production"]},
+    ]}
+    dup = _fix(type="bullet", experience_index=0,
+               text="Led the migration of core services to Kubernetes in production.")
+    out = apply_fix(content, dup)
+    assert len(out["experience"][0]["bullets"]) == 1  # near-duplicate not appended
+
+
+def test_apply_fixes_still_adds_a_genuinely_new_bullet():
+    content = {"skills": [], "experience": [{"title": "E", "bullets": ["Managed CI pipelines"]}]}
+    fix = _fix(type="bullet", experience_index=0, text="Ran production workloads on Kubernetes.")
+    out = apply_fixes(content, [fix])
+    assert "Ran production workloads on Kubernetes." in out["experience"][0]["bullets"]
+
+
 from app.services.ats import estimate_fix_delta
 
 

@@ -25,6 +25,7 @@ from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
+    bullet_already_present,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.db.models import SkillQuestionBank
@@ -558,23 +559,24 @@ bullet that would close it.
 </system_role>
 
 <rules>
-1. If the résumé already shows related experience, reframe the CLOSEST real \
-experience into a bullet that names the gap explicitly — set grounded=true and \
-experience_index to that entry's index.
-2. If there is no basis in the résumé, write one plausible bullet for the \
-role, set grounded=false and experience_index=null. The user will only keep it \
-if it is actually true of them.
-3. Never invent numbers, employers, dates, or tools the résumé doesn't support. \
-A grounded bullet keeps the original metrics; a speculative bullet has none.
+1. ONLY propose a bullet for a gap the résumé does NOT already cover, even \
+loosely. If any existing bullet already touches the gap, skip it entirely \
+(omit it from the output) — the résumé's own bullets already speak to it and a \
+second, reworded bullet would just duplicate them.
+2. For a genuine gap, write ONE plausible new bullet for the role. It is \
+speculative: the user keeps it only if it is actually true of them. Always set \
+grounded=false and experience_index=null.
+3. Never invent numbers, employers, dates, or tools. A speculative bullet has \
+no metrics — it describes a capability, not a measured result.
 4. If a gap has kind "title", and only then, also return a `headline` string: \
 a concise professional headline aligning the candidate to the target title \
 (e.g. "Senior Data Analyst | Analytics Engineering"). Otherwise headline "".
-5. One bullet per gap, in the same order. Output ONLY valid JSON matching the \
-schema.
+5. At most one bullet per gap, in the same order; gaps the résumé already \
+covers produce no bullet at all. Output ONLY valid JSON matching the schema.
 </rules>
 
 <output_schema>
-{"bullets": [{"gap": "string", "grounded": true, "experience_index": 0, "bullet_text": "string"}], "headline": "string"}
+{"bullets": [{"gap": "string", "grounded": false, "experience_index": null, "bullet_text": "string"}], "headline": "string"}
 </output_schema>"""
 
 
@@ -1521,20 +1523,24 @@ async def run_tailoring_pipeline(
             id=fix_slug("skill", name), type="skill", gap=name,
             importance=_imp(name), grounded=True, text=name, default_accept=False,
         ))
-    # bullet fixes from the gap filler. A speculative bullet has no role of its
-    # own (experience_index is None) — pin it to the most-recent role (index 0)
-    # so accepting it actually lands in the résumé and counts toward the score;
-    # the review UI still lets the user move it to a different role.
+    # bullet fixes from the gap filler. These are always speculative (new
+    # content the résumé lacks) — never a reword of an existing bullet, so
+    # accepting one can't duplicate what's already there. Pin it to the
+    # most-recent role (index 0); the review UI lets the user move it. Skip
+    # any that still restate an existing bullet as a belt-and-braces guard.
+    all_bullets = [
+        b for exp in (tailored_content.get("experience") or [])
+        for b in (exp.get("bullets") or [])
+    ]
     n_roles = len(tailored_content.get("experience") or [])
     for b in gap_out.bullets:
-        exp_idx = b.experience_index if b.experience_index is not None else 0
-        if n_roles == 0:
-            exp_idx = None
+        if bullet_already_present(all_bullets, b.bullet_text):
+            continue
+        exp_idx = 0 if n_roles > 0 else None
         fixes.append(AtsFix(
             id=fix_slug("bullet", b.gap), type="bullet", gap=b.gap,
-            importance=_imp(b.gap), grounded=b.grounded, text=b.bullet_text,
-            experience_index=exp_idx,
-            default_accept=b.grounded,   # only a grounded bullet pre-accepts
+            importance=_imp(b.gap), grounded=False, text=b.bullet_text,
+            experience_index=exp_idx, default_accept=False,
         ))
     # headline fix
     if gap_out.headline.strip():

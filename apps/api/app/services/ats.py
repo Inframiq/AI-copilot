@@ -281,6 +281,34 @@ def fix_slug(prefix: str, gap: str) -> str:
     return f"{prefix}:{s}"
 
 
+def _bullet_tokens(text: str) -> set[str]:
+    return {t for t in re.sub(r"[^a-z0-9]+", " ", text.lower()).split() if len(t) > 2}
+
+
+def bullet_already_present(existing: list[str], text: str) -> bool:
+    """True if `text` restates a bullet already in `existing` — an exact match
+    after normalisation, or ≥ 80% word overlap (so a light reword of a bullet
+    the résumé already has isn't added a second time). Kept identical to the
+    frontend's bulletAlreadyPresent in tailoring-store.ts."""
+    norm = lambda s: re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+    target = norm(text)
+    if not target:
+        return False
+    new_tokens = _bullet_tokens(text)
+    for b in existing:
+        if norm(b) == target:
+            return True
+        if not new_tokens:
+            continue
+        b_tokens = _bullet_tokens(b)
+        if not b_tokens:
+            continue
+        overlap = len(new_tokens & b_tokens) / len(new_tokens | b_tokens)
+        if overlap >= 0.8:
+            return True
+    return False
+
+
 def apply_fix(content: dict, fix: AtsFix) -> dict:
     """Return a deep copy of `content` with the single fix folded in. No cap
     checks here — see apply_fixes for those."""
@@ -294,7 +322,9 @@ def apply_fix(content: dict, fix: AtsFix) -> dict:
     elif fix.type == "bullet" and fix.experience_index is not None:
         exps = out.get("experience") or []
         if 0 <= fix.experience_index < len(exps):
-            exps[fix.experience_index].setdefault("bullets", []).append(fix.text)
+            bullets = exps[fix.experience_index].setdefault("bullets", [])
+            if not bullet_already_present(bullets, fix.text):
+                bullets.append(fix.text)
     return out
 
 
@@ -314,7 +344,10 @@ def apply_fixes(content: dict, fixes: list[AtsFix]) -> dict:
             exps = out.get("experience") or []
             if 0 <= fix.experience_index < len(exps):
                 bullets = exps[fix.experience_index].setdefault("bullets", [])
-                if len(bullets) < _MAX_BULLETS_PER_ROLE:
+                if (
+                    len(bullets) < _MAX_BULLETS_PER_ROLE
+                    and not bullet_already_present(bullets, fix.text)
+                ):
                     bullets.append(fix.text)
     return out
 

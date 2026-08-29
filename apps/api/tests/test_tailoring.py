@@ -1043,3 +1043,58 @@ async def test_pipeline_emits_ats_fixes_and_bullet_importance():
     assert levels == sorted(levels, key=lambda l: {"high": 0, "medium": 1, "low": 2}[l])
     # bullet importance from the mapping plan (max of keyword + responsibility importance)
     assert result.bullet_importance["exp0_b0"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_drops_gap_bullet_that_restates_existing_content():
+    from app.services.tailoring import GapFillerOutput, GapFillBullet
+
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Kubernetes"], importance={"kubernetes": "high"},
+        ),
+        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
+        WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
+        GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
+            gap="Kubernetes", grounded=False, experience_index=None,
+            bullet_text="Operated Kubernetes clusters in production.")]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {
+        "experience": [{"title": "E", "bullets": ["Operated Kubernetes clusters in production"]}],
+        "skills": [],
+    }
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "need Kubernetes", 50, provider, db)
+
+    # the gap-filler bullet just restates an existing bullet — don't offer it
+    assert not any(f.type == "bullet" for f in result.ats_fixes)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_gap_bullets_are_always_speculative():
+    from app.services.tailoring import GapFillerOutput, GapFillBullet
+
+    responses = {
+        JDAnalysis: make_jd_analysis(
+            exact_technical_tools=["Kubernetes"], importance={"kubernetes": "high"},
+        ),
+        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
+        WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
+        GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
+            gap="Kubernetes", grounded=True, experience_index=0,
+            bullet_text="Ran build systems on bare metal for years.")]),
+        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "E", "bullets": ["Wrote docs"]}], "skills": []}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(resume, "need Kubernetes", 50, provider, db)
+
+    bullet_fixes = [f for f in result.ats_fixes if f.type == "bullet"]
+    assert bullet_fixes and all(not f.grounded and not f.default_accept for f in bullet_fixes)
