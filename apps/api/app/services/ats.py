@@ -244,6 +244,28 @@ def title_match_verdict(jd_titles: list[str], resume_titles: list[str]) -> str:
     return {0: "missing", 1: "partial", 2: "matched"}[best]
 
 
+def default_importance(
+    term: str,
+    *,
+    titles: list[str],
+    hard_tools: list[str],
+    mediums: list[str],
+    nice: list[str],
+) -> str:
+    """Bucket-based importance for a JD term when Agent 1 didn't rate it
+    (old cache, or an item it missed). See the spec's fallback table."""
+    t = term.strip().lower()
+    if t == "job title" or any(t == x.strip().lower() for x in titles):
+        return "high"
+    if any(t == x.strip().lower() for x in hard_tools):
+        return "high"
+    if any(t == x.strip().lower() for x in nice):
+        return "low"
+    if any(t == x.strip().lower() for x in mediums):
+        return "medium"
+    return "medium"
+
+
 def compute_delta(jd_skills: list[str], resume: "str | dict") -> DeltaResult:
     """Compute which JD skills are present or missing in the resume.
 

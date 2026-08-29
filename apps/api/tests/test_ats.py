@@ -1,6 +1,6 @@
 import pytest
 from app.services.ats import (
-    compute_delta, blend_scores, title_match_verdict, DeltaResult,
+    compute_delta, blend_scores, title_match_verdict, default_importance, DeltaResult,
 )
 
 def test_compute_delta_all_matched():
@@ -167,3 +167,32 @@ def test_title_match_checks_all_candidate_titles_and_takes_best():
 def test_title_match_empty_inputs_are_missing():
     assert title_match_verdict([], ["Data Analyst"]) == "missing"
     assert title_match_verdict(["Data Analyst"], []) == "missing"
+
+
+# ── default_importance ──────────────────────────────────────────────────────
+
+
+def test_default_importance_title_and_hard_tools_are_high():
+    kw = dict(titles=["Senior Data Analyst"], hard_tools=["Python"],
+              mediums=["Agile"], nice=["Looker"])
+    assert default_importance("job title", **kw) == "high"
+    assert default_importance("Senior Data Analyst", **kw) == "high"
+    assert default_importance("Python", **kw) == "high"
+
+
+def test_default_importance_mediums_and_unknown_are_medium():
+    kw = dict(titles=[], hard_tools=["Python"], mediums=["Agile", "own the roadmap"], nice=[])
+    assert default_importance("Agile", **kw) == "medium"
+    assert default_importance("own the roadmap", **kw) == "medium"
+    assert default_importance("something not in any list", **kw) == "medium"
+
+
+def test_default_importance_nice_is_low():
+    kw = dict(titles=[], hard_tools=[], mediums=[], nice=["Looker", "dbt"])
+    assert default_importance("Looker", **kw) == "low"
+    assert default_importance("DBT", **kw) == "low"  # case-insensitive
+
+
+def test_default_importance_matches_case_insensitively():
+    kw = dict(titles=["Data Analyst"], hard_tools=[], mediums=[], nice=[])
+    assert default_importance("data analyst", **kw) == "high"
