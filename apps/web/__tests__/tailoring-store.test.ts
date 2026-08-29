@@ -183,6 +183,61 @@ describe("useTailoringStore", () => {
 
       expect(useTailoringStore.getState().atsScore).toBe(91);
     });
+
+    it("stores jdImportance from the analyze response", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "jd text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 80,
+        matched_skills: ["Python"],
+        missing_skills: ["AWS"],
+        company_keywords: [],
+        importance: { python: "high", aws: "low" },
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      expect(useTailoringStore.getState().jdImportance).toEqual({ python: "high", aws: "low" });
+    });
+
+    it("defaults jdImportance to {} when the analyze response omits importance", async () => {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-1", "jd text");
+      vi.mocked(apiClient.analyzeJd).mockResolvedValueOnce({
+        ats_score: 80,
+        matched_skills: ["Python"],
+        missing_skills: [],
+        company_keywords: [],
+      });
+
+      await useTailoringStore.getState().runAnalysis("resume-abc");
+
+      expect(useTailoringStore.getState().jdImportance).toEqual({});
+    });
+  });
+
+  it("setAnalysisResults hydrates jdImportance from its argument", () => {
+    useTailoringStore.getState().setAnalysisResults({
+      atsScore: 70,
+      matchedSkills: ["Python"],
+      missingSkills: ["AWS"],
+      companyKeywords: [],
+      jdImportance: { python: "high", aws: "medium" },
+    });
+
+    expect(useTailoringStore.getState().jdImportance).toEqual({ python: "high", aws: "medium" });
+  });
+
+  it("setJd to a genuinely different JD resets jdImportance", () => {
+    useTailoringStore.setState({ jdImportance: { python: "high" } });
+    useTailoringStore.getState().setJd("jd-2", "A different JD entirely");
+    expect(useTailoringStore.getState().jdImportance).toEqual({});
+  });
+
+  it("resetStore clears jdImportance", () => {
+    useTailoringStore.setState({ jdImportance: { python: "high" } });
+    useTailoringStore.getState().resetStore();
+    expect(useTailoringStore.getState().jdImportance).toEqual({});
   });
 
   it("runTailoring succeeds and hydrates session state", async () => {

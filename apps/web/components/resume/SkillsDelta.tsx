@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { CheckCircle, XCircle, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { ImportanceBadge } from "./ImportanceBadge";
 
 export function SkillsDelta() {
-  const { atsScore, matchedSkills, missingSkills } = useTailoringStore();
+  const { atsScore, matchedSkills, missingSkills, jdImportance } = useTailoringStore();
 
   // Track skills the user has manually dismissed from each list.
   const [removedMatched, setRemovedMatched] = useState<Set<string>>(new Set());
@@ -55,6 +56,9 @@ export function SkillsDelta() {
                 <CheckCircle size={12} weight="fill" className="group-hover:hidden" />
                 <XCircle size={12} weight="fill" className="hidden group-hover:block text-[#c62828]" />
                 {s}
+                {jdImportance[s.toLowerCase()] && (
+                  <ImportanceBadge level={jdImportance[s.toLowerCase()]} className="ml-xs" />
+                )}
               </button>
             ))}
           </div>
@@ -78,6 +82,9 @@ export function SkillsDelta() {
                 <XCircle size={12} weight="fill" className="group-hover:hidden" />
                 <XCircle size={12} weight="fill" className="hidden group-hover:block opacity-40" />
                 {s}
+                {jdImportance[s.toLowerCase()] && (
+                  <ImportanceBadge level={jdImportance[s.toLowerCase()]} className="ml-xs" />
+                )}
               </button>
             ))}
           </div>

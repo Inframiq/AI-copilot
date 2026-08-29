@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent } from "@career-copilot/types";
+import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
 
 // 'accept' = use tailored version, 'reject' = keep original
 export type BulletDecision = "accept" | "reject";
@@ -106,6 +107,9 @@ interface TailoringState {
   matchedSkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
+  // Per-JD term importance from POST /ai/analyze, keyed by the lowercased
+  // term. Drives the High/Medium/Low marks on the matched/missing chips.
+  jdImportance: Record<string, ImportanceLevel>;
   suggestedSkills: string[];  // skills Agent 2 suggests — user opts in per chip
   prioritySkills: string[];  // user-picked "not matched" keywords to prioritize — set from the JD detail page before calling runTailoring
   humanizeLevel: number;
@@ -135,6 +139,7 @@ interface TailoringState {
     matchedSkills: string[];
     missingSkills: string[];
     companyKeywords: string[];
+    jdImportance?: Record<string, ImportanceLevel>;
   }) => void;
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
@@ -174,6 +179,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   matchedSkills: [],
   missingSkills: [],
   companyKeywords: [],
+  jdImportance: {},
   suggestedSkills: [],
   prioritySkills: [],
   humanizeLevel: 50,
@@ -203,6 +209,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: isDifferentJd ? [] : current.matchedSkills,
       missingSkills: isDifferentJd ? [] : current.missingSkills,
       companyKeywords: isDifferentJd ? [] : current.companyKeywords,
+      jdImportance: isDifferentJd ? {} : current.jdImportance,
       suggestedSkills: isDifferentJd ? [] : current.suggestedSkills,
       prioritySkills: isDifferentJd ? [] : current.prioritySkills,
       pendingContent: null,
@@ -222,8 +229,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         : [...s.prioritySkills, skill],
     })),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
-  setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords }) =>
-    set({ atsScore, matchedSkills, missingSkills, companyKeywords }),
+  setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance }) =>
+    set({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance: jdImportance ?? {} }),
   // Any edit made after a preview was already rendered invalidates that
   // preview — it was built from a snapshot of pendingContent/bulletDecisions
   // at generatePreview time, so a later Humanize/Rewrite/accept-reject/skill
@@ -307,6 +314,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
+      jdImportance: {},
       sessionId: null,
     });
     try {
@@ -317,6 +325,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
         companyKeywords: result.company_keywords ?? [],
+        jdImportance: (result.importance ?? {}) as Record<string, ImportanceLevel>,
         isAnalyzing: false,
       });
     } catch (e: unknown) {
@@ -355,6 +364,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
+      jdImportance: {},
       suggestedSkills: [],
       sessionId: null,
       pendingContent: null,
@@ -627,6 +637,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
+      jdImportance: {},
       suggestedSkills: [],
       prioritySkills: [],
       humanizeLevel: 50,

@@ -151,6 +151,9 @@ export interface AnalyzeOut {
   matched_skills: string[];
   missing_skills: string[];
   company_keywords: string[];
+  /** Per-term importance for this JD, keyed by the lowercased term. Absent on
+   * older responses / the reanalyze path. */
+  importance?: Record<string, "high" | "medium" | "low">;
 }
 
 export interface PrepQuestionOut {
