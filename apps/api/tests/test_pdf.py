@@ -174,6 +174,47 @@ def test_generate_pdf_strips_file_scheme_photo_url():
 
 
 # ---------------------------------------------------------------------------
+# Photo templates crop the image to a fixed box (object-fit: cover) instead
+# of stretching it, and only emit the <img> when a trusted photo_url is set.
+# ---------------------------------------------------------------------------
+
+
+def test_sidebar_photo_template_crops_not_stretches():
+    html = _render_html(SAMPLE_RESUME, "ats_sidebar")
+    assert "object-fit: cover" in html
+
+
+def test_professional_photo_template_crops_not_stretches():
+    html = _render_html(SAMPLE_RESUME, "ats_professional")
+    assert "object-fit: cover" in html
+
+
+def test_sidebar_template_omits_photo_when_absent():
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {k: v for k, v in SAMPLE_RESUME["contact"].items() if k != "photo_url"},
+    }
+    html = _render_html(resume, "ats_sidebar")
+    assert 'class="photo"' not in html
+
+
+def test_sidebar_template_embeds_photo_when_trusted():
+    trusted = "https://test-project.supabase.co"
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {
+            **SAMPLE_RESUME["contact"],
+            "photo_url": f"{trusted}/storage/v1/object/public/avatars/u/r.png",
+        },
+    }
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = trusted
+        html = _render_html(resume, "ats_sidebar")
+    assert 'class="photo"' in html
+    assert "/storage/v1/object/public/avatars/u/r.png" in html
+
+
+# ---------------------------------------------------------------------------
 # Missing contact fields must be omitted, not rendered as the literal
 # string "None" (Jinja2 stringifies Python None unlike JS's undefined) —
 # ats_clean and ats_modern used to interpolate contact.location directly.
