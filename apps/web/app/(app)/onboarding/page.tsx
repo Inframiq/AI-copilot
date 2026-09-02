@@ -54,6 +54,8 @@ export default function OnboardingPage() {
         skills: [],
         certifications: [],
         role_status: roleStatus,
+        photo_url: null,
+        photo_path: null,
       });
       setStep("resume");
     } catch (err) {

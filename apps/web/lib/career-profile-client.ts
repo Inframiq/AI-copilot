@@ -70,6 +70,12 @@ export interface CareerProfile {
   certifications: CertEntry[];
   headline: string | null;
   role_status: RoleStatus | null;
+  /** Public URL of the user's default profile photo in the "avatars" bucket.
+   *  null = none set. Distinct from a resume's content.contact.photo_url. */
+  photo_url: string | null;
+  /** Storage object key for photo_url ("<uid>/profile.<ext>") — kept so a
+   *  later replace/remove knows the exact object. null iff photo_url is null. */
+  photo_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -189,6 +195,8 @@ export function resumeContentToCareerProfileInput(
       ? c.certifications.map((name) => ({ id: crypto.randomUUID(), name, issuer: "", year: "" }))
       : [],
     role_status: null,
+    photo_url: null,
+    photo_path: null,
   };
 }
 

@@ -73,6 +73,8 @@ describe("ProfileForm", () => {
       certifications: [],
       headline: "Staff Engineer",
       role_status: null,
+      photo_url: null,
+      photo_path: null,
       created_at: "",
       updated_at: "",
     };
@@ -92,6 +94,8 @@ describe("ProfileForm", () => {
       certifications: [],
       headline: "Staff Engineer",
       role_status: null,
+      photo_url: null,
+      photo_path: null,
       created_at: "",
       updated_at: "",
     };
