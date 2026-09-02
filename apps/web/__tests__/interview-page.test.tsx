@@ -35,33 +35,24 @@ describe("InterviewIndexPage — no active session", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
   });
 
-  it("shows real bank questions for the active topic instead of fake local progress cards", async () => {
-    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([
-      {
-        id: "q-1",
-        skill: "kubernetes",
-        topic: "Technical",
-        question: "Describe how you've used Kubernetes in production.",
-        answer_framework: "STAR: ...",
-      },
-    ]);
-
+  it("shows only the 'tailor a resume to a JD' CTA and never touches the shared bank", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
-    expect(await screen.findByText(/Describe how you've used Kubernetes/)).toBeInTheDocument();
-    expect(apiClient.getQuestionBank).toHaveBeenCalledWith("Technical");
+    expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/generated when you tailor a resume to a specific job description/i)
+    ).toBeInTheDocument();
+    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 
-  it("re-fetches the bank when switching tabs", async () => {
-    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([]);
+  it("still shows only the CTA after switching tabs — no per-tab bank fetch", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
     await screen.findByText("Behavioral");
     await userEvent.click(screen.getByText("Behavioral"));
 
-    await waitFor(() =>
-      expect(apiClient.getQuestionBank).toHaveBeenCalledWith("Behavioral")
-    );
+    expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
+    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 });
 
@@ -192,21 +183,12 @@ describe("InterviewIndexPage — no real questions for any JD", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
   });
 
-  it("falls back to the shared bank instead of showing the empty state forever", async () => {
+  it("shows the empty-state CTA — an active session with no generated questions still gets no bank fallback", async () => {
     useTailoringStore.setState({ sessionId: "session-1" });
-    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([
-      {
-        id: "q-1",
-        skill: "kubernetes",
-        topic: "Technical",
-        question: "Describe how you've used Kubernetes in production.",
-        answer_framework: "STAR: ...",
-      },
-    ]);
 
     renderWithQueryClient(<InterviewIndexPage />);
 
-    expect(await screen.findByText(/Describe how you've used Kubernetes/)).toBeInTheDocument();
-    expect(screen.queryByText(/No Technical questions yet/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
+    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 });

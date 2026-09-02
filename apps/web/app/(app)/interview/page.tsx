@@ -12,7 +12,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import type { PrepQuestionWithJdOut, Resume, JobDescription, SkillQuestionOut } from "@career-copilot/types";
+import type { PrepQuestionWithJdOut, Resume, JobDescription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
 type Tab = (typeof TABS)[number];
@@ -85,16 +85,6 @@ export default function InterviewIndexPage() {
     resumesQuery.refetch();
     jdsQuery.refetch();
   };
-  const { data: bankQuestions = [], isLoading: bankLoading } = useQuery<SkillQuestionOut[]>({
-    queryKey: ["questionBank", activeTab],
-    queryFn: () => apiClient.getQuestionBank(activeTab),
-    // Mirrors the render gate below (`hasAnyQuestions`): fetch the shared
-    // bank whenever we'd actually render the browse UI, i.e. the user has
-    // never generated real questions for any JD. `!isLoading` avoids a
-    // throwaway fetch while myQuestions is still in flight and its length
-    // is transiently 0.
-    enabled: !isLoading && !hasAnyQuestions,
-  });
 
   // Distinct JDs present in myQuestions, for the filter dropdown —
   // deliberately not apiClient.getJds() directly, since that would offer
@@ -343,53 +333,23 @@ export default function InterviewIndexPage() {
             )}
           </div>
         ) : (
-          /* No session — real, previously-generated questions from the
-             shared skill bank. Read-only (no practiced tracking): that
-             only applies to your personalized session questions. */
-          <div className="flex flex-col gap-md">
-            {bankLoading ? (
-              <div className="flex items-center justify-center py-xl">
-                <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              </div>
-            ) : bankQuestions.length > 0 ? (
-              bankQuestions.map((q) => (
-                <div
-                  key={q.id}
-                  className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
-                >
-                  <div className="flex justify-between items-start mb-md">
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-primary/10 text-primary">
-                      <MicrophoneStage size={24} />
-                    </div>
-                    <span className="bg-surface-container text-caption text-primary px-sm py-xs rounded-full">
-                      {q.topic}
-                    </span>
-                  </div>
-                  <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
-                  <p className="text-body-sm text-on-surface-variant">{q.answer_framework}</p>
-                </div>
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center py-xl gap-md text-center bg-surface-container-lowest rounded-2xl border border-outline-variant/20">
-                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions yet</p>
-                <p className="text-body-sm text-on-surface-variant">
-                  This grows automatically as more candidates tailor resumes against JDs needing these skills.
-                </p>
-              </div>
-            )}
-
-            <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
-              <p className="text-body-md text-on-surface font-medium">Get Personalized Questions</p>
-              <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
-                Analyze a job description and tailor your resume to generate interview questions specific to your target role.
-              </p>
-              <button
-                onClick={() => router.push("/jd")}
-                className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
-              >
-                Go to JD Analyzer
-              </button>
-            </div>
+          /* No tailoring-generated questions yet. Interview questions are
+             only ever produced by tailoring a resume against a JD — there
+             is no resume-only or cross-user question list here, so a plain
+             resume uploaded in My Profile shows nothing but this CTA. */
+          <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
+            <p className="text-body-md text-on-surface font-medium">No interview questions yet</p>
+            <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
+              Interview questions are generated when you tailor a resume to a
+              specific job description. Analyze a JD and run tailoring to get
+              questions built from your resume and that role.
+            </p>
+            <button
+              onClick={() => router.push("/jd")}
+              className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+            >
+              Go to JD Analyzer
+            </button>
           </div>
         )}
       </div>
