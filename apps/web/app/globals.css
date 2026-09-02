@@ -84,6 +84,8 @@
   --spacing-md: 16px;
   --spacing-xxl: 48px;
   --spacing-xs: 4px;
+  /* Gap between stacked page sections (the outer `flex flex-col`). */
+  --spacing-section: 42px;
   --spacing-sidebar-width: 280px;
 
   /* Font sizes — mapped by closest semantic tier onto this app's

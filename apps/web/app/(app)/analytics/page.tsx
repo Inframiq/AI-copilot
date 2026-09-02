@@ -93,9 +93,9 @@ export default function AnalyticsPage() {
   const funnelMax = funnel[0].count > 0 ? funnel[0].count : 1;
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
-      <section className="pt-xl pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+      <section className="pt-lg pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
         <div>
           <h1 className="text-headline-xl text-on-surface font-bold mb-sm" style={{ letterSpacing: "-0.02em" }}>
             Analytics

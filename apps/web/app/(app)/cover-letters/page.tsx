@@ -104,7 +104,7 @@ export default function CoverLettersPage() {
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <ConnectionErrorBanner show={connectionError} onRetry={retryAll} isRetrying={isRetrying} />
 
       <section className="pb-md">

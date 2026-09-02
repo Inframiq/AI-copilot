@@ -173,9 +173,9 @@ export default function JDPage({
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page Header */}
-      <section className="pt-xl pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+      <section className="pt-lg pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
         <div>
           <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
             JD Analysis

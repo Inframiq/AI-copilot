@@ -257,7 +257,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="max-w-[1440px] w-full mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] w-full mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <ConnectionErrorBanner
         show={connectionError}
         onRetry={retryAll}
@@ -265,7 +265,7 @@ export default function DashboardPage() {
       />
 
       {/* Hero Greeting */}
-      <section className="pt-xl pb-md">
+      <section className="pt-lg pb-md">
         <h1 className="text-headline-xl text-on-surface mb-sm font-bold" style={{ letterSpacing: "-0.02em" }}>
           Welcome back!
         </h1>

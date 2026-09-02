@@ -141,7 +141,7 @@ export default function StudioIndexPage() {
   // Prompt: user has existing resumes — let them choose
   if (showPrompt && existingResumes.length > 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-[32rem] mx-auto w-full">
+      <div className="flex-1 flex flex-col items-center justify-center gap-section p-gutter max-w-[32rem] mx-auto w-full">
         <ConnectionErrorBanner
           show={resumesQuery.isError}
           onRetry={() => resumesQuery.refetch()}
@@ -222,7 +222,7 @@ export default function StudioIndexPage() {
   );
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-xl p-gutter max-w-4xl mx-auto w-full">
+    <div className="flex-1 flex flex-col items-center justify-center gap-section p-gutter max-w-4xl mx-auto w-full">
       <ConnectionErrorBanner
         show={resumesQuery.isError}
         onRetry={() => resumesQuery.refetch()}

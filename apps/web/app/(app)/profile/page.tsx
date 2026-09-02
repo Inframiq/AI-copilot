@@ -418,9 +418,9 @@ export default function ProfilePage() {
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
   return (
-    <div className="max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page header */}
-      <div className="pt-xl flex flex-col gap-xs">
+      <div className="pt-lg flex flex-col gap-xs">
         <h1 className="text-headline-xl text-on-surface font-extrabold" style={{ letterSpacing: "-0.02em" }}>
           My Profile
         </h1>

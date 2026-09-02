@@ -316,9 +316,9 @@ export default function NetworkingPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
-      <section className="pt-xl pb-md">
+      <section className="pt-lg pb-md">
         <h1
           className="text-headline-xl text-on-surface font-bold mb-sm"
           style={{ letterSpacing: "-0.02em" }}
@@ -635,7 +635,7 @@ export default function NetworkingPage() {
 
       {/* ── REQUESTS TAB ─────────────────────────────────────────────────────── */}
       {activeTab === "requests" && (
-        <div className="flex flex-col gap-xl">
+        <div className="flex flex-col gap-section">
           {/* Incoming */}
           <div>
             <h2 className="text-headline-md text-on-surface font-semibold mb-lg">

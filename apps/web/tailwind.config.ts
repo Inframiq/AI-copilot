@@ -71,6 +71,8 @@ const config: Config = {
         md: "16px",
         xxl: "48px",
         xs: "4px",
+        // Gap between stacked page sections (outer `flex flex-col`).
+        section: "42px",
         "sidebar-width": "280px",
       },
       fontFamily: {

@@ -173,7 +173,7 @@ export default function CoverLetterEditorPage({
   }
 
   return (
-    <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <section className="pb-md">
         <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
           Cover Letter

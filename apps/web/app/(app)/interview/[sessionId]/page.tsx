@@ -36,9 +36,9 @@ export default function InterviewPage({
   const active = questions[activeIndex];
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-xl">
+    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page Header */}
-      <section className="pt-xl pb-md">
+      <section className="pt-lg pb-md">
         <h1 className="text-headline-xl text-on-surface mb-xs">
           Interview Prep
         </h1>
