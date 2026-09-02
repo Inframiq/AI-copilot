@@ -6,7 +6,6 @@ import type {
   AnalyzeOut,
   PrepQuestionOut,
   PrepQuestionWithJdOut,
-  SkillQuestionOut,
   ResumeContent,
   LearningItem,
   ExternalContact,
@@ -350,12 +349,6 @@ export const apiClient = {
   // Center to categorize questions by JD and filter down to one.
   getMyQuestions: (): Promise<PrepQuestionWithJdOut[]> =>
     request<PrepQuestionWithJdOut[]>("GET", "/ai/questions/mine"),
-
-  getQuestionBank: (topic?: string): Promise<SkillQuestionOut[]> =>
-    request<SkillQuestionOut[]>(
-      "GET",
-      `/ai/questions/browse${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`
-    ),
 
   markQuestionPracticed: (questionId: string): Promise<PrepQuestionOut> =>
     request<PrepQuestionOut>("PATCH", `/ai/questions/${questionId}/practice`),

@@ -7,8 +7,6 @@ from app.services.tailoring import (
     BulletMapping,
     WriterOutput,
     RewrittenBullet,
-    SkillQuestionData,
-    SkillQuestionsWrapper,
 )
 
 
@@ -56,8 +54,6 @@ async def test_priority_skills_reach_agent2_payload():
             )
         if schema is WriterOutput:
             return WriterOutput(rewritten_bullets=[], updated_skills=["Python"])
-        if schema is SkillQuestionsWrapper:
-            return SkillQuestionsWrapper(questions=[])
         raise AssertionError(f"Unexpected schema: {schema}")
 
     provider = MagicMock()
@@ -103,7 +99,6 @@ async def test_suggested_skills_always_includes_priority_skills_even_if_agent2_o
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Used Python")],
             updated_skills=["Python"],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
 
@@ -149,7 +144,6 @@ async def test_no_priority_skills_falls_back_to_agent2_own_suggestions():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Used Python")],
             updated_skills=["Python"],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
 

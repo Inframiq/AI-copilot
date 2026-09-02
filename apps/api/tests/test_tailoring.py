@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     extract_jd_skills, ParsedJD,
-    get_or_generate_prep_questions, PrepQuestionData, SkillQuestionData, SkillQuestionsWrapper,
+    get_or_generate_prep_questions, PrepQuestionData,
     InterviewQuestionData, InterviewQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
@@ -125,12 +125,6 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
         core_responsibilities=["Own the payments reconciliation pipeline"],
     )
     provider = make_provider_dispatching_by_schema({
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[
-            SkillQuestionData(
-                skill="aws", topic="Technical",
-                question="Generic AWS question", answer_framework="Use STAR",
-            ),
-        ]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[
             InterviewQuestionData(
                 source="requirement",
@@ -207,7 +201,6 @@ async def test_get_or_generate_prep_questions_caps_at_fifteen():
         core_responsibilities=[f"Responsibility {i}" for i in range(10)],
     )
     provider = make_provider_dispatching_by_schema({
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(
             questions=[_make_interview_question("requirement", i) for i in range(20)]
         ),
@@ -228,46 +221,12 @@ async def test_get_or_generate_prep_questions_returns_empty_when_no_jd_analysis(
     InterviewQuestionsWrapper response is registered here, so a stray call
     would KeyError)."""
     provider = make_provider_dispatching_by_schema({
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[
-            SkillQuestionData(
-                skill="aws", topic="Technical",
-                question="Generic AWS question", answer_framework="Use STAR",
-            ),
-        ]),
     })
     db = make_mock_db_with_rows([])
 
     result = await get_or_generate_prep_questions(["AWS"], {"experience": []}, provider, db)
 
     assert result == []
-
-
-@pytest.mark.asyncio
-async def test_get_or_generate_prep_questions_survives_skill_bank_failure():
-    """The skill bank is a best-effort side feature for a separate browse UI —
-    a failure filling it must never take down the user's real questions."""
-    jd_analysis = make_jd_analysis(core_responsibilities=["Own the pipeline"])
-    provider = MagicMock()
-
-    async def fake_complete_structured(system, user, schema, **kwargs):
-        if schema is SkillQuestionsWrapper:
-            raise RuntimeError("boom")
-        return InterviewQuestionsWrapper(questions=[
-            InterviewQuestionData(
-                source="requirement", basis="Own the pipeline", topic="Technical",
-                question="Tell me about a time you owned a pipeline.", answer_framework="Use STAR",
-            ),
-        ])
-
-    provider.complete_structured = AsyncMock(side_effect=fake_complete_structured)
-    db = make_mock_db_with_rows([])
-
-    result = await get_or_generate_prep_questions(
-        ["AWS"], {"experience": []}, provider, db, jd_analysis=jd_analysis,
-    )
-
-    assert len(result) == 1
-    assert result[0].source == "requirement"
 
 
 def test_agent3_system_prompt_enforces_length_and_bans_generic_phrases():
@@ -688,9 +647,6 @@ async def test_run_tailoring_pipeline_returns_result():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
             updated_skills=["Python"],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(
-            questions=[SkillQuestionData(skill="AWS", topic="Technical", question="Q?", answer_framework="A")]
-        ),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(
             questions=[InterviewQuestionData(
                 source="requirement", basis="Python", topic="Technical",
@@ -734,7 +690,6 @@ async def test_run_tailoring_pipeline_scores_the_tailored_resume_not_the_origina
             )],
             updated_skills=[],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
@@ -773,7 +728,6 @@ async def test_run_tailoring_pipeline_passes_seniority_indicators_to_agent3():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Led Python delivery")],
             updated_skills=["Python"],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
@@ -816,7 +770,6 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
             rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
             updated_skills=["Python"],
         ),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
 
@@ -843,7 +796,6 @@ async def test_run_tailoring_pipeline_reraises_agent3_failure():
     responses = {
         JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
@@ -872,7 +824,6 @@ async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
         ),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
         WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
@@ -1019,7 +970,6 @@ async def test_pipeline_emits_ats_fixes_and_bullet_importance():
         GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
             gap="Kubernetes", grounded=False, experience_index=None,
             bullet_text="Operated Kubernetes clusters in production.")]),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
@@ -1058,7 +1008,6 @@ async def test_pipeline_drops_gap_bullet_that_restates_existing_content():
         GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
             gap="Kubernetes", grounded=False, experience_index=None,
             bullet_text="Operated Kubernetes clusters in production.")]),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
@@ -1087,7 +1036,6 @@ async def test_pipeline_gap_bullets_are_always_speculative():
         GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
             gap="Kubernetes", grounded=True, experience_index=0,
             bullet_text="Ran build systems on bare metal for years.")]),
-        SkillQuestionsWrapper: SkillQuestionsWrapper(questions=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)

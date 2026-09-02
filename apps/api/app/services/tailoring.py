@@ -19,7 +19,6 @@ import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
@@ -28,7 +27,6 @@ from app.services.ats import (
     bullet_already_present,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
-from app.db.models import SkillQuestionBank
 
 logger = logging.getLogger("app")
 
@@ -52,7 +50,6 @@ _MAX_TOKENS_SEMANTIC_MAP = 16384
 _MAX_TOKENS_BULLET_WRITE = 16384
 _MAX_TOKENS_COVER_LETTER = 3000
 _MAX_TOKENS_SEMANTIC_VERIFY = 4000
-_MAX_TOKENS_PREP_SKILL_QUESTIONS = 8000
 _MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 6000
 
 
@@ -136,17 +133,6 @@ class PrepQuestionData(BaseModel):
 
 
 _TOPIC_VALUES = {"Technical", "Behavioral", "HR & Culture"}
-
-
-class SkillQuestionData(BaseModel):
-    skill: str
-    topic: str
-    question: str
-    answer_framework: str
-
-
-class SkillQuestionsWrapper(BaseModel):
-    questions: list[SkillQuestionData]
 
 
 class InterviewQuestionData(BaseModel):
@@ -1010,77 +996,6 @@ def _cap_balanced(questions: list["InterviewQuestionData"], limit: int) -> list[
     return selected
 
 
-async def _generate_questions_for_skills(
-    skills: list[str], resume_content: dict, provider: AIProvider
-) -> list[SkillQuestionData]:
-    """LLM call scoped to skills with no cached bank entry yet — never called
-    for a skill _fill_skill_bank already found cached. Feeds ONLY the shared,
-    cross-user SkillQuestionBank (Interview Center's pre-session browse
-    view) — a real tailoring run's own prep questions come from
-    _agent4_generate_interview_questions instead, which is grounded in this
-    specific JD and resume rather than a bare skill name."""
-    system = (
-        "You are an expert interview coach. For EACH of the following skills a "
-        f"candidate is missing, generate exactly 2 targeted interview questions: {skills}. "
-        "For each question provide: skill (must exactly match one of the input skills, "
-        "verbatim), topic (exactly one of \"Technical\", \"Behavioral\", \"HR & Culture\"), "
-        "question, answer_framework (use the STAR method — Situation, Task, Action, Result). "
-        "These questions will be reused for other candidates missing the same skill, so keep "
-        "them skill-focused rather than referencing this specific candidate's resume. "
-        "Return JSON with a 'questions' array only."
-    )
-    wrapper = await provider.complete_structured(
-        system, json.dumps(resume_content), SkillQuestionsWrapper, model_tier="pro",
-        max_output_tokens=_MAX_TOKENS_PREP_SKILL_QUESTIONS, call_name="prep_questions_skills",
-    )
-    return wrapper.questions
-
-
-async def _fill_skill_bank(
-    missing_skills: list[str], resume_content: dict, provider: AIProvider, db: AsyncSession
-) -> None:
-    """Best-effort: keeps the shared, cross-user SkillQuestionBank growing
-    for Interview Center's pre-session browse view (GET /ai/questions/browse)
-    — a separate, lower-stakes experience from a real tailoring run's own
-    prep questions, which this no longer feeds (see
-    get_or_generate_prep_questions). Callers should treat failures here as
-    non-fatal: a slow-growing browse bank is never worth risking the user's
-    real, personalized questions."""
-    safe_missing = _sanitize_skill_list(missing_skills)
-    normalized: dict[str, str] = {}
-    for s in safe_missing:
-        key = s.strip().lower()
-        if key and key not in normalized:
-            normalized[key] = s.strip()
-    if not normalized:
-        return
-
-    cached_keys = set(
-        (await db.execute(
-            select(SkillQuestionBank.skill).where(SkillQuestionBank.skill.in_(normalized.keys()))
-        )).scalars().all()
-    )
-    uncovered_display = [display for key, display in normalized.items() if key not in cached_keys]
-    if not uncovered_display:
-        return
-    uncovered_keys = {d.strip().lower() for d in uncovered_display}
-
-    generated = await _generate_questions_for_skills(uncovered_display, resume_content, provider)
-    new_rows: list[SkillQuestionBank] = []
-    for q in generated:
-        key = q.skill.strip().lower()
-        if key not in uncovered_keys:
-            continue  # LLM echoed a skill we never asked about (or one already
-            # cached) — drop it, don't cache garbage or duplicate a covered skill.
-        topic = q.topic if q.topic in _TOPIC_VALUES else "Technical"
-        new_rows.append(SkillQuestionBank(
-            skill=key, topic=topic, question=q.question, answer_framework=q.answer_framework
-        ))
-    if new_rows:
-        db.add_all(new_rows)
-        await db.commit()
-
-
 def _build_interview_prep_system(seniority_indicators: list[str]) -> str:
     seniority_block = json.dumps(seniority_indicators) if seniority_indicators else "(none extracted for this JD)"
     return f"""\
@@ -1214,17 +1129,7 @@ async def get_or_generate_prep_questions(
     for the full rule set. There is no meaningful question to generate
     without a JD to ground it — jd_analysis is effectively required (the
     real caller always supplies it); omitting it returns [].
-
-    Also best-effort keeps the separate, lower-stakes SkillQuestionBank
-    growing (see _fill_skill_bank) for Interview Center's pre-session
-    browse view — a failure there is logged and swallowed, never allowed
-    to affect the real questions returned here.
     """
-    try:
-        await _fill_skill_bank(missing_skills, resume_content, provider, db)
-    except Exception:
-        logger.warning("Skill-bank fill failed (non-fatal — browse view only)", exc_info=True)
-
     if jd_analysis is None:
         return []
 

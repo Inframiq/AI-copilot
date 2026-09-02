@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
-from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, SkillQuestionBank
+from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.ai import (
-    TailorRequest, TailorOut, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
-    RewriteBulletRequest, RewriteBulletOut, SkillQuestionOut,
+    TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
+    RewriteBulletRequest, RewriteBulletOut,
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
@@ -325,24 +325,6 @@ async def rewrite_bullet(
         if len(words) > max_words:
             rewritten = " ".join(words[:max_words]).rstrip(",;:") + "."
     return RewriteBulletOut(rewritten_text=rewritten)
-
-
-@router.get("/questions/browse", response_model=list[SkillQuestionOut])
-async def browse_questions(
-    topic: str | None = None,
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Read-only browse of the shared skill-question bank — used by the
-    Interview Center's "no active session" view so it shows real,
-    previously-generated questions instead of nothing. Not personalized;
-    same content for every user browsing the same topic."""
-    query = select(SkillQuestionBank)
-    if topic:
-        query = query.where(SkillQuestionBank.topic == topic)
-    query = query.order_by(SkillQuestionBank.created_at.desc()).limit(50)
-    rows = (await db.execute(query)).scalars().all()
-    return rows
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)

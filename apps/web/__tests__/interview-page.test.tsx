@@ -12,7 +12,6 @@ vi.mock("@/lib/api-client", () => ({
     getMyQuestions: vi.fn().mockResolvedValue([]),
     getResumes: vi.fn().mockResolvedValue([]),
     getJds: vi.fn().mockResolvedValue([]),
-    getQuestionBank: vi.fn(),
     markQuestionPracticed: vi.fn(),
     getLatestSession: vi.fn().mockResolvedValue({ session_id: null }),
   },
@@ -35,24 +34,22 @@ describe("InterviewIndexPage — no active session", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
   });
 
-  it("shows only the 'tailor a resume to a JD' CTA and never touches the shared bank", async () => {
+  it("shows only the 'tailor a resume to a JD' CTA when the user has no generated questions", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
     expect(
       screen.getByText(/generated when you tailor a resume to a specific job description/i)
     ).toBeInTheDocument();
-    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 
-  it("still shows only the CTA after switching tabs — no per-tab bank fetch", async () => {
+  it("still shows only the CTA after switching tabs", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
     await screen.findByText("Behavioral");
     await userEvent.click(screen.getByText("Behavioral"));
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
-    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 });
 
@@ -63,7 +60,7 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     vi.mocked(apiClient.getLatestSession).mockResolvedValue({ session_id: null });
   });
 
-  it("shows real questions instead of falling back to the shared bank", async () => {
+  it("shows the user's real generated questions", async () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
       {
         id: "q-real",
@@ -80,12 +77,10 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
         practiced_at: null,
       },
     ]);
-    vi.mocked(apiClient.getQuestionBank).mockResolvedValue([]);
 
     renderWithQueryClient(<InterviewIndexPage />);
 
     expect(await screen.findByText(/Tell me about a time you used Python/)).toBeInTheDocument();
-    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 
   it("groups questions under their JD's name when multiple JDs have questions", async () => {
@@ -183,12 +178,11 @@ describe("InterviewIndexPage — no real questions for any JD", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
   });
 
-  it("shows the empty-state CTA — an active session with no generated questions still gets no bank fallback", async () => {
+  it("shows the empty-state CTA even with an active session but no generated questions", async () => {
     useTailoringStore.setState({ sessionId: "session-1" });
 
     renderWithQueryClient(<InterviewIndexPage />);
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
-    expect(apiClient.getQuestionBank).not.toHaveBeenCalled();
   });
 });
