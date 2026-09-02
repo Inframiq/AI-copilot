@@ -14,6 +14,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { Resume, JobDescription, LearningItem, PrepQuestionWithJdOut } from "@career-copilot/types";
@@ -36,29 +37,28 @@ const STATUS_COLOR: Record<LearningItem["status"], string> = {
   done: "bg-success-accent/15 text-success-accent",
 };
 
-function computeProfileHealth(resume: Resume | undefined): { score: number; label: string } {
-  if (!resume) return { score: 0, label: "Needs work" };
-  const c = resume.content as {
-    contact?: { name?: string; email?: string; phone?: string; location?: string; linkedin?: string; github?: string };
-    summary?: string;
-    experience?: unknown[];
-    education?: unknown[];
-    skills?: unknown[];
-  } | null;
-  if (!c) return { score: 0, label: "Needs work" };
-  const contact = c.contact ?? {};
-  let filled = 0;
-  if (contact.name) filled++;
-  if (contact.email) filled++;
-  if (contact.phone) filled++;
-  if (contact.location) filled++;
-  if (contact.linkedin) filled++;
-  if (contact.github) filled++;
-  if (c.summary) filled++;
-  if (Array.isArray(c.experience) && c.experience.length > 0) filled++;
-  if (Array.isArray(c.education) && c.education.length > 0) filled++;
-  if (Array.isArray(c.skills) && c.skills.length >= 5) filled++;
-  const score = Math.round((filled / 10) * 100);
+// Profile Health measures the user's My Profile (career_profiles) — the
+// app's source of truth — NOT a resume. (It used to read resumes[0].content,
+// so a stub "Untitled Resume" created from this dashboard would peg it at 0%
+// even with a fully filled profile.) Ten equally-weighted signals; each
+// present one is 10 points.
+function computeProfileHealth(profile: CareerProfile | null): { score: number; label: string } {
+  if (!profile) return { score: 0, label: "Needs work" };
+  const contact = profile.contact ?? { name: "", email: "" };
+  const checks = [
+    !!contact.name?.trim(),
+    !!contact.email?.trim(),
+    !!contact.phone?.trim(),
+    !!contact.location?.trim(),
+    !!contact.linkedin?.trim(),
+    !!contact.github?.trim(),
+    !!profile.headline?.trim(),
+    Array.isArray(profile.experience) && profile.experience.length > 0,
+    Array.isArray(profile.education) && profile.education.length > 0,
+    Array.isArray(profile.skills) && profile.skills.length >= 5,
+  ];
+  const filled = checks.filter(Boolean).length;
+  const score = Math.round((filled / checks.length) * 100);
   const label = score >= 80 ? "Excellent" : score >= 50 ? "Good" : "Needs work";
   return { score, label };
 }
@@ -102,16 +102,27 @@ export default function DashboardPage() {
   });
   const learningItems = learningQuery.data ?? [];
 
+  // My Profile (career_profiles) — the source of truth behind the Profile
+  // Health KPI. Shared ["careerProfile"] key, so this is usually warm from
+  // the Profile page / studio editor.
+  const careerProfileQuery = useQuery<CareerProfile | null>({
+    queryKey: ["careerProfile"],
+    queryFn: getCareerProfile,
+    staleTime: 2 * 60 * 1000,
+  });
+  const careerProfile = careerProfileQuery.data ?? null;
+
   // Any core query failing means the dashboard's numbers below are partial —
   // surface that instead of rendering confident zeros over a backend outage.
   const connectionError =
-    resumesQuery.isError || jdsQuery.isError || learningQuery.isError;
+    resumesQuery.isError || jdsQuery.isError || learningQuery.isError || careerProfileQuery.isError;
   const isRetrying =
-    resumesQuery.isFetching || jdsQuery.isFetching || learningQuery.isFetching;
+    resumesQuery.isFetching || jdsQuery.isFetching || learningQuery.isFetching || careerProfileQuery.isFetching;
   const retryAll = () => {
     resumesQuery.refetch();
     jdsQuery.refetch();
     learningQuery.refetch();
+    careerProfileQuery.refetch();
   };
 
   // All interview questions the user has generated (across every JD), not
@@ -169,12 +180,8 @@ export default function DashboardPage() {
     }
   }
 
-  // Best resume = one with highest ats_score, fallback to first
-  const bestResume = resumes.length > 0
-    ? resumes.reduce((best, r) => ((r.ats_score ?? 0) > (best.ats_score ?? 0) ? r : best), resumes[0])
-    : undefined;
-
-  const { score: profileScore, label: profileLabel } = computeProfileHealth(bestResume);
+  const hasProfile = !!careerProfile?.contact?.name?.trim();
+  const { score: profileScore, label: profileLabel } = computeProfileHealth(careerProfile);
 
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const jdsThisWeek = jds.filter((jd) => new Date(jd.created_at).getTime() >= oneWeekAgo).length;
@@ -217,11 +224,11 @@ export default function DashboardPage() {
   }> = [
     {
       label: "Profile Health",
-      value: resumes.length > 0 ? `${profileScore}` : "—",
-      badge: resumes.length > 0 ? profileLabel : "Add resume",
+      value: hasProfile ? `${profileScore}%` : "—",
+      badge: hasProfile ? profileLabel : "Complete profile",
       icon: Heartbeat,
-      barWidth: resumes.length > 0 ? `${profileScore}%` : null,
-      action: resumes.length === 0 ? createNewResume : undefined,
+      barWidth: hasProfile ? `${profileScore}%` : null,
+      action: () => router.push("/profile"),
     },
     {
       label: "Active Applications",
