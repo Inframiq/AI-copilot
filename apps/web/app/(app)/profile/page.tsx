@@ -292,9 +292,9 @@ export default function ProfilePage() {
           }))
         : [];
       const newEducation: EducationEntry[] = Array.isArray(c.education)
-        ? (c.education as Array<{institution:string;degree:string;year:string}>).map(e => ({
+        ? (c.education as Array<{institution:string;degree:string;year:string;gpa?:string}>).map(e => ({
             id: newId(), institution: e.institution, degree: e.degree,
-            field: "", year: e.year, gpa: "", honors: "",
+            field: "", year: e.year, gpa: e.gpa ?? "", honors: "",
           }))
         : [];
       const newCertifications: CertEntry[] = Array.isArray(c.certifications)

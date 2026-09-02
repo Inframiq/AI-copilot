@@ -187,7 +187,7 @@ export function resumeContentToCareerProfileInput(
           degree: e.degree,
           field: "",
           year: e.year,
-          gpa: "",
+          gpa: e.gpa ?? "",
           honors: "",
         }))
       : [],
@@ -232,6 +232,7 @@ export function profileToResumeContent(profile: CareerProfileInput): ResumeConte
       institution: e.institution,
       degree: `${e.degree}${e.field ? ` in ${e.field}` : ""}`,
       year: e.year,
+      gpa: e.gpa || undefined,
     })),
     skills: profile.skills,
     certifications: profile.certifications.map(c => `${c.name}${c.issuer ? ` — ${c.issuer}` : ""}`),

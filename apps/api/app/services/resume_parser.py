@@ -124,7 +124,8 @@ Return a JSON object with EXACTLY this shape:
     {
       "institution": "University Name",
       "degree": "Degree and major",
-      "year": "YYYY or YYYY-YYYY"
+      "year": "YYYY or YYYY-YYYY",
+      "gpa": "grade exactly as printed, or null"
     }
   ],
   "skills": ["Skill1", "Skill2"],
@@ -136,6 +137,10 @@ Rules:
 - Return only the JSON object, no markdown fences.
 - Keep all original bullet text verbatim — do not rewrite.
 - If a field is not found, use null for strings and [] for arrays.
+- education "gpa": CGPA, GPA, "Grade", "Aggregate", and a percentage are the
+  SAME field — capture whichever the resume shows, copied verbatim with its
+  scale or "%" sign (e.g. "8.6", "8.6/10", "3.9/4.0", "85%"). Never convert
+  between scales, and never invent a value.
 - skills must be a flat list of individual skill strings, each a short tool/
   technology/methodology name — 1 to 4 words, no verbs, no punctuation, never
   a sentence. "Python", "Stakeholder Management", "CI/CD" are valid entries.

@@ -32,6 +32,9 @@ export interface ResumeContent {
     institution: string;
     degree: string;
     year: string;
+    /** GPA / CGPA / percentage exactly as printed on the resume (e.g.
+     * "8.6", "3.9/4.0", "85%"). CGPA and GPA are treated as the same field. */
+    gpa?: string;
   }>;
   skills: string[];
   languages?: Array<{
