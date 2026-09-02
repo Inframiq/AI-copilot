@@ -67,9 +67,33 @@ export function PhotoRequirementModal({
     try {
       const url = await uploadResumePhoto(resumeId, file);
       updateContent({ contact: { ...content.contact, photo_url: url } });
-      if (alsoSaveToProfile && profileForUpsert) {
+      if (alsoSaveToProfile) {
         const { url: pUrl, path } = await uploadProfilePhoto(file);
-        await upsertCareerProfile({ ...profileForUpsert, photo_url: pUrl, photo_path: path });
+        // When getCareerProfile() returned null (no row yet) the studio page
+        // passes profileForUpsert=null. A checked "also save to my profile"
+        // must still write a row — seed a minimal profile from the resume's
+        // contact, matching resumeContentToCareerProfileInput's empty shape.
+        const baseProfile: CareerProfileInput = profileForUpsert ?? {
+          master_resume_id: null,
+          contact: {
+            name: content.contact.name ?? "",
+            email: content.contact.email ?? "",
+            phone: content.contact.phone ?? "",
+            location: content.contact.location ?? "",
+            linkedin: content.contact.linkedin ?? "",
+            github: content.contact.github ?? "",
+          },
+          headline: null,
+          experience: [],
+          projects: [],
+          education: [],
+          skills: [],
+          certifications: [],
+          role_status: null,
+          photo_url: null,
+          photo_path: null,
+        };
+        await upsertCareerProfile({ ...baseProfile, photo_url: pUrl, photo_path: path });
         queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
       }
       setPhotoModal(false); // success — keep the photo template
@@ -91,7 +115,9 @@ export function PhotoRequirementModal({
           </Dialog.Title>
 
           {profilePhotoUrl === undefined ? (
-            <p className="text-body-sm text-on-surface-variant">Loading your profile…</p>
+            <Dialog.Description className="text-body-sm text-on-surface-variant">
+              Loading your profile…
+            </Dialog.Description>
           ) : caseB ? (
             <Dialog.Description className="text-body-sm text-on-surface-variant">
               You don&apos;t have a profile photo yet. Please upload one to continue.

@@ -117,6 +117,12 @@ export default function StudioPage({
   // hydration (setResume writes the real template id), not only on later
   // in-editor switches.
   const prevTemplateIdRef = useRef<string | null>(null);
+  // Reset the "seen template" ref on client-side navigation between resumes,
+  // so a second resume that shares the first's photo template but has no photo
+  // still gets prompted (the ref otherwise persists across the route change).
+  useEffect(() => {
+    prevTemplateIdRef.current = null;
+  }, [resumeId]);
   useEffect(() => {
     if (storeResumeId !== resumeId || !content) return;
     const prev = prevTemplateIdRef.current;

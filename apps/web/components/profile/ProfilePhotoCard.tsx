@@ -1,5 +1,4 @@
 "use client";
-import { useRef } from "react";
 import { UserCircle } from "@phosphor-icons/react";
 
 interface ProfilePhotoCardProps {
@@ -21,8 +20,6 @@ export function ProfilePhotoCard({
   onFileSelected,
   onRemove,
 }: ProfilePhotoCardProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
   return (
     <section className={cardCls}>
       <h2 className="text-headline-md text-on-surface font-bold tracking-tight mb-lg">
@@ -47,7 +44,6 @@ export function ProfilePhotoCard({
             <label className="px-md py-sm rounded-lg border border-outline-variant text-label-sm text-primary hover:bg-surface-container-low transition-colors cursor-pointer">
               {uploading ? "Uploading…" : photoUrl ? "Replace" : "Upload photo"}
               <input
-                ref={inputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 disabled={uploading}

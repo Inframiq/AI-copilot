@@ -121,6 +121,25 @@ describe("PhotoRequirementModal", () => {
     expect(onOpenProfile).toHaveBeenCalled();
   });
 
+  it("Case B: checkbox checked + no existing profile row still upserts, seeding contact from content", async () => {
+    useResumeStore.getState().setPhotoModal(true, "ats_clean");
+    mount({ profilePhotoUrl: null, profileForUpsert: null });
+
+    await userEvent.click(screen.getByRole("button", { name: /upload photo/i }));
+    expect(screen.getByRole("checkbox", { name: /also save|also set/i })).toBeChecked();
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    await userEvent.upload(screen.getByLabelText(/choose an image|upload/i), file);
+
+    await waitFor(() => expect(uploadProfilePhoto).toHaveBeenCalledWith(file));
+    expect(upsertCareerProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photo_url: "https://sb.example/avatars/u/profile.png",
+        photo_path: "u/profile.png",
+        contact: expect.objectContaining({ name: "Jane", email: "j@x.com" }),
+      }),
+    );
+  });
+
   it("Cancel reverts the template to photoModalRevertTo", async () => {
     useResumeStore.getState().setPhotoModal(true, "ats_clean");
     mount({ profilePhotoUrl: null });
