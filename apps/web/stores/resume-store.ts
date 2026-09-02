@@ -20,6 +20,12 @@ interface ResumeState {
    * successful save — surfaced in the UI so a failed save is never silent. */
   saveError: string | null;
   pdfSignedUrl: string | null;
+  /** Open state of <PhotoRequirementModal>, shared between the studio page
+   *  (auto-trigger on template change) and EditorPanel ("Change photo"). */
+  photoModalOpen: boolean;
+  /** Template id to restore if the user cancels an auto-triggered prompt.
+   *  null when the modal was opened manually (nothing to revert). */
+  photoModalRevertTo: string | null;
   _saveTimer: ReturnType<typeof setTimeout> | null;
 
   setResume: (
@@ -33,6 +39,7 @@ interface ResumeState {
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setPdfSignedUrl: (url: string | null) => void;
+  setPhotoModal: (open: boolean, revertTo?: string | null) => void;
   resetStore: () => void;
   /** Bypasses the debounce and persists immediately — for callers that need
    *  the backend to be caught up before doing something else (e.g. a PDF
@@ -54,6 +61,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   isSaving: false,
   saveError: null,
   pdfSignedUrl: null,
+  photoModalOpen: false,
+  photoModalRevertTo: null,
   _saveTimer: null,
 
   setResume: (id, content, templateId, lineSpacing, paragraphSpacing) =>
@@ -91,6 +100,9 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
+  setPhotoModal: (open, revertTo = null) =>
+    set({ photoModalOpen: open, photoModalRevertTo: open ? revertTo : null }),
+
   resetStore: () => {
     const timer = get()._saveTimer;
     if (timer !== null) clearTimeout(timer);
@@ -104,6 +116,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       isSaving: false,
       saveError: null,
       pdfSignedUrl: null,
+      photoModalOpen: false,
+      photoModalRevertTo: null,
       _saveTimer: null,
     });
   },

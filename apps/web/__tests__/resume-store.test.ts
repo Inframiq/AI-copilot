@@ -227,4 +227,38 @@ describe("useResumeStore", () => {
     expect(useResumeStore.getState().saveError).toBeNull();
     expect(useResumeStore.getState().isDirty).toBe(false);
   });
+
+  describe("photo modal state", () => {
+    it("defaults closed with no revert target", () => {
+      const s = useResumeStore.getState();
+      expect(s.photoModalOpen).toBe(false);
+      expect(s.photoModalRevertTo).toBeNull();
+    });
+
+    it("setPhotoModal(true, id) opens and records the revert target", () => {
+      useResumeStore.getState().setPhotoModal(true, "ats_clean");
+      expect(useResumeStore.getState().photoModalOpen).toBe(true);
+      expect(useResumeStore.getState().photoModalRevertTo).toBe("ats_clean");
+    });
+
+    it("setPhotoModal(true) with no id opens with a null revert target", () => {
+      useResumeStore.getState().setPhotoModal(true, "ats_clean");
+      useResumeStore.getState().setPhotoModal(true);
+      expect(useResumeStore.getState().photoModalRevertTo).toBeNull();
+    });
+
+    it("setPhotoModal(false) closes and clears the revert target", () => {
+      useResumeStore.getState().setPhotoModal(true, "ats_clean");
+      useResumeStore.getState().setPhotoModal(false);
+      expect(useResumeStore.getState().photoModalOpen).toBe(false);
+      expect(useResumeStore.getState().photoModalRevertTo).toBeNull();
+    });
+
+    it("resetStore clears photo modal state", () => {
+      useResumeStore.getState().setPhotoModal(true, "ats_sidebar");
+      useResumeStore.getState().resetStore();
+      expect(useResumeStore.getState().photoModalOpen).toBe(false);
+      expect(useResumeStore.getState().photoModalRevertTo).toBeNull();
+    });
+  });
 });
