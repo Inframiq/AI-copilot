@@ -53,6 +53,8 @@ import {
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
+import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
+import { uploadProfilePhoto } from "@/lib/photo-upload";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -120,6 +122,10 @@ export default function ProfilePage() {
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
   const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [skills, setSkills] = useState<string[]>([]);
   const [skillDraft, setSkillDraft] = useState("");
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([]);
@@ -159,6 +165,8 @@ export default function ProfilePage() {
     setEducation(profile.education);
     setCertifications(profile.certifications);
     setMasterResumeId(profile.master_resume_id);
+    setPhotoUrl(profile.photo_url ?? null);
+    setPhotoPath(profile.photo_path ?? null);
   }
 
   // ── load master resume title ───────────────────────────────────────────────
@@ -208,6 +216,8 @@ export default function ProfilePage() {
         skills,
         certifications,
         role_status: roleStatus || null,
+        photo_url: photoUrl,
+        photo_path: photoPath,
       };
       await upsertCareerProfile(profileInput);
       // Deliberately NOT syncing this back into the resume's stored content:
@@ -315,6 +325,29 @@ export default function ProfilePage() {
     } finally {
       setUploading(false);
     }
+  }
+
+  // ── profile photo ──────────────────────────────────────────────────────────
+  async function handleProfilePhoto(file: File) {
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      const { url, path } = await uploadProfilePhoto(file);
+      setPhotoUrl(url);
+      setPhotoPath(path);
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "Photo upload failed");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  function removeProfilePhoto() {
+    // Leaves the storage object in place (it is overwritten on the next
+    // upload) — only the profile's pointer to it is cleared, persisted on Save.
+    setPhotoUrl(null);
+    setPhotoPath(null);
+    setPhotoError(null);
   }
 
   // ── experience helpers ─────────────────────────────────────────────────────
@@ -475,6 +508,15 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
+
+      {/* ── Profile photo ────────────────────────────────────────────────── */}
+      <ProfilePhotoCard
+        photoUrl={photoUrl}
+        uploading={photoUploading}
+        error={photoError}
+        onFileSelected={handleProfilePhoto}
+        onRemove={removeProfilePhoto}
+      />
 
       {/* ── Contact information ───────────────────────────────────────────── */}
       <section className={cardCls}>
