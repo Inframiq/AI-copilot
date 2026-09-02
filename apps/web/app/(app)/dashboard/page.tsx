@@ -16,7 +16,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import type { Resume, JobDescription, LearningItem, PrepQuestionOut } from "@career-copilot/types";
+import type { Resume, JobDescription, LearningItem, PrepQuestionWithJdOut } from "@career-copilot/types";
 
 const STATUS_CYCLE: Record<LearningItem["status"], LearningItem["status"]> = {
   not_started: "learning",
@@ -114,10 +114,12 @@ export default function DashboardPage() {
     learningQuery.refetch();
   };
 
-  const { data: questions = [] } = useQuery<PrepQuestionOut[]>({
-    queryKey: ["questions", sessionId],
-    queryFn: () => apiClient.getQuestions(sessionId!),
-    enabled: sessionId !== null,
+  // All interview questions the user has generated (across every JD), not
+  // just the current session's — this is what "interview prep has begun"
+  // actually means. Uploading a resume in My Profile generates none of these.
+  const { data: myQuestions = [] } = useQuery<PrepQuestionWithJdOut[]>({
+    queryKey: ["myQuestions"],
+    queryFn: () => apiClient.getMyQuestions(),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -177,13 +179,21 @@ export default function DashboardPage() {
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const jdsThisWeek = jds.filter((jd) => new Date(jd.created_at).getTime() >= oneWeekAgo).length;
 
+  // A resume only counts as "tailored" once it's been run against a JD —
+  // jd.ats_score is non-null exactly when that JD has a completed tailoring
+  // session. A plain resume uploaded in My Profile is not a tailored version.
+  const tailoredCount = jds.filter((jd) => jd.ats_score != null).length;
+
   // Same formula as Interview Center's Overall Readiness gauge — each
   // milestone is worth 20 pts, practiced-question ratio fills the last 40.
-  const answeredCount = questions.filter((q) => q.practiced_at).length;
-  const practiceScore = questions.length > 0 ? (answeredCount / questions.length) * 40 : 0;
+  // Deliberately does NOT count "has a resume": interview readiness begins
+  // with a JD analyzed, questions generated (JD tailoring or the Interview
+  // tab), and a practice session — never from a My Profile resume upload.
+  const answeredCount = myQuestions.filter((q) => q.practiced_at).length;
+  const practiceScore = myQuestions.length > 0 ? (answeredCount / myQuestions.length) * 40 : 0;
   const interviewReadiness = Math.round(
-    (resumes.length > 0 ? 20 : 0) +
     (jds.length > 0 ? 20 : 0) +
+    (myQuestions.length > 0 ? 20 : 0) +
     (sessionId ? 20 : 0) +
     practiceScore
   );
@@ -231,11 +241,11 @@ export default function DashboardPage() {
     },
     {
       label: "Tailored Resumes",
-      value: String(resumes.length),
-      badge: "Versions saved",
+      value: tailoredCount > 0 ? String(tailoredCount) : "—",
+      badge: tailoredCount > 0 ? "Versions saved" : "Tailor to a JD",
       icon: FileDashed,
       barWidth: null,
-      action: resumes.length > 0 ? () => router.push("/studio") : createNewResume,
+      action: tailoredCount > 0 ? () => router.push("/studio") : () => router.push("/jd"),
     },
   ];
 

@@ -113,12 +113,15 @@ export default function InterviewIndexPage() {
   const answeredSet   = new Set(myQuestions.filter((q) => q.practiced_at).map((q) => q.id));
   const answeredCount = answeredSet.size;
 
-  // Overall readiness (progressive — each milestone = +20 pts, practice fills last 40)
+  // Overall readiness (progressive — each milestone = +20 pts, practice fills last 40).
+  // Interview readiness only starts once actual prep work exists — a JD
+  // analyzed, questions generated (via JD tailoring or this tab), a practice
+  // session started. Merely uploading a resume in My Profile does not count.
   const practiceScore  = myQuestions.length > 0 ? (answeredCount / myQuestions.length) * 40 : 0;
   const readinessScore = Math.round(
-    (resumes.length > 0 ? 20 : 0) +
-    (jds.length     > 0 ? 20 : 0) +
-    (sessionId          ? 20 : 0) +
+    (jds.length        > 0 ? 20 : 0) +
+    (hasAnyQuestions       ? 20 : 0) +
+    (sessionId             ? 20 : 0) +
     practiceScore,
   );
 
