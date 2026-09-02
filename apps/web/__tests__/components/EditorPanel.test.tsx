@@ -3,10 +3,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("@/lib/photo-upload", () => ({
-  uploadResumePhoto: vi.fn(),
-}));
-
 // A successful tailor run populates pendingContent, which makes EditorPanel
 // render BulletReviewPanel — and that component calls useRouter() (added
 // alongside the tailoring preview/save flow), which throws outside a real
@@ -31,7 +27,6 @@ import { EditorPanel } from "../../components/resume/EditorPanel";
 import { useResumeStore } from "../../stores/resume-store";
 import { useTailoringStore } from "../../stores/tailoring-store";
 import { apiClient } from "../../lib/api-client";
-import { uploadResumePhoto } from "../../lib/photo-upload";
 
 const SAMPLE_CONTENT = {
   contact: { name: "Jane Doe", email: "jane@example.com" },
@@ -129,34 +124,33 @@ describe("EditorPanel", () => {
     });
   });
 
-  it("uploads a profile photo and stores the returned URL", async () => {
+  it("shows no photo controls in the contact tab for a text-only template", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(uploadResumePhoto).mockResolvedValue("https://cdn.example.com/photo.jpg");
     render(<EditorPanel />);
-
     await userEvent.click(screen.getByRole("tab", { name: "contact" }));
-    const fileInput = screen.getByLabelText(/Upload Photo/) as HTMLInputElement;
-    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
-    await userEvent.upload(fileInput, file);
-
-    await waitFor(() => {
-      expect(useResumeStore.getState().content?.contact.photo_url).toBe(
-        "https://cdn.example.com/photo.jpg"
-      );
-    });
+    expect(screen.queryByText(/profile photo/i)).not.toBeInTheDocument();
   });
 
-  it("shows a photo upload error without crashing", async () => {
-    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(uploadResumePhoto).mockRejectedValue(new Error("Upload failed: too large"));
+  it("shows a 'choose photo' prompt in the contact tab for a photo template with no photo", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_sidebar");
     render(<EditorPanel />);
-
     await userEvent.click(screen.getByRole("tab", { name: "contact" }));
-    const fileInput = screen.getByLabelText(/Upload Photo/) as HTMLInputElement;
-    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
-    await userEvent.upload(fileInput, file);
+    const btn = screen.getByRole("button", { name: /choose photo/i });
+    await userEvent.click(btn);
+    expect(useResumeStore.getState().photoModalOpen).toBe(true);
+  });
 
-    expect(await screen.findByText("Upload failed: too large")).toBeInTheDocument();
+  it("shows the thumbnail + Remove for a photo template that already has a photo", async () => {
+    useResumeStore.getState().setResume(
+      "resume-1",
+      { ...SAMPLE_CONTENT, contact: { ...SAMPLE_CONTENT.contact, photo_url: "https://sb.example/x.png" } },
+      "ats_sidebar",
+    );
+    render(<EditorPanel />);
+    await userEvent.click(screen.getByRole("tab", { name: "contact" }));
+    expect(screen.getByRole("img", { name: /profile/i })).toHaveAttribute("src", "https://sb.example/x.png");
+    await userEvent.click(screen.getByRole("button", { name: /remove photo/i }));
+    expect(useResumeStore.getState().content!.contact.photo_url).toBeUndefined();
   });
 
   it("caps the Summary tab at 80 words instead of accepting an unbounded paste", async () => {

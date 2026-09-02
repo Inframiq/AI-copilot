@@ -86,6 +86,8 @@ const SAMPLE_PROFILE: CareerProfile = {
   certifications: [{ id: "c1", name: "AWS SAA", issuer: "AWS", year: "2025" }],
   headline: "Aspiring SWE",
   role_status: "student",
+  photo_url: null,
+  photo_path: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
@@ -130,6 +132,32 @@ describe("career-profile-client", () => {
       expect(result).toEqual(SAMPLE_PROFILE);
       expect(upsertCalls[0].payload).toMatchObject({ user_id: "user-1" });
       expect(upsertCalls[0].opts).toEqual({ onConflict: "user_id" });
+    });
+
+    it("forwards photo_url and photo_path in the upsert payload", async () => {
+      getUserMock.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      queryResult = { data: { user_id: "user-1" }, error: null };
+      upsertCalls = [];
+
+      await upsertCareerProfile({
+        master_resume_id: null,
+        contact: { name: "Jane", email: "j@x.com" },
+        headline: null,
+        experience: [],
+        projects: [],
+        education: [],
+        skills: [],
+        certifications: [],
+        role_status: null,
+        photo_url: "https://sb.example/avatars/user-1/profile.png",
+        photo_path: "user-1/profile.png",
+      });
+
+      expect(upsertCalls[0].payload).toMatchObject({
+        user_id: "user-1",
+        photo_url: "https://sb.example/avatars/user-1/profile.png",
+        photo_path: "user-1/profile.png",
+      });
     });
   });
 

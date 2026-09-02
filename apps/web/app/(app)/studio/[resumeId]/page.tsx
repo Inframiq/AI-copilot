@@ -1,13 +1,16 @@
 "use client";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { CheckCircle, ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
+import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
+import { templateRequiresPhoto } from "@/lib/resume-templates";
+import { getCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
 
 export default function StudioPage({
@@ -23,6 +26,8 @@ export default function StudioPage({
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
+  const content = useResumeStore((s) => s.content);
+  const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
   const isDirty = useResumeStore((s) => s.isDirty);
   const isSaving = useResumeStore((s) => s.isSaving);
   const saveError = useResumeStore((s) => s.saveError);
@@ -55,6 +60,30 @@ export default function StudioPage({
     staleTime: 2 * 60 * 1000,
   });
 
+  // Shared ["careerProfile"] cache key — the same one profile/page.tsx and
+  // <PhotoRequirementModal> ("also save to profile") invalidate.
+  const { data: careerProfile } = useQuery({
+    queryKey: ["careerProfile"],
+    queryFn: getCareerProfile,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const profileForUpsert: CareerProfileInput | null = careerProfile
+    ? {
+        master_resume_id: careerProfile.master_resume_id,
+        contact: careerProfile.contact,
+        headline: careerProfile.headline,
+        experience: careerProfile.experience,
+        projects: careerProfile.projects,
+        education: careerProfile.education,
+        skills: careerProfile.skills,
+        certifications: careerProfile.certifications,
+        role_status: careerProfile.role_status,
+        photo_url: careerProfile.photo_url,
+        photo_path: careerProfile.photo_path,
+      }
+    : null;
+
   useEffect(() => {
     // Skip if the store is already hydrated for this exact resume — e.g. we
     // just navigated here right after AI tailoring, which already wrote the
@@ -82,6 +111,27 @@ export default function StudioPage({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resume?.id, storeResumeId]);
+
+  // Prompt for a photo the first time the resume lands on a photo template
+  // without one. prevTemplateIdRef starts null so this also fires on initial
+  // hydration (setResume writes the real template id), not only on later
+  // in-editor switches.
+  const prevTemplateIdRef = useRef<string | null>(null);
+  // Reset the "seen template" ref on client-side navigation between resumes,
+  // so a second resume that shares the first's photo template but has no photo
+  // still gets prompted (the ref otherwise persists across the route change).
+  useEffect(() => {
+    prevTemplateIdRef.current = null;
+  }, [resumeId]);
+  useEffect(() => {
+    if (storeResumeId !== resumeId || !content) return;
+    const prev = prevTemplateIdRef.current;
+    prevTemplateIdRef.current = templateId;
+    if (templateId === prev) return;
+    if (templateRequiresPhoto(templateId) && !content.contact.photo_url) {
+      setPhotoModal(true, prev ?? undefined);
+    }
+  }, [templateId, storeResumeId, resumeId, content, setPhotoModal]);
 
   function startEditingTitle() {
     setTitleDraft(resume?.title ?? "");
@@ -359,6 +409,15 @@ export default function StudioPage({
           </div>
         </div>
       )}
+
+      <PhotoRequirementModal
+        profilePhotoUrl={careerProfile === undefined ? undefined : careerProfile?.photo_url ?? null}
+        profileForUpsert={profileForUpsert}
+        onOpenProfile={() => {
+          setPhotoModal(false);
+          router.push("/profile");
+        }}
+      />
     </div>
   );
 }

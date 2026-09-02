@@ -5,8 +5,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
-import { uploadResumePhoto } from "@/lib/photo-upload";
-import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
 import { sameCompany } from "@/lib/career-profile-client";
 import { CaretDown, CaretRight, CheckCircle, FileText, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
@@ -32,8 +31,7 @@ export function EditorPanel() {
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
   const setTemplateId = useResumeStore((s) => s.setTemplateId);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
+  const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
 
   const {
     jdText, setJd,
@@ -55,22 +53,6 @@ export function EditorPanel() {
   // Collapsed by default — reference material, not the primary focus of
   // this screen (the tailoring form / bullet review is).
   const [jdSectionOpen, setJdSectionOpen] = useState(false);
-
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !resumeId || !content) return;
-    setIsUploadingPhoto(true);
-    setPhotoError(null);
-    try {
-      const photoUrl = await uploadResumePhoto(resumeId, file);
-      updateContent({ contact: { ...content.contact, photo_url: photoUrl } });
-    } catch (err) {
-      setPhotoError(err instanceof Error ? err.message : "Photo upload failed");
-    } finally {
-      setIsUploadingPhoto(false);
-      e.target.value = "";
-    }
-  }
 
   if (!content) {
     return (
@@ -236,34 +218,52 @@ export function EditorPanel() {
         {/* Contact Tab */}
         <Tabs.Content value="contact" className="flex flex-col gap-md">
           <div className="bg-surface p-lg rounded-xl border border-outline-variant/20 shadow-sm flex flex-col gap-md">
-            <div className="flex flex-col gap-xs">
-              <label className="text-label-sm text-on-surface-variant">Profile Photo</label>
-              <div className="flex items-center gap-md">
+            {templateRequiresPhoto(templateId) && (
+              <div className="flex flex-col gap-xs">
+                <label className="text-label-sm text-on-surface-variant">
+                  Profile Photo <span className="text-primary">· required by this template</span>
+                </label>
                 {content.contact.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={content.contact.photo_url}
-                    alt="Profile"
-                    className="w-16 h-16 rounded-lg object-cover border border-outline-variant/30"
-                  />
+                  <div className="flex items-center gap-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={content.contact.photo_url}
+                      alt="Profile"
+                      className="w-16 h-16 rounded-lg object-cover border border-outline-variant/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoModal(true)}
+                      className="px-md py-sm rounded-lg border border-outline-variant text-label-sm text-primary hover:bg-surface-container-low transition-colors"
+                    >
+                      Change photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateContent({ contact: { ...content.contact, photo_url: undefined } })
+                      }
+                      className="px-md py-sm rounded-lg text-label-sm text-on-surface-variant hover:text-error transition-colors"
+                    >
+                      Remove photo
+                    </button>
+                  </div>
                 ) : (
-                  <div className="w-16 h-16 rounded-lg bg-surface-container-high border border-dashed border-outline-variant flex items-center justify-center text-label-sm text-on-surface-variant">
-                    None
+                  <div className="flex items-center gap-md">
+                    <p className="text-caption text-on-surface-variant">
+                      This template needs a profile photo. Manage your default in My Profile.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoModal(true)}
+                      className="px-md py-sm rounded-lg bg-primary text-on-primary text-label-sm hover:opacity-90 transition-opacity shrink-0"
+                    >
+                      Choose photo
+                    </button>
                   </div>
                 )}
-                <label className="px-md py-sm rounded-lg border border-outline-variant text-label-sm text-primary hover:bg-surface-container-low transition-colors cursor-pointer">
-                  {isUploadingPhoto ? "Uploading…" : "Upload Photo"}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handlePhotoChange}
-                    disabled={isUploadingPhoto}
-                    className="hidden"
-                  />
-                </label>
               </div>
-              {photoError && <p className="text-label-sm text-error">{photoError}</p>}
-            </div>
+            )}
 
             {CONTACT_FIELDS.map(({ key, label, type }) => (
               <div key={key} className="flex flex-col gap-xs">

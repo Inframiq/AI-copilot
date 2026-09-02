@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, waitFor, act } from "@testing-library/react";
+import { render, waitFor, act, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mockPush = vi.fn();
@@ -26,6 +26,12 @@ vi.mock("@/lib/api-client", () => ({
     updateResume: vi.fn().mockResolvedValue({}),
   },
 }));
+
+vi.mock("@/lib/career-profile-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
+  return { ...actual, getCareerProfile: vi.fn().mockResolvedValue(null) };
+});
+vi.mock("@/lib/photo-upload", () => ({ uploadResumePhoto: vi.fn(), uploadProfilePhoto: vi.fn() }));
 
 import StudioResumePage from "../app/(app)/studio/[resumeId]/page";
 import { apiClient } from "../lib/api-client";
@@ -123,5 +129,29 @@ describe("Studio resume editor page — loading an already-generated PDF on open
 
     expect(apiClient.getLatestResumePdf).not.toHaveBeenCalled();
     expect(useResumeStore.getState().pdfSignedUrl).toBe("https://example.com/tailored-preview.pdf");
+  });
+
+  it("opens the photo prompt when the resume is on a photo template with no photo", async () => {
+    vi.mocked(apiClient.getResume).mockResolvedValue(
+      makeResume({ template_id: "ats_sidebar" }) as any,
+    );
+    await renderWithQueryClient(<StudioResumePage params={Promise.resolve({ resumeId: "resume-1" })} />);
+
+    await waitFor(() =>
+      expect(useResumeStore.getState().photoModalOpen).toBe(true),
+    );
+    expect(await screen.findByText("This template requires a profile photo.")).toBeInTheDocument();
+  });
+
+  it("does not open the prompt when the resume already has a photo", async () => {
+    vi.mocked(apiClient.getResume).mockResolvedValue(
+      makeResume({
+        template_id: "ats_sidebar",
+        content: { ...SAMPLE_CONTENT, contact: { ...SAMPLE_CONTENT.contact, photo_url: "https://sb.example/x.png" } },
+      }) as any,
+    );
+    await renderWithQueryClient(<StudioResumePage params={Promise.resolve({ resumeId: "resume-1" })} />);
+    await waitFor(() => expect(useResumeStore.getState().resumeId).toBe("resume-1"));
+    expect(useResumeStore.getState().photoModalOpen).toBe(false);
   });
 });
