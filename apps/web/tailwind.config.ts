@@ -65,10 +65,11 @@ const config: Config = {
       spacing: {
         lg: "24px",
         gutter: "24px",
-        xl: "48px",
+        // xl/xxl tightened from 48/80 — keep in sync with app/globals.css.
+        xl: "32px",
         sm: "8px",
         md: "16px",
-        xxl: "80px",
+        xxl: "48px",
         xs: "4px",
         "sidebar-width": "280px",
       },

@@ -77,10 +77,12 @@
      of adding a duplicate token. */
   --spacing-lg: 24px;
   --spacing-gutter: 24px;
-  --spacing-xl: 48px;
+  /* xl/xxl tightened from 48/80 — the old jump from lg (24px) left large
+     dead bands between stacked sections and above/below page content. */
+  --spacing-xl: 32px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
-  --spacing-xxl: 80px;
+  --spacing-xxl: 48px;
   --spacing-xs: 4px;
   --spacing-sidebar-width: 280px;
 
