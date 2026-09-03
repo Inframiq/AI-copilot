@@ -1,7 +1,11 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
-import { Lightning, Sparkle, Info } from "@phosphor-icons/react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Lightning, Sparkle, Info, User, ArrowRight, SignOut } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { createBrowserClient } from "@/lib/supabase";
+import { getCareerProfile } from "@/lib/career-profile-client";
 import type { Subscription } from "@career-copilot/types";
 
 // Only actions the user actively triggers with a button. Interview prep
@@ -17,11 +21,42 @@ const ACTION_LABELS: Record<string, string> = {
 // Order the cost table so the headline action is first.
 const ACTION_ORDER = ["tailor", "cover_letter", "rewrite_bullet", "analyze"];
 
+const STATUS_LABEL: Record<string, string> = { working: "Working", student: "Student" };
+
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex items-center justify-between py-sm gap-md">
+      <span className="text-body-md text-on-surface-variant">{label}</span>
+      <span className="text-body-md text-on-surface font-medium text-right truncate">
+        {value || "—"}
+      </span>
+    </div>
+  );
+}
+
 export default function AccountPage() {
-  const { data: sub, isLoading } = useQuery<Subscription>({
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const supabase = createBrowserClient();
+
+  const { data: sub, isLoading: subLoading } = useQuery<Subscription>({
     queryKey: ["subscription"],
     queryFn: () => apiClient.getSubscription(),
   });
+  const { data: profile } = useQuery({
+    queryKey: ["careerProfile"],
+    queryFn: () => getCareerProfile(),
+  });
+
+  async function handleSignOut() {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore — treat as signed out either way
+    }
+    queryClient.clear();
+    router.push("/login");
+  }
 
   const pct =
     sub && sub.credits_allotment > 0
@@ -41,12 +76,47 @@ export default function AccountPage() {
           Account
         </h1>
         <p className="text-body-lg text-on-surface-variant">
-          Your plan and credit balance. Credits are spent when you tailor a resume,
-          generate a cover letter, or rewrite a bullet.
+          Your details, plan, and credit balance.
         </p>
       </section>
 
-      {isLoading || !sub ? (
+      {/* Your details */}
+      <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+        <div className="flex items-center justify-between mb-md">
+          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+            <User size={20} weight="fill" className="text-primary" />
+            Your details
+          </h2>
+          <Link
+            href="/profile"
+            className="text-label-md text-primary font-semibold flex items-center gap-xs hover:underline"
+          >
+            Edit in My Profile
+            <ArrowRight size={16} />
+          </Link>
+        </div>
+        {profile ? (
+          <div className="flex flex-col divide-y divide-outline-variant/20">
+            <DetailRow label="Name" value={profile.contact?.name} />
+            <DetailRow label="Email" value={profile.contact?.email} />
+            <DetailRow label="Phone" value={profile.contact?.phone} />
+            <DetailRow
+              label="Status"
+              value={profile.role_status ? STATUS_LABEL[profile.role_status] : undefined}
+            />
+          </div>
+        ) : (
+          <p className="text-body-sm text-on-surface-variant">
+            Your profile isn&apos;t set up yet.{" "}
+            <Link href="/onboarding" className="text-primary font-semibold hover:underline">
+              Finish setting it up
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+
+      {subLoading || !sub ? (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 h-40 animate-pulse" />
       ) : (
         <>
@@ -140,6 +210,15 @@ export default function AccountPage() {
           </div>
         </>
       )}
+
+      {/* Sign out */}
+      <button
+        onClick={handleSignOut}
+        className="self-start flex items-center gap-sm px-lg py-md rounded-xl text-label-md font-semibold text-error border border-error/40 bg-error/5 hover:bg-error/10 transition-colors"
+      >
+        <SignOut size={18} weight="bold" />
+        Sign out
+      </button>
     </div>
   );
 }

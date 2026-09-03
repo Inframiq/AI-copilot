@@ -1,19 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-const pushMock = vi.fn();
-const signOutMock = vi.fn().mockResolvedValue({ error: null });
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
-  useRouter: () => ({ push: pushMock }),
-}));
-
-vi.mock("@/lib/supabase", () => ({
-  createBrowserClient: () => ({ auth: { signOut: signOutMock } }),
 }));
 
 // Sidebar renders <CreditMeter/>, which fetches the subscription. Keep it
@@ -24,8 +15,7 @@ vi.mock("@/lib/api-client", () => ({
 
 import { Sidebar } from "../../components/layout/Sidebar";
 
-// Sidebar calls useQueryClient() (to clear the cache on sign-out), which
-// throws without a provider in the tree.
+// CreditMeter calls useQuery(), which needs a provider in the tree.
 function renderSidebar() {
   const queryClient = new QueryClient();
   return render(
@@ -36,11 +26,6 @@ function renderSidebar() {
 }
 
 describe("Sidebar", () => {
-  beforeEach(() => {
-    pushMock.mockClear();
-    signOutMock.mockClear();
-  });
-
   it("renders all nav links", () => {
     renderSidebar();
     // Phase 1 nav — Career Path and Networking are intentionally hidden
@@ -71,10 +56,8 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Support")).not.toBeInTheDocument();
   });
 
-  it("signs out and redirects to /login on Sign Out click", async () => {
+  it("no longer renders a Sign Out button (moved to /account)", () => {
     renderSidebar();
-    await userEvent.click(screen.getByText("Sign Out"));
-    expect(signOutMock).toHaveBeenCalledOnce();
-    expect(pushMock).toHaveBeenCalledWith("/login");
+    expect(screen.queryByText(/sign ?out/i)).not.toBeInTheDocument();
   });
 });

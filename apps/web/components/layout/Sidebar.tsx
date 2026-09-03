@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import {
   SquaresFour,
   FileDashed,
@@ -13,7 +12,6 @@ import {
   EnvelopeSimple,
   CreditCard,
 } from "@phosphor-icons/react";
-import { createBrowserClient } from "@/lib/supabase";
 import { CreditMeter } from "./CreditMeter";
 
 // Phase 1 nav — Career Path (/career-path) and Networking (/networking) are
@@ -32,22 +30,6 @@ const NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createBrowserClient();
-  const queryClient = useQueryClient();
-
-  async function signOut() {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore sign-out errors — treat as signed out
-    }
-    // Drop any cached query results (resumes, dashboard stats, etc.) so the
-    // next person to sign in on this browser/tab doesn't see this user's
-    // data before their own fetches land.
-    queryClient.clear();
-    router.push("/login");
-  }
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -88,15 +70,9 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom Actions */}
-      <div className="mt-auto flex flex-col gap-sm pb-md">
+      {/* Bottom — credit balance; sign-out lives on /account */}
+      <div className="mt-auto pb-md">
         <CreditMeter variant="full" />
-        <button
-          onClick={signOut}
-          className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 mb-md"
-        >
-          Sign Out
-        </button>
       </div>
     </aside>
   );
