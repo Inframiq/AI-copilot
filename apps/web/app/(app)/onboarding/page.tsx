@@ -11,13 +11,16 @@ import {
   resumeContentToCareerProfileInput,
   type RoleStatus,
 } from "@/lib/career-profile-client";
+import { PlansComparison } from "@/components/plans/PlansComparison";
+import { UpgradeModal } from "@/components/plans/UpgradeModal";
 
 const inputCls = "w-full px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary placeholder:text-on-surface-variant/50 transition-all";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"details" | "resume">("details");
+  const [step, setStep] = useState<"details" | "resume" | "plan">("details");
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // ── Step 1: mandatory details ────────────────────────────────────────────
   const [name, setName] = useState("");
@@ -67,7 +70,6 @@ export default function OnboardingPage() {
 
   // ── Step 2: resume upload (optional) ─────────────────────────────────────
   const [uploading, setUploading] = useState(false);
-  const [skipping, setSkipping] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -78,9 +80,8 @@ export default function OnboardingPage() {
 
   function handleSkip() {
     // The mandatory details are already persisted from step 1 — nothing
-    // further to save, just move on.
-    setSkipping(true);
-    finish();
+    // further to save, just move on to the plan step.
+    setStep("plan");
   }
 
   async function handleFile(file: File) {
@@ -110,7 +111,7 @@ export default function OnboardingPage() {
         role_status: roleStatus || null,
       });
       await setProfileMasterResume(resume.id);
-      finish();
+      setStep("plan");
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed. You can skip and add this later.");
       setUploading(false);
@@ -180,6 +181,31 @@ export default function OnboardingPage() {
     );
   }
 
+  if (step === "plan") {
+    return (
+      <div className="min-h-full flex items-center justify-center p-gutter">
+        <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-xl max-w-[42rem] w-full">
+          <h1 className="text-headline-lg text-on-surface font-bold mb-xs">Choose your plan</h1>
+          <p className="text-body-md text-on-surface-variant mb-lg">
+            Start free — you can upgrade anytime from Account.
+          </p>
+          <PlansComparison
+            variant="compact"
+            onChoosePlan={(id) => (id === "premium" ? setShowUpgrade(true) : finish())}
+          />
+          {showUpgrade && (
+            <UpgradeModal
+              onClose={() => {
+                setShowUpgrade(false);
+                finish();
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-full flex items-center justify-center p-gutter">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-xl max-w-[32rem] w-full">
@@ -229,11 +255,11 @@ export default function OnboardingPage() {
 
         <button
           onClick={handleSkip}
-          disabled={uploading || skipping}
+          disabled={uploading}
           className="w-full mt-lg flex items-center justify-center gap-xs py-md rounded-lg text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-60"
         >
-          {skipping ? "Skipping…" : "Skip for now"}
-          {!skipping && <ArrowRight size={16} />}
+          Skip for now
+          <ArrowRight size={16} />
         </button>
       </div>
     </div>
