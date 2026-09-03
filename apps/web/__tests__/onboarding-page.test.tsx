@@ -27,8 +27,9 @@ vi.mock("@/lib/api-client", () => ({
 
 import OnboardingPage from "../app/(app)/onboarding/page";
 import { apiClient } from "../lib/api-client";
+import type { Plan } from "@career-copilot/types";
 
-const CATALOG = {
+const CATALOG: { plans: Plan[] } = {
   plans: [
     { id: "free", name: "Free", price_usd: 0, period: null, credits: 50, refills: false, features: ["a", "b", "c", "d"] },
     { id: "premium", name: "Premium", price_usd: 5, period: "month", credits: 600, refills: true, features: ["a", "b", "c", "d"] },

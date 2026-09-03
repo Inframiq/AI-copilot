@@ -8,8 +8,9 @@ vi.mock("@/lib/api-client", () => ({ apiClient: { getPlans: vi.fn() } }));
 
 import { PlansComparison } from "../../components/plans/PlansComparison";
 import { apiClient } from "../../lib/api-client";
+import type { Plan } from "@career-copilot/types";
 
-const CATALOG = {
+const CATALOG: { plans: Plan[] } = {
   plans: [
     { id: "free", name: "Free", price_usd: 0, period: null, credits: 50, refills: false,
       features: ["50 credits, one-time", "About 5 resume tailors", "Cover letters and bullet rewrites", "Free JD analysis"] },
