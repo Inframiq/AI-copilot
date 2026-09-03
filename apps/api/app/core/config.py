@@ -18,10 +18,6 @@ class Settings(BaseSettings):
     # one for cost reasons decided against real per-call token estimates.
     openai_model_fast: str = "gpt-5.6-luna"
     openai_model_premium: str = "gpt-5.6-sol"
-    # Rolling-30-day cap on POST /ai/tailor per user. 0 = unlimited (default —
-    # no behaviour change until a real number is set). Enforced in
-    # routers/ai.py::tailor_resume; counts non-failed TailoringSession rows.
-    tailor_monthly_limit: int = 0
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
 
     class Config:

@@ -196,6 +196,31 @@ class LearningItem(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
 
+class Subscription(Base):
+    """One row per user — their plan, credit balance, and (for paid plans)
+    billing cycle. Credits are spent by app.core.credits.spend_credits at the
+    top of metered endpoints (tailor / cover letter / bullet rewrite)."""
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    plan: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    credits_remaining: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    credits_allotment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_period_start: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+    # NULL = a one-time grant that never refills (the free plan). When set,
+    # it's the end of the current monthly cycle: on/after it, credits refill
+    # to credits_allotment and this advances by 30 days. Paid plans set it.
+    current_period_end: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # Populated by the payment webhook (not built yet — billing lands with GST).
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class AiUsageEvent(Base):
     """Append-only ledger — one row per LLM API call, written from the
     provider via app.core.usage.record_ai_usage(). Powers per-user cost

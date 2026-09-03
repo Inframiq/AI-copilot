@@ -1,4 +1,4 @@
-"""POST /ai/tailor rolling-30-day quota (settings.tailor_monthly_limit) and
+"""POST /ai/tailor credit gate (app.core.credits.spend_credits) and
 GET /ai/sessions/{id}/questions lazy generation."""
 import time
 import uuid
@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
+from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, Subscription
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -25,6 +25,7 @@ def make_mock_db():
     s = MagicMock()
     s.execute = AsyncMock()
     s.commit = AsyncMock()
+    s.flush = AsyncMock()
     s.refresh = AsyncMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4()))
     s.add = MagicMock()
     s.add_all = MagicMock()
@@ -63,70 +64,51 @@ class _BgCtx:
         return False
 
 
-# ── quota ────────────────────────────────────────────────────────────────────
+# ── credit gate ──────────────────────────────────────────────────────────────
+
+
+def _sub(credits, status="active", allotment=50):
+    return Subscription(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), plan="free",
+                        status=status, credits_remaining=credits, credits_allotment=allotment,
+                        current_period_end=None)
 
 
 @pytest.mark.asyncio
-async def test_tailor_402_when_quota_reached():
+async def test_tailor_402_when_out_of_credits():
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    cr = MagicMock(); cr.scalar_one.return_value = 60
-    db.execute = AsyncMock(side_effect=[rr, jr, cr])
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=4)  # < 10
+    db.execute = AsyncMock(side_effect=[rr, jr, sr])
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch.object(settings, "tailor_monthly_limit", 60):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post("/ai/tailor",
-                                 json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
-                                 headers=make_auth_header())
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/ai/tailor",
+                             json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
+                             headers=make_auth_header())
         assert r.status_code == 402
-        assert "limit reached" in r.json()["detail"].lower()
-        db.add.assert_not_called()
+        assert "out of credits" in r.json()["detail"].lower()
+        db.add.assert_not_called()  # no tailoring session row created
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_tailor_allowed_when_under_quota():
+async def test_tailor_deducts_credits_and_proceeds_when_balance_ok():
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
+    sub = _sub(credits=50)
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    cr = MagicMock(); cr.scalar_one.return_value = 12
-    db.execute = AsyncMock(side_effect=[rr, jr, cr])
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
+    db.execute = AsyncMock(side_effect=[rr, jr, sr])
     db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4())
                        if isinstance(o, TailoringSession) and o.id is None else None)
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch.object(settings, "tailor_monthly_limit", 60), \
-             patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()), \
-             patch("app.routers.ai.AsyncSessionLocal", new=lambda: _BgCtx()):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post("/ai/tailor",
-                                 json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
-                                 headers=make_auth_header())
-        assert r.status_code == 202
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_tailor_quota_off_by_default_runs_no_count_query():
-    override, db = make_mock_db()
-    resume, jd = make_resume(), make_jd()
-    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    db.execute = AsyncMock(side_effect=[rr, jr])
-    db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4())
-                       if isinstance(o, TailoringSession) and o.id is None else None)
-
-    app.dependency_overrides[get_db] = override
-    try:
-        assert settings.tailor_monthly_limit == 0
         with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()), \
              patch("app.routers.ai.AsyncSessionLocal", new=lambda: _BgCtx()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -134,7 +116,36 @@ async def test_tailor_quota_off_by_default_runs_no_count_query():
                                  json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
                                  headers=make_auth_header())
         assert r.status_code == 202
-        assert db.execute.await_count == 2
+        assert sub.credits_remaining == 40  # 50 - CREDIT_COSTS["tailor"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_tailor_creates_a_free_subscription_on_first_use():
+    override, db = make_mock_db()
+    resume, jd = make_resume(), make_jd()
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = None  # no subscription yet
+    db.execute = AsyncMock(side_effect=[rr, jr, sr])
+    added = []
+    db.add = MagicMock(side_effect=lambda o: (added.append(o),
+        setattr(o, "id", uuid.uuid4()) if isinstance(o, TailoringSession) and o.id is None else None))
+    db.flush = AsyncMock()
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()), \
+             patch("app.routers.ai.AsyncSessionLocal", new=lambda: _BgCtx()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post("/ai/tailor",
+                                 json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
+                                 headers=make_auth_header())
+        assert r.status_code == 202
+        subs = [o for o in added if isinstance(o, Subscription)]
+        assert len(subs) == 1 and subs[0].plan == "free"
+        assert subs[0].credits_remaining == 40  # 50 free grant - 10
     finally:
         app.dependency_overrides.pop(get_db, None)
 

@@ -8,9 +8,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import Resume, JobDescription
+from app.db.models import Resume, JobDescription, Subscription
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def credit_sub_result(credits=9999):
+    """A MagicMock execute-result yielding a well-funded subscription, so
+    spend_credits() in POST /ai/tailor passes without touching a real DB."""
+    r = MagicMock()
+    r.scalar_one_or_none.return_value = Subscription(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), plan="premium", status="active",
+        credits_remaining=credits, credits_allotment=credits, current_period_end=None,
+    )
+    return r
 
 
 def make_auth_header():
@@ -477,7 +488,7 @@ async def test_analyze_uses_saved_resume_content_by_default():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -527,7 +538,7 @@ async def test_analyze_uses_content_override_when_provided():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -704,7 +715,7 @@ async def test_tailor_resume_returns_202_and_creates_pending_session():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
 
     from app.db.models import TailoringSession
 
@@ -770,7 +781,7 @@ async def test_tailor_resume_background_task_persists_result_and_forwards_priori
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
@@ -849,7 +860,7 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"

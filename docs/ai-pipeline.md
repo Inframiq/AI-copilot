@@ -147,9 +147,17 @@ résumé). Four changes:
    caller). Wrapped around the tailor background task, `/ai/analyze`,
    `/ai/rewrite-bullet`, and the lazy prep-questions path. `cover_letter` /
    `parse_resume` / `create_jd` are not wrapped yet (one-line each).
-4. **`TAILOR_MONTHLY_LIMIT`** (settings, default 0 = off) — `POST /ai/tailor`
-   returns 402 once a user has ≥ N non-failed `tailoring_sessions` in the
-   trailing 30 days. This is the hard cost cap behind a paid plan.
+4. **Credit metering** (`app/core/credits.py`, table `subscriptions`, migration
+   017) — replaces the interim `TAILOR_MONTHLY_LIMIT` count check.
+   `spend_credits(db, user_id, "tailor")` at the top of `POST /ai/tailor`
+   resolves (lazily creates) the user's `subscriptions` row, deducts
+   `CREDIT_COSTS["tailor"]` (10), or returns **402**. Free plan =
+   `PLAN_CREDITS["free"]` (50 = 5 tailors), a one-time grant that never
+   refills (`current_period_end` NULL); paid plans refill every 30 days once
+   billing sets that column. `CREDIT_COSTS` also prices `cover_letter` (3) and
+   `rewrite_bullet` (1) but only `tailor` is in `ENFORCED_ACTIONS` for now.
+   `GET /me/subscription` returns the balance + cost table. Payment-provider
+   integration (Razorpay webhook → set plan/refill) is deferred until GST.
 
 ### Content-quality prompt upgrade (2026-08-17): responsibility-alignment, not just keyword injection
 
@@ -303,11 +311,11 @@ That's **two premium-model calls (Agent 2 + Agent 3)** plus ~3-4 fast-model
 calls. Prep questions are no longer part of this — they generate lazily on
 first Interview-Center view.
 
-**Cost guardrail:** `POST /ai/tailor` enforces a rolling-30-day per-user cap
-when `TAILOR_MONTHLY_LIMIT` > 0 (counts non-failed `tailoring_sessions`
-rows; returns 402 when reached). Every LLM call is also logged to the
-`ai_usage_events` ledger via `app.core.usage.record_ai_usage` for per-user
-cost analytics.
+**Cost guardrail:** `POST /ai/tailor` calls `spend_credits(db, uid, "tailor")`
+(`app/core/credits.py`) — deducts 10 credits from the user's `subscriptions`
+row or returns 402. Every LLM call is also logged to the `ai_usage_events`
+ledger via `app.core.usage.record_ai_usage` for per-user cost analytics. See
+the 2026-09-03 section above for the credit model.
 
 **Per "Analyze Description" click:** just Agent 1 (+ optional Agent 0) — no
 resume rewriting, no pro-tier-in-name-only calls.

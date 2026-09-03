@@ -1,17 +1,17 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
-from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.core.usage import record_ai_usage
+from app.core.credits import spend_credits
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
@@ -220,31 +220,11 @@ async def tailor_resume(
     if not resume_row or not jd_row:
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
-    # Rolling-30-day tailoring quota (settings.tailor_monthly_limit; 0 = off).
-    # A tailored resume is by far the most expensive action in the app — this
-    # is the cost guardrail behind any paid plan. Counts every non-failed
-    # session (pending included, so a burst of retries still consumes quota).
-    if settings.tailor_monthly_limit:
-        since = datetime.now(timezone.utc) - timedelta(days=30)
-        used = (
-            await db.execute(
-                select(func.count())
-                .select_from(TailoringSession)
-                .where(
-                    TailoringSession.user_id == uid,
-                    TailoringSession.created_at >= since,
-                    TailoringSession.status != "failed",
-                )
-            )
-        ).scalar_one()
-        if used >= settings.tailor_monthly_limit:
-            raise HTTPException(
-                status_code=402,
-                detail=(
-                    f"Tailoring limit reached ({settings.tailor_monthly_limit} in 30 days). "
-                    "Your quota frees up as earlier runs pass the 30-day mark."
-                ),
-            )
+    # Credit gate — the cost guardrail behind a paid plan. Tailoring is by
+    # far the most expensive action; spend_credits deducts CREDIT_COSTS
+    # ["tailor"] here (flushed, committed together with the session row
+    # below) or raises 402. Free plan = a one-time grant.
+    await spend_credits(db, uid, "tailor")
 
     provider = get_ai_provider()
 
