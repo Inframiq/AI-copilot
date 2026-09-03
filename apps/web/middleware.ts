@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/career-path", "/networking", "/analytics", "/profile", "/onboarding"];
+  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/career-path", "/networking", "/analytics", "/profile", "/onboarding", "/account"];
   const PUBLIC_PATHS = [
     "/",
     "/login",

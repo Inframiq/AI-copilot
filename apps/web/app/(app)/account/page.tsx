@@ -39,7 +39,7 @@ export default function AccountPage() {
   const queryClient = useQueryClient();
   const supabase = createBrowserClient();
 
-  const { data: sub, isLoading: subLoading } = useQuery<Subscription>({
+  const { data: sub, isLoading: subLoading, isError: subError } = useQuery<Subscription>({
     queryKey: ["subscription"],
     queryFn: () => apiClient.getSubscription(),
   });
@@ -116,7 +116,14 @@ export default function AccountPage() {
         )}
       </div>
 
-      {subLoading || !sub ? (
+      {subError ? (
+        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+          <p className="text-body-md text-on-surface font-medium">Couldn&apos;t load your plan</p>
+          <p className="text-body-sm text-on-surface-variant mt-xs">
+            Refresh the page to try again.
+          </p>
+        </div>
+      ) : subLoading || !sub ? (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 h-40 animate-pulse" />
       ) : (
         <>
