@@ -196,6 +196,29 @@ class LearningItem(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
 
+class AiUsageEvent(Base):
+    """Append-only ledger — one row per LLM API call, written from the
+    provider via app.core.usage.record_ai_usage(). Powers per-user cost
+    analytics and the POST /ai/tailor quota check. No foreign keys on
+    purpose: it must outlive the session / resume / JD it describes."""
+
+    __tablename__ = "ai_usage_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    # The user-facing action this call was part of: "tailor" | "analyze" |
+    # "rewrite_bullet" | "cover_letter" | "parse_resume" | "create_jd" | "prep_questions"
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    call_name: Mapped[str] = mapped_column(String(60), nullable=False)  # e.g. "agent2_semantic_map"
+    model: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    model_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reasoning_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, index=True)
+
+
 class ExternalContact(Base):
     """People tracked outside the platform (not Career Copilot users) —
     distinct from Networking's Profile/connection_requests, which is for

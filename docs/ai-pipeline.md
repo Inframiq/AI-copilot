@@ -123,6 +123,34 @@ consumption. Any token-count figures quoted below are still **estimates
 from fixed system-prompt sizes** (measured directly, ~4 chars/token
 heuristic), not observed data.
 
+### Cost-reduction pass (2026-09-03): premium Agent 3, lazy prep questions, usage ledger + tailor quota
+
+Driven by unit-economics for a paid plan (target: ~$0.02–0.04 per tailored
+résumé). Four changes:
+
+1. **`_agent3_write` moved from `"pro"` → `"premium"`.** With
+   `OPENAI_MODEL_FAST` set to a small model, Agent 3 (fact-locked rewrite of
+   every bullet in one call) is the call most prone to dropped bullets /
+   fabricated metrics / truncated JSON. It now shares the premium model with
+   Agent 2. Every other pipeline call still requests `"fast"`/`"pro"` and
+   lands on the fast model.
+2. **Prep questions are lazy.** `run_tailoring_pipeline` no longer calls
+   `get_or_generate_prep_questions` (that was ~15–20% of a run's tokens and
+   most tailors are never followed by interview prep). `GET
+   /ai/sessions/{id}/questions` now generates + persists them on first view;
+   subsequent reads are a plain query. `run_tailoring_pipeline`'s `db` param
+   is now unused (kept for signature stability).
+3. **`ai_usage_events` ledger.** `app/core/usage.py` provides
+   `record_ai_usage(user_id, action)` — an async context manager that
+   collects every `record_call(...)` the providers emit and writes one
+   `ai_usage_events` row per LLM call (its own session; never raises into the
+   caller). Wrapped around the tailor background task, `/ai/analyze`,
+   `/ai/rewrite-bullet`, and the lazy prep-questions path. `cover_letter` /
+   `parse_resume` / `create_jd` are not wrapped yet (one-line each).
+4. **`TAILOR_MONTHLY_LIMIT`** (settings, default 0 = off) — `POST /ai/tailor`
+   returns 402 once a user has ≥ N non-failed `tailoring_sessions` in the
+   trailing 30 days. This is the hard cost cap behind a paid plan.
+
 ### Content-quality prompt upgrade (2026-08-17): responsibility-alignment, not just keyword injection
 
 Three rounds of research (ATS mechanics, keyword-vs-responsibility alignment,
@@ -255,19 +283,31 @@ forces or fabricates a weak metric to fit the `[Action Verb] + [Method] +
 |---|-------|---------|------------------------|-------------------------------------|---------------------|-------------------------------------|
 | 0 | Company Intel (`_agent0_company_intel`) | Optional — only when a company name is given to Analyze/Tailor | `"fast"` | `gpt-5.6-luna` | 1,866 chars (~466 tokens) | 3000 (`agent0_company_intel`) |
 | 1 | JD Deconstructor (`_agent1_parse_jd`) | Every "Analyze Description" and every "Tailor Resume" | `"fast"` | `gpt-5.6-luna` | 1,284 chars (~321 tokens) | 3000 (`agent1_parse_jd`) |
-| 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | **`gpt-5.6-sol`** | 3,288 chars (~822 tokens) | 16384 (`agent2_semantic_map`) — scales with bullet count |
-| 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | `"pro"` | `gpt-5.6-luna` | 2,302 chars (~575 tokens, varies slightly with humanize tone) | 16384 (`agent3_write`) — scales with bullet count |
-| — | Cover letter (`write_cover_letter`) | "Generate Cover Letter" action | `"pro"` | `gpt-5.6-luna` | ~1,000 chars (~250 tokens) | 3000 (`cover_letter`) |
-| — | Prep Questions — skill bank (`_generate_questions_for_skills`) | Every "Tailor Resume" only, runs in parallel with Agent 3 | `"pro"` | `gpt-5.6-luna` | ~500 chars (~125 tokens) + the missing-skills list | 8000 (`prep_questions_skills`) |
-| — | Prep Questions — JD-specific (`_generate_jd_specific_questions`) | Every "Tailor Resume" only, runs alongside the skill-bank prep questions | `"pro"` | `gpt-5.6-luna` | ~600 chars (~150 tokens) | 2500 (`prep_questions_jd_specific`) |
-| — | Rewrite/Humanize bullet (`/ai/rewrite-bullet`, `apps/api/app/routers/ai.py`) | Per-click "Rewrite"/"Humanize" button in the tailoring review panel | `"fast"` | `gpt-5.6-luna` | 250–350 chars (~70–90 tokens) | 1200 (`rewrite_bullet`) |
-| — | Legacy JD skill extractor (`extract_jd_skills`) | `/jd` create endpoint (older, non-agent-pipeline path) | `"fast"` | `gpt-5.6-luna` | ~150 chars (~40 tokens) | 3000 (`extract_jd_skills_legacy`) |
+| 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | premium model | 3,288 chars (~822 tokens) | 16384 (`agent2_semantic_map`) — scales with bullet count |
+| 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | **`"premium"`** (was `"pro"` — see 2026-09-03 note) | premium model | 2,302 chars (~575 tokens, varies slightly with humanize tone) | 16384 (`agent3_write`) — scales with bullet count |
+| — | Cover letter (`write_cover_letter`) | "Generate Cover Letter" action | `"pro"` | fast model | ~1,000 chars (~250 tokens) | 3000 (`cover_letter`) |
+| — | Prep Questions (`_agent4_generate_interview_questions` via `get_or_generate_prep_questions`) | **Lazy** — first view of `GET /ai/sessions/{id}/questions` (Interview Center), NOT the tailoring pipeline | `"pro"` | fast model | ~1,400 chars (~350 tokens) | 6000 (`prep_questions_interview`) |
+| — | Semantic presence verify (`_verify_semantic_presence`) | Twice per "Tailor Resume" (pre + post re-score); once per "Analyze" | `"fast"` | fast model | ~1,250 chars (~314 tokens) | 4000 (`verify_semantic_presence`) |
+| — | Gap filler (`_agent_gap_filler`) | Every "Tailor Resume" only | `"fast"` | fast model | ~1,200 chars (~308 tokens) | 4000 (`agent_gap_filler`) |
+| — | Rewrite/Humanize bullet (`/ai/rewrite-bullet`, `apps/api/app/routers/ai.py`) | Per-click "Rewrite"/"Humanize" button in the tailoring review panel | `"fast"` | fast model | 250–350 chars (~70–90 tokens) | 1200 (`rewrite_bullet`) |
+| — | Legacy JD skill extractor (`extract_jd_skills`) | `/jd` create endpoint (older, non-agent-pipeline path) | `"fast"` | fast model | ~150 chars (~40 tokens) | 3000 (`extract_jd_skills_legacy`) |
 
-**Per "Tailor Resume" click:** Agent 1 → Agent 2 → [Agent 3 + Prep Questions
-in parallel], plus optional Agent 0 if a company name was entered. That's
-one `gpt-5.6-sol` call (Agent 2) plus 3-4 `gpt-5.6-luna` calls — see the
-`max_output_tokens` column above for each call's actual ceiling (no longer a
-single shared 16384 across the board).
+"fast model" = `OPENAI_MODEL_FAST`, "premium model" = `OPENAI_MODEL_PREMIUM`
+(`.env`). The `gpt-5.6-luna` / `gpt-5.6-sol` names in older revisions of this
+doc were placeholders and are not real OpenAI ids — set real ones per env.
+
+**Per "Tailor Resume" click:** Agent 1 (cached after a prior Analyze) →
+semantic verify → Agent 2 → Agent 3 → semantic verify (on the tailored
+résumé) → gap filler, plus optional Agent 0 if a company name was entered.
+That's **two premium-model calls (Agent 2 + Agent 3)** plus ~3-4 fast-model
+calls. Prep questions are no longer part of this — they generate lazily on
+first Interview-Center view.
+
+**Cost guardrail:** `POST /ai/tailor` enforces a rolling-30-day per-user cap
+when `TAILOR_MONTHLY_LIMIT` > 0 (counts non-failed `tailoring_sessions`
+rows; returns 402 when reached). Every LLM call is also logged to the
+`ai_usage_events` ledger via `app.core.usage.record_ai_usage` for per-user
+cost analytics.
 
 **Per "Analyze Description" click:** just Agent 1 (+ optional Agent 0) — no
 resume rewriting, no pro-tier-in-name-only calls.

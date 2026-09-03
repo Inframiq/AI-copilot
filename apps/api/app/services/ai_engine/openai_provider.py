@@ -38,15 +38,28 @@ class OpenAIProvider(AIProvider):
         reasoning_tokens = getattr(
             getattr(usage, "output_tokens_details", None), "reasoning_tokens", None
         )
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+        total_tokens = getattr(usage, "total_tokens", None)
         logger.info(
             "ai_usage call=%s tier=%s model=%s input_tokens=%s output_tokens=%s "
             "reasoning_tokens=%s total_tokens=%s",
             call_name, model_tier, model,
-            getattr(usage, "input_tokens", None),
-            getattr(usage, "output_tokens", None),
-            reasoning_tokens,
-            getattr(usage, "total_tokens", None),
+            input_tokens, output_tokens, reasoning_tokens, total_tokens,
         )
+        # Persist to ai_usage_events when a record_ai_usage(...) block is
+        # active (deferred import keeps this module free of an app.core dep
+        # at import time).
+        try:
+            from app.core.usage import record_call
+
+            record_call(
+                call_name=call_name, model=model, model_tier=model_tier,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                reasoning_tokens=reasoning_tokens, total_tokens=total_tokens,
+            )
+        except Exception:
+            logger.debug("record_call failed", exc_info=True)
 
     async def complete(
         self,

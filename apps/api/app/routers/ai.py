@@ -1,22 +1,26 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
+from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
+from app.core.usage import record_ai_usage
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
-from app.services.tailoring import run_tailoring_pipeline, analyze_jd_match, JDAnalysis
+from app.services.tailoring import (
+    run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
+)
 from app.services.ats import build_resume_text, score_content, apply_fixes, AtsFix
 from app.services.resume_spec import HARD_LIMITS
 
@@ -78,14 +82,15 @@ async def analyze_jd(
         if sem_cache and resume_fp and sem_cache.get("fingerprint") == resume_fp:
             cached_semantic_verdicts = sem_cache.get("verdicts") or {}
 
-    analysis = await analyze_jd_match(
-        content_for_analysis,
-        jd_row.raw_text,
-        provider,
-        company_name=body.company_name,
-        cached_jd_analysis=cached_jd_analysis,
-        cached_semantic_verdicts=cached_semantic_verdicts,
-    )
+    async with record_ai_usage(uid, "analyze"):
+        analysis = await analyze_jd_match(
+            content_for_analysis,
+            jd_row.raw_text,
+            provider,
+            company_name=body.company_name,
+            cached_jd_analysis=cached_jd_analysis,
+            cached_semantic_verdicts=cached_semantic_verdicts,
+        )
 
     # Persist Agent 1 + semantic verdicts so future no-company analyses are
     # deterministic (same JD text → same skill list, same resume → same score).
@@ -118,6 +123,7 @@ async def analyze_jd(
 
 async def _run_tailoring_background(
     session_id: uuid.UUID,
+    user_id: uuid.UUID,
     resume_content: dict,
     jd_text: str,
     humanize_level: int,
@@ -140,16 +146,17 @@ async def _run_tailoring_background(
     """
     async with AsyncSessionLocal() as session_db:
         try:
-            result = await run_tailoring_pipeline(
-                resume_content,
-                jd_text,
-                humanize_level,
-                provider,
-                db=session_db,
-                company_name=company_name,
-                priority_skills=priority_skills,
-                cached_jd_analysis=cached_jd_analysis,
-            )
+            async with record_ai_usage(user_id, "tailor"):
+                result = await run_tailoring_pipeline(
+                    resume_content,
+                    jd_text,
+                    humanize_level,
+                    provider,
+                    db=session_db,
+                    company_name=company_name,
+                    priority_skills=priority_skills,
+                    cached_jd_analysis=cached_jd_analysis,
+                )
         except Exception:
             logger.exception("Tailoring pipeline failed for session %s", session_id)
             row_result = await session_db.execute(
@@ -213,6 +220,32 @@ async def tailor_resume(
     if not resume_row or not jd_row:
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
+    # Rolling-30-day tailoring quota (settings.tailor_monthly_limit; 0 = off).
+    # A tailored resume is by far the most expensive action in the app — this
+    # is the cost guardrail behind any paid plan. Counts every non-failed
+    # session (pending included, so a burst of retries still consumes quota).
+    if settings.tailor_monthly_limit:
+        since = datetime.now(timezone.utc) - timedelta(days=30)
+        used = (
+            await db.execute(
+                select(func.count())
+                .select_from(TailoringSession)
+                .where(
+                    TailoringSession.user_id == uid,
+                    TailoringSession.created_at >= since,
+                    TailoringSession.status != "failed",
+                )
+            )
+        ).scalar_one()
+        if used >= settings.tailor_monthly_limit:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Tailoring limit reached ({settings.tailor_monthly_limit} in 30 days). "
+                    "Your quota frees up as earlier runs pass the 30-day mark."
+                ),
+            )
+
     provider = get_ai_provider()
 
     # Reuse cached Agent 1 output (same logic as /analyze) so tailoring uses
@@ -240,6 +273,7 @@ async def tailor_resume(
     background_tasks.add_task(
         _run_tailoring_background,
         session.id,
+        uid,
         resume_row.content,
         jd_row.raw_text,
         body.humanize_level,
@@ -313,9 +347,10 @@ async def rewrite_bullet(
     # tight ceiling avoids giving the reasoning model unneeded headroom to
     # burn extra (billed) reasoning tokens. See tailoring.py's per-call
     # token-ceiling comment / docs/ai-pipeline.md.
-    rewritten = await provider.complete(
-        system, user_msg, model_tier="fast", max_output_tokens=1200, call_name="rewrite_bullet"
-    )
+    async with record_ai_usage(uuid.UUID(user["sub"]), "rewrite_bullet"):
+        rewritten = await provider.complete(
+            system, user_msg, model_tier="fast", max_output_tokens=1200, call_name="rewrite_bullet"
+        )
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
     if is_summary:
@@ -436,16 +471,64 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
 
 @router.get("/sessions/{session_id}/questions", response_model=list[PrepQuestionOut])
 async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(PrepQuestion)
-        .join(TailoringSession)
-        .where(
-            TailoringSession.id == session_id,
-            TailoringSession.user_id == uuid.UUID(user["sub"]),
+    """Interview-prep questions for a session. Generated lazily on first call
+    (the tailoring pipeline no longer produces them — see
+    run_tailoring_pipeline) and persisted, so subsequent calls are a plain
+    read."""
+    uid = uuid.UUID(user["sub"])
+    session = (
+        await db.execute(
+            select(TailoringSession).where(
+                TailoringSession.id == session_id, TailoringSession.user_id == uid
+            )
         )
-        .order_by(PrepQuestion.order_index)
-    )
-    return result.scalars().all()
+    ).scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    existing = (
+        await db.execute(
+            select(PrepQuestion)
+            .where(PrepQuestion.session_id == session_id)
+            .order_by(PrepQuestion.order_index)
+        )
+    ).scalars().all()
+    if existing or session.status != "completed":
+        return existing
+
+    # First view — generate now. Needs the JD's cached Agent 1 analysis; if
+    # it's absent (older JD, never analyzed) there's nothing to ground
+    # questions in, so return empty rather than a bad set.
+    jd_row = (
+        await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
+    ).scalar_one_or_none()
+    agent1 = (jd_row.parsed or {}).get("agent1") if jd_row else None
+    if not agent1:
+        return []
+
+    async with record_ai_usage(uid, "prep_questions"):
+        questions = await get_or_generate_prep_questions(
+            session.missing_skills or [],
+            session.tailored_content or {},
+            get_ai_provider(),
+            db,
+            jd_analysis=JDAnalysis(**agent1),
+            matched_skills=session.matched_skills or [],
+        )
+    rows = [
+        PrepQuestion(
+            session_id=session.id, topic=q.topic, question=q.question,
+            answer_framework=q.answer_framework, is_gap_based=q.is_gap_based,
+            source=q.source, basis=q.basis, order_index=q.order_index,
+        )
+        for q in questions
+    ]
+    if rows:
+        db.add_all(rows)
+        await db.commit()
+        for r in rows:
+            await db.refresh(r)
+    return rows
 
 
 @router.get("/questions/mine", response_model=list[PrepQuestionWithJdOut])

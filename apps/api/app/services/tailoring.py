@@ -14,7 +14,6 @@ prep_questions runs in parallel with Agent 3 once the mapping plan is ready.
 """
 import re
 import json
-import asyncio
 import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -881,11 +880,17 @@ async def _agent3_write(
         ),
         "original_skills": original_skills,
     }
+    # "premium", not "pro" — Agent 3 does fact-locked rewriting of every
+    # résumé bullet in one call; on the budget model it's the call most
+    # prone to dropping bullets, fabricating metrics, or truncating the
+    # JSON. It shares the premium model with Agent 2 (see _agent2_semantic_map
+    # and OpenAIProvider._model_for). Every other pipeline call stays on the
+    # budget model.
     return await provider.complete_structured(
         _build_agent3_system(humanize_level, seniority_indicators),
         json.dumps(payload),
         WriterOutput,
-        model_tier="pro",
+        model_tier="premium",
         max_output_tokens=_MAX_TOKENS_BULLET_WRITE,
         call_name="agent3_write",
     )
@@ -1289,7 +1294,7 @@ async def run_tailoring_pipeline(
     jd_text: str,
     humanize_level: int,
     provider: AIProvider,
-    db: AsyncSession,
+    db: AsyncSession,  # unused since prep questions became lazy; kept for call-signature stability
     company_name: str | None = None,
     priority_skills: list[str] | None = None,
     cached_jd_analysis: "JDAnalysis | None" = None,
@@ -1298,10 +1303,15 @@ async def run_tailoring_pipeline(
     Full pipeline — the "Tailor Resume" step. Re-runs analyze_jd_match (cheap,
     fast-model calls) and continues into the resume-rewriting agents:
 
-    Agent 2 (pro)   ─── semantic mapping of JD → resume bullets
+    Agent 2 (premium) ─── semantic mapping of JD → resume bullets
          │
-         ├── Agent 3 (pro)  ─── precision bullet rewrite    ┐ parallel
-         └── prep questions (pro)                           ┘
+    Agent 3 (premium) ─── precision bullet rewrite
+         │
+    gap filler (fast) ─── speculative bullets/headline for remaining gaps
+
+    Prep questions are NOT generated here — they're lazy (first view of the
+    Interview Center); see get_or_generate_prep_questions and the
+    GET /ai/sessions/{id}/questions endpoint.
 
     priority_skills — keywords the user explicitly picked (e.g. from the JD
     Analyzer's "Not Matched" list) that they want the tailoring to prioritize.
@@ -1325,36 +1335,19 @@ async def run_tailoring_pipeline(
         analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
     )
 
-    # ── Agent 3 + prep questions in parallel (both pro model) ────────────────
-    # return_exceptions=True so a prep-questions failure (e.g. the model's
-    # structured-output JSON gets truncated for a long missing-skills list)
-    # can't discard an otherwise-successful bullet rewrite — prep questions
-    # are a bonus feature; the tailored resume itself is the point of this
-    # call and must not be thrown away because a secondary call flaked.
+    # ── Agent 3 — precision bullet rewrite ──────────────────────────────────
     original_skills = resume_content.get("skills", [])
 
-    tailored_raw, questions_result = await asyncio.gather(
-        _agent3_write(
-            mapping_plan, original_skills, humanize_level, provider,
-            seniority_indicators=analysis.jd_analysis.seniority_indicators,
-        ),
-        get_or_generate_prep_questions(
-            analysis.missing_skills, resume_content, provider, db,
-            jd_analysis=analysis.jd_analysis, company_name=company_name,
-            matched_skills=analysis.matched_skills,
-        ),
-        return_exceptions=True,
+    tailored_raw = await _agent3_write(
+        mapping_plan, original_skills, humanize_level, provider,
+        seniority_indicators=analysis.jd_analysis.seniority_indicators,
     )
-    if isinstance(tailored_raw, BaseException):
-        raise tailored_raw
-    if isinstance(questions_result, BaseException):
-        logger.exception(
-            "Prep-question generation failed — continuing tailoring without prep questions",
-            exc_info=questions_result,
-        )
-        questions: list[PrepQuestionData] = []
-    else:
-        questions = questions_result
+
+    # Prep questions are generated lazily on first view in the Interview
+    # Center (GET /ai/sessions/{id}/questions), not here: most tailor runs
+    # are never followed by interview prep, and that generation call is
+    # ~15-20% of a run's tokens. This pipeline no longer needs `db`.
+    questions: list[PrepQuestionData] = []
 
     # ── patch rewritten bullets back into the original structure ─────────────
     tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)
