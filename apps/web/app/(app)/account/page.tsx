@@ -205,16 +205,22 @@ export default function AccountPage() {
             </p>
           </div>
 
-          {/* Upgrade — billing not wired yet */}
-          <div className="bg-surface-container-low rounded-2xl p-lg border border-outline-variant/20 flex items-start gap-md">
-            <Info size={20} className="text-on-surface-variant shrink-0 mt-[2px]" />
-            <div>
-              <p className="text-body-md text-on-surface font-medium">Need more credits?</p>
-              <p className="text-body-sm text-on-surface-variant mt-xs">
-                Paid plans with a monthly credit refill are coming soon.
-              </p>
+          {/* Upgrade */}
+          <Link
+            href="/plans"
+            className="bg-surface-container-low rounded-2xl p-lg border border-outline-variant/20 flex items-center justify-between gap-md hover:bg-surface-container transition-colors"
+          >
+            <div className="flex items-start gap-md">
+              <Info size={20} className="text-on-surface-variant shrink-0 mt-[2px]" />
+              <div>
+                <p className="text-body-md text-on-surface font-medium">Need more credits?</p>
+                <p className="text-body-sm text-on-surface-variant mt-xs">
+                  See plans — Premium refills your credits every month.
+                </p>
+              </div>
             </div>
-          </div>
+            <ArrowRight size={18} className="text-on-surface-variant shrink-0" />
+          </Link>
         </>
       )}
 

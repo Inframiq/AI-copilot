@@ -104,4 +104,12 @@ describe("Account page", () => {
     expect(signOutMock).toHaveBeenCalledOnce();
     expect(pushMock).toHaveBeenCalledWith("/login");
   });
+
+  it("links the upgrade card to /plans", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    vi.mocked(getCareerProfile).mockResolvedValue(null);
+    renderPage();
+    const link = await screen.findByRole("link", { name: /need more credits/i });
+    expect(link).toHaveAttribute("href", "/plans");
+  });
 });
