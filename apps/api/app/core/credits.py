@@ -33,6 +33,39 @@ CREDIT_COSTS: dict[str, int] = {
 # sets current_period_end.
 PLAN_CREDITS: dict[str, int] = {"free": 50, "premium": 600}
 
+# Static catalog served by GET /plans and rendered by the pricing UI.
+# Credit amounts come from PLAN_CREDITS above so there's one number to change.
+PLANS: list[dict] = [
+    {
+        "id": "free",
+        "name": "Free",
+        "price_usd": 0,
+        "period": None,
+        "credits": PLAN_CREDITS["free"],
+        "refills": False,
+        "features": [
+            "50 credits, one-time",
+            "About 5 resume tailors",
+            "Cover letters and bullet rewrites",
+            "Free JD analysis",
+        ],
+    },
+    {
+        "id": "premium",
+        "name": "Premium",
+        "price_usd": 5,
+        "period": "month",
+        "credits": PLAN_CREDITS["premium"],
+        "refills": True,
+        "features": [
+            "600 credits every month",
+            "About 60 resume tailors",
+            "Everything in Free",
+            "Priority support",
+        ],
+    },
+]
+
 BILLING_PERIOD = timedelta(days=30)
 
 # Actions currently enforced. Others have a cost defined above for the
