@@ -219,3 +219,14 @@ export interface Subscription {
   // Per-action credit cost, e.g. { tailor: 10, cover_letter: 3, analyze: 0 }.
   costs: Record<string, number>;
 }
+
+// GET /plans — static pricing catalog.
+export interface Plan {
+  id: string;
+  name: string;
+  price_usd: number;
+  period: "month" | null;
+  credits: number;
+  refills: boolean;
+  features: string[];
+}

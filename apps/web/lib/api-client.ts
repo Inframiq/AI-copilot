@@ -15,6 +15,7 @@ import type {
   JDCoverLetter,
   AtsFix,
   Subscription,
+  Plan,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -375,4 +376,7 @@ export const apiClient = {
   // ── Account / credits ────────────────────────────────────────────────────
   getSubscription: (): Promise<Subscription> =>
     request<Subscription>("GET", "/me/subscription"),
+
+  getPlans: (): Promise<{ plans: Plan[] }> =>
+    request<{ plans: Plan[] }>("GET", "/plans"),
 };
