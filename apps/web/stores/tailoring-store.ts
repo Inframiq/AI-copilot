@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiClient, type AtsFix } from "@/lib/api-client";
+import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent } from "@career-copilot/types";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
@@ -603,6 +604,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         for (const f of atsFixes) {
           initialDecisions[`fix:${f.id}`] = f.default_accept ? "accept" : "reject";
         }
+
+        // A completed tailor just spent credits server-side — refresh the
+        // cached balance so the credit meter updates now, not on next focus.
+        queryClient.invalidateQueries({ queryKey: ["subscription"] });
 
         set({
           sessionId: session.session_id,
