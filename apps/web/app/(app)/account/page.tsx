@@ -4,16 +4,18 @@ import { Lightning, Sparkle, Info } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import type { Subscription } from "@career-copilot/types";
 
+// Only actions the user actively triggers with a button. Interview prep
+// questions are deliberately excluded: they're generated from a tailored
+// resume you already paid for, not a standalone action you can "buy".
 const ACTION_LABELS: Record<string, string> = {
   tailor: "Tailor a resume to a job description",
   cover_letter: "Generate a cover letter",
   rewrite_bullet: "Rewrite or humanize a bullet",
-  prep_questions: "Interview prep questions",
   analyze: "Analyze a job description",
 };
 
 // Order the cost table so the headline action is first.
-const ACTION_ORDER = ["tailor", "cover_letter", "rewrite_bullet", "prep_questions", "analyze"];
+const ACTION_ORDER = ["tailor", "cover_letter", "rewrite_bullet", "analyze"];
 
 export default function AccountPage() {
   const { data: sub, isLoading } = useQuery<Subscription>({
@@ -120,6 +122,10 @@ export default function AccountPage() {
                 );
               })}
             </div>
+            <p className="text-body-sm text-on-surface-variant mt-md">
+              Interview prep questions are generated from a resume you&apos;ve
+              already tailored — they don&apos;t cost extra.
+            </p>
           </div>
 
           {/* Upgrade — billing not wired yet */}
