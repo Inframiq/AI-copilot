@@ -16,6 +16,12 @@ vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({ auth: { signOut: signOutMock } }),
 }));
 
+// Sidebar renders <CreditMeter/>, which fetches the subscription. Keep it
+// pending so the meter renders nothing and the nav assertions stay clean.
+vi.mock("@/lib/api-client", () => ({
+  apiClient: { getSubscription: vi.fn(() => new Promise(() => {})) },
+}));
+
 import { Sidebar } from "../../components/layout/Sidebar";
 
 // Sidebar calls useQueryClient() (to clear the cache on sign-out), which
@@ -47,6 +53,7 @@ describe("Sidebar", () => {
       "Cover Letter",
       "Interview Center",
       "Analytics",
+      "Account",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }

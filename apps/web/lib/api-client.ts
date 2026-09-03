@@ -14,6 +14,7 @@ import type {
   CoverLetterStart,
   JDCoverLetter,
   AtsFix,
+  Subscription,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -370,4 +371,8 @@ export const apiClient = {
 
   deleteLearningItem: (id: string): Promise<void> =>
     request<void>("DELETE", `/learning/${id}`),
+
+  // ── Account / credits ────────────────────────────────────────────────────
+  getSubscription: (): Promise<Subscription> =>
+    request<Subscription>("GET", "/me/subscription"),
 };

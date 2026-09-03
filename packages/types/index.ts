@@ -205,3 +205,17 @@ export interface LearningItem {
   status: "not_started" | "learning" | "done";
   created_at: string;
 }
+
+// GET /me/subscription — the signed-in user's plan and credit balance.
+export interface Subscription {
+  plan: string; // "free" | "premium"
+  status: string; // "active" | "past_due" | "canceled" | "expired"
+  credits_remaining: number;
+  credits_allotment: number;
+  // ISO timestamp when the current cycle ends and credits refill; null for
+  // the free plan's one-time grant (never refills).
+  current_period_end: string | null;
+  renews: boolean;
+  // Per-action credit cost, e.g. { tailor: 10, cover_letter: 3, analyze: 0 }.
+  costs: Record<string, number>;
+}

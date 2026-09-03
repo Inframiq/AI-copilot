@@ -11,8 +11,10 @@ import {
   MicrophoneStage,
   IdentificationCard,
   EnvelopeSimple,
+  CreditCard,
 } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
+import { CreditMeter } from "./CreditMeter";
 
 // Phase 1 nav — Career Path (/career-path) and Networking (/networking) are
 // intentionally excluded. Their pages and backend code are intact in git
@@ -25,6 +27,7 @@ const NAV = [
   { href: "/cover-letters", icon: EnvelopeSimple, label: "Cover Letter" },
   { href: "/interview", icon: MicrophoneStage, label: "Interview Center" },
   { href: "/analytics", icon: ChartLineUp, label: "Analytics" },
+  { href: "/account", icon: CreditCard, label: "Account" },
 ];
 
 export function Sidebar() {
@@ -87,6 +90,7 @@ export function Sidebar() {
 
       {/* Bottom Actions */}
       <div className="mt-auto flex flex-col gap-sm pb-md">
+        <CreditMeter variant="full" />
         <button
           onClick={signOut}
           className="w-full py-md rounded-xl text-label-md text-on-primary bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 mb-md"
