@@ -44,7 +44,7 @@ export function Sidebar() {
           <RocketLaunch size={20} weight="fill" className="text-on-primary" />
         </div>
         <div className="flex flex-col">
-          <span className="text-headline-md font-black text-primary">Career Copilot</span>
+          <span className="text-[19px] leading-tight font-black text-primary whitespace-nowrap">Career Copilot</span>
           <span className="text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
         </div>
       </div>

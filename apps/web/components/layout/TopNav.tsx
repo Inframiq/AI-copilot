@@ -22,7 +22,7 @@ export function TopNav() {
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-bold text-primary">Career Copilot</span>
+          <span className="text-[19px] font-bold text-primary whitespace-nowrap">Career Copilot</span>
         </div>
         <div className="flex items-center gap-sm">
           <CreditMeter variant="compact" />
