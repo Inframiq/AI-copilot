@@ -3,40 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { margin: 0; }
+  /* @page margin applies uniformly to every page — body margin: 0 so
+     page 2+ also gets proper whitespace, not just the first page.
+     (Previously @page margin:0 with manual .header/.body padding left
+     every overflow page's content flush to the paper's top edge.) */
+  @page { margin: 0.5in; }
   body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
-  .banner { background: #4c6178; height: 16px; width: 100%; }
-  .header { display: flex; align-items: flex-start; gap: 16px; padding: 12px 36px 4px; }
+  /* flex:start + gap, never justify-content/float — the text block stays in
+     normal flow (DOM order preserved for ATS extraction); only the photo,
+     a bare <img>, sits beside it. */
+  .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 6px; }
   .photo { width: 80px; height: 80px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
   .name { font-size: 19pt; font-weight: 800; color: #2b2b2b; margin: 2px 0 4px; letter-spacing: 0.02em; line-height: 1.1; }
-  .contact-line { font-size: 9pt; color: #333; margin-bottom: 2px; }
-  .contact-line .marker { color: #4c6178; font-weight: bold; margin-right: 6px; }
-  .body { padding: 3px 36px 16px; }
+  .contact-line { font-size: 9pt; color: #333; }
   /* section_gap is 1.5x paragraph_spacing — the gap between one section's
      content and the next section's label. */
   .section { margin-top: {{ section_gap }}px; }
   .section-label { font-size: 11.5pt; font-weight: 800; color: #2b2b2b; text-transform: uppercase;
     letter-spacing: 0.04em; border-left: 4px solid #4c6178; padding-left: 8px; margin-bottom: 5px; }
   .section-body { padding-left: 12px; }
-  p.summary { margin: 0; font-size: 9.5pt; }
-  /* Not multi-column — CSS `columns` reflows list items top-to-bottom
+  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: 9.5pt; }
+  /* Skills render as one flush inline line per category (comma-joined),
+     the same shape as ats_clean/ats_modern — NOT one <li> per skill (that
+     ran the section a full page long) and NOT CSS `columns` (reflows items
      per visual column, which reorders them ahead of later sections in
-     ATS-extracted text (confirmed by direct render+extract testing:
-     second-column skills landed after the next section's heading). */
-  ul.skills-grid { list-style: none; margin: 0; padding: 0; font-size: 9.5pt; }
-  ul.skills-grid li { margin-bottom: 2px; }
-  ul.skills-grid li:before { content: "· "; color: #4c6178; font-weight: bold; }
-  .skills-category { font-size: 9.5pt; font-weight: 700; margin: 4px 0 2px; }
-  /* .job is the whole entry (title+company+bullets) — its own bottom
-     margin is the authoritative gap between entries, so table.bullets
-     below only gets a small fixed bottom margin, not paragraph_spacing
-     too (that would double it, since it's the last thing inside .job).
-     The divider's own padding-bottom stays a small fixed value — it's
-     just breathing room before the dashed line, not the entry-to-entry
-     gap itself (that's the margin-bottom above, which applies whether or
-     not this is the last entry). */
-  .job { margin-bottom: {{ paragraph_spacing }}px; }
-  .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 5px; }
+     ATS-extracted text). */
+  .skills-line { font-size: 9.5pt; margin: 2px 0; }
+  /* Same spacing contract as ats_clean/ats_modern: the entry-to-entry gap
+     is carried by the previous entry's table.bullets bottom margin
+     (= paragraph_spacing), so .job itself adds no bottom margin (that
+     would double it). The dashed divider between entries keeps its own
+     small fixed padding/margin — breathing room around the line, not the
+     entry gap itself. */
+  .job { margin-bottom: 0; }
+  .job:not(:last-child) { border-bottom: 1px dashed #bbb; padding-bottom: 4px; margin-bottom: 4px; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
      justify-content, float:right, and even a table cell with a
@@ -56,13 +56,14 @@
      so the divider-between-entries rule above applies between companies,
      not between individual roles at the same one. */
   .company-header { font-weight: 700; font-style: italic; font-size: 9.5pt; margin-bottom: 4px; }
-  .role-block:not(:first-child) { margin-top: 6px; }
+  /* Nested roles under one company: no top margin — each inherits the
+     previous role's table.bullets bottom margin, same as ats_clean's
+     .role-row pattern. */
+  .role-block:not(:first-child) { margin-top: 0; }
   .role-block .job-title-line { margin-left: 10px; }
-  /* Small fixed bottom margin, not paragraph_spacing — this table is the
-     last thing inside .job, whose own margin-bottom (paragraph_spacing)
-     already provides the entry-to-entry gap; adding it here too would
-     double it. */
-  table.bullets { width: 100%; border-collapse: collapse; margin: 2px 0 2px 0; font-size: 9.5pt; }
+  /* Bottom margin is paragraph_spacing — this is the entry-to-entry gap,
+     the same rule ats_clean/ats_modern use (see the .job comment above). */
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: 9.5pt; }
   /* Without this, WeasyPrint can split a <tr> across a page break — the
      bullet dot's <td> renders at the bottom of one page and its text <td>
      at the top of the next, as two orphaned fragments of the same row. */
@@ -81,18 +82,15 @@
   .lang-name b { font-weight: 700; }
   .lang-bar-track { flex: 1; height: 6px; background: #e4e4e4; border-radius: 3px; overflow: hidden; }
   .lang-bar-fill { height: 100%; background: #4c6178; }
-  ul.plain { margin: 2px 0 0 16px; padding: 0; font-size: 9.5pt; }
+  ul.plain { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: 9.5pt; }
 </style>
 </head>
 <body>
-<div class="banner"></div>
 <div class="header">
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
   <div>
     <div class="name">{{ contact.name | upper }}</div>
-    {% if contact.location %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.location }}</div>{% endif %}
-    {% if contact.phone %}<div class="contact-line"><span class="marker">&#9679;</span>{{ contact.phone }}</div>{% endif %}
-    <div class="contact-line"><span class="marker">&#9679;</span>{{ contact.email }}</div>
+    <div class="contact-line">{{ [contact.location, contact.phone, contact.email, contact.linkedin, contact.github] | select | join('  ·  ') }}</div>
   </div>
 </div>
 
@@ -119,11 +117,10 @@
     <div class="section-body">
       {% if skills is mapping %}
         {% for category, items in skills.items() %}
-        <div class="skills-category">{{ category }}</div>
-        <ul class="skills-grid">{% for s in items %}<li>{{ s }}</li>{% endfor %}</ul>
+        <div class="skills-line"><b>{{ category }}:</b> {{ items | join(", ") }}</div>
         {% endfor %}
       {% else %}
-      <ul class="skills-grid">{% for s in skills %}<li>{{ s }}</li>{% endfor %}</ul>
+      <div class="skills-line">{{ skills | join(", ") }}</div>
       {% endif %}
     </div>
   </div>

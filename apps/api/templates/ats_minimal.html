@@ -53,14 +53,18 @@
   .kw { font-weight: 700; }
   .edu-degree { font-weight: 700; font-size: 10.5pt; }
   .edu-institution { font-size: 9.5pt; color: #444; }
-  ul.additional { margin: 4px 0 8px 18px; padding: 0; font-size: 9.5pt; }
+  /* Skills / Languages render as a flush inline block (like ats_clean's
+     .skills), not a bulleted list — its bottom margin is a small fixed
+     value, same as ats_clean/ats_modern. */
+  .skills-list { font-size: 9.5pt; margin: 4px 0 6px; }
+  ul.additional { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: 9.5pt; }
   ul.additional li { margin-bottom: 2px; }
 </style>
 </head>
 <body>
 <div class="name">{{ contact.name | upper }}</div>
 <div class="contact-line">
-  {{ [contact.location, contact.phone, contact.email] | select | join(' • ') }}{% if contact.linkedin %} • {{ contact.linkedin }}{% endif %}{% if contact.github %} • {{ contact.github }}{% endif %}
+  {{ [contact.location, contact.phone, contact.email, contact.linkedin, contact.github] | select | join(' • ') }}
 </div>
 <hr>
 
@@ -118,22 +122,20 @@
 {% macro render_skills() %}
   {% if skills %}
   <h2>Skills</h2>
-  <ul class="additional">
-    {% if skills is mapping %}
-      {% for category, items in skills.items() %}
-      <li><b>{{ category }}:</b> {{ items | join(", ") }}</li>
-      {% endfor %}
-    {% else %}
-    <li>{{ skills | join(", ") }}</li>
-    {% endif %}
-  </ul>
+  {% if skills is mapping %}
+    {% for category, items in skills.items() %}
+    <div class="skills-list"><b>{{ category }}:</b> {{ items | join(", ") }}</div>
+    {% endfor %}
+  {% else %}
+  <div class="skills-list">{{ skills | join(", ") }}</div>
+  {% endif %}
   {% endif %}
 {% endmacro %}
 
 {% macro render_languages() %}
   {% if languages %}
   <h2>Languages</h2>
-  <ul class="additional"><li>{% for l in languages %}{{ l.name }}{% if l.level %} ({{ l.level }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</li></ul>
+  <div class="skills-list">{% for l in languages %}{{ l.name }}{% if l.level %} ({{ l.level }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</div>
   {% endif %}
 {% endmacro %}
 
