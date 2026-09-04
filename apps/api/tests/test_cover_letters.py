@@ -60,9 +60,28 @@ async def test_generate_creates_pending_row_and_returns_202():
 
     mock_session.refresh = fake_refresh
 
+    # ASGITransport runs BackgroundTasks synchronously, so
+    # _run_cover_letter_background actually executes during this request and
+    # opens its own AsyncSessionLocal() — fake it out the same way the
+    # neighboring background-task tests do, or it'll hit a real DB.
+    bg_session = MagicMock()
+    bg_result = MagicMock()
+    bg_result.scalar_one_or_none.return_value = None
+    bg_session.execute = AsyncMock(return_value=bg_result)
+    bg_session.commit = AsyncMock()
+
+    class _FakeSessionContextManager:
+        async def __aenter__(self):
+            return bg_session
+
+        async def __aexit__(self, *exc_info):
+            return False
+
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.cover_letters.get_ai_provider", return_value=MagicMock()):
+        with patch("app.routers.cover_letters.get_ai_provider", return_value=AsyncMock()), patch(
+            "app.routers.cover_letters.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
+        ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/cover-letters",
