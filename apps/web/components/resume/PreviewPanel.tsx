@@ -4,8 +4,15 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
-import { ArrowSquareOut, ArrowsClockwise, DownloadSimple, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowSquareOut, ArrowsClockwise, FileText, SpinnerGap } from "@phosphor-icons/react";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+
+// Hides the embedded PDF viewer's own toolbar (its download/print bar) so
+// the header's "Download PDF" stays the one place to actually download —
+// works on both signed https URLs and the data: URIs generatePdf() returns.
+function withHiddenToolbar(url: string): string {
+  return url.includes("#") ? url : `${url}#toolbar=0`;
+}
 
 // Real resume-formatting guidance (Teal, WashU Career Engagement, Hireflow —
 // see the commit that introduced this) converges on: 1.0-1.15 line spacing
@@ -129,7 +136,7 @@ export function PreviewPanel() {
                 disabled={isGenerating}
                 className={`px-sm py-xs rounded-lg text-label-sm transition-colors disabled:opacity-60 ${
                   templateId === t.id
-                    ? "bg-secondary-container text-primary font-bold"
+                    ? "bg-secondary-container text-on-secondary-container font-bold"
                     : "text-on-surface-variant hover:bg-surface-container-low"
                 }`}
               >
@@ -216,7 +223,11 @@ export function PreviewPanel() {
           {genError && (
             <span className="text-label-sm text-error">{genError}</span>
           )}
-          {/* Hide Generate PDF in tailoring mode — the BulletReviewPanel owns that flow */}
+          {/* This button only ever refreshes the live preview render — the
+              actual PDF download lives in the header's single "Download PDF"
+              button, so this never wears a download icon/label (that read as
+              a second, redundant download action). Hidden in tailoring mode
+              — the BulletReviewPanel owns that flow. */}
           {!isTailoringMode && (
             <button
               onClick={handleGeneratePdf}
@@ -229,12 +240,10 @@ export function PreviewPanel() {
             >
               {isGenerating ? (
                 <SpinnerGap size={16} className="animate-spin" />
-              ) : spacingStale ? (
-                <ArrowsClockwise size={16} />
               ) : (
-                <DownloadSimple size={16} />
+                <ArrowsClockwise size={16} />
               )}
-              {isGenerating ? "Generating…" : spacingStale ? "Regenerate PDF" : "Generate PDF"}
+              {isGenerating ? "Refreshing…" : spacingStale ? "Update preview" : "Refresh preview"}
             </button>
           )}
           {/* Tailoring mode's equivalent — BulletReviewPanel owns the first
@@ -253,12 +262,10 @@ export function PreviewPanel() {
             >
               {isGenerating ? (
                 <SpinnerGap size={16} className="animate-spin" />
-              ) : spacingStale ? (
-                <ArrowsClockwise size={16} />
               ) : (
-                <DownloadSimple size={16} />
+                <ArrowsClockwise size={16} />
               )}
-              {isGenerating ? "Generating…" : spacingStale ? "Regenerate Preview" : "Preview Up To Date"}
+              {isGenerating ? "Refreshing…" : spacingStale ? "Update preview" : "Preview up to date"}
             </button>
           )}
           {sessionId && (
@@ -284,7 +291,10 @@ export function PreviewPanel() {
                 </div>
               )}
               <iframe
-                src={pdfSignedUrl}
+                // #toolbar=0 hides the browser's own embedded PDF
+                // viewer chrome (its download/print bar) — the header's
+                // "Download PDF" is the one place to actually download.
+                src={withHiddenToolbar(pdfSignedUrl)}
                 onLoad={() => setIframeLoaded(true)}
                 className="absolute inset-0 w-full h-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
                 title="Resume Preview"
@@ -296,11 +306,11 @@ export function PreviewPanel() {
             >
               <div className="text-center px-lg">
                 <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto mb-md">
-                  <DownloadSimple size={32} className="text-on-surface-variant" />
+                  <FileText size={32} className="text-on-surface-variant" />
                 </div>
-                <p className="text-on-surface text-body-md font-bold mb-sm">No PDF generated yet</p>
+                <p className="text-on-surface text-body-md font-bold mb-sm">No preview yet</p>
                 <p className="text-on-surface-variant text-body-sm">
-                  Click &ldquo;Generate PDF&rdquo; to preview your resume,
+                  Click &ldquo;Refresh preview&rdquo; to see your resume,
                   <br />or use &ldquo;Tailor to JD&rdquo; to optimize and generate.
                 </p>
               </div>

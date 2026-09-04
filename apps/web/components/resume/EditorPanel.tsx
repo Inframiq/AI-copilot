@@ -7,7 +7,7 @@ import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
 import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
 import { sameCompany } from "@/lib/career-profile-client";
-import { CaretDown, CaretRight, CheckCircle, FileText, Target, WarningCircle, Sparkle } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CheckCircle, FileText, Target, Trash, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
@@ -136,13 +136,14 @@ export function EditorPanel() {
 
       {/* Content editor tabs — hidden when collapsed in tailoring mode, always visible otherwise */}
       {(!isTailoringMode || editorOpen) && <Tabs.Root defaultValue="template">
-        <Tabs.List className="flex gap-xs mb-lg border-b border-outline-variant/20 pb-sm overflow-x-auto">
+        <Tabs.List className="flex flex-wrap gap-xs mb-lg p-xs bg-surface-container rounded-xl">
           {(["template", "contact", "summary", "experience", "education", "skills", "languages", "certifications"] as const).map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
-              className="px-md py-sm rounded-t-lg text-label-md text-on-surface-variant capitalize whitespace-nowrap
-                data-[state=active]:bg-secondary-container data-[state=active]:text-primary transition-colors flex-shrink-0"
+              className="px-md py-sm rounded-lg text-label-sm text-on-surface-variant capitalize whitespace-nowrap
+                data-[state=active]:bg-surface-container-lowest data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=active]:shadow-sm
+                hover:text-on-surface transition-all"
             >
               {tab}
             </Tabs.Trigger>
@@ -316,21 +317,21 @@ export function EditorPanel() {
           {content.experience.map((job, i) => (
             <div key={i}>
               {sameCompany(job.company, content.experience[i - 1]?.company) && (
-                <div className="flex items-center justify-between gap-sm mb-sm px-md py-sm rounded-lg bg-primary/5 border border-primary/20">
+                <div className="flex items-center justify-between gap-md mb-md px-md py-sm rounded-xl bg-primary/5 border border-primary/20">
                   <p className="text-caption text-on-surface-variant">
                     Same company as the role above — your resume will already show these grouped
                     under one company header. Prefer a single combined entry instead?
                   </p>
                   <button
                     onClick={() => mergeExperienceIntoPreviousRole(i)}
-                    className="shrink-0 text-label-sm text-primary font-semibold hover:underline whitespace-nowrap"
+                    className="shrink-0 text-label-sm text-primary font-semibold px-sm py-xs rounded-lg hover:bg-primary/10 transition-colors whitespace-nowrap"
                   >
                     Merge into one entry
                   </button>
                 </div>
               )}
               <div
-                className="bg-surface border border-outline-variant/20 rounded-xl p-md flex flex-col gap-sm shadow-sm"
+                className="bg-surface border border-outline-variant/20 rounded-xl p-lg flex flex-col gap-md shadow-sm hover:shadow-md transition-shadow"
               >
               <div className="flex items-center justify-between mb-xs">
                 <span className="text-label-sm text-on-surface-variant font-bold uppercase tracking-wider">
@@ -341,13 +342,14 @@ export function EditorPanel() {
                     const updated = content.experience.filter((_, idx) => idx !== i);
                     updateContent({ experience: updated });
                   }}
-                  className="text-label-sm text-error hover:underline"
+                  className="flex items-center gap-xs text-label-sm text-error px-sm py-xs rounded-lg hover:bg-error-container/30 transition-colors"
                 >
+                  <Trash size={14} />
                   Remove
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-sm">
+              <div className="grid grid-cols-2 gap-md">
                 <div className="flex flex-col gap-xs">
                   <label className="text-label-sm text-on-surface-variant">Company</label>
                   <input
@@ -449,7 +451,7 @@ export function EditorPanel() {
           {content.education.map((edu, i) => (
             <div
               key={i}
-              className="bg-surface border border-outline-variant/20 rounded-xl p-md flex flex-col gap-sm shadow-sm"
+              className="bg-surface border border-outline-variant/20 rounded-xl p-lg flex flex-col gap-md shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex items-center justify-between mb-xs">
                 <span className="text-label-sm text-on-surface-variant font-bold uppercase tracking-wider">
@@ -460,8 +462,9 @@ export function EditorPanel() {
                     const updated = content.education.filter((_, idx) => idx !== i);
                     updateContent({ education: updated });
                   }}
-                  className="text-label-sm text-error hover:underline"
+                  className="flex items-center gap-xs text-label-sm text-error px-sm py-xs rounded-lg hover:bg-error-container/30 transition-colors"
                 >
+                  <Trash size={14} />
                   Remove
                 </button>
               </div>
@@ -480,33 +483,35 @@ export function EditorPanel() {
                   className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
               </div>
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-sm text-on-surface-variant">Degree</label>
-                <input
-                  type="text"
-                  value={edu.degree}
-                  onChange={(e) => {
-                    const updated = [...content.education];
-                    updated[i] = { ...updated[i], degree: e.target.value };
-                    updateContent({ education: updated });
-                  }}
-                  placeholder="e.g. B.S. Computer Science"
-                  className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-                />
-              </div>
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-sm text-on-surface-variant">Year</label>
-                <input
-                  type="text"
-                  value={edu.year}
-                  onChange={(e) => {
-                    const updated = [...content.education];
-                    updated[i] = { ...updated[i], year: e.target.value };
-                    updateContent({ education: updated });
-                  }}
-                  placeholder="e.g. 2020"
-                  className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-                />
+              <div className="grid grid-cols-2 gap-md">
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-sm text-on-surface-variant">Degree</label>
+                  <input
+                    type="text"
+                    value={edu.degree}
+                    onChange={(e) => {
+                      const updated = [...content.education];
+                      updated[i] = { ...updated[i], degree: e.target.value };
+                      updateContent({ education: updated });
+                    }}
+                    placeholder="e.g. B.S. Computer Science"
+                    className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                  />
+                </div>
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-sm text-on-surface-variant">Year</label>
+                  <input
+                    type="text"
+                    value={edu.year}
+                    onChange={(e) => {
+                      const updated = [...content.education];
+                      updated[i] = { ...updated[i], year: e.target.value };
+                      updateContent({ education: updated });
+                    }}
+                    placeholder="e.g. 2020"
+                    className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                  />
+                </div>
               </div>
             </div>
           ))}
@@ -554,7 +559,7 @@ export function EditorPanel() {
                 {content.skills.map((skill) => (
                   <span
                     key={skill}
-                    className="px-sm py-xs rounded-full bg-secondary-container text-primary text-label-sm"
+                    className="px-sm py-xs rounded-full bg-secondary-container text-on-secondary-container text-label-sm font-medium"
                   >
                     {skill}
                   </span>
@@ -604,9 +609,10 @@ export function EditorPanel() {
                   const updated = (content.languages ?? []).filter((_, idx) => idx !== i);
                   updateContent({ languages: updated });
                 }}
-                className="text-label-sm text-error hover:underline py-xs"
+                aria-label="Remove language"
+                className="flex items-center gap-xs text-label-sm text-error px-sm py-sm rounded-lg hover:bg-error-container/30 transition-colors"
               >
-                Remove
+                <Trash size={14} />
               </button>
             </div>
           ))}
@@ -723,7 +729,7 @@ export function EditorPanel() {
               <div className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
                   Target Company
-                  <span className="text-caption bg-secondary-container text-primary px-xs py-0.5 rounded-full">
+                  <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 rounded-full">
                     optional
                   </span>
                 </label>
@@ -908,7 +914,7 @@ function TailoringForm({
       <div className="flex flex-col gap-xs">
         <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
           Target Company
-          <span className="text-caption bg-secondary-container text-primary px-xs py-0.5 rounded-full">optional</span>
+          <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 rounded-full">optional</span>
         </label>
         <input
           type="text"
