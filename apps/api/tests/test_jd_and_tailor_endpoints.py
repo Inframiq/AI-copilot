@@ -1120,25 +1120,31 @@ async def test_rewrite_bullet_custom_mode_requires_instructions():
 
 @pytest.mark.asyncio
 async def test_rewrite_bullet_custom_mode_follows_instructions():
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value="Rewritten per instructions.")
-    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.post(
-                "/ai/rewrite-bullet",
-                json={
-                    "bullet_text": "Original summary text.",
-                    "mode": "custom",
-                    "custom_instruction": "Make it punchier and mention leadership.",
-                    "field": "summary",
-                },
-                headers=make_auth_header(),
-            )
-    assert r.status_code == 200
-    assert r.json()["rewritten_text"] == "Rewritten per instructions."
-    system_prompt, user_msg = mock_provider.complete.call_args.args[:2]
-    assert "instructions" in system_prompt.lower()
-    assert "Make it punchier and mention leadership." in user_msg
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/rewrite-bullet",
+                    json={
+                        "bullet_text": "Original summary text.",
+                        "mode": "custom",
+                        "custom_instruction": "Make it punchier and mention leadership.",
+                        "field": "summary",
+                    },
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert r.json()["rewritten_text"] == "Rewritten per instructions."
+        system_prompt, user_msg = mock_provider.complete.call_args.args[:2]
+        assert "instructions" in system_prompt.lower()
+        assert "Make it punchier and mention leadership." in user_msg
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -1147,17 +1153,23 @@ async def test_rewrite_bullet_summary_field_truncates_to_word_cap():
 
     max_words = HARD_LIMITS["summary"]["max_words"]
     overlong = " ".join(f"word{i}" for i in range(max_words + 30))
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value=overlong)
-    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.post(
-                "/ai/rewrite-bullet",
-                json={"bullet_text": "Original summary.", "mode": "rewrite", "field": "summary"},
-                headers=make_auth_header(),
-            )
-    assert r.status_code == 200
-    assert len(r.json()["rewritten_text"].split()) <= max_words
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/rewrite-bullet",
+                    json={"bullet_text": "Original summary.", "mode": "rewrite", "field": "summary"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert len(r.json()["rewritten_text"].split()) <= max_words
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -1166,17 +1178,23 @@ async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
 
     max_words = HARD_LIMITS["summary"]["max_words"]
     long_bullet = " ".join(f"word{i}" for i in range(max_words + 30))
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value=long_bullet)
-    with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.post(
-                "/ai/rewrite-bullet",
-                json={"bullet_text": "Original bullet.", "mode": "rewrite"},
-                headers=make_auth_header(),
-            )
-    assert r.status_code == 200
-    assert len(r.json()["rewritten_text"].split()) == max_words + 30
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/rewrite-bullet",
+                    json={"bullet_text": "Original bullet.", "mode": "rewrite"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert len(r.json()["rewritten_text"].split()) == max_words + 30
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -1187,6 +1205,54 @@ async def test_rewrite_bullet_requires_auth():
             json={"bullet_text": "Original bullet.", "mode": "rewrite"},
         )
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_deducts_one_credit():
+    sub_result = credit_sub_result(credits=50)
+    sub = sub_result.scalar_one_or_none()
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(return_value=sub_result)
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(return_value="Rewritten.")
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/rewrite-bullet",
+                    json={"bullet_text": "Original bullet.", "mode": "rewrite"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert sub.credits_remaining == 49  # rewrite_bullet costs 1
+        mock_session.commit.assert_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_refunds_credit_when_provider_fails():
+    sub_result = credit_sub_result(credits=50)
+    sub = sub_result.scalar_one_or_none()
+    override, mock_session = make_mock_db()
+    mock_session.execute = AsyncMock(return_value=sub_result)
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(side_effect=RuntimeError("provider exploded"))
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
+            transport = ASGITransport(app=app, raise_app_exceptions=False)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/rewrite-bullet",
+                    json={"bullet_text": "Original bullet.", "mode": "rewrite"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 500
+        assert sub.credits_remaining == 50  # charged then refunded — net zero
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio

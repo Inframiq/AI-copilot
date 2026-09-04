@@ -80,6 +80,17 @@ async def test_spend_deducts_the_action_cost():
 
 
 @pytest.mark.asyncio
+async def test_spend_deducts_for_cover_letter_and_rewrite_bullet():
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=50, credits_allotment=50, current_period_end=None)
+    db = _db(existing_sub=existing)
+    await spend_credits(db, USER, "cover_letter")
+    assert existing.credits_remaining == 50 - CREDIT_COSTS["cover_letter"]
+    await spend_credits(db, USER, "rewrite_bullet")
+    assert existing.credits_remaining == 50 - CREDIT_COSTS["cover_letter"] - CREDIT_COSTS["rewrite_bullet"]
+
+
+@pytest.mark.asyncio
 async def test_spend_raises_402_when_balance_too_low():
     existing = Subscription(user_id=USER, plan="free", status="active",
                             credits_remaining=4, credits_allotment=50, current_period_end=None)
@@ -105,8 +116,7 @@ async def test_spend_is_a_noop_for_unmetered_actions():
     existing = Subscription(user_id=USER, plan="free", status="active",
                             credits_remaining=1, credits_allotment=50, current_period_end=None)
     db = _db(existing_sub=existing)
-    await spend_credits(db, USER, "analyze")        # cost 0
-    await spend_credits(db, USER, "cover_letter")   # priced but not enforced yet
+    await spend_credits(db, USER, "analyze")  # cost 0 — free JD analysis by design
     assert existing.credits_remaining == 1
 
 

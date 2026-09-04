@@ -12,6 +12,7 @@ from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, CoverLetter
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
+from app.core.credits import spend_credits, refund_credits
 from app.schemas.cover_letter import (
     CoverLetterGenerateRequest, CoverLetterStartOut, CoverLetterOut, CoverLetterUpdate,
 )
@@ -34,6 +35,7 @@ def _supabase():
 
 async def _run_cover_letter_background(
     cover_letter_id: uuid.UUID,
+    user_id: uuid.UUID,
     resume_content: dict,
     jd_text: str,
     jd_title: str,
@@ -41,6 +43,7 @@ async def _run_cover_letter_background(
     humanize_level: int,
     provider,
     cached_jd_analysis: JDAnalysis | None,
+    user_email: str | None = None,
 ) -> None:
     """Runs letter generation off the request path — same reasoning as
     _run_tailoring_background in routers/ai.py: this chains a JD-analysis
@@ -64,7 +67,10 @@ async def _run_cover_letter_background(
             row = row_result.scalar_one_or_none()
             if row:
                 row.status = "failed"
-                await session_db.commit()
+            # spend_credits already charged for this run before the background
+            # job started — give it back since no letter was ever delivered.
+            await refund_credits(session_db, user_id, "cover_letter", email=user_email)
+            await session_db.commit()
             return
 
         row_result = await session_db.execute(
@@ -96,6 +102,8 @@ async def generate_cover_letter(
     ).scalar_one_or_none()
     if not resume_row or not jd_row:
         raise HTTPException(status_code=404, detail="Resume or JD not found")
+
+    await spend_credits(db, uid, "cover_letter", email=user.get("email"))
 
     # Reuse the tailored resume content when a session is linked; otherwise
     # use the resume as saved.
@@ -138,6 +146,7 @@ async def generate_cover_letter(
     background_tasks.add_task(
         _run_cover_letter_background,
         letter.id,
+        uid,
         resume_content,
         jd_row.raw_text,
         jd_row.title,
@@ -145,6 +154,7 @@ async def generate_cover_letter(
         body.humanize_level,
         provider,
         cached_jd_analysis,
+        user.get("email"),
     )
 
     return CoverLetterStartOut(cover_letter_id=letter.id, status="pending")

@@ -278,6 +278,7 @@ async def rewrite_bullet(
     request: Request,
     body: RewriteBulletRequest,
     user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Rewrite, humanize, or custom-instruction-rewrite a single bullet or
     the resume's Summary using AI. Same lightweight single-call shape either
@@ -287,6 +288,10 @@ async def rewrite_bullet(
     when the user types directly (resume_spec.py HARD_LIMITS["summary"])."""
     if body.mode == "custom" and not body.custom_instruction.strip():
         raise HTTPException(status_code=422, detail="custom_instruction is required for mode=custom")
+
+    uid = uuid.UUID(user["sub"])
+    await spend_credits(db, uid, "rewrite_bullet", email=user.get("email"))
+    await db.commit()
 
     provider = get_ai_provider()
     is_summary = body.field == "summary"
@@ -333,10 +338,17 @@ async def rewrite_bullet(
     # tight ceiling avoids giving the reasoning model unneeded headroom to
     # burn extra (billed) reasoning tokens. See tailoring.py's per-call
     # token-ceiling comment / docs/ai-pipeline.md.
-    async with record_ai_usage(uuid.UUID(user["sub"]), "rewrite_bullet"):
-        rewritten = await provider.complete(
-            system, user_msg, model_tier="fast", max_output_tokens=1200, call_name="rewrite_bullet"
-        )
+    try:
+        async with record_ai_usage(uid, "rewrite_bullet"):
+            rewritten = await provider.complete(
+                system, user_msg, model_tier="fast", max_output_tokens=1200, call_name="rewrite_bullet"
+            )
+    except Exception:
+        # spend_credits already charged above — give it back since no
+        # rewritten text was ever delivered.
+        await refund_credits(db, uid, "rewrite_bullet", email=user.get("email"))
+        await db.commit()
+        raise
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
     if is_summary:

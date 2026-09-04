@@ -80,7 +80,7 @@ BILLING_PERIOD = timedelta(days=30)
 
 # Actions currently enforced. Others have a cost defined above for the
 # future but aren't gated yet (one-line change to add them).
-ENFORCED_ACTIONS = {"tailor"}
+ENFORCED_ACTIONS = {"tailor", "cover_letter", "rewrite_bullet"}
 
 
 async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:
