@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, RocketLaunch, SquaresFour, FileDashed, MicrophoneStage, FileText, MagnifyingGlass } from "@phosphor-icons/react";
+import { RocketLaunch, SquaresFour, FileDashed, MicrophoneStage, FileText, MagnifyingGlass } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
 
 const MOBILE_NAV = [
@@ -26,9 +26,6 @@ export function TopNav() {
         </div>
         <div className="flex items-center gap-sm">
           <CreditMeter variant="compact" />
-          <button className="text-on-surface-variant hover:bg-surface-container-high/50 p-sm rounded-full transition-colors">
-            <Bell size={24} />
-          </button>
         </div>
       </header>
 
@@ -45,9 +42,6 @@ export function TopNav() {
         </div>
         <div className="flex items-center gap-md">
           <CreditMeter variant="compact" />
-          <button className="p-sm text-on-surface-variant hover:bg-surface-container-high/50 transition-colors rounded-full">
-            <Bell size={24} />
-          </button>
         </div>
       </header>
 
