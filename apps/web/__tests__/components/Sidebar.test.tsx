@@ -44,6 +44,12 @@ describe("Sidebar", () => {
     }
   });
 
+  it("links the Career Copilot wordmark back to the dashboard", () => {
+    renderSidebar();
+    const wordmarkLink = screen.getByText("Career Copilot").closest("a");
+    expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
+  });
+
   it("marks the current route active", () => {
     renderSidebar();
     const dashboardLink = screen.getByText("Dashboard").closest("a");

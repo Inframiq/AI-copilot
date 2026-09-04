@@ -39,7 +39,7 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col p-md gap-sm bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[280px] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50">
       {/* Logo */}
-      <div className="flex items-center gap-md px-md py-lg mb-md">
+      <Link href="/dashboard" className="flex items-center gap-md px-md py-lg mb-md">
         <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
           <RocketLaunch size={20} weight="fill" className="text-on-primary" />
         </div>
@@ -47,7 +47,7 @@ export function Sidebar() {
           <span className="text-[19px] leading-tight font-black text-primary whitespace-nowrap">Career Copilot</span>
           <span className="text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
         </div>
-      </div>
+      </Link>
 
       {/* Nav Items */}
       <nav className="flex-1 flex flex-col gap-sm">

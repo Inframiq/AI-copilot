@@ -18,12 +18,12 @@ export function TopNav() {
     <>
       {/* Mobile Top Header */}
       <header className="md:hidden flex justify-between items-center w-full px-lg h-16 bg-surface/80 backdrop-blur-md sticky top-0 z-40 border-b border-outline-variant/30 shadow-sm">
-        <div className="flex items-center gap-sm">
+        <Link href="/dashboard" className="flex items-center gap-sm">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
           <span className="text-[19px] font-bold text-primary whitespace-nowrap">Career Copilot</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-sm">
           <CreditMeter variant="compact" />
         </div>

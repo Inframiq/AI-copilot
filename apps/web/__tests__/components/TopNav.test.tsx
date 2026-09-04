@@ -33,6 +33,12 @@ describe("TopNav", () => {
     expect(screen.getByText("Resume")).toBeInTheDocument();
   });
 
+  it("links the Career Copilot wordmark back to the dashboard", () => {
+    renderTopNav();
+    const wordmarkLink = screen.getByText("Career Copilot").closest("a");
+    expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
+  });
+
   it("marks the current mobile nav item active", () => {
     renderTopNav();
     const jdLink = screen.getByText("JD").closest("a");
