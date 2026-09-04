@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 import { X, ArrowSquareOut, SpinnerGap, WarningCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 
+// Hides the embedded PDF viewer's own toolbar (its download/print bar) —
+// this modal is a preview only; downloading happens in the Builder.
+function withHiddenToolbar(url: string): string {
+  return url.includes("#") ? url : `${url}#toolbar=0`;
+}
+
 interface Props {
   resumeId: string;
   templateId: string;
@@ -79,7 +85,7 @@ export function ResumePreviewModal({ resumeId, templateId, title, onClose }: Pro
                   </div>
                 )}
                 <iframe
-                  src={pdfUrl}
+                  src={withHiddenToolbar(pdfUrl)}
                   onLoad={() => setIframeLoaded(true)}
                   className="absolute inset-0 w-full h-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"
                   title="Resume Preview"

@@ -37,13 +37,13 @@ describe("PreviewPanel", () => {
 
   it("shows the empty state when no PDF has been generated", () => {
     render(<PreviewPanel />);
-    expect(screen.getByText("No PDF generated yet")).toBeInTheDocument();
+    expect(screen.getByText("No preview yet")).toBeInTheDocument();
     expect(screen.queryByTitle("Resume Preview")).not.toBeInTheDocument();
   });
 
   it("Generate PDF is disabled until a resume is loaded", () => {
     render(<PreviewPanel />);
-    expect(screen.getByText("Generate PDF").closest("button")).toBeDisabled();
+    expect(screen.getByText("Refresh preview").closest("button")).toBeDisabled();
   });
 
   it("clicking Generate PDF calls the API and renders the iframe on success", async () => {
@@ -53,12 +53,12 @@ describe("PreviewPanel", () => {
     });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Generate PDF"));
+    await userEvent.click(screen.getByText("Refresh preview"));
 
     await waitFor(() => {
       expect(screen.getByTitle("Resume Preview")).toHaveAttribute(
         "src",
-        "https://example.com/resume.pdf"
+        "https://example.com/resume.pdf#toolbar=0"
       );
     });
     expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean", undefined, 1.25, 12);
@@ -88,40 +88,40 @@ describe("PreviewPanel", () => {
     expect(useResumeStore.getState().templateId).toBe("ats_modern");
   });
 
-  it("adjusting spacing after a PDF exists marks it stale and relabels the button Regenerate PDF", async () => {
+  it("adjusting spacing after a PDF exists marks it stale and relabels the button Update preview", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     vi.mocked(apiClient.generatePdf).mockResolvedValue({
       signed_url: "https://example.com/resume.pdf",
     });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Generate PDF"));
+    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "1.5" } });
 
     expect(useResumeStore.getState().lineSpacing).toBe(1.5);
-    expect(screen.getByText("Regenerate PDF")).toBeInTheDocument();
+    expect(screen.getByText("Update preview")).toBeInTheDocument();
   });
 
-  it("Regenerate PDF sends the updated spacing values and clears the stale state", async () => {
+  it("Update preview sends the updated spacing values and clears the stale state", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     vi.mocked(apiClient.generatePdf).mockResolvedValue({
       signed_url: "https://example.com/resume.pdf",
     });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Generate PDF"));
+    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Paragraph spacing"), { target: { value: "20" } });
-    await userEvent.click(screen.getByText("Regenerate PDF"));
+    await userEvent.click(screen.getByText("Update preview"));
 
     await waitFor(() =>
       expect(apiClient.generatePdf).toHaveBeenLastCalledWith("resume-1", "ats_clean", undefined, 1.25, 20)
     );
-    expect(screen.getByText("Generate PDF")).toBeInTheDocument();
-    expect(screen.queryByText("Regenerate PDF")).not.toBeInTheDocument();
+    expect(screen.getByText("Refresh preview")).toBeInTheDocument();
+    expect(screen.queryByText("Update preview")).not.toBeInTheDocument();
   });
 
   it("hides spacing controls until a preview actually exists, in normal mode", () => {
@@ -164,9 +164,9 @@ describe("PreviewPanel", () => {
 
     render(<PreviewPanel />);
     fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "1.4" } });
-    expect(screen.getByText("Regenerate Preview")).toBeInTheDocument();
+    expect(screen.getByText("Update preview")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Regenerate Preview"));
+    await userEvent.click(screen.getByText("Update preview"));
 
     await waitFor(() =>
       expect(apiClient.generatePdf).toHaveBeenLastCalledWith(
@@ -179,7 +179,7 @@ describe("PreviewPanel", () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Generate PDF"));
+    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     // Default (1.25, 12) matches none of the three presets exactly.
@@ -195,13 +195,13 @@ describe("PreviewPanel", () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Generate PDF"));
+    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Spacing"), { target: { value: "Spacious" } });
 
     expect(useResumeStore.getState().lineSpacing).toBe(1.4);
     expect(useResumeStore.getState().paragraphSpacing).toBe(18);
-    expect(screen.getByText("Regenerate PDF")).toBeInTheDocument();
+    expect(screen.getByText("Update preview")).toBeInTheDocument();
   });
 });

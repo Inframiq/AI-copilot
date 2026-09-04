@@ -229,6 +229,75 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
 
 
 @pytest.mark.asyncio
+async def test_create_resume_evicts_oldest_beyond_five_unprotected():
+    """Creating a 6th resume deletes the oldest one — but only when it isn't
+    the career profile's master resume or linked to a JD, per
+    _evict_oldest_resumes."""
+    from app.db.models import Resume
+    from datetime import datetime, timezone
+
+    uid = uuid.UUID(TEST_USER_ID)
+    oldest_id = uuid.uuid4()
+    kept_ids = [uuid.uuid4() for _ in range(5)]
+    new_id = uuid.uuid4()
+
+    override, mock_session = make_mock_db()
+
+    created_resume = Resume(
+        id=new_id, user_id=uid, title="Newest", content={}, template_id="ats_clean",
+        pdf_url=None, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+    )
+
+    async def fake_refresh(obj):
+        obj.id = new_id
+        obj.created_at = created_resume.created_at
+        obj.updated_at = created_resume.updated_at
+
+    mock_session.refresh = fake_refresh
+
+    # Order of execute() calls inside create_resume + _evict_oldest_resumes:
+    # 1. select id/user_id ordered by updated_at desc (newest first)
+    # 2. career_profiles master_resume_id lookup (raw text query)
+    # 3. JobDescription.tailored_resume_id lookup
+    # 4. select Resume rows to actually delete
+    ids_result = MagicMock()
+    ids_result.all.return_value = [(new_id, uid)] + [(rid, uid) for rid in kept_ids] + [(oldest_id, uid)]
+
+    master_result = MagicMock()
+    master_result.__iter__.return_value = iter([])  # no master resume set
+
+    jd_result = MagicMock()
+    jd_scalars = MagicMock()
+    jd_scalars.all.return_value = []  # no JD-linked resumes
+    jd_result.scalars.return_value = jd_scalars
+
+    oldest_resume_row = Resume(
+        id=oldest_id, user_id=uid, title="Oldest", content={}, template_id="ats_clean",
+        original_file_path=None, pdf_url="resumes/some/path.pdf",
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+    )
+    delete_result = MagicMock()
+    delete_scalars = MagicMock()
+    delete_scalars.all.return_value = [oldest_resume_row]
+    delete_result.scalars.return_value = delete_scalars
+
+    mock_session.execute = AsyncMock(side_effect=[ids_result, master_result, jd_result, delete_result])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes._supabase") as mock_supabase:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/resumes", json={"title": "Newest"}, headers=make_auth_header())
+            assert r.status_code == 201
+            # The oldest (6th) resume was deleted...
+            mock_session.delete.assert_awaited_once_with(oldest_resume_row)
+            # ...and its (empty here) storage paths cleanup was attempted.
+            mock_supabase.return_value.storage.from_.assert_called_once_with("resumes")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_get_resume_404_when_not_found():
     override, mock_session = make_mock_db()
     mock_result = MagicMock()

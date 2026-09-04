@@ -2,7 +2,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, ClockCounterClockwise, DownloadSimple, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
+import { CheckCircle, DownloadSimple, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
@@ -321,10 +321,6 @@ export default function StudioPage({
             </button>
             {deleteError && <span className="text-caption text-error">{deleteError}</span>}
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-label-md">
-            <ClockCounterClockwise size={20} />
-            History
-          </button>
           <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleExportPdf}
@@ -332,13 +328,13 @@ export default function StudioPage({
               className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <DownloadSimple size={20} />
-              {isGeneratingPdf ? "Generating…" : "Export PDF"}
+              {isGeneratingPdf ? "Generating…" : "Download PDF"}
             </button>
             {pdfError && (
               <span className="text-caption text-error">{pdfError}</span>
             )}
             {pdfDownloaded && !pdfError && (
-              <span className="text-caption text-success-accent">Downloaded ✓</span>
+              <span className="text-caption text-success">Downloaded ✓</span>
             )}
           </div>
         </div>

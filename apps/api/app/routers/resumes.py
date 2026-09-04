@@ -34,6 +34,75 @@ def _supabase():
     return _sb_client
 
 
+_MAX_RESUMES_PER_USER = 5
+
+
+async def _evict_oldest_resumes(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Keeps only the user's 5 most recently edited resumes — deletes the
+    oldest ones beyond that. Never removes a resume that's the career
+    profile's linked master resume or tied to a JD's tailored_resume_id, so
+    this can't silently pull a resume out from under a flow that's actively
+    depending on it; if every resume past the 5th is protected, nothing is
+    deleted. Editing an old resume updates its updated_at, so it counts as
+    "recent" again and survives the next eviction.
+
+    Best-effort, same as storage cleanup on delete below — a failure here
+    must never block resume creation.
+    """
+    try:
+        result = await db.execute(
+            select(Resume.id, Resume.user_id)
+            .where(Resume.user_id == user_id)
+            .order_by(Resume.updated_at.desc())
+        )
+        ids = [row[0] for row in result.all()]
+        overflow_ids = ids[_MAX_RESUMES_PER_USER:]
+        if not overflow_ids:
+            return
+
+        protected: set[uuid.UUID] = set()
+        master_rows = await db.execute(
+            text(
+                "SELECT master_resume_id FROM career_profiles "
+                "WHERE user_id = :uid AND master_resume_id IS NOT NULL"
+            ),
+            {"uid": str(user_id)},
+        )
+        protected.update(uuid.UUID(str(row[0])) for row in master_rows)
+        jd_result = await db.execute(
+            select(JobDescription.tailored_resume_id).where(
+                JobDescription.user_id == user_id,
+                JobDescription.tailored_resume_id.isnot(None),
+            )
+        )
+        protected.update(jd_result.scalars().all())
+
+        to_delete = [rid for rid in overflow_ids if rid not in protected]
+        if not to_delete:
+            return
+
+        result = await db.execute(select(Resume).where(Resume.id.in_(to_delete)))
+        resumes_to_delete = result.scalars().all()
+        storage_paths: list[str] = []
+        for r in resumes_to_delete:
+            storage_paths.extend(p for p in (r.original_file_path, r.pdf_url) if p)
+            db.add(ResumeDeletionLog(
+                resume_id=r.id, user_id=r.user_id, title=r.title, was_master_resume=False,
+            ))
+            await db.delete(r)
+        await db.commit()
+
+        if storage_paths:
+            try:
+                _supabase().storage.from_("resumes").remove(storage_paths)
+            except Exception:
+                logger.warning(
+                    "Failed to remove storage objects for evicted resumes: %s", storage_paths
+                )
+    except Exception:
+        logger.warning("Resume eviction (keep last %d) failed for user %s", _MAX_RESUMES_PER_USER, user_id, exc_info=True)
+
+
 async def _dedupe_title(db: AsyncSession, user_id: uuid.UUID, base_title: str) -> str:
     """Appends "(2)", "(3)", ... when base_title collides with one of this
     user's existing resume titles — otherwise every upload/generate of the
@@ -114,6 +183,7 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
     if jd:
         jd.tailored_resume_id = resume.id
         await db.commit()
+    await _evict_oldest_resumes(db, uid)
     return resume
 
 
@@ -382,6 +452,7 @@ async def generate_resume_endpoint(
         db.add(resume)
         await db.commit()
         await db.refresh(resume)
+        await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
 
     return GenerateResumeOut(
         resume_id=resume.id,
@@ -502,4 +573,5 @@ async def parse_and_create_resume(
     db.add(resume)
     await db.commit()
     await db.refresh(resume)
+    await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
     return resume
