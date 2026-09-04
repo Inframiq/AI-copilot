@@ -873,11 +873,21 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
 
     mock_session.add = MagicMock(side_effect=fake_add)
 
+    # spend_credits already deducted 10 for this run before the background
+    # job started — the pipeline failure below must credit it back.
+    sub = Subscription(
+        id=uuid.uuid4(), user_id=resume.user_id, plan="premium", status="active",
+        credits_remaining=590, credits_allotment=600, current_period_end=None,
+    )
+    session_result = MagicMock()
+    session_result.scalar_one_or_none.side_effect = lambda: created_session
+    sub_result = MagicMock()
+    sub_result.scalar_one_or_none.return_value = sub
+
     bg_session = MagicMock()
-    bg_result = MagicMock()
-    bg_result.scalar_one_or_none.side_effect = lambda: created_session
-    bg_session.execute = AsyncMock(return_value=bg_result)
+    bg_session.execute = AsyncMock(side_effect=[session_result, sub_result])
     bg_session.commit = AsyncMock()
+    bg_session.flush = AsyncMock()
 
     class _FakeSessionContextManager:
         async def __aenter__(self):
@@ -901,6 +911,7 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
                 )
         assert r.status_code == 202
         assert created_session.status == "failed"
+        assert sub.credits_remaining == 600  # 590 + the 10-credit tailor cost refunded
     finally:
         app.dependency_overrides.pop(get_db, None)
 

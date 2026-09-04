@@ -11,7 +11,7 @@ from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.core.usage import record_ai_usage
-from app.core.credits import spend_credits
+from app.core.credits import spend_credits, refund_credits
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
@@ -165,7 +165,11 @@ async def _run_tailoring_background(
             row = row_result.scalar_one_or_none()
             if row:
                 row.status = "failed"
-                await session_db.commit()
+            # spend_credits already charged for this run before the background
+            # job started — give it back since the pipeline never delivered a
+            # tailored resume.
+            await refund_credits(session_db, user_id, "tailor")
+            await session_db.commit()
             return
 
         row_result = await session_db.execute(

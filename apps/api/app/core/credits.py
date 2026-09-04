@@ -135,6 +135,20 @@ async def spend_credits(db: AsyncSession, user_id, action: str) -> Subscription:
     return sub
 
 
+async def refund_credits(db: AsyncSession, user_id, action: str) -> None:
+    """Credit back `action`'s cost after spend_credits already charged it up
+    front but the work it paid for failed server-side afterward (e.g. the
+    tailoring background job erroring out after the request already
+    returned 202). Capped at credits_allotment so repeated refunds can't
+    drift a balance above the plan's actual grant."""
+    cost = CREDIT_COSTS.get(action, 0)
+    if cost <= 0 or action not in ENFORCED_ACTIONS:
+        return
+    sub = await resolve_subscription(db, user_id)
+    sub.credits_remaining = min(sub.credits_remaining + cost, sub.credits_allotment)
+    await db.flush()
+
+
 def subscription_public(sub: Subscription) -> dict:
     """Shape returned by GET /me/subscription."""
     return {
