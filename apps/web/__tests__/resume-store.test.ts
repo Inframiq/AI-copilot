@@ -133,6 +133,7 @@ describe("useResumeStore", () => {
     expect(state.templateId).toBe("ats_clean");
     expect(state.isDirty).toBe(false);
     expect(state.pdfSignedUrl).toBeNull();
+    expect(state.previewOpen).toBe(false);
   });
 
   it("setTemplateId updates templateId and sets isDirty", () => {
@@ -226,6 +227,25 @@ describe("useResumeStore", () => {
     await useResumeStore.getState().saveNow();
     expect(useResumeStore.getState().saveError).toBeNull();
     expect(useResumeStore.getState().isDirty).toBe(false);
+  });
+
+  describe("preview pane state", () => {
+    it("defaults closed", () => {
+      expect(useResumeStore.getState().previewOpen).toBe(false);
+    });
+
+    it("setPreviewOpen toggles it", () => {
+      useResumeStore.getState().setPreviewOpen(true);
+      expect(useResumeStore.getState().previewOpen).toBe(true);
+      useResumeStore.getState().setPreviewOpen(false);
+      expect(useResumeStore.getState().previewOpen).toBe(false);
+    });
+
+    it("setResume closes it — a newly-loaded resume starts with the pane closed until requested", () => {
+      useResumeStore.getState().setPreviewOpen(true);
+      useResumeStore.getState().setResume("resume-123", SAMPLE_CONTENT, "ats_clean");
+      expect(useResumeStore.getState().previewOpen).toBe(false);
+    });
   });
 
   describe("photo modal state", () => {

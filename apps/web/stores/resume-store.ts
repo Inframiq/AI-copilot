@@ -20,6 +20,14 @@ interface ResumeState {
    * successful save — surfaced in the UI so a failed save is never silent. */
   saveError: string | null;
   pdfSignedUrl: string | null;
+  /** Whether the split preview pane is showing. Starts closed — an empty
+   *  "no preview yet" pane eats half the screen for nothing before the user
+   *  has asked for one. Opened by the studio header's "Preview" button, the
+   *  effect that finds an already-generated PDF on load, and any explicit
+   *  "preview" action buried in the editor (e.g. BulletReviewPanel's
+   *  Preview/Regenerate Preview) so a preview request always lands
+   *  somewhere visible. */
+  previewOpen: boolean;
   /** Open state of <PhotoRequirementModal>, shared between the studio page
    *  (auto-trigger on template change) and EditorPanel ("Change photo"). */
   photoModalOpen: boolean;
@@ -39,6 +47,7 @@ interface ResumeState {
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setPdfSignedUrl: (url: string | null) => void;
+  setPreviewOpen: (open: boolean) => void;
   setPhotoModal: (open: boolean, revertTo?: string | null) => void;
   resetStore: () => void;
   /** Bypasses the debounce and persists immediately — for callers that need
@@ -61,6 +70,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   isSaving: false,
   saveError: null,
   pdfSignedUrl: null,
+  previewOpen: false,
   photoModalOpen: false,
   photoModalRevertTo: null,
   _saveTimer: null,
@@ -76,6 +86,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       isSaving: false,
       saveError: null,
       pdfSignedUrl: null,
+      previewOpen: false,
     }),
 
   updateContent: (partial) => {
@@ -100,6 +111,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
+  setPreviewOpen: (open) => set({ previewOpen: open }),
+
   setPhotoModal: (open, revertTo = null) =>
     set({ photoModalOpen: open, photoModalRevertTo: open ? revertTo : null }),
 
@@ -116,6 +129,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       isSaving: false,
       saveError: null,
       pdfSignedUrl: null,
+      previewOpen: false,
       photoModalOpen: false,
       photoModalRevertTo: null,
       _saveTimer: null,

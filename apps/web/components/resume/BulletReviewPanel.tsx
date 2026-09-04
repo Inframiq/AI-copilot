@@ -210,6 +210,10 @@ export function BulletReviewPanel() {
 
   async function handleGeneratePreview() {
     if (!resumeId) return;
+    // The split preview pane is hidden until requested — this button is a
+    // preview request, so reveal it now rather than rendering into a pane
+    // the user can't see.
+    useResumeStore.getState().setPreviewOpen(true);
     setIsGenerating(true);
     setGenerateError(null);
     try {

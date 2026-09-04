@@ -50,32 +50,13 @@ describe("EditorPanel", () => {
     expect(screen.getByText("Loading resume…")).toBeInTheDocument();
   });
 
-  it("renders the editor once content is loaded, defaulting to the Template tab", () => {
+  it("renders the editor once content is loaded, defaulting to the Contact tab", () => {
+    // Template switching lives in the studio header now (a single control,
+    // not duplicated as a tab here) — the editor opens straight on content.
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     render(<EditorPanel />);
     expect(screen.getByText("Content Editor")).toBeInTheDocument();
-    expect(screen.getByText(/Choose the layout/)).toBeInTheDocument();
-  });
-
-  it("shows the full template grid on the sidebar-entry path (no JD context)", async () => {
-    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    render(<EditorPanel />);
-    await userEvent.click(screen.getByRole("tab", { name: "template" }));
-    expect(screen.getByText("ATS Clean")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-  });
-
-  it("shows a compact template dropdown instead of the grid when arriving from JD Analyzer", async () => {
-    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    useTailoringStore.getState().setJd("jd-1", "Some job description text");
-    render(<EditorPanel />);
-
-    // Tailoring mode starts collapsed — expand to reach the tabs.
-    await userEvent.click(screen.getByText("Expand to edit"));
-    await userEvent.click(screen.getByRole("tab", { name: "template" }));
-
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
-    expect(screen.queryByText("ATS Clean")).not.toBeInTheDocument();
+    expect(screen.getByText("Full Name")).toBeInTheDocument();
   });
 
   it("shows a collapsible Job Description section on the JD-analyzer path, hidden on the sidebar-entry path", async () => {

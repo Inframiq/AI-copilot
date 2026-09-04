@@ -5,7 +5,6 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ArrowSquareOut, ArrowsClockwise, FileText, SpinnerGap } from "@phosphor-icons/react";
-import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 
 // Hides the embedded PDF viewer's own toolbar (its download/print bar) so
 // the header's "Download PDF" stays the one place to actually download —
@@ -35,7 +34,6 @@ export function PreviewPanel() {
   const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const isDirty = useResumeStore((s) => s.isDirty);
-  const setTemplateId = useResumeStore((s) => s.setTemplateId);
   const setSpacing = useResumeStore((s) => s.setSpacing);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -52,22 +50,6 @@ export function PreviewPanel() {
   const { sessionId, pendingContent, generatePreview } = useTailoringStore();
   const isTailoringMode = pendingContent !== null;
   const router = useRouter();
-
-  // Switch template and immediately re-render the preview if one exists.
-  async function handleTemplateChange(id: string) {
-    setTemplateId(id);
-    if (!resumeId || !pdfSignedUrl) return; // no preview yet — user must click Generate PDF
-    setIsGenerating(true);
-    setGenError(null);
-    try {
-      const { signed_url } = await apiClient.generatePdf(resumeId, id, undefined, lineSpacing, paragraphSpacing);
-      setPdfSignedUrl(signed_url);
-    } catch (err) {
-      setGenError(err instanceof Error ? err.message : "Re-render failed");
-    } finally {
-      setIsGenerating(false);
-    }
-  }
 
   function handleSpacingChange(nextLineSpacing: number, nextParagraphSpacing: number) {
     setSpacing(nextLineSpacing, nextParagraphSpacing);
@@ -90,6 +72,20 @@ export function PreviewPanel() {
     }
   }
 
+  // This panel only mounts once the studio page's "Preview" toggle opens the
+  // split pane, so mounting IS "the user just asked to see a preview" —
+  // render one immediately instead of making them click "Refresh preview" a
+  // second time. Skipped when a preview already exists (e.g. the resume had
+  // one from a previous session — the studio page opens the pane with it
+  // already loaded) and in tailoring mode, where BulletReviewPanel owns the
+  // first render.
+  useEffect(() => {
+    if (!isTailoringMode && resumeId && !pdfSignedUrl) {
+      handleGeneratePdf();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Tailoring mode's first preview is owned by BulletReviewPanel (it needs
   // the merged accept/reject/humanize state, not just the saved resume), but
   // once that preview exists, re-rendering it for a spacing change only
@@ -111,41 +107,7 @@ export function PreviewPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Controls Bar */}
-      <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/20 flex-shrink-0 bg-surface-container-lowest flex-wrap gap-sm">
-        {/* Template Switcher — dropdown in tailoring mode, pills otherwise */}
-        {isTailoringMode ? (
-          <div className="flex items-center gap-sm">
-            <span className="text-label-sm text-on-surface-variant">Template:</span>
-            <select
-              value={templateId}
-              onChange={(e) => handleTemplateChange(e.target.value)}
-              disabled={isGenerating}
-              className="px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {RESUME_TEMPLATES.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="flex items-center gap-xs flex-wrap">
-            {RESUME_TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => handleTemplateChange(t.id)}
-                disabled={isGenerating}
-                className={`px-sm py-xs rounded-lg text-label-sm transition-colors disabled:opacity-60 ${
-                  templateId === t.id
-                    ? "bg-secondary-container text-on-secondary-container font-bold"
-                    : "text-on-surface-variant hover:bg-surface-container-low"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-
+      <div className="flex items-center px-lg py-md border-b border-outline-variant/20 flex-shrink-0 bg-surface-container-lowest flex-wrap gap-sm">
         {/* Spacing controls — only relevant once a preview actually exists;
             before that there's nothing rendered yet for them to affect.
             Shown in both modes (previously hidden whenever isTailoringMode
@@ -214,7 +176,7 @@ export function PreviewPanel() {
         )}
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-sm ml-auto">
           {isDirty && (
             <span className="text-label-sm text-on-surface-variant italic">
               Saving…

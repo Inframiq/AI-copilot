@@ -5,7 +5,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
-import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
+import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { sameCompany } from "@/lib/career-profile-client";
 import { CaretDown, CaretRight, CheckCircle, FileText, Target, Trash, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
@@ -30,7 +30,6 @@ export function EditorPanel() {
   const updateContent = useResumeStore((s) => s.updateContent);
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
-  const setTemplateId = useResumeStore((s) => s.setTemplateId);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
 
   const {
@@ -135,9 +134,9 @@ export function EditorPanel() {
       </button>
 
       {/* Content editor tabs — hidden when collapsed in tailoring mode, always visible otherwise */}
-      {(!isTailoringMode || editorOpen) && <Tabs.Root defaultValue="template">
+      {(!isTailoringMode || editorOpen) && <Tabs.Root defaultValue="contact">
         <Tabs.List className="flex flex-wrap gap-xs mb-lg p-xs bg-surface-container rounded-xl">
-          {(["template", "contact", "summary", "experience", "education", "skills", "languages", "certifications"] as const).map((tab) => (
+          {(["contact", "summary", "experience", "education", "skills", "languages", "certifications"] as const).map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
@@ -149,72 +148,6 @@ export function EditorPanel() {
             </Tabs.Trigger>
           ))}
         </Tabs.List>
-
-        {/* Template Tab — a compact dropdown when arriving from JD Analyzer
-            (isTailoringMode), since the full visual grid competes for
-            attention with the tailoring form that's the actual point of
-            landing here. Sidebar-entry Studio usage keeps the full grid. */}
-        <Tabs.Content value="template" className="flex flex-col gap-md">
-          <p className="text-body-sm text-on-surface-variant">
-            Choose the layout used for your live preview and PDF export. Switching updates both immediately.
-          </p>
-          {isTailoringMode ? (
-            <div className="flex items-center gap-md">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/resume-templates/${templateId}.png`}
-                alt="Selected template preview"
-                className="w-16 h-auto rounded-lg border border-outline-variant/30 shrink-0"
-                style={{ aspectRatio: "834 / 1179" }}
-              />
-              <select
-                value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                className="flex-1 px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                {RESUME_TEMPLATES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label} — {t.description}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-md">
-              {RESUME_TEMPLATES.map((t) => {
-                const isSelected = templateId === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setTemplateId(t.id)}
-                    className={`text-left rounded-xl border-2 shadow-sm transition-all overflow-hidden flex flex-col ${
-                      isSelected
-                        ? "border-primary ring-2 ring-primary/30"
-                        : "border-outline-variant/30 bg-surface hover:border-primary/40"
-                    }`}
-                  >
-                    <div className="relative bg-surface-container-high" style={{ aspectRatio: "834 / 1179" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/resume-templates/${t.id}.png`}
-                        alt={`${t.label} template preview`}
-                        className="w-full h-full object-cover object-top"
-                        loading="lazy"
-                      />
-                      {isSelected && (
-                        <div className="absolute top-xs right-xs w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-md">
-                          <CheckCircle size={16} weight="fill" className="text-on-primary" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-sm bg-surface">
-                      <span className="text-label-sm font-bold text-on-surface block">{t.label}</span>
-                      <p className="text-caption text-on-surface-variant leading-tight">{t.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Tabs.Content>
 
         {/* Contact Tab */}
         <Tabs.Content value="contact" className="flex flex-col gap-md">

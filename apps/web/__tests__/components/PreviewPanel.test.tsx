@@ -33,6 +33,12 @@ describe("PreviewPanel", () => {
     useTailoringStore.getState().resetStore();
     pushMock.mockClear();
     vi.mocked(apiClient.generatePdf).mockReset();
+    // Default so mounting with a resume (which now auto-renders a preview —
+    // see next test) always has something to resolve to; individual tests
+    // override this when the returned URL matters.
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/resume.pdf",
+    });
   });
 
   it("shows the empty state when no PDF has been generated", () => {
@@ -41,19 +47,15 @@ describe("PreviewPanel", () => {
     expect(screen.queryByTitle("Resume Preview")).not.toBeInTheDocument();
   });
 
-  it("Generate PDF is disabled until a resume is loaded", () => {
+  it("Refresh preview is disabled until a resume is loaded", () => {
     render(<PreviewPanel />);
     expect(screen.getByText("Refresh preview").closest("button")).toBeDisabled();
   });
 
-  it("clicking Generate PDF calls the API and renders the iframe on success", async () => {
+  it("auto-renders a preview once a resume is loaded — this panel only mounts when Preview is opened, so opening it should show something immediately", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(apiClient.generatePdf).mockResolvedValue({
-      signed_url: "https://example.com/resume.pdf",
-    });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Refresh preview"));
 
     await waitFor(() => {
       expect(screen.getByTitle("Resume Preview")).toHaveAttribute(
@@ -62,6 +64,28 @@ describe("PreviewPanel", () => {
       );
     });
     expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean", undefined, 1.25, 12);
+  });
+
+  it("does not auto-render in tailoring mode — BulletReviewPanel owns that first render", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    act(() => {
+      useTailoringStore.setState({ pendingContent: SAMPLE_CONTENT, bulletDecisions: {}, suggestedSkills: [] });
+    });
+    render(<PreviewPanel />);
+    expect(apiClient.generatePdf).not.toHaveBeenCalled();
+  });
+
+  it("does not re-fetch when a preview already exists on mount (e.g. opened with one already loaded)", () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    act(() => {
+      useResumeStore.getState().setPdfSignedUrl("https://example.com/already-loaded.pdf");
+    });
+    render(<PreviewPanel />);
+    expect(apiClient.generatePdf).not.toHaveBeenCalled();
+    expect(screen.getByTitle("Resume Preview")).toHaveAttribute(
+      "src",
+      "https://example.com/already-loaded.pdf#toolbar=0"
+    );
   });
 
   it("shows the Interview Prep button only when a tailoring session exists", () => {
@@ -82,20 +106,10 @@ describe("PreviewPanel", () => {
     expect(pushMock).toHaveBeenCalledWith("/interview/session-42");
   });
 
-  it("switches templates on click", async () => {
-    render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("ATS Modern"));
-    expect(useResumeStore.getState().templateId).toBe("ats_modern");
-  });
-
   it("adjusting spacing after a PDF exists marks it stale and relabels the button Update preview", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(apiClient.generatePdf).mockResolvedValue({
-      signed_url: "https://example.com/resume.pdf",
-    });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "1.5" } });
@@ -106,12 +120,8 @@ describe("PreviewPanel", () => {
 
   it("Update preview sends the updated spacing values and clears the stale state", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(apiClient.generatePdf).mockResolvedValue({
-      signed_url: "https://example.com/resume.pdf",
-    });
 
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Paragraph spacing"), { target: { value: "20" } });
@@ -125,7 +135,6 @@ describe("PreviewPanel", () => {
   });
 
   it("hides spacing controls until a preview actually exists, in normal mode", () => {
-    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     render(<PreviewPanel />);
     expect(screen.queryByLabelText("Line spacing")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Paragraph spacing")).not.toBeInTheDocument();
@@ -177,9 +186,7 @@ describe("PreviewPanel", () => {
 
   it("shows the matching preset label when spacing matches one, and Custom otherwise", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     // Default (1.25, 12) matches none of the three presets exactly.
@@ -193,9 +200,7 @@ describe("PreviewPanel", () => {
 
   it("picking a spacing preset marks the preview stale, same as a manual slider change", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
-    vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/resume.pdf" });
     render(<PreviewPanel />);
-    await userEvent.click(screen.getByText("Refresh preview"));
     await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Spacing"), { target: { value: "Spacious" } });
