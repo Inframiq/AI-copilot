@@ -12,9 +12,19 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.models import Subscription, utcnow
 
 logger = logging.getLogger("app")
+
+
+def _is_unlimited_credit_email(email: str | None) -> bool:
+    """True for QA/test accounts named in UNLIMITED_CREDIT_EMAILS — exempt
+    from all credit metering so they never hit a 402 or spend a balance."""
+    if not email:
+        return False
+    allowlist = {e.strip().lower() for e in settings.unlimited_credit_emails.split(",") if e.strip()}
+    return email.strip().lower() in allowlist
 
 # Credits charged per user-initiated action. 0 = not metered.
 # Sized so the priciest realistic run still clears margin: ~$0.028 per
@@ -105,19 +115,20 @@ async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:
     return sub
 
 
-async def spend_credits(db: AsyncSession, user_id, action: str) -> Subscription:
+async def spend_credits(db: AsyncSession, user_id, action: str, email: str | None = None) -> Subscription:
     """Deduct `action`'s cost from the user's balance, or raise 402.
 
-    No deduction for un-metered actions (cost 0) or actions not in
-    ENFORCED_ACTIONS — but the subscription row is still resolved/created so
-    a first metered call always has a balance to read. Not
+    No deduction for un-metered actions (cost 0), actions not in
+    ENFORCED_ACTIONS, or an email on the UNLIMITED_CREDIT_EMAILS allowlist
+    (QA/test accounts) — but the subscription row is still resolved/created
+    so a first metered call always has a balance to read. Not
     `SELECT ... FOR UPDATE`: the endpoints are rate-limited and the UI
     disables the trigger while a call is in flight, so a double-spend race
     is negligible at this scale.
     """
     sub = await resolve_subscription(db, user_id)
     cost = CREDIT_COSTS.get(action, 0)
-    if cost <= 0 or action not in ENFORCED_ACTIONS:
+    if cost <= 0 or action not in ENFORCED_ACTIONS or _is_unlimited_credit_email(email):
         return sub
 
     if sub.status != "active":
@@ -135,14 +146,16 @@ async def spend_credits(db: AsyncSession, user_id, action: str) -> Subscription:
     return sub
 
 
-async def refund_credits(db: AsyncSession, user_id, action: str) -> None:
+async def refund_credits(db: AsyncSession, user_id, action: str, email: str | None = None) -> None:
     """Credit back `action`'s cost after spend_credits already charged it up
     front but the work it paid for failed server-side afterward (e.g. the
     tailoring background job erroring out after the request already
     returned 202). Capped at credits_allotment so repeated refunds can't
-    drift a balance above the plan's actual grant."""
+    drift a balance above the plan's actual grant. No-op for an
+    UNLIMITED_CREDIT_EMAILS account — spend_credits never deducted anything
+    for it, so there's nothing to give back."""
     cost = CREDIT_COSTS.get(action, 0)
-    if cost <= 0 or action not in ENFORCED_ACTIONS:
+    if cost <= 0 or action not in ENFORCED_ACTIONS or _is_unlimited_credit_email(email):
         return
     sub = await resolve_subscription(db, user_id)
     sub.credits_remaining = min(sub.credits_remaining + cost, sub.credits_allotment)

@@ -7,9 +7,10 @@ from fastapi import HTTPException
 from unittest.mock import AsyncMock, MagicMock
 
 from app.core.credits import (
-    resolve_subscription, spend_credits, subscription_public,
+    resolve_subscription, spend_credits, refund_credits, subscription_public,
     CREDIT_COSTS, PLAN_CREDITS, BILLING_PERIOD,
 )
+from app.core.config import settings
 from app.db.models import Subscription, utcnow
 
 USER = uuid.uuid4()
@@ -107,6 +108,47 @@ async def test_spend_is_a_noop_for_unmetered_actions():
     await spend_credits(db, USER, "analyze")        # cost 0
     await spend_credits(db, USER, "cover_letter")   # priced but not enforced yet
     assert existing.credits_remaining == 1
+
+
+@pytest.mark.asyncio
+async def test_spend_is_a_noop_for_unlimited_credit_email(monkeypatch):
+    monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com, Other@Example.com")
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=0, credits_allotment=50, current_period_end=None)
+    db = _db(existing_sub=existing)
+    # Would otherwise 402 — email match (case-insensitive) bypasses metering entirely.
+    await spend_credits(db, USER, "tailor", email="QA@example.com")
+    assert existing.credits_remaining == 0  # unchanged, no deduction
+
+
+@pytest.mark.asyncio
+async def test_spend_still_enforced_for_email_not_on_the_allowlist(monkeypatch):
+    monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com")
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=4, credits_allotment=50, current_period_end=None)
+    db = _db(existing_sub=existing)
+    with pytest.raises(HTTPException) as ei:
+        await spend_credits(db, USER, "tailor", email="someone-else@example.com")
+    assert ei.value.status_code == 402
+
+
+@pytest.mark.asyncio
+async def test_refund_is_a_noop_for_unlimited_credit_email(monkeypatch):
+    monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com")
+    existing = Subscription(user_id=USER, plan="premium", status="active",
+                            credits_remaining=590, credits_allotment=600, current_period_end=None)
+    db = _db(existing_sub=existing)
+    await refund_credits(db, USER, "tailor", email="qa@example.com")
+    assert existing.credits_remaining == 590  # nothing was ever deducted, so nothing to add back
+
+
+@pytest.mark.asyncio
+async def test_refund_caps_at_allotment():
+    existing = Subscription(user_id=USER, plan="premium", status="active",
+                            credits_remaining=595, credits_allotment=600, current_period_end=None)
+    db = _db(existing_sub=existing)
+    await refund_credits(db, USER, "tailor")  # tailor costs 10 — would overshoot to 605
+    assert existing.credits_remaining == 600
 
 
 def test_subscription_public_shape():

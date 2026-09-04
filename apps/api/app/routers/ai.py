@@ -131,6 +131,7 @@ async def _run_tailoring_background(
     company_name: str | None,
     priority_skills: list[str],
     cached_jd_analysis: JDAnalysis | None,
+    user_email: str | None = None,
 ) -> None:
     """Runs the AI tailoring pipeline off the request path.
 
@@ -168,7 +169,7 @@ async def _run_tailoring_background(
             # spend_credits already charged for this run before the background
             # job started — give it back since the pipeline never delivered a
             # tailored resume.
-            await refund_credits(session_db, user_id, "tailor")
+            await refund_credits(session_db, user_id, "tailor", email=user_email)
             await session_db.commit()
             return
 
@@ -228,7 +229,7 @@ async def tailor_resume(
     # far the most expensive action; spend_credits deducts CREDIT_COSTS
     # ["tailor"] here (flushed, committed together with the session row
     # below) or raises 402. Free plan = a one-time grant.
-    await spend_credits(db, uid, "tailor")
+    await spend_credits(db, uid, "tailor", email=user.get("email"))
 
     provider = get_ai_provider()
 
@@ -265,6 +266,7 @@ async def tailor_resume(
         body.company_name,
         body.priority_skills,
         cached_for_tailor,
+        user.get("email"),
     )
 
     return TailorStartOut(session_id=session.id, status="pending")
