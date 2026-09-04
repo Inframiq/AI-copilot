@@ -48,7 +48,7 @@ async def test_run_tailoring_pipeline_does_not_generate_prep_questions():
     async def fake_structured(system, user, schema, **kw):
         seen_schemas.append(schema)
         return {
-            "JDAnalysis": _jd_analysis(exact_technical_tools=["Python"]),
+            "_JDAnalysisWire": _jd_analysis(exact_technical_tools=["Python"]),
             "MappingPlan": MappingPlan(
                 mapping_plan=[BulletMapping(
                     original_bullet_id="exp0_b0", original_text="Used Python",

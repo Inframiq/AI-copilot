@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     run_tailoring_pipeline,
     JDAnalysis,
+    _JDAnalysisWire,
     MappingPlan,
     BulletMapping,
     WriterOutput,
@@ -44,7 +45,7 @@ async def test_priority_skills_reach_agent2_payload():
         if schema is MappingPlan:
             captured_user_msg["value"] = user
             return MappingPlan(mapping_plan=[], plausible_skills_to_add=[])
-        if schema is JDAnalysis:
+        if schema is _JDAnalysisWire:
             return JDAnalysis(
                 exact_technical_tools=["Python"],
                 methodologies_and_frameworks=[],
@@ -75,7 +76,7 @@ async def test_suggested_skills_always_includes_priority_skills_even_if_agent2_o
     a priority skill (prompt-following failure), the pipeline's returned
     suggested_skills must still contain it."""
     responses = {
-        JDAnalysis: JDAnalysis(
+        _JDAnalysisWire: JDAnalysis(
             exact_technical_tools=["Python"],
             methodologies_and_frameworks=[],
             domain_expertise_themes=[],
@@ -121,7 +122,7 @@ async def test_no_priority_skills_falls_back_to_agent2_own_suggestions():
     """When the user picks nothing, behavior is unchanged from before this
     feature existed — suggested_skills is exactly Agent 2's own pick."""
     responses = {
-        JDAnalysis: JDAnalysis(
+        _JDAnalysisWire: JDAnalysis(
             exact_technical_tools=["Python"],
             methodologies_and_frameworks=[],
             domain_expertise_themes=[],

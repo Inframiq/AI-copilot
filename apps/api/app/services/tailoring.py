@@ -77,6 +77,30 @@ class JDAnalysis(BaseModel):
     importance: dict[str, str] = {}  # {term_lowercased: "high"|"medium"|"low"}; "job title" key for the title signal
 
 
+class _TermImportance(BaseModel):
+    """One {term, level} pair. OpenAI's Structured Outputs strict mode
+    rejects an open-ended dict[str, str] (arbitrary JD-term keys) — see
+    _JDAnalysisWire below — so Agent 1's raw wire schema carries a list of
+    these instead; _agent1_parse_jd folds the list into JDAnalysis.importance's
+    plain dict for every other caller."""
+    term: str
+    level: str
+
+
+class _JDAnalysisWire(BaseModel):
+    """Agent 1's actual LLM response schema — identical to JDAnalysis except
+    importance is a list, not a dict (see _TermImportance)."""
+    exact_technical_tools: list[str]
+    methodologies_and_frameworks: list[str]
+    domain_expertise_themes: list[str]
+    seniority_indicators: list[str]
+    ats_filter_phrases: list[str]
+    core_responsibilities: list[str] = []
+    target_job_titles: list[str] = []
+    nice_to_have_skills: list[str] = []
+    importance: list[_TermImportance] = []
+
+
 class BulletMapping(BaseModel):
     """One entry in the mapping plan produced by Agent 2.
 
@@ -386,7 +410,7 @@ low = "nice to have", peripheral, or generic. Keys are the term verbatim \
   "core_responsibilities": ["string"],
   "target_job_titles": ["string"],
   "nice_to_have_skills": ["string"],
-  "importance": {"term": "high|medium|low"}
+  "importance": [{"term": "string", "level": "high|medium|low"}]
 }
 </output_schema>"""
 
@@ -406,10 +430,19 @@ async def _agent1_parse_jd(
             f"<company_intelligence>\n{intel_block}\n</company_intelligence>\n\n"
             f"<job_description>\n{jd_text}\n</job_description>"
         )
-    result = await provider.complete_structured(
-        _AGENT1_SYSTEM, user_msg, JDAnalysis, model_tier="fast",
+    wire = await provider.complete_structured(
+        _AGENT1_SYSTEM, user_msg, _JDAnalysisWire, model_tier="fast",
         max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="agent1_parse_jd",
     )
+    # wire.importance is normally a list[_TermImportance] (see _JDAnalysisWire);
+    # tolerate a plain dict too since test doubles sometimes hand back a
+    # JDAnalysis directly regardless of the requested schema.
+    raw_importance = wire.importance
+    importance = (
+        raw_importance if isinstance(raw_importance, dict)
+        else {i.term: i.level for i in raw_importance}
+    )
+    result = JDAnalysis(**wire.model_dump(exclude={"importance"}), importance=importance)
     return _backfill_importance(result)
 
 

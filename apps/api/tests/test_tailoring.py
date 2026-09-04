@@ -6,7 +6,7 @@ from app.services.tailoring import (
     InterviewQuestionData, InterviewQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
-    JDAnalysis, MappingPlan, BulletMapping,
+    JDAnalysis, _JDAnalysisWire, MappingPlan, BulletMapping,
     WriterOutput, RewrittenBullet,
     _build_agent3_system,
     _sanitize_skill_list, _looks_like_a_skill, _AGENT2_SYSTEM,
@@ -343,7 +343,7 @@ def make_semantic_provider(jd_analysis, verdicts: dict[str, str]):
     provider = MagicMock()
 
     async def fake_complete_structured(system, user, schema, **kwargs):
-        if schema is JDAnalysis:
+        if schema is _JDAnalysisWire:
             return jd_analysis
         if schema is SemanticMatchResult:
             return SemanticMatchResult(
@@ -446,7 +446,7 @@ async def test_analyze_jd_match_survives_semantic_verifier_failure():
     provider = MagicMock()
 
     async def fake_complete_structured(system, user, schema, **kwargs):
-        if schema is JDAnalysis:
+        if schema is _JDAnalysisWire:
             return jd_analysis
         raise RuntimeError("model exploded")
 
@@ -630,7 +630,7 @@ async def test_verify_semantic_presence_requests_fast_tier():
 @pytest.mark.asyncio
 async def test_run_tailoring_pipeline_returns_result():
     responses = {
-        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(
             mapping_plan=[
                 BulletMapping(
@@ -670,7 +670,7 @@ async def test_run_tailoring_pipeline_scores_the_tailored_resume_not_the_origina
     # The whole point of tailoring: the returned ats_score / matched / missing
     # must reflect the *rewritten* resume, not the one the user started with.
     responses = {
-        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
         MappingPlan: MappingPlan(
             mapping_plan=[
                 BulletMapping(
@@ -711,7 +711,7 @@ async def test_run_tailoring_pipeline_passes_seniority_indicators_to_agent3():
     # actually threads analysis.jd_analysis.seniority_indicators through to it.
     captured_system_prompts: dict[type, str] = {}
     responses = {
-        JDAnalysis: make_jd_analysis(
+        _JDAnalysisWire: make_jd_analysis(
             exact_technical_tools=["Python"], seniority_indicators=["lead a team of 8"],
         ),
         MappingPlan: MappingPlan(
@@ -753,7 +753,7 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
     # bullet rewrite — prep questions are a bonus, the tailored resume is
     # the point of this call.
     responses = {
-        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(
             mapping_plan=[
                 BulletMapping(
@@ -794,7 +794,7 @@ async def test_run_tailoring_pipeline_reraises_agent3_failure():
     # Unlike prep questions, Agent 3 failing IS fatal — there is no tailored
     # resume to return without it, so this must still propagate.
     responses = {
-        JDAnalysis: make_jd_analysis(exact_technical_tools=["Python"]),
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
@@ -818,7 +818,7 @@ async def test_run_tailoring_pipeline_dedupes_overlapping_skills():
     # Same dedup guarantee as the analyze-only test above, but exercised
     # through the full tailoring pipeline.
     responses = {
-        JDAnalysis: make_jd_analysis(
+        _JDAnalysisWire: make_jd_analysis(
             exact_technical_tools=["Python", "AWS"],
             ats_filter_phrases=["python"],
         ),
@@ -947,7 +947,7 @@ async def test_pipeline_emits_ats_fixes_and_bullet_importance():
     from app.services.tailoring import GapFillerOutput, GapFillBullet
 
     responses = {
-        JDAnalysis: make_jd_analysis(
+        _JDAnalysisWire: make_jd_analysis(
             exact_technical_tools=["Python", "Kubernetes"],
             core_responsibilities=["own the deploy pipeline"],
             importance={"python": "high", "kubernetes": "high",
@@ -1000,7 +1000,7 @@ async def test_pipeline_drops_gap_bullet_that_restates_existing_content():
     from app.services.tailoring import GapFillerOutput, GapFillBullet
 
     responses = {
-        JDAnalysis: make_jd_analysis(
+        _JDAnalysisWire: make_jd_analysis(
             exact_technical_tools=["Kubernetes"], importance={"kubernetes": "high"},
         ),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
@@ -1028,7 +1028,7 @@ async def test_pipeline_gap_bullets_are_always_speculative():
     from app.services.tailoring import GapFillerOutput, GapFillBullet
 
     responses = {
-        JDAnalysis: make_jd_analysis(
+        _JDAnalysisWire: make_jd_analysis(
             exact_technical_tools=["Kubernetes"], importance={"kubernetes": "high"},
         ),
         MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
