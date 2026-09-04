@@ -2,14 +2,14 @@
 import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, DownloadSimple, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
+import { CheckCircle, DownloadSimple, Eye, EyeSlash, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
-import { templateRequiresPhoto } from "@/lib/resume-templates";
+import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
 import { getCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
 
@@ -26,6 +26,11 @@ export default function StudioPage({
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
+  const setTemplateId = useResumeStore((s) => s.setTemplateId);
+  const lineSpacing = useResumeStore((s) => s.lineSpacing);
+  const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
+  const previewOpen = useResumeStore((s) => s.previewOpen);
+  const setPreviewOpen = useResumeStore((s) => s.setPreviewOpen);
   const content = useResumeStore((s) => s.content);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
   const isDirty = useResumeStore((s) => s.isDirty);
@@ -46,6 +51,7 @@ export default function StudioPage({
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isSwitchingTemplate, setIsSwitchingTemplate] = useState(false);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
@@ -106,7 +112,14 @@ export default function StudioPage({
     if (!resume || resume.id !== storeResumeId || pdfSignedUrl || !resume.pdf_url) return;
     let cancelled = false;
     apiClient.getLatestResumePdf(resume.id)
-      .then(({ signed_url }) => { if (!cancelled) setPdfSignedUrl(signed_url); })
+      .then(({ signed_url }) => {
+        if (cancelled) return;
+        setPdfSignedUrl(signed_url);
+        // There's already something to show — open the split pane straight
+        // to it instead of making the user click "Preview" for content
+        // that's already sitting in storage.
+        setPreviewOpen(true);
+      })
       .catch(() => {}); // 404 (never generated) or a transient failure — Generate PDF still works as a fallback
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,6 +198,26 @@ export default function StudioPage({
       setDeleteError(err instanceof Error ? err.message : "Failed to delete resume");
       setIsDeleting(false);
       setDeleteArmed(false);
+    }
+  }
+
+  // The one place template gets switched — was previously duplicated between
+  // a full grid tab in the editor and a pill/dropdown in the preview panel.
+  // Re-renders the preview in place if one's already showing; otherwise just
+  // records the choice (rendering happens whenever the user next asks for a
+  // preview or download).
+  async function handleTemplateChange(id: string) {
+    setTemplateId(id);
+    if (!storeResumeId || !pdfSignedUrl) return;
+    setIsSwitchingTemplate(true);
+    try {
+      const { signed_url } = await apiClient.generatePdf(storeResumeId, id, undefined, lineSpacing, paragraphSpacing);
+      setPdfSignedUrl(signed_url);
+    } catch {
+      // Best-effort re-render — the template choice itself is already saved;
+      // the next explicit preview/download retries the render.
+    } finally {
+      setIsSwitchingTemplate(false);
     }
   }
 
@@ -305,6 +338,28 @@ export default function StudioPage({
           {titleError && <span className="text-caption text-error">{titleError}</span>}
         </div>
         <div className="flex items-center gap-3">
+          <select
+            value={templateId}
+            onChange={(e) => handleTemplateChange(e.target.value)}
+            disabled={isSwitchingTemplate}
+            title="Change template"
+            className="px-3 py-2 rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer"
+          >
+            {RESUME_TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setPreviewOpen(!previewOpen)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-label-md transition-all ${
+              previewOpen
+                ? "bg-secondary-container text-on-secondary-container font-semibold"
+                : "text-on-surface-variant hover:bg-surface-container-low"
+            }`}
+          >
+            {previewOpen ? <EyeSlash size={20} /> : <Eye size={20} />}
+            {previewOpen ? "Hide Preview" : "Preview"}
+          </button>
           <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleDeleteResume}
@@ -340,23 +395,26 @@ export default function StudioPage({
         </div>
       </header>
 
-      {/* Split Workspace */}
+      {/* Workspace — full-width editor until Preview is opened, so an empty
+          "no preview yet" pane doesn't eat half the screen for a resume
+          nobody's asked to render yet. Single <PreviewPanel> instance
+          (previously mounted twice — once hidden per breakpoint — which
+          would have doubled its on-open auto-generate call). */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        {/* Left Pane: Editor */}
-        <section className="w-full lg:w-1/2 h-full overflow-y-auto bg-surface-container-lowest border-r border-outline-variant/20 relative z-10"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+        <section
+          className={`w-full h-full overflow-y-auto bg-surface-container-lowest relative z-10 ${
+            previewOpen ? "lg:w-1/2 border-r border-outline-variant/20" : ""
+          }`}
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
           <EditorPanel />
         </section>
 
-        {/* Right Pane: Live Preview */}
-        <section className="hidden lg:flex flex-col w-1/2 h-full overflow-hidden">
-          <PreviewPanel />
-        </section>
-
-        {/* Mobile: Preview below editor */}
-        <section className="lg:hidden bg-surface-container-high">
-          <PreviewPanel />
-        </section>
+        {previewOpen && (
+          <section className="w-full lg:w-1/2 h-full overflow-hidden flex flex-col bg-surface-container-high lg:bg-transparent">
+            <PreviewPanel />
+          </section>
+        )}
       </div>
 
       {/* Floating AI Assistant — only nag to tailor if there's no tailoring

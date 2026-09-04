@@ -93,6 +93,10 @@ describe("Studio resume editor page — loading an already-generated PDF on open
     await waitFor(() =>
       expect(useResumeStore.getState().pdfSignedUrl).toBe("https://signed.example/resume-1.pdf")
     );
+    // A preview already exists for this resume — open the split pane
+    // straight to it instead of requiring a "Preview" click for content
+    // that's already sitting in storage.
+    expect(useResumeStore.getState().previewOpen).toBe(true);
   });
 
   it("does not call getLatestResumePdf for a resume that has never had a PDF generated", async () => {
@@ -105,6 +109,9 @@ describe("Studio resume editor page — loading an already-generated PDF on open
     await waitFor(() => expect(useResumeStore.getState().resumeId).toBe("resume-1"));
     expect(apiClient.getLatestResumePdf).not.toHaveBeenCalled();
     expect(useResumeStore.getState().pdfSignedUrl).toBeNull();
+    // Nothing to show yet — the split preview pane stays closed until the
+    // user explicitly asks for one via the header's "Preview" button.
+    expect(useResumeStore.getState().previewOpen).toBe(false);
   });
 
   it("does not overwrite an already-loaded preview (e.g. from a just-completed AI tailoring) by re-fetching", async () => {
