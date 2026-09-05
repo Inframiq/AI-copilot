@@ -62,6 +62,10 @@ export interface Resume {
   line_spacing: number;
   /** Space in px after each bullet list / summary / plain list (0–24). */
   paragraph_spacing: number;
+  /** Key into the backend's FONT_STACKS map (see services/pdf.py). */
+  font_choice: string;
+  /** "#RRGGBB", or null to use the template's own default accent color. */
+  accent_color: string | null;
   ats_score?: number;
   // Storage path (not a signed URL) — null until this resume's PDF has been
   // generated at least once. Presence, not the raw path, is what the

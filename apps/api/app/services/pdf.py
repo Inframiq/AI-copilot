@@ -54,13 +54,19 @@ _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape
 _jinja_env.filters["highlight"] = _highlight_keywords
 
 
+_MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB — a portrait photo has no business being bigger
+
+
 def _sanitize_resume_content(resume_content: dict) -> dict:
-    """Strip contact.photo_url unless it points at the trusted Supabase Storage host.
+    """Strip contact.photo_url unless it points at the trusted Supabase Storage host,
+    and inline whatever survives as a data: URI.
 
     Some templates render photo_url into an <img src="..."> tag, which WeasyPrint
-    fetches server-side. Since resume content is fully user-controlled, an
-    unrestricted URL here is an SSRF vector (cloud metadata endpoints, internal
-    services, etc.), so only allow https URLs on our own storage host through.
+    fetches server-side via _blocked_url_fetcher — a default-deny fetcher that only
+    ever allows data: URIs (never http/https, even to our own trusted host, since a
+    render-time network fetch is itself part of the SSRF surface this function
+    guards against). So a trusted https:// URL that made it past the host check
+    below would still fail to render: it must be fetched and inlined here instead.
     """
     contact = resume_content.get("contact")
     photo_url = contact.get("photo_url") if isinstance(contact, dict) else None
@@ -70,9 +76,59 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     allowed_host = urlparse(settings.supabase_url).hostname
     parsed = urlparse(photo_url)
     if parsed.scheme != "https" or not allowed_host or parsed.hostname != allowed_host:
-        resume_content = {**resume_content, "contact": {**contact, "photo_url": None}}
+        return {**resume_content, "contact": {**contact, "photo_url": None}}
 
-    return resume_content
+    data_uri = _fetch_photo_as_data_uri(photo_url)
+    return {**resume_content, "contact": {**contact, "photo_url": data_uri}}
+
+
+def _fetch_photo_as_data_uri(photo_url: str) -> str | None:
+    """Fetch a trusted photo URL and return it as a data: URI, or None on any failure.
+
+    Runs synchronously — callers (generate_pdf/count_pdf_pages) are always invoked
+    via asyncio.to_thread, same as the WeasyPrint render itself, so this blocking
+    call doesn't tie up the event loop. A missing/oversized/non-image photo should
+    degrade to "no photo in the PDF", not fail the whole resume download.
+    """
+    import base64
+
+    import httpx
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(photo_url)
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";")[0].strip()
+            if not content_type.startswith("image/") or len(response.content) > _MAX_PHOTO_BYTES:
+                return None
+            encoded = base64.b64encode(response.content).decode("ascii")
+            return f"data:{content_type};base64,{encoded}"
+    except httpx.HTTPError:
+        return None
+
+
+# Every stack ends in a bare generic (sans-serif/serif) deliberately — the
+# render host (see Dockerfile/nixpacks.toml) installs no font packages at
+# all, so "Arial"/"Georgia" never actually resolve there. What renders today
+# is whatever fontconfig's default falls back to for the trailing generic
+# keyword. A font choice that didn't end in one of these two generics could
+# silently fail to find any face on some hosts.
+FONT_STACKS = {
+    "sans": "Arial, Helvetica, sans-serif",
+    "modern_sans": '"Helvetica Neue", Arial, sans-serif',
+    "serif": 'Georgia, "Times New Roman", serif',
+    "classic_serif": '"Times New Roman", Times, serif',
+}
+
+# Each template's current hardcoded accent hex, preserved as the default so
+# an unset accent_color (None) renders identically to before this existed.
+TEMPLATE_DEFAULT_ACCENT = {
+    "ats_clean": "#111111",
+    "ats_modern": "#5c6bc0",
+    "ats_sidebar": "#4c6178",
+    "ats_professional": "#1f5fbf",
+    "ats_minimal": "#1a1a1a",
+}
 
 
 def _derived_spacing(line_spacing: float, paragraph_spacing: int) -> dict:
@@ -133,6 +189,8 @@ def _render_html(
     template_id: str,
     line_spacing: float = 1.25,
     paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
 ) -> str:
     """Validate template_id and render resume_content to an HTML string.
 
@@ -140,7 +198,7 @@ def _render_html(
     always render from the exact same template + sanitization path.
     count_pdf_pages always uses the defaults — it measures the from-scratch
     generator's page-overflow compression loop, which doesn't know about a
-    user's per-resume spacing preference.
+    user's per-resume spacing/font/color preference.
     """
     if template_id not in ALLOWED_TEMPLATES:
         raise ValueError(
@@ -148,10 +206,20 @@ def _render_html(
         )
     resume_content = _sanitize_resume_content(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
+    if accent_color and re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color):
+        resolved_accent = accent_color
+    else:
+        resolved_accent = TEMPLATE_DEFAULT_ACCENT[template_id]
     return template.render(
         **resume_content,
         line_spacing=line_spacing,
         paragraph_spacing=paragraph_spacing,
+        # Markup: these two are fixed, server-controlled CSS fragments (a
+        # lookup into FONT_STACKS / a regex-checked hex color), never user
+        # content — autoescape would otherwise HTML-entity-encode the font
+        # stack's quotes inside the <style> block and corrupt the CSS.
+        font_family=Markup(FONT_STACKS.get(font_choice, FONT_STACKS["sans"])),
+        accent_color=Markup(resolved_accent),
         experience_groups=_group_experience_by_company(resume_content.get("experience") or []),
         **_derived_spacing(line_spacing, paragraph_spacing),
     )
@@ -162,17 +230,22 @@ def generate_pdf(
     template_id: str,
     line_spacing: float = 1.25,
     paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
 ) -> bytes:
     """Render resume_content with the named template and return PDF bytes.
 
     Args:
         resume_content: Dict with keys: contact, experience, education, skills.
-        template_id: One of "ats_clean" or "ats_modern".
+        template_id: One of ALLOWED_TEMPLATES.
         line_spacing: CSS line-height multiplier (matches Resume.line_spacing).
         paragraph_spacing: Space in px after each bullet list / summary /
             plain list (matches Resume.paragraph_spacing) — the "how much
             air is between sections" knob, distinct from line_spacing's
             "how tight are lines within a paragraph".
+        font_choice: Key into FONT_STACKS (matches Resume.font_choice).
+        accent_color: "#RRGGBB" or None for the template's own default
+            (matches Resume.accent_color).
 
     Returns:
         Raw PDF bytes (starts with b"%PDF").
@@ -182,7 +255,7 @@ def generate_pdf(
     """
     import weasyprint  # deferred so import errors surface as ImportError, not module-level
 
-    html = _render_html(resume_content, template_id, line_spacing, paragraph_spacing)
+    html = _render_html(resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color)
     return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
 
 

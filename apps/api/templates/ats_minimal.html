@@ -6,7 +6,7 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
+  body { font-family: {{ font_family }}; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
   .name { font-size: 18pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 3px; color: #1a1a1a; line-height: 1.1; }
   .contact-line { font-size: 9pt; text-align: center; color: #444; margin-bottom: 6px; }
   hr { border: none; border-top: 1.5pt solid #333; margin: 4px 0 6px; }
@@ -15,7 +15,7 @@
      (header-to-first-item) stays a small fixed value; that pairing is
      meant to stay tight regardless of the paragraph_spacing setting. */
   h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #1a1a1a; border-bottom: 1.5pt solid #1a1a1a; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
+    color: #1a1a1a; border-bottom: 1.5pt solid {{ accent_color }}; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
   p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: 9.5pt; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex

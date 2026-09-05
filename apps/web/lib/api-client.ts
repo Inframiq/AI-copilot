@@ -100,6 +100,8 @@ export const apiClient = {
     content?: ResumeContent;
     line_spacing?: number;
     paragraph_spacing?: number;
+    font_choice?: string;
+    accent_color?: string | null;
     /** When set, saves this as "the tailored resume for this JD" — the
      * backend overwrites the JD's already-linked resume (if any) instead of
      * creating a new row, so re-tailoring + saving again doesn't pile up
@@ -109,7 +111,12 @@ export const apiClient = {
 
   updateResume: (
     id: string,
-    payload: Partial<Pick<Resume, "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing">>
+    payload: Partial<
+      Pick<
+        Resume,
+        "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing" | "font_choice" | "accent_color"
+      >
+    >
   ): Promise<Resume> => request<Resume>("PATCH", `/resumes/${id}`, payload),
 
   deleteResume: (id: string): Promise<void> =>
@@ -125,13 +132,17 @@ export const apiClient = {
      * either persists it onto the resume, same as templateId, unless
      * contentOverride is also set (an unsaved preview never persists). */
     lineSpacing?: number,
-    paragraphSpacing?: number
+    paragraphSpacing?: number,
+    fontChoice?: string,
+    accentColor?: string | null
   ): Promise<{ signed_url: string }> =>
     request<{ signed_url: string }>("POST", `/resumes/${id}/pdf`, {
       template_id: templateId,
       ...(contentOverride ? { content: contentOverride } : {}),
       ...(lineSpacing !== undefined ? { line_spacing: lineSpacing } : {}),
       ...(paragraphSpacing !== undefined ? { paragraph_spacing: paragraphSpacing } : {}),
+      ...(fontChoice !== undefined ? { font_choice: fontChoice } : {}),
+      ...(accentColor !== undefined ? { accent_color: accentColor } : {}),
     }),
 
   parseResumeFile: async (

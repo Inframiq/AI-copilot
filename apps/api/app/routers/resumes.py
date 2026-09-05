@@ -130,7 +130,7 @@ _MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
 ]
 
-_VALID_TEMPLATES = {"ats_clean", "ats_modern", "ats_professional", "ats_minimal"}
+_VALID_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
 
 
 def _check_magic_bytes(data: bytes) -> None:
@@ -371,6 +371,12 @@ async def generate_resume_pdf(
         if body and body.paragraph_spacing is not None and body.paragraph_spacing != resume.paragraph_spacing:
             resume.paragraph_spacing = body.paragraph_spacing
             changed = True
+        if body and body.font_choice is not None and body.font_choice != resume.font_choice:
+            resume.font_choice = body.font_choice
+            changed = True
+        if body and body.accent_color is not None and body.accent_color != resume.accent_color:
+            resume.accent_color = body.accent_color
+            changed = True
         if changed:
             await db.commit()
     content = body.content if is_preview else resume.content
@@ -378,7 +384,13 @@ async def generate_resume_pdf(
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
     pdf_bytes = await asyncio.to_thread(
-        generate_pdf, content, template_id, resume.line_spacing, resume.paragraph_spacing
+        generate_pdf,
+        content,
+        template_id,
+        resume.line_spacing,
+        resume.paragraph_spacing,
+        resume.font_choice,
+        resume.accent_color,
     )
     # Hand the bytes straight back as a data URI so the browser can render the
     # preview immediately — the client no longer waits on a Supabase upload +

@@ -142,6 +142,56 @@ def test_generate_pdf_new_templates_work_without_optional_fields():
         assert pdf[:4] == b"%PDF"
 
 
+TEMPLATE_DEFAULT_ACCENT_LOWER = {
+    "ats_clean": "#111111",
+    "ats_modern": "#5c6bc0",
+    "ats_sidebar": "#4c6178",
+    "ats_professional": "#1f5fbf",
+    "ats_minimal": "#1a1a1a",
+}
+
+
+@pytest.mark.parametrize(
+    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_default_font_and_accent_preserve_original_look(template_id):
+    """With no font_choice/accent_color override, every template must render
+    with the exact hex it always used — a regression guard so introducing
+    customization can't shift the look of an existing saved resume."""
+    html = _render_html(SAMPLE_RESUME, template_id)
+    assert "Arial, Helvetica, sans-serif" in html
+    assert TEMPLATE_DEFAULT_ACCENT_LOWER[template_id] in html.lower()
+
+
+@pytest.mark.parametrize(
+    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_font_choice_overrides_body_font_stack(template_id):
+    html = _render_html(SAMPLE_RESUME, template_id, font_choice="serif")
+    assert 'Georgia, "Times New Roman", serif' in html
+    assert "Arial, Helvetica, sans-serif" not in html
+
+
+@pytest.mark.parametrize(
+    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_accent_color_override_appears_instead_of_default(template_id):
+    """Compares against the *default* render, not a literal hex absence —
+    ats_minimal's own base text color happens to equal its default accent
+    hex (#1a1a1a is both), so asserting the old hex is gone entirely would
+    be wrong: it must still appear for unrelated body text."""
+    default_html = _render_html(SAMPLE_RESUME, template_id)
+    default_count = default_html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id])
+    html = _render_html(SAMPLE_RESUME, template_id, accent_color="#00aa55")
+    assert "#00aa55" in html
+    assert html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id]) < default_count
+
+
+def test_unknown_font_choice_falls_back_to_sans():
+    html = _render_html(SAMPLE_RESUME, "ats_clean", font_choice="not-a-real-font")
+    assert "Arial, Helvetica, sans-serif" in html
+
+
 def test_generate_pdf_invalid_template_raises():
     with pytest.raises(ValueError, match="Unknown template"):
         generate_pdf(SAMPLE_RESUME, "unknown_template")
@@ -198,20 +248,40 @@ def test_sidebar_template_omits_photo_when_absent():
     assert 'class="photo"' not in html
 
 
-def test_sidebar_template_embeds_photo_when_trusted():
+def test_sidebar_template_embeds_photo_when_trusted(httpx_mock):
+    """A trusted Supabase photo URL must be fetched and inlined as a data:
+    URI — _blocked_url_fetcher rejects http/https at render time no matter
+    how trusted the host is, so the raw URL can never reach the <img> tag."""
     trusted = "https://test-project.supabase.co"
+    photo_url = f"{trusted}/storage/v1/object/public/avatars/u/r.png"
+    png_bytes = b"\x89PNG\r\n\x1a\nfake-png-bytes"
+    httpx_mock.add_response(url=photo_url, content=png_bytes, headers={"content-type": "image/png"})
     resume = {
         **SAMPLE_RESUME,
-        "contact": {
-            **SAMPLE_RESUME["contact"],
-            "photo_url": f"{trusted}/storage/v1/object/public/avatars/u/r.png",
-        },
+        "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
     }
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = trusted
         html = _render_html(resume, "ats_sidebar")
     assert 'class="photo"' in html
-    assert "/storage/v1/object/public/avatars/u/r.png" in html
+    assert "data:image/png;base64," in html
+    assert photo_url not in html
+
+
+def test_sidebar_template_drops_photo_when_fetch_fails(httpx_mock):
+    """A trusted URL that 404s (deleted avatar, etc.) must degrade to no
+    photo in the PDF, not raise and fail the whole resume download."""
+    trusted = "https://test-project.supabase.co"
+    photo_url = f"{trusted}/storage/v1/object/public/avatars/u/r.png"
+    httpx_mock.add_response(url=photo_url, status_code=404)
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
+    }
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = trusted
+        html = _render_html(resume, "ats_sidebar")
+    assert 'class="photo"' not in html
 
 
 # ---------------------------------------------------------------------------
@@ -398,3 +468,20 @@ def test_generate_letter_pdf_with_escaped_body_still_produces_pdf():
     pdf_bytes = generate_letter_pdf(contact, "January 1, 2026", body)
 
     assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_template_allowlists_stay_in_sync():
+    """pdf.py's ALLOWED_TEMPLATES, the ResumeCreate/Update/PdfGenerateRequest
+    schema's ValidTemplateId, and resumes.py's _VALID_TEMPLATES are three
+    independent allowlists with no shared source of truth — ats_sidebar was
+    once missing from the latter two, so the template rendered fine here but
+    every API call to save or render it as a resume's template_id 422'd.
+    This pins all three to the same set so that class of drift fails loudly."""
+    from typing import get_args
+
+    from app.routers.resumes import _VALID_TEMPLATES
+    from app.services.pdf import ALLOWED_TEMPLATES
+    from app.schemas.resume import ValidTemplateId
+
+    assert set(get_args(ValidTemplateId)) == ALLOWED_TEMPLATES
+    assert _VALID_TEMPLATES == ALLOWED_TEMPLATES

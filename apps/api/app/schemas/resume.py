@@ -4,7 +4,12 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
-ValidTemplateId = Literal["ats_clean", "ats_modern", "ats_professional", "ats_minimal"]
+ValidTemplateId = Literal["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+
+FontChoice = Literal["sans", "modern_sans", "serif", "classic_serif"]
+
+# #RRGGBB only — matches the native <input type="color"> the frontend uses.
+_HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
 
 # resume.content is forwarded verbatim into "pro"-tier LLM prompts during
 # /ai/tailor (see services/tailoring.py rewrite_bullets / get_or_generate_prep_questions).
@@ -32,6 +37,10 @@ class ResumeCreate(BaseModel):
     # to "very airy" without breaking a template's layout.
     line_spacing: float = Field(default=1.25, ge=1.0, le=1.6)
     paragraph_spacing: int = Field(default=12, ge=0, le=24)
+    font_choice: FontChoice = "sans"
+    # None = template's own default accent color (see services/pdf.py
+    # TEMPLATE_DEFAULT_ACCENT).
+    accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
     # When set, this create is "save the tailored resume for this JD" —
     # see create_resume in routers/resumes.py, which overwrites the JD's
     # already-linked resume (if any) instead of creating a new row.
@@ -46,6 +55,8 @@ class ResumeUpdate(BaseModel):
     template_id: ValidTemplateId | None = None
     line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
+    font_choice: FontChoice | None = None
+    accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -56,12 +67,14 @@ class PdfGenerateRequest(BaseModel):
     # tailoring results the user hasn't accepted yet) without persisting it
     # to the resume row.
     content: dict | None = None
-    # Optional spacing overrides — like template_id, persisted onto the
-    # resume when this isn't a content-override preview (see
+    # Optional spacing/font/color overrides — like template_id, persisted
+    # onto the resume when this isn't a content-override preview (see
     # generate_resume_pdf). Omitted (None) means "use the resume's saved
     # value", not "reset to the template default".
     line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
+    font_choice: FontChoice | None = None
+    accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -74,6 +87,8 @@ class ResumeOut(BaseModel):
     template_id: str
     line_spacing: float
     paragraph_spacing: int
+    font_choice: str
+    accent_color: str | None
     pdf_url: str | None
     # Presence (not the raw storage path) is what the frontend needs — it
     # decides whether Preview can show the untouched original vs. falling

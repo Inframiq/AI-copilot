@@ -98,7 +98,15 @@ export default function StudioPage({
     // query) fetched copy would blow away that preview, including resetting
     // pdfSignedUrl to null.
     if (resume && resume.id !== storeResumeId) {
-      setResume(resume.id, resume.content, resume.template_id, resume.line_spacing, resume.paragraph_spacing);
+      setResume(
+        resume.id,
+        resume.content,
+        resume.template_id,
+        resume.line_spacing,
+        resume.paragraph_spacing,
+        resume.font_choice,
+        resume.accent_color
+      );
     }
   }, [resume, storeResumeId, setResume]);
 

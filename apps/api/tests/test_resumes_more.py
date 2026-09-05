@@ -73,6 +73,8 @@ def make_resume(**overrides):
         template_id="ats_clean",
         line_spacing=1.25,
         paragraph_spacing=12,
+        font_choice="sans",
+        accent_color=None,
         pdf_url=None,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -206,7 +208,7 @@ async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_gene
         assert resume.line_spacing == 1.5
         assert resume.paragraph_spacing == 20
         # And forwarded to the actual render call.
-        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20)
+        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20, "sans", None)
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -232,7 +234,7 @@ async def test_generate_pdf_content_override_preview_does_not_persist_spacing():
         # A content-override preview never persists — same rule template_id
         # already follows, now applied to spacing too.
         assert resume.line_spacing == 1.25
-        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.25, 12)
+        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.25, 12, "sans", None)
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -295,6 +297,8 @@ async def test_parse_upload_creates_resume():
         # DB round-trip is what fills them in.
         obj.line_spacing = created.line_spacing
         obj.paragraph_spacing = created.paragraph_spacing
+        obj.font_choice = created.font_choice
+        obj.accent_color = created.accent_color
 
     mock_session.refresh = fake_refresh
 
@@ -356,6 +360,8 @@ async def test_parse_upload_dedupes_title_on_collision():
         obj.updated_at = created.updated_at
         obj.line_spacing = created.line_spacing
         obj.paragraph_spacing = created.paragraph_spacing
+        obj.font_choice = created.font_choice
+        obj.accent_color = created.accent_color
 
     mock_session.refresh = fake_refresh
 

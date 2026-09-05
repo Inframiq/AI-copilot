@@ -63,7 +63,7 @@ describe("PreviewPanel", () => {
         "https://example.com/resume.pdf#toolbar=0"
       );
     });
-    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean", undefined, 1.25, 12);
+    expect(apiClient.generatePdf).toHaveBeenCalledWith("resume-1", "ats_clean", undefined, 1.25, 12, "sans", null);
   });
 
   it("does not auto-render in tailoring mode — BulletReviewPanel owns that first render", () => {
@@ -128,7 +128,7 @@ describe("PreviewPanel", () => {
     await userEvent.click(screen.getByText("Update preview"));
 
     await waitFor(() =>
-      expect(apiClient.generatePdf).toHaveBeenLastCalledWith("resume-1", "ats_clean", undefined, 1.25, 20)
+      expect(apiClient.generatePdf).toHaveBeenLastCalledWith("resume-1", "ats_clean", undefined, 1.25, 20, "sans", null)
     );
     expect(screen.getByText("Refresh preview")).toBeInTheDocument();
     expect(screen.queryByText("Update preview")).not.toBeInTheDocument();
@@ -179,7 +179,7 @@ describe("PreviewPanel", () => {
 
     await waitFor(() =>
       expect(apiClient.generatePdf).toHaveBeenLastCalledWith(
-        "resume-1", "ats_clean", expect.any(Object), 1.4, 12
+        "resume-1", "ats_clean", expect.any(Object), 1.4, 12, "sans", null
       )
     );
   });

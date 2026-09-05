@@ -6,14 +6,14 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; margin: 0; color: #111; }
+  body { font-family: {{ font_family }}; font-size: 10pt; line-height: {{ line_spacing }}; margin: 0; color: #111; }
   h1 { font-size: 16pt; font-weight: 700; margin: 0 0 3px; line-height: 1.1; }
   .contact { font-size: 9.5pt; color: #333; margin-bottom: 10px; }
   /* Top margin is section_gap (1.5x paragraph_spacing) — the gap between
      one section's content and the next section's header. Bottom margin
      (header-to-first-item) stays a small fixed value; that pairing is
      meant to stay tight regardless of the paragraph_spacing setting. */
-  h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid #111; margin: {{ section_gap }}px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
+  h2 { font-size: 11pt; font-weight: 700; border-bottom: 1.5pt solid {{ accent_color }}; margin: {{ section_gap }}px 0 5px; padding-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; page-break-after: avoid; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
      justify-content, float:right, and even a table cell with a

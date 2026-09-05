@@ -4,6 +4,7 @@ import type { ResumeContent } from "@career-copilot/types";
 
 const DEFAULT_LINE_SPACING = 1.25;
 const DEFAULT_PARAGRAPH_SPACING = 12;
+const DEFAULT_FONT_CHOICE = "sans";
 
 interface ResumeState {
   resumeId: string | null;
@@ -13,6 +14,10 @@ interface ResumeState {
   lineSpacing: number;
   /** Space in px after each bullet list / summary / plain list. */
   paragraphSpacing: number;
+  /** Key into the backend's FONT_STACKS map (see services/pdf.py). */
+  fontChoice: string;
+  /** "#RRGGBB", or null to use the template's own default accent color. */
+  accentColor: string | null;
   isDirty: boolean;
   /** True while the debounced auto-save's PATCH request is actually in flight. */
   isSaving: boolean;
@@ -41,11 +46,15 @@ interface ResumeState {
     content: ResumeContent,
     templateId: string,
     lineSpacing?: number,
-    paragraphSpacing?: number
+    paragraphSpacing?: number,
+    fontChoice?: string,
+    accentColor?: string | null
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
+  setFontChoice: (fontChoice: string) => void;
+  setAccentColor: (accentColor: string | null) => void;
   setPdfSignedUrl: (url: string | null) => void;
   setPreviewOpen: (open: boolean) => void;
   setPhotoModal: (open: boolean, revertTo?: string | null) => void;
@@ -66,6 +75,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   templateId: "ats_clean",
   lineSpacing: DEFAULT_LINE_SPACING,
   paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
+  fontChoice: DEFAULT_FONT_CHOICE,
+  accentColor: null,
   isDirty: false,
   isSaving: false,
   saveError: null,
@@ -75,13 +86,15 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   photoModalRevertTo: null,
   _saveTimer: null,
 
-  setResume: (id, content, templateId, lineSpacing, paragraphSpacing) =>
+  setResume: (id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor) =>
     set({
       resumeId: id,
       content,
       templateId,
       lineSpacing: lineSpacing ?? DEFAULT_LINE_SPACING,
       paragraphSpacing: paragraphSpacing ?? DEFAULT_PARAGRAPH_SPACING,
+      fontChoice: fontChoice ?? DEFAULT_FONT_CHOICE,
+      accentColor: accentColor ?? null,
       isDirty: false,
       isSaving: false,
       saveError: null,
@@ -109,6 +122,16 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     get()._triggerAutoSave();
   },
 
+  setFontChoice: (fontChoice) => {
+    set({ fontChoice, isDirty: true, saveError: null });
+    get()._triggerAutoSave();
+  },
+
+  setAccentColor: (accentColor) => {
+    set({ accentColor, isDirty: true, saveError: null });
+    get()._triggerAutoSave();
+  },
+
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
   setPreviewOpen: (open) => set({ previewOpen: open }),
@@ -125,6 +148,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       templateId: "ats_clean",
       lineSpacing: DEFAULT_LINE_SPACING,
       paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
+      fontChoice: DEFAULT_FONT_CHOICE,
+      accentColor: null,
       isDirty: false,
       isSaving: false,
       saveError: null,
@@ -153,7 +178,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     if (timer !== null) clearTimeout(timer);
     set({ _saveTimer: null });
 
-    const { resumeId, content, templateId, lineSpacing, paragraphSpacing } = get();
+    const { resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor } = get();
     if (!resumeId || !content) return;
     set({ isSaving: true });
     try {
@@ -162,6 +187,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
         template_id: templateId,
         line_spacing: lineSpacing,
         paragraph_spacing: paragraphSpacing,
+        font_choice: fontChoice,
+        accent_color: accentColor,
       });
       set({ isDirty: false, isSaving: false, saveError: null });
     } catch (err) {

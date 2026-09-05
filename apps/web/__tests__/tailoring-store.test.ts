@@ -365,7 +365,9 @@ describe("useTailoringStore", () => {
         experience: [expect.objectContaining({ bullets: ["Did stuff, tailored"] })],
       }),
       1.25,
-      12
+      12,
+      "sans",
+      null
     );
     // Nothing persisted, and the original resume is untouched.
     expect(apiClient.updateResume).not.toHaveBeenCalled();
@@ -401,7 +403,9 @@ describe("useTailoringStore", () => {
       "ats_clean",
       expect.any(Object),
       1.5,
-      20
+      20,
+      "sans",
+      null
     );
   });
 
@@ -639,6 +643,8 @@ describe("useTailoringStore", () => {
       template_id: "ats_clean",
       line_spacing: 1.25,
       paragraph_spacing: 12,
+      font_choice: "sans",
+      accent_color: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -678,6 +684,8 @@ describe("useTailoringStore", () => {
       template_id: "ats_clean",
       line_spacing: 1.25,
       paragraph_spacing: 12,
+      font_choice: "sans",
+      accent_color: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

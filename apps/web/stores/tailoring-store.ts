@@ -665,6 +665,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         mergedContent,
         resumeStoreState.lineSpacing,
         resumeStoreState.paragraphSpacing,
+        resumeStoreState.fontChoice,
+        resumeStoreState.accentColor,
       );
       set({ previewPdfUrl: signed_url, isApplying: false });
       // Also drive the Studio page's dedicated PDF Preview panel — it reads
@@ -725,6 +727,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         await apiClient.updateResume(resumeId, {
           content: mergedContent,
           template_id: resumeStore.templateId,
+          font_choice: resumeStore.fontChoice,
+          accent_color: resumeStore.accentColor,
         });
       } else {
         // jd_id links this save to the JD it was tailored for — the backend
@@ -735,6 +739,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           title: newTitle?.trim() || "Tailored Resume",
           template_id: resumeStore.templateId,
           content: mergedContent,
+          font_choice: resumeStore.fontChoice,
+          accent_color: resumeStore.accentColor,
           jd_id: jdId ?? undefined,
         });
         targetId = created.id;
@@ -745,13 +751,23 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         undefined,
         resumeStore.lineSpacing,
         resumeStore.paragraphSpacing,
+        resumeStore.fontChoice,
+        resumeStore.accentColor,
       );
       // Hydrate the resume store with the just-saved content/PDF regardless
       // of mode — for "new" this also points the store at the newly created
       // resume, which matters because whoever navigates to
       // /studio/{targetId} next skips re-hydrating (and so keeps this PDF)
       // only when the store's resumeId already matches.
-      resumeStore.setResume(targetId, mergedContent, resumeStore.templateId, resumeStore.lineSpacing, resumeStore.paragraphSpacing);
+      resumeStore.setResume(
+        targetId,
+        mergedContent,
+        resumeStore.templateId,
+        resumeStore.lineSpacing,
+        resumeStore.paragraphSpacing,
+        resumeStore.fontChoice,
+        resumeStore.accentColor
+      );
       useResumeStore.getState().setPdfSignedUrl(signed_url);
       set({
         pendingContent: null,

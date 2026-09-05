@@ -27,14 +27,40 @@ const SPACING_PRESETS = [
   { label: "Spacious", lineSpacing: 1.4, paragraphSpacing: 18 },
 ] as const;
 
+// Every stack ends in a bare generic (sans-serif/serif) deliberately — must
+// match FONT_STACKS in apps/api/app/services/pdf.py exactly, both in keys
+// and in which generic each ends with (the render host has no font packages
+// installed, so only the trailing generic keyword is guaranteed to resolve).
+const FONT_CHOICES = [
+  { value: "sans", label: "Sans" },
+  { value: "modern_sans", label: "Modern Sans" },
+  { value: "serif", label: "Serif" },
+  { value: "classic_serif", label: "Classic Serif" },
+] as const;
+
+// Mirrors TEMPLATE_DEFAULT_ACCENT in apps/api/app/services/pdf.py — only
+// used so the color picker shows the template's actual current accent
+// instead of an arbitrary color when the user hasn't overridden it yet.
+const TEMPLATE_DEFAULT_ACCENT: Record<string, string> = {
+  ats_clean: "#111111",
+  ats_modern: "#5c6bc0",
+  ats_sidebar: "#4c6178",
+  ats_professional: "#1f5fbf",
+  ats_minimal: "#1a1a1a",
+};
+
 export function PreviewPanel() {
   const resumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
   const lineSpacing = useResumeStore((s) => s.lineSpacing);
   const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
+  const fontChoice = useResumeStore((s) => s.fontChoice);
+  const accentColor = useResumeStore((s) => s.accentColor);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const isDirty = useResumeStore((s) => s.isDirty);
   const setSpacing = useResumeStore((s) => s.setSpacing);
+  const setFontChoice = useResumeStore((s) => s.setFontChoice);
+  const setAccentColor = useResumeStore((s) => s.setAccentColor);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -56,13 +82,31 @@ export function PreviewPanel() {
     if (pdfSignedUrl) setSpacingStale(true);
   }
 
+  function handleFontChange(nextFontChoice: string) {
+    setFontChoice(nextFontChoice);
+    if (pdfSignedUrl) setSpacingStale(true);
+  }
+
+  function handleAccentChange(nextAccentColor: string) {
+    setAccentColor(nextAccentColor);
+    if (pdfSignedUrl) setSpacingStale(true);
+  }
+
   // Generate preview and update the iframe.
   async function handleGeneratePdf() {
     if (!resumeId) return;
     setIsGenerating(true);
     setGenError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(resumeId, templateId, undefined, lineSpacing, paragraphSpacing);
+      const { signed_url } = await apiClient.generatePdf(
+        resumeId,
+        templateId,
+        undefined,
+        lineSpacing,
+        paragraphSpacing,
+        fontChoice,
+        accentColor
+      );
       setPdfSignedUrl(signed_url);
       setSpacingStale(false);
     } catch (err) {
@@ -171,6 +215,33 @@ export function PreviewPanel() {
                 className="w-20 accent-primary"
               />
               <span className="text-label-sm text-on-surface-variant w-9 text-right">{paragraphSpacing}px</span>
+            </div>
+            <div className="flex items-center gap-xs">
+              <label htmlFor="font-choice" className="text-label-sm text-on-surface-variant whitespace-nowrap">
+                Font
+              </label>
+              <select
+                id="font-choice"
+                value={fontChoice}
+                onChange={(e) => handleFontChange(e.target.value)}
+                className="px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer"
+              >
+                {FONT_CHOICES.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-xs">
+              <label htmlFor="accent-color" className="text-label-sm text-on-surface-variant whitespace-nowrap">
+                Accent color
+              </label>
+              <input
+                id="accent-color"
+                type="color"
+                value={accentColor ?? TEMPLATE_DEFAULT_ACCENT[templateId] ?? "#111111"}
+                onChange={(e) => handleAccentChange(e.target.value)}
+                className="w-8 h-8 rounded-md border border-outline-variant/50 cursor-pointer bg-transparent p-0"
+              />
             </div>
           </div>
         )}

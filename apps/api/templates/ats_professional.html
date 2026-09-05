@@ -6,7 +6,7 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
+  body { font-family: {{ font_family }}; font-size: 10pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
   /* No justify-content / float / right-aligned cell — .header-main takes
      flex:1 and stays in normal flow, so every piece of header TEXT is
      emitted in DOM order; only the photo (a bare <img>, no text content
@@ -16,14 +16,14 @@
   .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
   .header-main { flex: 1; }
   .photo { width: 76px; height: 76px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-  .name { font-size: 18pt; font-weight: 800; color: #1f5fbf; margin: 0 0 2px; line-height: 1.1; }
+  .name { font-size: 18pt; font-weight: 800; color: {{ accent_color }}; margin: 0 0 2px; line-height: 1.1; }
   .contact-line { font-size: 9pt; color: #333; }
   /* Top margin is section_gap (1.5x paragraph_spacing) — the gap between
      one section's content and the next section's header. Bottom margin
      (header-to-first-item) stays a small fixed value; that pairing is
      meant to stay tight regardless of the paragraph_spacing setting. */
-  h2 { font-size: 11pt; font-weight: 800; color: #1f5fbf; text-transform: uppercase; letter-spacing: 0.05em;
-    border-bottom: 1.5pt solid #1f5fbf; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
+  h2 { font-size: 11pt; font-weight: 800; color: {{ accent_color }}; text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 1.5pt solid {{ accent_color }}; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
   p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: 9.5pt; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
