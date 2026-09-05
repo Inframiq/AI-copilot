@@ -71,7 +71,7 @@
   <div class="header-main">
     <div class="name">{{ contact.name | upper }}</div>
     <div class="contact-line">
-      {{ [contact.location, contact.phone, contact.email, contact.linkedin, contact.github] | select | join(' | ') }}
+      {{ [contact.location, contact.phone | phone_link, contact.email | email_link, contact.linkedin | url_link, contact.github | url_link] | select | join(' | ') }}
     </div>
   </div>
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
@@ -112,7 +112,7 @@
   <h2>Projects</h2>
   {% for p in projects %}
   <div class="job-row"><span class="job-title">{{ p.name }}{% if p.tech_stack %}, <b>{{ p.tech_stack }}</b>{% endif %}</span>{% if p.start %} <span class="job-dates">| {{ p.start }} — {{ p.end or "Present" }}</span>{% endif %}</div>
-  {% if p.link %}<div class="edu-institution">{{ p.link }}</div>{% endif %}
+  {% if p.link %}<div class="edu-institution">{{ p.link | url_link }}</div>{% endif %}
   <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
   {% endif %}
@@ -186,7 +186,7 @@
 {% macro render_links() %}
   {% if contact.website %}
   <h2>Links</h2>
-  <div class="skills-list">{{ contact.website }}</div>
+  <div class="skills-list">{{ contact.website | url_link }}</div>
   {% endif %}
 {% endmacro %}
 

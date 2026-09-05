@@ -16,8 +16,11 @@ import pytest
 weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import (  # noqa: E402
+    _email_link,
+    _phone_link,
     _render_html,
     _render_letter_html,
+    _url_link,
     generate_letter_pdf,
     generate_pdf,
     get_signed_url,
@@ -485,3 +488,104 @@ def test_template_allowlists_stay_in_sync():
 
     assert set(get_args(ValidTemplateId)) == ALLOWED_TEMPLATES
     assert _VALID_TEMPLATES == ALLOWED_TEMPLATES
+
+
+# ---------------------------------------------------------------------------
+# Contact/project links: email/phone/LinkedIn/GitHub/website/project-link
+# fields must render as actual clickable mailto:/tel:/https:// links, not
+# plain text — previously every one of them was rendered as inert text.
+# ---------------------------------------------------------------------------
+
+
+def test_email_link_produces_mailto_anchor():
+    assert _email_link("jane@example.com") == '<a href="mailto:jane@example.com">jane@example.com</a>'
+
+
+def test_email_link_escapes_html_special_characters():
+    html = _email_link('"><script>alert(1)</script>@example.com')
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+
+
+def test_email_link_empty_renders_nothing():
+    assert _email_link("") == ""
+    assert _email_link(None) == ""
+
+
+def test_phone_link_normalizes_digits_but_displays_original_formatting():
+    html = _phone_link("(555) 123-4567")
+    assert html == '<a href="tel:5551234567">(555) 123-4567</a>'
+
+
+def test_phone_link_keeps_leading_plus_for_international_numbers():
+    html = _phone_link("+1 555-123-4567")
+    assert 'href="tel:+15551234567"' in html
+
+
+def test_phone_link_falls_back_to_plain_text_when_nothing_dialable():
+    """A phone field that's actually free text (e.g. "Available on request")
+    must not produce a dangling tel: link with an empty number."""
+    html = _phone_link("Available on request")
+    assert "<a " not in html
+    assert html == "Available on request"
+
+
+def test_url_link_prepends_https_to_a_bare_domain():
+    html = _url_link("linkedin.com/in/janedoe")
+    assert html == '<a href="https://linkedin.com/in/janedoe">linkedin.com/in/janedoe</a>'
+
+
+def test_url_link_preserves_an_already_full_url():
+    html = _url_link("https://github.com/janedoe")
+    assert html == '<a href="https://github.com/janedoe">https://github.com/janedoe</a>'
+
+
+def test_url_link_rejects_unsafe_schemes_and_falls_back_to_plain_text():
+    """A malicious/unexpected scheme pasted into a resume field must never
+    reach the rendered href — it still displays as plain text (same as any
+    other resume field), just never becomes a clickable link."""
+    html = _url_link("javascript:alert(1)")
+    assert "<a " not in html
+    assert 'href="javascript:' not in html
+    assert html == "javascript:alert(1)"
+
+
+def test_url_link_empty_renders_nothing():
+    assert _url_link("") == ""
+    assert _url_link(None) == ""
+
+
+@pytest.mark.parametrize(
+    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_contact_fields_render_as_real_links_in_every_template(template_id):
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {
+            **SAMPLE_RESUME["contact"],
+            "linkedin": "linkedin.com/in/janedoe",
+            "github": "github.com/janedoe",
+            "website": "janedoe.dev",
+        },
+    }
+    html = _render_html(resume, template_id)
+    assert 'href="mailto:jane@example.com"' in html
+    assert 'href="tel:5550100"' in html
+    assert 'href="https://linkedin.com/in/janedoe"' in html
+    assert 'href="https://github.com/janedoe"' in html
+    assert 'href="https://janedoe.dev"' in html
+
+
+@pytest.mark.parametrize(
+    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_project_link_renders_as_a_real_link(template_id):
+    html = _render_html(SAMPLE_RESUME, template_id)
+    assert 'href="https://github.com/jane/campus-marketplace"' in html
+
+
+def test_cover_letter_contact_fields_render_as_real_links():
+    contact = {"name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100", "location": "NYC"}
+    html = _render_letter_html(contact, "January 1, 2026", "Body text.")
+    assert 'href="mailto:jane@example.com"' in html
+    assert 'href="tel:5550100"' in html

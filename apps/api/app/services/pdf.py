@@ -50,8 +50,76 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
     return Markup(highlighted)
 
 
+_LINK_SCHEMES = {"http", "https"}
+_SCHEME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:")
+
+
+def _tel_href(phone: str) -> str:
+    """Digits and a single leading + only — a tel: URI must carry the
+    dialable number, not the display formatting (parens, dashes, spaces)."""
+    return re.sub(r"[^0-9+]", "", phone)
+
+
+def _as_http_url(value: str) -> str | None:
+    """Best-effort normalize a bare domain ("linkedin.com/in/x") or a full
+    URL into an https:// URL for use in an href. Returns None when the
+    result isn't a safe http(s) URL — e.g. a "javascript:..." value someone
+    pasted into a resume field — so the caller falls back to plain text
+    instead of ever emitting an unsafe scheme into the rendered HTML."""
+    if not value:
+        return None
+    # "://" alone isn't enough to detect an existing scheme — a value like
+    # "javascript:alert(1)" has no "//" and would otherwise get "https://"
+    # blindly prepended (producing "https://javascript:alert(1)", which
+    # passes a scheme check it shouldn't). Match any "word:" prefix instead,
+    # then let the scheme check below reject anything that isn't http(s).
+    candidate = value if _SCHEME_PATTERN.match(value) else f"https://{value}"
+    parsed = urlparse(candidate)
+    if parsed.scheme not in _LINK_SCHEMES or not parsed.netloc:
+        return None
+    return candidate
+
+
+def _email_link(email: str) -> Markup:
+    """mailto: link — resume content is user-controlled, so the address is
+    HTML-escaped before going into both the href and the visible text."""
+    if not email:
+        return Markup("")
+    safe = escape(email)
+    return Markup(f'<a href="mailto:{safe}">{safe}</a>')
+
+
+def _phone_link(phone: str) -> Markup:
+    """tel: link — dials the normalized digits, displays the original
+    formatting. Falls back to plain (escaped) text if nothing dialable
+    survives normalization, e.g. a phone field that's actually free text."""
+    if not phone:
+        return Markup("")
+    digits = _tel_href(phone)
+    if not digits:
+        return Markup(escape(phone))
+    return Markup(f'<a href="tel:{escape(digits)}">{escape(phone)}</a>')
+
+
+def _url_link(value: str) -> Markup:
+    """https:// link for LinkedIn/GitHub/website/project-link fields —
+    accepts a bare domain or a full URL, always displays the original text.
+    Falls back to plain (escaped) text when the value isn't a safe http(s)
+    URL, so a malformed field degrades to unlinked text, not a broken link
+    or an unsafe href."""
+    if not value:
+        return Markup("")
+    href = _as_http_url(value)
+    if not href:
+        return Markup(escape(value))
+    return Markup(f'<a href="{escape(href)}">{escape(value)}</a>')
+
+
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 _jinja_env.filters["highlight"] = _highlight_keywords
+_jinja_env.filters["email_link"] = _email_link
+_jinja_env.filters["phone_link"] = _phone_link
+_jinja_env.filters["url_link"] = _url_link
 
 
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB — a portrait photo has no business being bigger

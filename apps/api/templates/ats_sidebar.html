@@ -91,7 +91,7 @@
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
   <div>
     <div class="name">{{ contact.name | upper }}</div>
-    <div class="contact-line">{{ [contact.location, contact.phone, contact.email, contact.linkedin, contact.github] | select | join('  ·  ') }}</div>
+    <div class="contact-line">{{ [contact.location, contact.phone | phone_link, contact.email | email_link, contact.linkedin | url_link, contact.github | url_link] | select | join('  ·  ') }}</div>
   </div>
 </div>
 
@@ -165,7 +165,7 @@
       {% for p in projects %}
       <div class="job">
         <div class="job-title-line"><span class="title">{{ p.name }}</span>{% if p.start %} <span class="dates">| {{ p.start }} – {{ p.end or "Current" }}</span>{% endif %}</div>
-        {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link }}</div>{% endif %}
+        {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link | url_link }}</div>{% endif %}
         <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>
       {% endfor %}
@@ -259,7 +259,7 @@
   {% if contact.website %}
   <div class="section">
     <div class="section-label">Links</div>
-    <div class="section-body">{{ contact.website }}</div>
+    <div class="section-body">{{ contact.website | url_link }}</div>
   </div>
   {% endif %}
 {% endmacro %}

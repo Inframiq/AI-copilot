@@ -17,7 +17,7 @@
   <div class="header">
     <p class="name">{{ contact.name }}</p>
     <p class="contact">
-      {{ contact.email }}{% if contact.phone %} · {{ contact.phone }}{% endif %}{% if contact.location %} · {{ contact.location }}{% endif %}
+      {{ contact.email | email_link }}{% if contact.phone %} · {{ contact.phone | phone_link }}{% endif %}{% if contact.location %} · {{ contact.location }}{% endif %}
     </p>
   </div>
   <p class="date">{{ date_str }}</p>
