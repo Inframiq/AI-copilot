@@ -11,65 +11,76 @@
      success-accent stays pinned to primary per this app's convention;
      success/success-container/etc. aren't part of the spec and are
      left untouched. */
-  /* ── "Cupertino Light" — Apple-grade neutral palette ──────────────────────
-     Token names are unchanged; only hex values are retuned. Goal: kill the
-     lavender/purple cast of the old set. Surfaces are true neutral off-whites
-     (#fbfbfd / #f5f5f7), text is Apple near-black (#1d1d1f), borders are the
-     Apple hairline gray (#d2d2d7), and the accent is Apple system blue
-     (#0071e3). Secondary/"container" chips are now soft neutral instead of
-     saturated indigo so pills read premium, not toy-like. */
-  --color-primary: #0071e3;
-  --color-surface-container: #f0f0f2;
-  --color-tertiary-container: #b5530f;
-  --color-tertiary-fixed: #ffe2d1;
-  --color-background: #fbfbfd;
-  --color-primary-container: #0077ed;
-  --color-surface-container-high: #eaeaec;
-  --color-inverse-on-surface: #f5f5f7;
-  --color-tertiary-fixed-dim: #ffbf9c;
-  --color-inverse-primary: #9ecbf7;
-  --color-on-tertiary-container: #fff2ea;
-  --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #9ecbf7;
-  --color-secondary: #5b5f6b;
-  --color-on-primary-fixed: #00294d;
-  --color-on-tertiary: #ffffff;
-  --color-error: #d70015;
-  --color-surface-dim: #e6e6e9;
-  --color-on-primary-fixed-variant: #005bbb;
-  --color-on-background: #1d1d1f;
-  --color-error-container: #fde7e9;
-  --color-on-surface-variant: #6e6e73;
-  --color-surface-tint: #0071e3;
-  --color-outline-variant: #d2d2d7;
-  --color-surface-container-low: #f5f5f7;
-  --color-secondary-fixed-dim: #c8cad0;
-  --color-surface-bright: #ffffff;
-  --color-on-error-container: #8a0010;
-  --color-on-tertiary-fixed: #3d1400;
-  --color-secondary-container: #eceef2;
+  /* ── "Sapphire & Ink" — a considered premium-blue palette ────────────────
+     Token names are unchanged; only hex values are retuned. The accent is a
+     deep royal sapphire (#1f43b8) — confident, slightly desaturated, and
+     deliberately NOT the electric #2563eb / #0071e3 "default blue" nor the
+     indigo/violet that reads as generative. Neutrals are a fine cool-grey
+     stack with no purple cast; ink text is #17181d (near-black, a hair of
+     blue). "secondary-container" chips are a soft neutral so pills read as
+     tailored hardware, not saturated stickers. */
+
+  /* accent — sapphire */
+  --color-primary: #1f43b8;
+  --color-primary-container: #2b52d4;      /* brighter sibling: hover/active fills */
+  --color-primary-fixed: #dde4ff;          /* light wash: chip backgrounds */
+  --color-primary-fixed-dim: #a8bbf0;
+  --color-inverse-primary: #a8bbf0;
+  --color-surface-tint: #1f43b8;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #e3e3e6;
-  --color-on-surface: #1d1d1f;
-  --color-on-primary-container: #eef5fe;
-  --color-primary-fixed: #d6e8fb;
-  --color-surface: #fbfbfd;
-  --color-on-tertiary-fixed-variant: #8a3a00;
-  --color-on-secondary-fixed-variant: #3f4351;
-  --color-on-secondary: #ffffff;
+  --color-on-primary-container: #eaefff;
+  --color-on-primary-fixed: #001449;
+  --color-on-primary-fixed-variant: #15368f;
+
+  /* ink + neutrals — cool grey, zero purple */
+  --color-background: #fcfcfd;
+  --color-surface: #fcfcfd;
+  --color-surface-bright: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #1d1d1f;
-  --color-surface-variant: #e8e8eb;
-  --color-outline: #86868b;
-  --color-success-accent: #0071e3;
-  --color-success: #248a3d;
-  --color-success-container: #e2f5e7;
-  --color-on-success-container: #0a3d1a;
+  --color-surface-container-low: #f6f7f9;
+  --color-surface-container: #f0f1f4;
+  --color-surface-container-high: #e8eaee;
+  --color-surface-container-highest: #e1e3e9;
+  --color-surface-dim: #e5e6eb;
+  --color-surface-variant: #e8eaee;
+  --color-on-background: #17181d;
+  --color-on-surface: #17181d;
+  --color-on-surface-variant: #5b5e6b;
+  --color-outline: #888b96;
+  --color-outline-variant: #d6d8df;
+  --color-inverse-surface: #1e2028;
+  --color-inverse-on-surface: #f3f3f6;
+
+  /* secondary — refined slate; containers stay soft-neutral */
+  --color-secondary: #4a5064;
+  --color-secondary-container: #eaecf3;
+  --color-secondary-fixed: #e5e7f0;
+  --color-secondary-fixed-dim: #c3c7d6;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #363b4c;
+  --color-on-secondary-fixed: #1a1f2e;
+  --color-on-secondary-fixed-variant: #383e51;
+
+  /* tertiary — a sparing warm bronze accent */
+  --color-tertiary: #9a5a1e;
+  --color-tertiary-container: #a35c17;
+  --color-tertiary-fixed: #ffe1c6;
+  --color-tertiary-fixed-dim: #f0bd8b;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #fff3e9;
+  --color-on-tertiary-fixed: #391c00;
+  --color-on-tertiary-fixed-variant: #7a4310;
+
+  /* error / success — muted, not fire-engine / not lime */
+  --color-error: #c62f1e;
+  --color-error-container: #fbe3df;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #7a1a0d;
+  --color-success-accent: #1f43b8;
+  --color-success: #1f7a45;
+  --color-success-container: #ddf1e5;
   --color-on-success: #ffffff;
-  --color-tertiary: #b5530f;
-  --color-on-secondary-container: #3f4351;
-  --color-secondary-fixed: #e7e8ec;
-  --color-on-secondary-fixed: #23262f;
+  --color-on-success-container: #093521;
 
   /* Border radius — left as-is: this app's existing DEFAULT/lg/xl/2xl
      scale (4/8/12/16px) already lands on the same pixel values the spec
@@ -153,7 +164,7 @@
 }
 
 html, body {
-  background-color: #fbfbfd; /* --color-background */
+  background-color: #fcfcfd; /* --color-background */
   height: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -169,90 +180,127 @@ html, body {
   animation: page-fade 0.15s ease both;
 }
 
-/* ── Card stagger: clean fade + gentle rise, nothing more ────────────────── */
+/* ── Card stagger: a restrained, quick settle — short travel, soft easing,
+   tight cadence so a full page is in place well under half a second. ─────── */
 @keyframes card-enter {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(8px) scale(0.995);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .page-enter > div > * {
-  animation: card-enter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: opacity, transform;
 }
 
 .page-enter > div > *:nth-child(1)  { animation-delay: 0.00s; }
-.page-enter > div > *:nth-child(2)  { animation-delay: 0.07s; }
-.page-enter > div > *:nth-child(3)  { animation-delay: 0.14s; }
-.page-enter > div > *:nth-child(4)  { animation-delay: 0.21s; }
-.page-enter > div > *:nth-child(5)  { animation-delay: 0.28s; }
-.page-enter > div > *:nth-child(6)  { animation-delay: 0.35s; }
-.page-enter > div > *:nth-child(7)  { animation-delay: 0.42s; }
-.page-enter > div > *:nth-child(8)  { animation-delay: 0.49s; }
-.page-enter > div > *:nth-child(9)  { animation-delay: 0.56s; }
-.page-enter > div > *:nth-child(10) { animation-delay: 0.63s; }
+.page-enter > div > *:nth-child(2)  { animation-delay: 0.035s; }
+.page-enter > div > *:nth-child(3)  { animation-delay: 0.07s; }
+.page-enter > div > *:nth-child(4)  { animation-delay: 0.105s; }
+.page-enter > div > *:nth-child(5)  { animation-delay: 0.14s; }
+.page-enter > div > *:nth-child(6)  { animation-delay: 0.175s; }
+.page-enter > div > *:nth-child(7)  { animation-delay: 0.21s; }
+.page-enter > div > *:nth-child(8)  { animation-delay: 0.245s; }
+.page-enter > div > *:nth-child(9)  { animation-delay: 0.28s; }
+.page-enter > div > *:nth-child(10) { animation-delay: 0.315s; }
 
-/* ── 3D pills: realistic layered depth, Apple-style ──────────────────────────
-   Add `pill` to any rounded-full chip/badge. It stacks a soft ambient shadow,
-   a tight contact shadow, a 1px top inner highlight and a 1px bottom inner
-   shade so the pill reads as a physical, slightly domed capsule rather than a
-   flat colour swatch. A faint top-down white sheen adds the gloss. Works on
-   tinted (bg-primary/10), solid (bg-primary) and neutral chips alike. */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .page-enter > div > * {
+    animation: none !important;
+  }
+}
+
+/* ── Premium ambient background: two slow, barely-perceptible sapphire washes
+   that drift over ~34s. Rendered by LightfallBackground. ────────────────── */
+@keyframes ambient-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-2.5%, 1.5%, 0) scale(1.06); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--color-background);
+}
+.ambient-bg::before,
+.ambient-bg::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background-repeat: no-repeat;
+  will-change: transform;
+}
+.ambient-bg::before {
+  background-image: radial-gradient(
+    46% 46% at 18% 8%,
+    rgba(31, 67, 184, 0.10) 0%,
+    rgba(31, 67, 184, 0) 70%
+  );
+  animation: ambient-drift 34s ease-in-out infinite;
+}
+.ambient-bg::after {
+  background-image: radial-gradient(
+    40% 40% at 92% 96%,
+    rgba(43, 82, 212, 0.07) 0%,
+    rgba(43, 82, 212, 0) 72%
+  );
+  animation: ambient-drift 42s ease-in-out infinite reverse;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-bg::before,
+  .ambient-bg::after { animation: none; }
+}
+
+/* ── 3D pills: a tight, tailored capsule — a crisp 1px top light-line, a
+   short soft contact shadow, a faint bottom seat. No muddy gradient over the
+   chip's own colour; the depth is all in the shadow. Works on tinted,
+   neutral and solid chips alike. ───────────────────────────────────────── */
 .pill {
   position: relative;
   border-radius: 9999px;
-  background-image: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0.12) 42%,
-    rgba(0, 0, 0, 0.03) 100%
-  );
   box-shadow:
-    0 1px 1.5px rgba(17, 24, 39, 0.06),
-    0 3px 6px -1px rgba(17, 24, 39, 0.09),
-    0 8px 18px -6px rgba(17, 24, 39, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -1px 1.5px rgba(17, 24, 39, 0.08);
-  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1),
-    box-shadow 0.18s ease;
+    0 1px 1px rgba(19, 22, 40, 0.05),
+    0 2px 5px -1px rgba(19, 22, 40, 0.09),
+    0 6px 14px -6px rgba(19, 22, 40, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1px 1px rgba(19, 22, 40, 0.045);
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.16s ease;
 }
 
-/* Solid-accent pills: sheen from the light, deeper cast below. */
+/* Solid-accent pills: keep the cap gloss, tint the cast to the sapphire. */
 .pill-solid {
-  background-image: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.28) 0%,
-    rgba(255, 255, 255, 0) 45%,
-    rgba(0, 0, 0, 0.12) 100%
-  );
   box-shadow:
-    0 1px 1.5px rgba(17, 24, 39, 0.12),
-    0 4px 10px -2px rgba(0, 74, 198, 0.28),
-    0 10px 24px -8px rgba(0, 74, 198, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.18);
+    0 1px 1px rgba(19, 22, 40, 0.10),
+    0 3px 8px -2px rgba(31, 67, 184, 0.30),
+    0 8px 18px -8px rgba(31, 67, 184, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.16);
 }
 
 .pill-interactive:hover {
-  transform: translateY(-1px);
+  transform: translateY(-0.5px);
   box-shadow:
-    0 2px 3px rgba(17, 24, 39, 0.07),
-    0 6px 12px -2px rgba(17, 24, 39, 0.11),
-    0 16px 30px -8px rgba(17, 24, 39, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    inset 0 -1px 1.5px rgba(17, 24, 39, 0.08);
+    0 1px 2px rgba(19, 22, 40, 0.06),
+    0 4px 9px -2px rgba(19, 22, 40, 0.12),
+    0 12px 22px -8px rgba(19, 22, 40, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 1px rgba(19, 22, 40, 0.045);
 }
 .pill-interactive:active {
   transform: translateY(0);
   box-shadow:
-    0 1px 1px rgba(17, 24, 39, 0.08),
-    inset 0 1px 3px rgba(17, 24, 39, 0.14),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+    0 1px 1px rgba(19, 22, 40, 0.07),
+    inset 0 1px 2.5px rgba(19, 22, 40, 0.13),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {
