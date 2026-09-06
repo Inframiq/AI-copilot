@@ -16,7 +16,7 @@ export default function TermsOfServicePage() {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-primary">Career Copilot</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight">Career Copilot</span>
         </Link>
         <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
           Back to home

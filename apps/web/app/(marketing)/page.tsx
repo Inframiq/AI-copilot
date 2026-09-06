@@ -9,7 +9,7 @@ export default function LandingPage() {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-primary">Career Copilot</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight">Career Copilot</span>
         </div>
         <div className="flex items-center gap-md">
           <Link
