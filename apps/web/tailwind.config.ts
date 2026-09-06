@@ -31,7 +31,7 @@ const config: Config = {
         "on-surface": "#17181d",
         "on-surface-variant": "#5b5e6b",
         "outline": "#888b96",
-        "outline-variant": "#d6d8df",
+        "outline-variant": "#cccfd8",
         "inverse-surface": "#1e2028",
         "inverse-on-surface": "#f3f3f6",
         "secondary": "#4a5064",

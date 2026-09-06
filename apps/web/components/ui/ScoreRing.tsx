@@ -7,9 +7,9 @@ interface ScoreRingProps {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 80) return "#22c55e"; // green
-  if (score >= 60) return "#f59e0b"; // amber
-  return "#ef4444"; // red
+  if (score >= 80) return "#1f7a45"; // success
+  if (score >= 60) return "#b5730f"; // caution
+  return "#c62f1e"; // error
 }
 
 export function ScoreRing({ score, size = 80 }: ScoreRingProps) {
@@ -41,7 +41,7 @@ export function ScoreRing({ score, size = 80 }: ScoreRingProps) {
         cx={size / 2}
         cy={size / 2}
         r={r}
-        stroke="#e7e7f3"
+        stroke="#e8eaee"
         strokeWidth={strokeWidth}
         fill="none"
       />
@@ -64,7 +64,7 @@ export function ScoreRing({ score, size = 80 }: ScoreRingProps) {
         y="50%"
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#191b23"
+        fill="#17181d"
         fontSize={size / 4}
         fontWeight="700"
         fontFamily="var(--font-inter), sans-serif"
