@@ -227,13 +227,13 @@ html, body {
    colour bodies stay well inside the viewport where their drift is visible */
 .ambient-aurora {
   position: absolute;
-  left: -15vw;
-  right: -15vw;
-  top: -14vh;
-  height: 96vh;
+  left: -30vw;
+  right: -30vw;
+  top: -30vh;
+  height: 120vh;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 42%, rgba(0, 0, 0, 0.45) 64%, transparent 88%);
-          mask-image: linear-gradient(to bottom, #000 0%, #000 42%, rgba(0, 0, 0, 0.45) 64%, transparent 88%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 48%, rgba(0, 0, 0, 0.45) 70%, transparent 92%);
+          mask-image: linear-gradient(to bottom, #000 0%, #000 48%, rgba(0, 0, 0, 0.45) 70%, transparent 92%);
 }
 
 .ambient-orb {
@@ -244,28 +244,28 @@ html, body {
   backface-visibility: hidden;
 }
 .ambient-orb--1 {
-  width: 52vw;
-  height: 52vw;
-  top: -6vw;
-  left: 12vw;
+  width: 50vw;
+  height: 50vw;
+  top: 4vh;
+  left: 8vw;
   background: radial-gradient(circle at 50% 50%, rgba(28, 62, 178, 0.62), rgba(28, 62, 178, 0) 66%);
-  animation: ambient-orb-1 19s ease-in-out infinite;
+  animation: ambient-orb-1 13s ease-in-out infinite;
 }
 .ambient-orb--2 {
-  width: 46vw;
-  height: 46vw;
-  top: -10vw;
-  right: 4vw;
+  width: 44vw;
+  height: 44vw;
+  top: 0vh;
+  right: 6vw;
   background: radial-gradient(circle at 50% 50%, rgba(64, 118, 246, 0.5), rgba(64, 118, 246, 0) 68%);
-  animation: ambient-orb-2 25s ease-in-out infinite;
+  animation: ambient-orb-2 17s ease-in-out infinite;
 }
 .ambient-orb--3 {
-  width: 40vw;
-  height: 40vw;
-  top: 2vw;
-  left: 34vw;
-  background: radial-gradient(circle at 50% 50%, rgba(120, 112, 232, 0.42), rgba(120, 112, 232, 0) 70%);
-  animation: ambient-orb-3 22s ease-in-out infinite;
+  width: 38vw;
+  height: 38vw;
+  top: 12vh;
+  left: 36vw;
+  background: radial-gradient(circle at 50% 50%, rgba(120, 112, 232, 0.44), rgba(120, 112, 232, 0) 70%);
+  animation: ambient-orb-3 11s ease-in-out infinite;
 }
 
 .ambient-grain {
@@ -276,22 +276,22 @@ html, body {
   opacity: 0.04;
 }
 
-/* asymmetric keyframes (0/33/66/100) so the orbs are always travelling —
-   never parked at an easing extreme */
+/* wide, asymmetric travel (0/33/66/100) so the whole top band is in constant,
+   brisk motion — the orbs sweep right across it, never parking */
 @keyframes ambient-orb-1 {
   0%,  100% { transform: translate3d(0, 0, 0) scale(1); }
-  33%       { transform: translate3d(13vw, 6vh, 0) scale(1.18); }
-  66%       { transform: translate3d(4vw, 12vh, 0) scale(0.92); }
+  33%       { transform: translate3d(34vw, 12vh, 0) scale(1.22); }
+  66%       { transform: translate3d(14vw, 26vh, 0) scale(0.85); }
 }
 @keyframes ambient-orb-2 {
-  0%,  100% { transform: translate3d(0, 0, 0) scale(1.06); }
-  33%       { transform: translate3d(-11vw, 8vh, 0) scale(0.9); }
-  66%       { transform: translate3d(-3vw, -4vh, 0) scale(1.15); }
+  0%,  100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  33%       { transform: translate3d(-30vw, 16vh, 0) scale(0.86); }
+  66%       { transform: translate3d(-10vw, -10vh, 0) scale(1.2); }
 }
 @keyframes ambient-orb-3 {
-  0%,  100% { transform: translate3d(0, 0, 0) scale(0.95); }
-  33%       { transform: translate3d(9vw, 10vh, 0) scale(1.22); }
-  66%       { transform: translate3d(-6vw, 3vh, 0) scale(1.02); }
+  0%,  100% { transform: translate3d(0, 0, 0) scale(0.92); }
+  33%       { transform: translate3d(26vw, 22vh, 0) scale(1.28); }
+  66%       { transform: translate3d(-22vw, 6vh, 0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ambient-orb { animation: none; }
