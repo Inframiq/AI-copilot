@@ -51,7 +51,7 @@ export function SkillsDelta() {
                 key={s}
                 onClick={() => removeMatched(s)}
                 title="Click to dismiss"
-                className="group flex items-center gap-xs px-sm py-xs rounded-full bg-[#e6f4ea] text-[#1e7e34] text-label-sm hover:bg-[#c8e6c9] transition-colors"
+                className="group flex items-center gap-xs px-sm py-xs pill rounded-full bg-[#e6f4ea] text-[#1e7e34] text-label-sm hover:bg-[#c8e6c9] transition-colors"
               >
                 <CheckCircle size={12} weight="fill" className="group-hover:hidden" />
                 <XCircle size={12} weight="fill" className="hidden group-hover:block text-[#c62828]" />
@@ -77,7 +77,7 @@ export function SkillsDelta() {
                 key={s}
                 onClick={() => removeMissing(s)}
                 title="Click to dismiss"
-                className="group flex items-center gap-xs px-sm py-xs rounded-full bg-error-container text-on-error-container text-label-sm hover:opacity-70 transition-opacity"
+                className="group flex items-center gap-xs px-sm py-xs pill rounded-full bg-error-container text-on-error-container text-label-sm hover:opacity-70 transition-opacity"
               >
                 <XCircle size={12} weight="fill" className="group-hover:hidden" />
                 <XCircle size={12} weight="fill" className="hidden group-hover:block opacity-40" />
@@ -104,7 +104,7 @@ export function SkillsDelta() {
                 key={s}
                 onClick={() => restoreMatched(s)}
                 title="Restore to Matched"
-                className="flex items-center gap-xs px-sm py-xs rounded-full bg-surface-container text-on-surface-variant text-label-sm border border-dashed border-[#1e7e34]/40 hover:bg-[#e6f4ea] hover:text-[#1e7e34] transition-colors"
+                className="flex items-center gap-xs px-sm py-xs pill rounded-full bg-surface-container text-on-surface-variant text-label-sm border border-dashed border-[#1e7e34]/40 hover:bg-[#e6f4ea] hover:text-[#1e7e34] transition-colors"
               >
                 <CheckCircle size={12} weight="regular" />
                 {s}
@@ -115,7 +115,7 @@ export function SkillsDelta() {
                 key={s}
                 onClick={() => restoreMissing(s)}
                 title="Restore to Missing"
-                className="flex items-center gap-xs px-sm py-xs rounded-full bg-surface-container text-on-surface-variant text-label-sm border border-dashed border-error/40 hover:bg-error-container hover:text-on-error-container transition-colors"
+                className="flex items-center gap-xs px-sm py-xs pill rounded-full bg-surface-container text-on-surface-variant text-label-sm border border-dashed border-error/40 hover:bg-error-container hover:text-on-error-container transition-colors"
               >
                 <XCircle size={12} weight="regular" />
                 {s}

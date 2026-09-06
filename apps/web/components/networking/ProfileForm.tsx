@@ -246,7 +246,7 @@ export function ProfileForm({ initial, careerProfile, onSave, isSaving, error }:
             {chips.map((s) => (
               <span
                 key={s}
-                className="px-sm py-xs rounded-full bg-secondary-container text-primary text-caption"
+                className="px-sm py-xs pill rounded-full bg-secondary-container text-primary text-caption"
               >
                 {s}
               </span>

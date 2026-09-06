@@ -52,7 +52,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             <div className="flex items-center justify-between gap-sm">
               <h3 className="text-headline-md text-on-surface font-semibold">{plan.name}</h3>
               {isCurrent && (
-                <span className="text-caption font-semibold px-sm py-[2px] rounded-full bg-secondary-container text-on-secondary-container">
+                <span className="text-caption font-semibold px-sm py-[2px] pill rounded-full bg-secondary-container text-on-secondary-container">
                   Current plan
                 </span>
               )}

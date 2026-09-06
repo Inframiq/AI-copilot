@@ -422,7 +422,7 @@ export default function NetworkingPage() {
                       {myProfile.display_name}
                     </p>
                     {myProfile.open_to_work && (
-                      <span className="text-caption px-sm py-xs rounded-full bg-primary/10 text-primary font-semibold">
+                      <span className="text-caption px-sm py-xs pill rounded-full bg-primary/10 text-primary font-semibold">
                         Open to Work
                       </span>
                     )}
@@ -799,7 +799,7 @@ export default function NetworkingPage() {
                       </div>
                       <button
                         onClick={() => handleCycleStatus(contact.id)}
-                        className={`text-caption px-sm py-xs rounded-full font-semibold shrink-0 cursor-pointer hover:opacity-80 transition-opacity ${color}`}
+                        className={`text-caption px-sm py-xs pill pill-interactive rounded-full font-semibold shrink-0 cursor-pointer hover:opacity-80 transition-opacity ${color}`}
                       >
                         {label}
                       </button>

@@ -12,7 +12,7 @@ export function QuestionCard({ question }: { question: PrepQuestionOut }) {
       onClick={() => setFlipped((f) => !f)}
     >
       <div className="flex items-start justify-between mb-md">
-        <span className="px-sm py-xs rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
+        <span className="px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
           {question.topic}
         </span>
       </div>

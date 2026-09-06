@@ -399,7 +399,7 @@ export function BulletReviewPanel() {
             {companyKeywords.map((kw) => (
               <span
                 key={kw}
-                className="px-sm py-0.5 rounded-full bg-primary/10 text-primary text-caption font-medium border border-primary/20"
+                className="px-sm py-0.5 pill rounded-full bg-primary/10 text-primary text-caption font-medium border border-primary/20"
               >
                 {kw}
               </span>
@@ -937,7 +937,7 @@ function SkillsBlock({
         disabled={disabled}
         title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — remove another to bring this back` : undefined}
         onClick={() => setBulletDecision(key, kept ? "reject" : "accept")}
-        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+        className={`flex items-center gap-xs px-sm py-xs pill rounded-full text-label-sm border transition-all ${
           kept
             ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
             : disabled
@@ -968,7 +968,7 @@ function SkillsBlock({
         disabled={disabled}
         title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority`}
         onClick={toggle}
-        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+        className={`flex items-center gap-xs px-sm py-xs pill rounded-full text-label-sm border transition-all ${
           selected
             ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
             : disabled

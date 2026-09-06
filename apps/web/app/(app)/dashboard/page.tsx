@@ -479,7 +479,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-sm shrink-0">
                   <button
                     onClick={() => handleCycleStatus(item)}
-                    className={`px-sm py-xs rounded-full text-caption font-semibold hover:opacity-80 transition-opacity ${STATUS_COLOR[item.status]}`}
+                    className={`px-sm py-xs pill pill-interactive rounded-full text-caption font-semibold hover:opacity-80 transition-opacity ${STATUS_COLOR[item.status]}`}
                   >
                     {STATUS_LABEL[item.status]}
                   </button>

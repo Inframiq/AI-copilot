@@ -84,7 +84,7 @@ export function ConnectionDrawer({
                   {profile.display_name}
                 </p>
                 {profile.open_to_work && (
-                  <span className="text-caption px-sm py-xs rounded-full bg-primary/10 text-primary font-semibold">
+                  <span className="text-caption px-sm py-xs pill rounded-full bg-primary/10 text-primary font-semibold">
                     Open to Work
                   </span>
                 )}

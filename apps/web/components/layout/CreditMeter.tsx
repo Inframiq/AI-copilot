@@ -33,7 +33,7 @@ export function CreditMeter({ variant = "compact" }: { variant?: "compact" | "fu
         href="/account"
         title={`${credits_remaining} of ${credits_allotment} credits`}
         aria-label={`${credits_remaining} credits remaining`}
-        className={`flex items-center gap-xs px-md py-xs rounded-full border text-label-sm font-semibold transition-colors ${
+        className={`flex items-center gap-xs px-md py-xs pill pill-interactive rounded-full border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
             : "border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/50"

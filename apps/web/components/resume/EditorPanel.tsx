@@ -492,7 +492,7 @@ export function EditorPanel() {
                 {content.skills.map((skill) => (
                   <span
                     key={skill}
-                    className="px-sm py-xs rounded-full bg-secondary-container text-on-secondary-container text-label-sm font-medium"
+                    className="px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm font-medium"
                   >
                     {skill}
                   </span>
@@ -662,7 +662,7 @@ export function EditorPanel() {
               <div className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
                   Target Company
-                  <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 rounded-full">
+                  <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 pill rounded-full">
                     optional
                   </span>
                 </label>
@@ -847,7 +847,7 @@ function TailoringForm({
       <div className="flex flex-col gap-xs">
         <label className="text-label-sm text-on-surface-variant flex items-center gap-xs">
           Target Company
-          <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 rounded-full">optional</span>
+          <span className="text-caption bg-secondary-container text-on-secondary-container font-semibold px-xs py-0.5 pill rounded-full">optional</span>
         </label>
         <input
           type="text"

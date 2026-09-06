@@ -183,10 +183,10 @@ export default function CareerPathPage() {
                       {m.title}
                     </p>
                     {m.status === "active" && (
-                      <span className="text-caption text-primary bg-primary/10 px-sm py-xs rounded-full">In Progress</span>
+                      <span className="text-caption text-primary bg-primary/10 px-sm py-xs pill rounded-full">In Progress</span>
                     )}
                     {m.status === "done" && (
-                      <span className="text-caption text-success-accent bg-success-accent/10 px-sm py-xs rounded-full">Done</span>
+                      <span className="text-caption text-success-accent bg-success-accent/10 px-sm py-xs pill rounded-full">Done</span>
                     )}
                   </div>
                   <p className="text-body-sm text-on-surface-variant">{m.description}</p>
@@ -262,7 +262,7 @@ export default function CareerPathPage() {
                     <p className="text-label-md text-on-surface truncate">{title}</p>
                     <p className="text-caption text-on-surface-variant">{type}</p>
                   </div>
-                  <span className="text-caption text-primary bg-primary/10 px-sm py-xs rounded-full shrink-0">{tag}</span>
+                  <span className="text-caption text-primary bg-primary/10 px-sm py-xs pill rounded-full shrink-0">{tag}</span>
                 </div>
               ))}
             </div>

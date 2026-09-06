@@ -93,7 +93,7 @@ export default function InterviewPage({
                   <span className="text-label-md text-on-surface-variant">
                     Question {activeIndex + 1} of {questions.length}
                   </span>
-                  <span className="px-sm py-xs rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
+                  <span className="px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
                     {active.topic}
                   </span>
                 </div>

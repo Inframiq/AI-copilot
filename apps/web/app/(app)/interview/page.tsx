@@ -276,7 +276,7 @@ export default function InterviewIndexPage() {
                             <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
                               <MicrophoneStage size={24} />
                             </div>
-                            <span className="bg-surface-container text-caption text-primary px-sm py-xs rounded-full">
+                            <span className="bg-surface-container text-caption text-primary px-sm py-xs pill rounded-full">
                               {q.topic}
                             </span>
                           </div>

@@ -41,7 +41,7 @@ export function ProfileCard({
               {profile.display_name}
             </p>
             {profile.open_to_work && (
-              <span className="text-caption px-sm py-xs rounded-full bg-primary/10 text-primary font-semibold shrink-0">
+              <span className="text-caption px-sm py-xs pill rounded-full bg-primary/10 text-primary font-semibold shrink-0">
                 Open to Work
               </span>
             )}

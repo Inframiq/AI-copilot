@@ -88,7 +88,7 @@ function SectionHeader({ title, onAdd, addLabel }: {
         <button
           type="button"
           onClick={onAdd}
-          className="flex items-center gap-xs px-md py-xs rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
+          className="flex items-center gap-xs px-md py-xs pill pill-interactive rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
         >
           <Plus size={14} weight="bold" /> {addLabel ?? "Add"}
         </button>

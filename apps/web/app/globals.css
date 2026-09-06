@@ -11,58 +11,65 @@
      success-accent stays pinned to primary per this app's convention;
      success/success-container/etc. aren't part of the spec and are
      left untouched. */
-  --color-primary: #004ac6;
-  --color-surface-container: #ededf9;
-  --color-tertiary-container: #bc4800;
-  --color-tertiary-fixed: #ffdbcd;
-  --color-background: #faf8ff;
-  --color-primary-container: #2563eb;
-  --color-surface-container-high: #e7e7f3;
-  --color-inverse-on-surface: #f0f0fb;
-  --color-tertiary-fixed-dim: #ffb596;
-  --color-inverse-primary: #b4c5ff;
-  --color-on-tertiary-container: #ffede6;
+  /* ── "Cupertino Light" — Apple-grade neutral palette ──────────────────────
+     Token names are unchanged; only hex values are retuned. Goal: kill the
+     lavender/purple cast of the old set. Surfaces are true neutral off-whites
+     (#fbfbfd / #f5f5f7), text is Apple near-black (#1d1d1f), borders are the
+     Apple hairline gray (#d2d2d7), and the accent is Apple system blue
+     (#0071e3). Secondary/"container" chips are now soft neutral instead of
+     saturated indigo so pills read premium, not toy-like. */
+  --color-primary: #0071e3;
+  --color-surface-container: #f0f0f2;
+  --color-tertiary-container: #b5530f;
+  --color-tertiary-fixed: #ffe2d1;
+  --color-background: #fbfbfd;
+  --color-primary-container: #0077ed;
+  --color-surface-container-high: #eaeaec;
+  --color-inverse-on-surface: #f5f5f7;
+  --color-tertiary-fixed-dim: #ffbf9c;
+  --color-inverse-primary: #9ecbf7;
+  --color-on-tertiary-container: #fff2ea;
   --color-on-error: #ffffff;
-  --color-primary-fixed-dim: #b4c5ff;
-  --color-secondary: #4648d4;
-  --color-on-primary-fixed: #00174b;
+  --color-primary-fixed-dim: #9ecbf7;
+  --color-secondary: #5b5f6b;
+  --color-on-primary-fixed: #00294d;
   --color-on-tertiary: #ffffff;
-  --color-error: #ba1a1a;
-  --color-surface-dim: #d9d9e5;
-  --color-on-primary-fixed-variant: #003ea8;
-  --color-on-background: #191b23;
-  --color-error-container: #ffdad6;
-  --color-on-surface-variant: #434655;
-  --color-surface-tint: #0053db;
-  --color-outline-variant: #c3c6d7;
-  --color-surface-container-low: #f3f3fe;
-  --color-secondary-fixed-dim: #c0c1ff;
-  --color-surface-bright: #faf8ff;
-  --color-on-error-container: #93000a;
-  --color-on-tertiary-fixed: #360f00;
-  --color-secondary-container: #6063ee;
+  --color-error: #d70015;
+  --color-surface-dim: #e6e6e9;
+  --color-on-primary-fixed-variant: #005bbb;
+  --color-on-background: #1d1d1f;
+  --color-error-container: #fde7e9;
+  --color-on-surface-variant: #6e6e73;
+  --color-surface-tint: #0071e3;
+  --color-outline-variant: #d2d2d7;
+  --color-surface-container-low: #f5f5f7;
+  --color-secondary-fixed-dim: #c8cad0;
+  --color-surface-bright: #ffffff;
+  --color-on-error-container: #8a0010;
+  --color-on-tertiary-fixed: #3d1400;
+  --color-secondary-container: #eceef2;
   --color-on-primary: #ffffff;
-  --color-surface-container-highest: #e1e2ed;
-  --color-on-surface: #191b23;
-  --color-on-primary-container: #eeefff;
-  --color-primary-fixed: #dbe1ff;
-  --color-surface: #faf8ff;
-  --color-on-tertiary-fixed-variant: #7d2d00;
-  --color-on-secondary-fixed-variant: #2f2ebe;
+  --color-surface-container-highest: #e3e3e6;
+  --color-on-surface: #1d1d1f;
+  --color-on-primary-container: #eef5fe;
+  --color-primary-fixed: #d6e8fb;
+  --color-surface: #fbfbfd;
+  --color-on-tertiary-fixed-variant: #8a3a00;
+  --color-on-secondary-fixed-variant: #3f4351;
   --color-on-secondary: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-inverse-surface: #2e3039;
-  --color-surface-variant: #e1e2ed;
-  --color-outline: #737686;
-  --color-success-accent: #004ac6;
-  --color-success: #146c2e;
-  --color-success-container: #c6f6d0;
-  --color-on-success-container: #002106;
+  --color-inverse-surface: #1d1d1f;
+  --color-surface-variant: #e8e8eb;
+  --color-outline: #86868b;
+  --color-success-accent: #0071e3;
+  --color-success: #248a3d;
+  --color-success-container: #e2f5e7;
+  --color-on-success-container: #0a3d1a;
   --color-on-success: #ffffff;
-  --color-tertiary: #943700;
-  --color-on-secondary-container: #fffbff;
-  --color-secondary-fixed: #e1e0ff;
-  --color-on-secondary-fixed: #07006c;
+  --color-tertiary: #b5530f;
+  --color-on-secondary-container: #3f4351;
+  --color-secondary-fixed: #e7e8ec;
+  --color-on-secondary-fixed: #23262f;
 
   /* Border radius — left as-is: this app's existing DEFAULT/lg/xl/2xl
      scale (4/8/12/16px) already lands on the same pixel values the spec
@@ -146,8 +153,10 @@
 }
 
 html, body {
-  background-color: #faf8ff; /* --color-background */
+  background-color: #fbfbfd; /* --color-background */
   height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Page shell: quick fade prevents flash between routes ────────────────── */
@@ -187,3 +196,70 @@ html, body {
 .page-enter > div > *:nth-child(8)  { animation-delay: 0.49s; }
 .page-enter > div > *:nth-child(9)  { animation-delay: 0.56s; }
 .page-enter > div > *:nth-child(10) { animation-delay: 0.63s; }
+
+/* ── 3D pills: realistic layered depth, Apple-style ──────────────────────────
+   Add `pill` to any rounded-full chip/badge. It stacks a soft ambient shadow,
+   a tight contact shadow, a 1px top inner highlight and a 1px bottom inner
+   shade so the pill reads as a physical, slightly domed capsule rather than a
+   flat colour swatch. A faint top-down white sheen adds the gloss. Works on
+   tinted (bg-primary/10), solid (bg-primary) and neutral chips alike. */
+.pill {
+  position: relative;
+  border-radius: 9999px;
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.12) 42%,
+    rgba(0, 0, 0, 0.03) 100%
+  );
+  box-shadow:
+    0 1px 1.5px rgba(17, 24, 39, 0.06),
+    0 3px 6px -1px rgba(17, 24, 39, 0.09),
+    0 8px 18px -6px rgba(17, 24, 39, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1.5px rgba(17, 24, 39, 0.08);
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 0.18s ease;
+}
+
+/* Solid-accent pills: sheen from the light, deeper cast below. */
+.pill-solid {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0) 45%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+  box-shadow:
+    0 1px 1.5px rgba(17, 24, 39, 0.12),
+    0 4px 10px -2px rgba(0, 74, 198, 0.28),
+    0 10px 24px -8px rgba(0, 74, 198, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.18);
+}
+
+.pill-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 3px rgba(17, 24, 39, 0.07),
+    0 6px 12px -2px rgba(17, 24, 39, 0.11),
+    0 16px 30px -8px rgba(17, 24, 39, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 1.5px rgba(17, 24, 39, 0.08);
+}
+.pill-interactive:active {
+  transform: translateY(0);
+  box-shadow:
+    0 1px 1px rgba(17, 24, 39, 0.08),
+    inset 0 1px 3px rgba(17, 24, 39, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill,
+  .pill-interactive:hover,
+  .pill-interactive:active {
+    transition: none;
+    transform: none;
+  }
+}

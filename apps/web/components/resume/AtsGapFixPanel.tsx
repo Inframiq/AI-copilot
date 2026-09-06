@@ -75,7 +75,7 @@ export function AtsGapFixPanel() {
                   type="button"
                   aria-label={`Accept ${f.gap}`}
                   onClick={() => setFixDecision(f.id, "accept")}
-                  className={`px-sm py-xs rounded-full text-label-sm border ${
+                  className={`px-sm py-xs pill rounded-full text-label-sm border ${
                     accepted
                       ? "bg-primary text-on-primary border-primary"
                       : "border-outline-variant/40 text-on-surface-variant"
@@ -87,7 +87,7 @@ export function AtsGapFixPanel() {
                   type="button"
                   aria-label={`Reject ${f.gap}`}
                   onClick={() => setFixDecision(f.id, "reject")}
-                  className={`px-sm py-xs rounded-full text-label-sm border ${
+                  className={`px-sm py-xs pill rounded-full text-label-sm border ${
                     !accepted
                       ? "bg-surface-container text-on-surface border-outline-variant/40"
                       : "border-outline-variant/40 text-on-surface-variant"
