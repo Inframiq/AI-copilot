@@ -206,10 +206,13 @@ html, body {
   }
 }
 
-/* ── Premium ambient background: a slow sapphire aurora — three big, soft,
-   blurred colour fields that drift on long eased loops so the page feels
-   alive but never busy. GPU-only (transform/opacity). Rendered by
-   LightfallBackground; grain on top kills gradient banding. ─────────────── */
+/* ── Premium ambient backdrop ────────────────────────────────────────────────
+   A luminous sapphire "aurora" that glows from the top of the page and
+   dissolves into clean paper before the content starts, so it reads as
+   striking and expensive up top while everything below stays crisp and
+   simple. Three saturated, heavily-blurred colour bodies drift and breathe
+   on long eased loops — clearly alive, never busy. GPU-only (transform).
+   Rendered by LightfallBackground. */
 .ambient-bg {
   position: fixed;
   inset: 0;
@@ -217,64 +220,78 @@ html, body {
   overflow: hidden;
   isolation: isolate;
   pointer-events: none;
+  /* guaranteed floor of colour from the top edge, so the glow always reads */
   background:
-    radial-gradient(120% 90% at 50% -20%, rgba(31, 67, 184, 0.06), transparent 60%),
+    radial-gradient(115% 62% at 50% -8%, rgba(31, 67, 184, 0.13), transparent 66%),
     var(--color-background);
 }
-.ambient-blob {
+
+/* the aurora lives in the top band and is masked to fade out downward */
+.ambient-aurora {
+  position: absolute;
+  left: -12vw;
+  right: -12vw;
+  top: -18vh;
+  height: 105vh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 46%, rgba(0, 0, 0, 0.4) 70%, transparent 94%);
+          mask-image: linear-gradient(to bottom, #000 0%, #000 46%, rgba(0, 0, 0, 0.4) 70%, transparent 94%);
+}
+
+.ambient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(72px);
+  filter: blur(56px);
   will-change: transform;
   backface-visibility: hidden;
 }
-.ambient-blob--1 {
-  width: 48vw;
-  height: 48vw;
-  top: -14vw;
-  left: -8vw;
-  background: radial-gradient(circle at 50% 50%, rgba(31, 67, 184, 0.24), rgba(31, 67, 184, 0) 70%);
-  animation: ambient-float-1 30s ease-in-out infinite;
+.ambient-orb--1 {
+  width: 58vw;
+  height: 58vw;
+  top: -20vw;
+  left: 2vw;
+  background: radial-gradient(circle at 50% 50%, rgba(28, 62, 178, 0.6), rgba(28, 62, 178, 0) 66%);
+  animation: ambient-orb-1 24s ease-in-out infinite;
 }
-.ambient-blob--2 {
-  width: 42vw;
-  height: 42vw;
-  right: -12vw;
-  bottom: -16vw;
-  background: radial-gradient(circle at 50% 50%, rgba(43, 82, 212, 0.18), rgba(43, 82, 212, 0) 70%);
-  animation: ambient-float-2 38s ease-in-out infinite;
+.ambient-orb--2 {
+  width: 50vw;
+  height: 50vw;
+  top: -16vw;
+  right: 0vw;
+  background: radial-gradient(circle at 50% 50%, rgba(64, 118, 246, 0.5), rgba(64, 118, 246, 0) 68%);
+  animation: ambient-orb-2 30s ease-in-out infinite;
 }
-.ambient-blob--3 {
-  width: 36vw;
-  height: 36vw;
-  top: 28vh;
-  right: 18vw;
-  background: radial-gradient(circle at 50% 50%, rgba(96, 132, 230, 0.13), rgba(96, 132, 230, 0) 70%);
-  animation: ambient-float-3 26s ease-in-out infinite;
+.ambient-orb--3 {
+  width: 44vw;
+  height: 44vw;
+  top: -6vw;
+  left: 30vw;
+  background: radial-gradient(circle at 50% 50%, rgba(126, 116, 232, 0.4), rgba(126, 116, 232, 0) 70%);
+  animation: ambient-orb-3 20s ease-in-out infinite;
 }
+
 .ambient-grain {
   position: absolute;
   inset: 0;
   background-repeat: repeat;
   mix-blend-mode: multiply;
-  opacity: 0.035;
+  opacity: 0.04;
 }
-@keyframes ambient-float-1 {
+
+@keyframes ambient-orb-1 {
   0%,  100% { transform: translate3d(0, 0, 0) scale(1); }
-  33%       { transform: translate3d(7vw, 5vh, 0) scale(1.12); }
-  66%       { transform: translate3d(-3vw, 9vh, 0) scale(0.94); }
+  50%       { transform: translate3d(10vw, 7vh, 0) scale(1.2); }
 }
-@keyframes ambient-float-2 {
-  0%,  100% { transform: translate3d(0, 0, 0) scale(1); }
-  40%       { transform: translate3d(-8vw, -6vh, 0) scale(1.15); }
-  70%       { transform: translate3d(-2vw, 4vh, 0) scale(0.97); }
+@keyframes ambient-orb-2 {
+  0%,  100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  50%       { transform: translate3d(-9vw, 6vh, 0) scale(0.9); }
 }
-@keyframes ambient-float-3 {
-  0%,  100% { transform: translate3d(0, 0, 0) scale(1); }
-  50%       { transform: translate3d(-6vw, 7vh, 0) scale(1.2); }
+@keyframes ambient-orb-3 {
+  0%,  100% { transform: translate3d(0, 0, 0) scale(0.95); }
+  50%       { transform: translate3d(5vw, 9vh, 0) scale(1.25); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ambient-blob { animation: none; }
+  .ambient-orb { animation: none; }
 }
 
 /* ── 3D pills: a tight, tailored capsule — a crisp 1px top light-line, a
