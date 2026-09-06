@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── "Sapphire & Ink" — a considered premium-blue palette ────────────────
+  /* ── "Cobalt & Ink" — a considered premium-blue palette ────────────────
      Token names are unchanged; only hex values are retuned. The accent is a
-     deep royal sapphire (#1f43b8) — confident, slightly desaturated, and
+     deep "ink cobalt" (#1b3a8f) — deep, quiet, pigment-like, and
      deliberately NOT the electric #2563eb / #0071e3 "default blue" nor the
      indigo/violet that reads as generative. Neutrals are a fine cool-grey
      stack with no purple cast; ink text is #17181d (near-black, a hair of
@@ -11,16 +11,16 @@
      tailored hardware, not saturated stickers. */
 
   /* accent — sapphire */
-  --color-primary: #1f43b8;
-  --color-primary-container: #2b52d4;      /* brighter sibling: hover/active fills */
+  --color-primary: #1b3a8f;
+  --color-primary-container: #2a4fb5;      /* brighter sibling: hover/active fills */
   --color-primary-fixed: #dde4ff;          /* light wash: chip backgrounds */
   --color-primary-fixed-dim: #a8bbf0;
   --color-inverse-primary: #a8bbf0;
-  --color-surface-tint: #1f43b8;
+  --color-surface-tint: #1b3a8f;
   --color-on-primary: #ffffff;
   --color-on-primary-container: #eaefff;
   --color-on-primary-fixed: #001449;
-  --color-on-primary-fixed-variant: #15368f;
+  --color-on-primary-fixed-variant: #123080;
 
   /* ink + neutrals — cool grey, zero purple */
   --color-background: #fcfcfd;
@@ -66,7 +66,7 @@
   --color-error-container: #fbe3df;
   --color-on-error: #ffffff;
   --color-on-error-container: #7a1a0d;
-  --color-success-accent: #1f43b8;
+  --color-success-accent: #1b3a8f;
   --color-success: #1f7a45;
   --color-success-container: #ddf1e5;
   --color-on-success: #ffffff;
@@ -244,7 +244,7 @@ html, body {
   height: 46vw;
   top: -4vh;
   left: 4vw;
-  background: radial-gradient(circle at 50% 50%, rgba(28, 62, 178, 0.62), rgba(28, 62, 178, 0) 66%);
+  background: radial-gradient(circle at 50% 50%, rgba(30, 64, 160, 0.62), rgba(30, 64, 160, 0) 66%);
   animation: ambient-orb-1 15s ease-in-out infinite;
 }
 .ambient-orb--2 {
@@ -340,8 +340,8 @@ html, body {
 .pill-solid {
   box-shadow:
     0 1px 1px rgba(19, 22, 40, 0.10),
-    0 3px 8px -2px rgba(31, 67, 184, 0.30),
-    0 8px 18px -8px rgba(31, 67, 184, 0.32),
+    0 3px 8px -2px rgba(27, 58, 143, 0.32),
+    0 8px 18px -8px rgba(27, 58, 143, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
     inset 0 -1px 2px rgba(0, 0, 0, 0.16);
 }

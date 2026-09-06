@@ -6,17 +6,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // "Sapphire & Ink" — keep in sync with app/globals.css @theme.
-        "primary": "#1f43b8",
-        "primary-container": "#2b52d4",
+        // "Cobalt & Ink" — keep in sync with app/globals.css @theme.
+        "primary": "#1b3a8f",
+        "primary-container": "#2a4fb5",
         "primary-fixed": "#dde4ff",
         "primary-fixed-dim": "#a8bbf0",
         "inverse-primary": "#a8bbf0",
-        "surface-tint": "#1f43b8",
+        "surface-tint": "#1b3a8f",
         "on-primary": "#ffffff",
         "on-primary-container": "#eaefff",
         "on-primary-fixed": "#001449",
-        "on-primary-fixed-variant": "#15368f",
+        "on-primary-fixed-variant": "#123080",
         "background": "#fcfcfd",
         "surface": "#fcfcfd",
         "surface-bright": "#ffffff",
@@ -54,7 +54,7 @@ const config: Config = {
         "error-container": "#fbe3df",
         "on-error": "#ffffff",
         "on-error-container": "#7a1a0d",
-        "success-accent": "#1f43b8",
+        "success-accent": "#1b3a8f",
         "success": "#1f7a45",
         "success-container": "#ddf1e5",
         "on-success": "#ffffff",
