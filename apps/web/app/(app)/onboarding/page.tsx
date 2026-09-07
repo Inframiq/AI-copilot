@@ -32,11 +32,14 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const sb = createBrowserClient();
-    sb.auth.getUser().then(({ data: { user } }) => {
+    (async () => {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
       if (!user) return;
       setName((user.user_metadata?.full_name as string) ?? "");
       setEmail(user.email ?? "");
-    });
+    })();
   }, []);
 
   const detailsValid = name.trim() && email.trim() && phone.trim() && roleStatus;

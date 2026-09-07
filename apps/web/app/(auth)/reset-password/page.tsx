@@ -18,9 +18,10 @@ export default function ResetPasswordPage() {
     // The recovery link exchanges its code for a session via /callback before
     // landing here — if that didn't happen (direct nav, expired link), there's
     // no session to update a password against.
-    supabase.auth.getSession().then(({ data }) => {
+    (async () => {
+      const { data } = await supabase.auth.getSession();
       setHasSession(!!data.session);
-    });
+    })();
   }, [supabase]);
 
   async function handleSubmit(e: React.FormEvent) {
