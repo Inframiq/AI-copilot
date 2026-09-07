@@ -566,7 +566,7 @@ export default function ProfilePage() {
 
         {masterResumeId && masterResumeTitle ? (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-md p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
-            <div className="flex items-start gap-md">
+            <div className="flex items-start gap-md min-w-0 md:flex-1">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-error-container to-error-container/60 text-error flex items-center justify-center shrink-0 border border-error-container/50">
                 <FilePdf size={22} />
               </div>
@@ -575,7 +575,7 @@ export default function ProfilePage() {
                 <p className="text-caption text-on-surface-variant mt-xs">Active resume · fields auto-populated from this file</p>
               </div>
             </div>
-            <div className="flex items-center gap-sm shrink-0 flex-wrap">
+            <div className="flex items-center gap-sm flex-wrap md:justify-end">
               <button
                 onClick={() => setShowPreview(true)}
                 className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
