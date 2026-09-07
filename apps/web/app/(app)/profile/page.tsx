@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   User,
@@ -12,6 +12,8 @@ import {
   X,
   FloppyDisk,
   FilePdf,
+  DownloadSimple,
+  ArrowsClockwise,
   CheckCircle,
   Spinner,
   LinkedinLogo,
@@ -114,6 +116,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [reparsing, setReparsing] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -148,12 +152,37 @@ export default function ProfilePage() {
   const [collapsedEdu, setCollapsedEdu] = useState<Record<string, boolean>>({});
   const [collapsedCert, setCollapsedCert] = useState<Record<string, boolean>>({});
 
+  // ── unsaved-changes tracking ───────────────────────────────────────────────
+  // A serialized snapshot of every persisted field. `savedSnapshotRef` holds
+  // the last value that matches what's in the DB (set after the initial load
+  // and after each successful save); the form is "dirty" whenever the live
+  // snapshot has drifted from it. Drives both the beforeunload prompt and the
+  // in-app navigation confirm below.
+  const formSnapshot = useMemo(
+    () => JSON.stringify({
+      contact, roleStatus, headline, skills,
+      experiences, projects, education, certifications,
+      masterResumeId, photoUrl, photoPath,
+    }),
+    [contact, roleStatus, headline, skills, experiences, projects, education, certifications, masterResumeId, photoUrl, photoPath],
+  );
+  const savedSnapshotRef = useRef<string | null>(null);
+  const isDirty = savedSnapshotRef.current !== null && savedSnapshotRef.current !== formSnapshot;
+
   // ── load profile on mount ──────────────────────────────────────────────────
   useEffect(() => {
     getCareerProfile().then(profile => {
       if (profile) hydrate(profile);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  // Once the initial load has settled, take the first snapshot as the
+  // "saved" baseline — anything the user changes after this counts as dirty.
+  useEffect(() => {
+    if (!loading && savedSnapshotRef.current === null) {
+      savedSnapshotRef.current = formSnapshot;
+    }
+  }, [loading, formSnapshot]);
 
   function hydrate(profile: CareerProfile) {
     setContact({ ...emptyContact(), ...profile.contact });
@@ -183,24 +212,42 @@ export default function ProfilePage() {
       });
   }, [masterResumeId]);
 
-  // ── save-on-leave ────────────────────────────────────────────────────────
-  // A resume upload fills the form but no longer auto-saves (see handleUpload)
-  // so the user can review AI-extracted fields before they're persisted. If
-  // they navigate away without hitting "Save Profile" explicitly, save for
-  // them anyway — but only when the form is in a valid state, so leaving
-  // mid-edit with e.g. no name entered doesn't silently persist junk.
-  // Refs (not the effect's dependency array) carry the latest state into the
-  // unmount cleanup, since that effect only runs once on mount.
-  const handleSaveRef = useRef(handleSave);
-  handleSaveRef.current = handleSave;
-  const isValidRef = useRef(false);
-  isValidRef.current = contact.name.trim().length > 0;
-
+  // ── warn before leaving with unsaved changes ─────────────────────────────
+  // Nothing is persisted until "Save Profile" is clicked (there is no
+  // silent auto-save). Guard both exit paths while the form is dirty:
+  //  • beforeunload  → browser refresh, tab close, navigating to another site
+  //  • anchor clicks → in-app navigation via <Link> in the sidebar / nav
   useEffect(() => {
-    return () => {
-      if (isValidRef.current) handleSaveRef.current();
+    if (!isDirty) return;
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    // Capture phase so we can cancel the navigation before Next's <Link>
+    // click handler runs.
+    const onDocClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement | null)?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || anchor.target === "_blank") return;
+      const dest = new URL(href, window.location.href);
+      if (dest.origin !== window.location.origin || dest.pathname === window.location.pathname) return;
+      if (!window.confirm("You have unsaved changes. Leave without saving?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onDocClick, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onDocClick, true);
+    };
+  }, [isDirty]);
 
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
@@ -220,6 +267,9 @@ export default function ProfilePage() {
         photo_path: photoPath,
       };
       await upsertCareerProfile(profileInput);
+      // Everything in the form now matches the DB — clear the dirty flag so
+      // the unsaved-changes guards stand down.
+      savedSnapshotRef.current = formSnapshot;
       // Deliberately NOT syncing this back into the resume's stored content:
       // profileToResumeContent reconstructs bullets from the profile form's
       // split Responsibilities/Achievements/Projects/Impact fields, which
@@ -252,13 +302,13 @@ export default function ProfilePage() {
     handleUpload(f);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleUpload(file: File) {
+  async function handleUpload(file: File, templateId: string = "ats_clean") {
     setUploading(true); setError(null);
     try {
       // Replacing an existing resume overwrites that same row in place
       // (instead of creating a new, orphaned one the rest of the app might
       // still be pointing at).
-      const resume = await apiClient.parseResumeFile(file, "ats_clean", masterResumeId ?? undefined);
+      const resume = await apiClient.parseResumeFile(file, templateId, masterResumeId ?? undefined);
       // Fully replace the form with the newly parsed resume — a "Replace"
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.
@@ -304,9 +354,9 @@ export default function ProfilePage() {
       // Fill the form only — deliberately NOT persisted yet. The uploaded
       // file is the user's master copy; auto-filling parsed fields is a
       // convenience, but overwriting their saved career profile before they
-      // can review what the AI extracted is not. This gets saved either by
-      // the "Save Profile" button or automatically on leaving this page
-      // (see the save-on-leave effect below), same as any other edit here.
+      // can review what the AI extracted is not. It persists when they click
+      // "Save Profile" — leaving with these changes unsaved triggers the
+      // unsaved-changes prompt, same as any other edit here.
       setContact(newContact);
       setHeadline(newHeadline);
       setSkills(newSkills);
@@ -324,6 +374,66 @@ export default function ProfilePage() {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  // ── download original resume ───────────────────────────────────────────────
+  // Pulls the untouched PDF the user uploaded (stored in Supabase Storage at
+  // resumes/{user}/{resume}/original.pdf) via a short-lived signed URL, then
+  // saves it locally. Fetched as a blob rather than linked directly because a
+  // plain <a download> pointing at the cross-origin storage URL opens the PDF
+  // instead of downloading it.
+  async function handleDownloadResume() {
+    if (!masterResumeId) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const { signed_url, file_name } = await apiClient.getOriginalResumeFile(masterResumeId);
+      const res = await fetch(signed_url);
+      if (!res.ok) throw new Error("Could not fetch the resume file.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file_name || `${masterResumeTitle ?? "resume"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 404
+          ? "This resume has no uploaded file to download."
+          : e instanceof Error ? e.message : "Download failed"
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  // ── re-parse the stored resume ─────────────────────────────────────────────
+  // Re-runs AI extraction on the original PDF already in storage — no
+  // re-upload needed. Fills the form with the fresh parse (same in-place
+  // "replace" semantics as an upload), which the user then reviews and saves.
+  async function handleReparse() {
+    if (!masterResumeId) return;
+    setReparsing(true);
+    setError(null);
+    try {
+      const { signed_url, file_name } = await apiClient.getOriginalResumeFile(masterResumeId);
+      const res = await fetch(signed_url);
+      if (!res.ok) throw new Error("Could not fetch the stored resume file.");
+      const blob = await res.blob();
+      const file = new File([blob], file_name || "resume.pdf", { type: "application/pdf" });
+      await handleUpload(file, masterResumeTemplateId);
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 404
+          ? "This resume has no stored file to re-parse."
+          : e instanceof Error ? e.message : "Re-parse failed"
+      );
+    } finally {
+      setReparsing(false);
     }
   }
 
@@ -465,22 +575,37 @@ export default function ProfilePage() {
                 <p className="text-caption text-on-surface-variant mt-xs">Active resume · fields auto-populated from this file</p>
               </div>
             </div>
-            <div className="flex items-center gap-sm shrink-0">
+            <div className="flex items-center gap-sm shrink-0 flex-wrap">
               <button
                 onClick={() => setShowPreview(true)}
                 className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
-                <Eye size={14} /> Preview
+                <Eye size={14} /> View
+              </button>
+              <button
+                onClick={handleDownloadResume}
+                disabled={downloading}
+                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
+                {downloading ? <Spinner size={14} className="animate-spin" /> : <DownloadSimple size={14} />}
+                {downloading ? "Downloading…" : "Download"}
               </button>
               <button onClick={() => router.push(`/studio/${masterResumeId}`)}
                 className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
                 <ArrowSquareOut size={14} /> Open
               </button>
               <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
+                onClick={handleReparse}
+                disabled={uploading || reparsing}
+                title="Re-run AI extraction on the stored file"
                 className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
-                {uploading && <Spinner size={14} className="animate-spin" />}
-                {uploading ? "Replacing…" : "Replace"}
+                <ArrowsClockwise size={14} className={reparsing ? "animate-spin" : ""} />
+                {reparsing ? "Re-parsing…" : "Re-parse"}
+              </button>
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || reparsing}
+                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
+                {uploading && !reparsing && <Spinner size={14} className="animate-spin" />}
+                {uploading && !reparsing ? "Replacing…" : "Replace"}
               </button>
             </div>
           </div>
@@ -963,9 +1088,9 @@ export default function ProfilePage() {
                           placeholder="2020" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">GPA (optional)</label>
+                        <label className="text-caption text-on-surface-variant">GPA / CGPA (optional)</label>
                         <input value={edu.gpa ?? ""} onChange={e => updateEdu(edu.id, "gpa", e.target.value)}
-                          placeholder="3.8 / 4.0" className={inputCls} />
+                          placeholder="e.g. 3.8/4.0 or 8.5/10" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs col-span-2">
                         <label className="text-caption text-on-surface-variant">Honors / Activities (optional)</label>

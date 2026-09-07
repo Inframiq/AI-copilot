@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // A successful tailor run populates pendingContent, which makes EditorPanel
 // render BulletReviewPanel — and that component calls useRouter() (added
@@ -23,10 +25,26 @@ vi.mock("@/lib/api-client", () => ({
   },
 }));
 
+// BulletReviewPanel (rendered once a tailor run populates pendingContent)
+// looks up the career profile via react-query to decide whether the open
+// resume is the profile's master — stub it so those tests don't hit network.
+const { getCareerProfile } = vi.hoisted(() => ({ getCareerProfile: vi.fn() }));
+vi.mock("@/lib/career-profile-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
+  return { ...actual, getCareerProfile };
+});
+
 import { EditorPanel } from "../../components/resume/EditorPanel";
 import { useResumeStore } from "../../stores/resume-store";
 import { useTailoringStore } from "../../stores/tailoring-store";
 import { apiClient } from "../../lib/api-client";
+
+// EditorPanel's tailoring preview subtree uses react-query; give every render
+// its own client so the hook has a provider.
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const SAMPLE_CONTENT = {
   contact: { name: "Jane Doe", email: "jane@example.com" },
@@ -41,6 +59,7 @@ describe("EditorPanel", () => {
     useResumeStore.getState().resetStore();
     useTailoringStore.getState().resetStore();
     vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
     vi.mocked(apiClient.updateResume).mockResolvedValue({} as any);
     vi.mocked(apiClient.generatePdf).mockResolvedValue({ signed_url: "https://example.com/r.pdf" } as any);
   });

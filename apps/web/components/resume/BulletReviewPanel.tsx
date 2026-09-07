@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -16,6 +17,7 @@ import {
 } from "@phosphor-icons/react";
 import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
+import { getCareerProfile } from "@/lib/career-profile-client";
 import { apiClient, type AtsFix } from "@/lib/api-client";
 import { AtsGapFixPanel } from "./AtsGapFixPanel";
 import { ImportanceBadge, type ImportanceLevel } from "./ImportanceBadge";
@@ -56,6 +58,18 @@ export function BulletReviewPanel() {
 
   const resumeId = useResumeStore((s) => s.resumeId);
   const originalContent = useResumeStore((s) => s.content);
+
+  // Tailoring is launched from the profile's master resume, and "Update my
+  // resume" would overwrite that canonical copy in place with JD-specific
+  // content. When this IS the master resume, only "Save as new" is offered
+  // (the backend also rejects a content overwrite of it with a 409).
+  const { data: careerProfile } = useQuery({
+    queryKey: ["careerProfile"],
+    queryFn: getCareerProfile,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isMasterResume =
+    !!resumeId && careerProfile?.master_resume_id === resumeId;
 
   const [isRetailoring, setIsRetailoring] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -242,6 +256,9 @@ export function BulletReviewPanel() {
 
   async function handleSave(mode: "update" | "new") {
     if (!resumeId) return;
+    // Belt-and-braces: the master resume's "Update" button isn't rendered,
+    // and the backend 409s on it anyway — never send the request.
+    if (mode === "update" && isMasterResume) return;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -635,17 +652,27 @@ export function BulletReviewPanel() {
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-md flex flex-col gap-sm">
             <p className="text-label-sm font-bold text-on-surface">Save tailored resume</p>
             {saveError && <p className="text-caption text-error">{saveError}</p>}
-            <button
-              onClick={() => handleSave("update")}
-              disabled={isSaving}
-              className="w-full flex items-center justify-center gap-xs py-sm rounded-lg text-label-sm text-on-primary bg-primary hover:bg-primary-container transition-all disabled:opacity-50"
-            >
-              <FloppyDisk size={14} />
-              {isSaving ? "Saving…" : "Update my resume"}
-            </button>
-            <p className="text-caption text-on-surface-variant px-xs">
-              Overwrites your current resume with this tailored version.
-            </p>
+            {!isMasterResume && (
+              <>
+                <button
+                  onClick={() => handleSave("update")}
+                  disabled={isSaving}
+                  className="w-full flex items-center justify-center gap-xs py-sm rounded-lg text-label-sm text-on-primary bg-primary hover:bg-primary-container transition-all disabled:opacity-50"
+                >
+                  <FloppyDisk size={14} />
+                  {isSaving ? "Saving…" : "Update my resume"}
+                </button>
+                <p className="text-caption text-on-surface-variant px-xs">
+                  Overwrites your current resume with this tailored version.
+                </p>
+              </>
+            )}
+            {isMasterResume && (
+              <p className="text-caption text-on-surface-variant px-xs">
+                This is your profile&rsquo;s master resume — it stays untouched. Save the
+                tailored version as a separate resume for this job.
+              </p>
+            )}
             <div className="flex items-center gap-sm">
               <input
                 type="text"

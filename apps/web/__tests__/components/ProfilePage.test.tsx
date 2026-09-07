@@ -22,11 +22,16 @@ vi.mock("@/lib/career-profile-client", async (importOriginal) => {
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto, uploadResumePhoto: vi.fn() }));
 
 vi.mock("@/lib/api-client", () => ({
-  apiClient: { getResume: vi.fn(), parseResumeFile: vi.fn() },
+  apiClient: {
+    getResume: vi.fn(),
+    parseResumeFile: vi.fn(),
+    getOriginalResumeFile: vi.fn(),
+  },
   ApiError: class ApiError extends Error { status = 0; },
 }));
 
 import ProfilePage from "../../app/(app)/profile/page";
+import { apiClient } from "@/lib/api-client";
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -94,5 +99,62 @@ describe("My Profile — profile photo", () => {
         expect.objectContaining({ photo_url: null, photo_path: null }),
       ),
     );
+  });
+});
+
+describe("My Profile — resume re-parse & unsaved-changes guard", () => {
+  const withMasterResume = {
+    user_id: "u1", master_resume_id: "r1",
+    contact: { name: "Jane", email: "j@x.com" },
+    experience: [], projects: [], education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+    getCareerProfile.mockResolvedValue(withMasterResume);
+    (apiClient.getResume as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane's Resume", template_id: "ats_modern", content: {},
+    });
+  });
+
+  it("Re-parse re-runs extraction on the stored file, in place, without a re-upload", async () => {
+    (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
+    });
+    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+      content: { contact: { name: "Jane Parsed" }, skills: ["Python"] },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
+    }) as unknown as typeof fetch;
+
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
+
+    await waitFor(() =>
+      // stored template preserved, same row overwritten (resume_id passed)
+      expect(apiClient.parseResumeFile).toHaveBeenCalledWith(expect.any(File), "ats_modern", "r1"),
+    );
+    expect(apiClient.getOriginalResumeFile).toHaveBeenCalledWith("r1");
+  });
+
+  it("prompts before leaving once the form has unsaved edits", async () => {
+    renderPage();
+    const nameInput = await screen.findByPlaceholderText("Jane Smith");
+
+    // Pristine — leaving is not blocked.
+    const clean = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+
+    await userEvent.type(nameInput, " Smith");
+
+    const dirty = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
   });
 });
