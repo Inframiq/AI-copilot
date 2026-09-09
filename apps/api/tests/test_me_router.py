@@ -1,9 +1,9 @@
-"""GET /me/subscription."""
+"""GET /me/subscription and DELETE /me."""
 import time
 import uuid
 import jwt as pyjwt
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
@@ -75,4 +75,61 @@ async def test_creates_free_subscription_on_first_call():
 async def test_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.get("/me/subscription")
+    assert r.status_code == 401
+
+
+# ── DELETE /me ───────────────────────────────────────────────────────────────
+
+
+def _delete_db():
+    s = MagicMock()
+    res = MagicMock()
+    res.all.return_value = []
+    s.execute = AsyncMock(return_value=res)
+    s.commit = AsyncMock()
+
+    async def _override():
+        yield s
+
+    return _override, s
+
+
+@pytest.mark.asyncio
+async def test_delete_account_wipes_data_and_removes_auth_user():
+    override, s = _delete_db()
+    app.dependency_overrides[get_db] = override
+    fake_sb = MagicMock()
+    try:
+        with patch("app.routers.me._supabase", return_value=fake_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.request("DELETE", "/me", headers=auth())
+        assert r.status_code == 204
+        fake_sb.auth.admin.delete_user.assert_called_once_with(TEST_USER_ID)
+        s.commit.assert_awaited()
+        # One bulk delete per owned table, plus the raw career_profiles delete.
+        assert s.execute.await_count >= 10
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_account_surfaces_auth_failure_without_wiping():
+    override, s = _delete_db()
+    app.dependency_overrides[get_db] = override
+    fake_sb = MagicMock()
+    fake_sb.auth.admin.delete_user.side_effect = RuntimeError("supabase down")
+    try:
+        with patch("app.routers.me._supabase", return_value=fake_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.request("DELETE", "/me", headers=auth())
+        assert r.status_code == 502
+        s.commit.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_account_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.request("DELETE", "/me")
     assert r.status_code == 401

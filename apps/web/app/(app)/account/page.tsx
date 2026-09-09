@@ -1,11 +1,14 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightning, Sparkle, Info, User, ArrowRight, SignOut } from "@phosphor-icons/react";
+import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { createBrowserClient } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
+import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import type { Subscription } from "@career-copilot/types";
 
 // Only actions the user actively triggers with a button. Interview prep
@@ -38,6 +41,7 @@ export default function AccountPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const supabase = createBrowserClient();
+  const [showDelete, setShowDelete] = useState(false);
 
   const { data: sub, isLoading: subLoading, isError: subError } = useQuery<Subscription>({
     queryKey: ["subscription"],
@@ -115,6 +119,9 @@ export default function AccountPage() {
           </p>
         )}
       </div>
+
+      {/* Password */}
+      <ChangePasswordCard />
 
       {subError ? (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
@@ -232,6 +239,27 @@ export default function AccountPage() {
         <SignOut size={18} weight="bold" />
         Sign out
       </button>
+
+      {/* Danger zone */}
+      <div className="rounded-2xl p-lg border border-error/40 bg-error/5">
+        <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+          <Warning size={20} weight="fill" className="text-error" />
+          Danger zone
+        </h2>
+        <p className="text-body-sm text-on-surface-variant mt-xs">
+          Permanently delete your account and everything in it. This cannot be
+          undone.
+        </p>
+        <button
+          onClick={() => setShowDelete(true)}
+          className="mt-md flex items-center gap-sm px-lg py-md rounded-xl text-label-md font-semibold text-on-error bg-error hover:opacity-90 transition-opacity"
+        >
+          <Trash size={18} weight="bold" />
+          Delete account
+        </button>
+      </div>
+
+      {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
     </div>
   );
 }

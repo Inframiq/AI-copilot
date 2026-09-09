@@ -388,6 +388,11 @@ export const apiClient = {
   getSubscription: (): Promise<Subscription> =>
     request<Subscription>("GET", "/me/subscription"),
 
+  /** Permanently deletes the signed-in user's account, all their data, and
+   * the Supabase auth user itself. Irreversible — the caller is responsible
+   * for signing out and clearing local state afterwards. */
+  deleteAccount: (): Promise<void> => request<void>("DELETE", "/me"),
+
   getPlans: (): Promise<{ plans: Plan[] }> =>
     request<{ plans: Plan[] }>("GET", "/plans"),
 };

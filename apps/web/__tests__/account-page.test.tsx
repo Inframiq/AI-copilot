@@ -6,11 +6,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const pushMock = vi.fn();
 const signOutMock = vi.fn().mockResolvedValue({ error: null });
+const getUserMock = vi.fn().mockResolvedValue({ data: { user: { email: "u@example.com" } } });
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
-vi.mock("@/lib/api-client", () => ({ apiClient: { getSubscription: vi.fn() } }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: pushMock }),
+}));
+vi.mock("@/lib/api-client", () => ({
+  apiClient: { getSubscription: vi.fn(), deleteAccount: vi.fn() },
+  ApiError: class ApiError extends Error {},
+}));
 vi.mock("@/lib/supabase", () => ({
-  createBrowserClient: () => ({ auth: { signOut: signOutMock } }),
+  createBrowserClient: () => ({ auth: { signOut: signOutMock, getUser: getUserMock } }),
 }));
 vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: vi.fn() }));
 
@@ -111,5 +117,20 @@ describe("Account page", () => {
     renderPage();
     const link = await screen.findByRole("link", { name: /need more credits/i });
     expect(link).toHaveAttribute("href", "/plans");
+  });
+
+  it("exposes the change-password form and a danger-zone delete action", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    vi.mocked(getCareerProfile).mockResolvedValue(null);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: /change password/i }));
+    expect(screen.getByText("Current password")).toBeInTheDocument();
+    expect(screen.getByText("New password")).toBeInTheDocument();
+    expect(screen.getByText("Confirm new password")).toBeInTheDocument();
+
+    expect(screen.getByText("Danger zone")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /delete account/i }));
+    expect(await screen.findByRole("dialog", { name: /delete account/i })).toBeInTheDocument();
   });
 });
