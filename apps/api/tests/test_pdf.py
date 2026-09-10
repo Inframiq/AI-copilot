@@ -16,6 +16,7 @@ import pytest
 weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import (  # noqa: E402
+    UNDERFILL_PAGE_FILL_THRESHOLD,
     _email_link,
     _phone_link,
     _render_html,
@@ -23,7 +24,9 @@ from app.services.pdf import (  # noqa: E402
     _url_link,
     generate_letter_pdf,
     generate_pdf,
+    generate_pdf_with_meta,
     get_signed_url,
+    measure_pdf,
     upload_pdf,
 )
 
@@ -198,6 +201,92 @@ def test_unknown_font_choice_falls_back_to_sans():
 def test_generate_pdf_invalid_template_raises():
     with pytest.raises(ValueError, match="Unknown template"):
         generate_pdf(SAMPLE_RESUME, "unknown_template")
+
+
+# ---------------------------------------------------------------------------
+# Page-fit metadata: measure_pdf / generate_pdf_with_meta feed the "resume is
+# shorter than a page" advisory shown after generation, tailoring, and in the
+# Studio preview pane.
+# ---------------------------------------------------------------------------
+
+# Deliberately sparse — a name, one short role, one line of education. Renders
+# well under a single page.
+SHORT_RESUME = {
+    "contact": {"name": "Sam Short", "email": "sam@example.com"},
+    "experience": [
+        {"company": "Acme", "title": "Intern", "start": "2023", "end": "2023", "bullets": ["Helped out"]}
+    ],
+    "education": [{"institution": "State U", "degree": "B.S. CS", "year": "2024"}],
+    "skills": ["Python"],
+}
+
+# Deliberately overflowing — many roles, many bullets, a big skills block. Runs
+# past one page on every template.
+LONG_RESUME = {
+    "contact": {
+        "name": "Pat Long",
+        "email": "pat@example.com",
+        "phone": "555-0199",
+        "location": "Boston, MA",
+    },
+    "summary": "Staff engineer with 12 years across platform, infra, and product teams. " * 3,
+    "experience": [
+        {
+            "company": f"Company {i}",
+            "title": "Senior Software Engineer",
+            "start": f"20{10 + i}",
+            "end": f"20{11 + i}",
+            "bullets": [
+                "Led a cross-functional team to deliver a major platform migration ahead of schedule",
+                "Cut p99 API latency by 45% by redesigning the caching and connection-pool layers",
+                "Mentored five engineers, three of whom were promoted within the year",
+                "Owned the on-call rotation and drove a 60% reduction in paging volume",
+                "Designed and shipped the multi-region failover strategy still in use today",
+            ],
+        }
+        for i in range(6)
+    ],
+    "education": [
+        {"institution": "MIT", "degree": "B.S. Computer Science", "year": "2006–2010"},
+        {"institution": "Georgia Tech", "degree": "M.S. Computer Science", "year": "2011–2013"},
+    ],
+    "skills": {
+        "Languages": ["Python", "Go", "Rust", "TypeScript", "Java", "C++"],
+        "Infra": ["Kubernetes", "Terraform", "AWS", "GCP", "Kafka", "PostgreSQL"],
+        "Practices": ["TDD", "CI/CD", "Observability", "Incident response", "Design review"],
+    },
+}
+
+
+def test_measure_pdf_returns_page_fit_dict():
+    meta = measure_pdf(SAMPLE_RESUME, "ats_clean")
+    assert set(meta) == {"page_count", "page_fill", "underfilled"}
+    assert meta["page_count"] >= 1
+    assert 0.0 <= meta["page_fill"] <= 1.0
+    assert isinstance(meta["underfilled"], bool)
+
+
+def test_measure_pdf_flags_a_resume_shorter_than_a_page():
+    meta = measure_pdf(SHORT_RESUME, "ats_clean")
+    assert meta["page_count"] == 1
+    assert meta["page_fill"] < UNDERFILL_PAGE_FILL_THRESHOLD
+    assert meta["underfilled"] is True
+
+
+def test_measure_pdf_does_not_flag_a_resume_that_overflows_one_page():
+    meta = measure_pdf(LONG_RESUME, "ats_clean")
+    assert meta["page_count"] > 1
+    assert meta["underfilled"] is False
+
+
+def test_generate_pdf_with_meta_returns_bytes_and_page_fit():
+    pdf, meta = generate_pdf_with_meta(SHORT_RESUME, "ats_clean")
+    assert pdf[:4] == b"%PDF"
+    assert meta["underfilled"] is True
+
+    pdf, meta = generate_pdf_with_meta(LONG_RESUME, "ats_clean")
+    assert pdf[:4] == b"%PDF"
+    assert meta["underfilled"] is False
 
 
 # ---------------------------------------------------------------------------

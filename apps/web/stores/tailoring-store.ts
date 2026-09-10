@@ -659,7 +659,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set({ isApplying: true, error: null, mergedContent });
     try {
       const resumeStoreState = useResumeStore.getState();
-      const { signed_url } = await apiClient.generatePdf(
+      const { signed_url, underfilled } = await apiClient.generatePdf(
         resumeId,
         resumeStoreState.templateId,
         mergedContent,
@@ -669,6 +669,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         resumeStoreState.accentColor,
       );
       set({ previewPdfUrl: signed_url, isApplying: false });
+      // "Resume is shorter than a page" advisory — the tailoring review panel
+      // and the Studio preview pane both read this off the resume store.
+      useResumeStore.getState().setPreviewUnderfilled(underfilled ?? false);
       // Also drive the Studio page's dedicated PDF Preview panel — it reads
       // its own pdfSignedUrl from the resume store, so without this the
       // "Preview Tailored Resume" render would only ever show up inline
@@ -745,7 +748,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         });
         targetId = created.id;
       }
-      const { signed_url } = await apiClient.generatePdf(
+      const { signed_url, underfilled } = await apiClient.generatePdf(
         targetId,
         resumeStore.templateId,
         undefined,
@@ -769,6 +772,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         resumeStore.accentColor
       );
       useResumeStore.getState().setPdfSignedUrl(signed_url);
+      useResumeStore.getState().setPreviewUnderfilled(underfilled ?? false);
       set({
         pendingContent: null,
         bulletDecisions: {},

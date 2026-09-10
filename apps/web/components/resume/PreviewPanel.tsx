@@ -5,6 +5,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ArrowSquareOut, ArrowsClockwise, FileText, SpinnerGap } from "@phosphor-icons/react";
+import { UnderfillWarning } from "./UnderfillWarning";
 
 // Hides the embedded PDF viewer's own toolbar (its download/print bar) so
 // the header's "Download PDF" stays the one place to actually download —
@@ -62,6 +63,8 @@ export function PreviewPanel() {
   const setFontChoice = useResumeStore((s) => s.setFontChoice);
   const setAccentColor = useResumeStore((s) => s.setAccentColor);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
+  const previewUnderfilled = useResumeStore((s) => s.previewUnderfilled);
+  const setPreviewUnderfilled = useResumeStore((s) => s.setPreviewUnderfilled);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   // Spacing sliders only mark the preview stale — regenerating on every drag
@@ -98,7 +101,7 @@ export function PreviewPanel() {
     setIsGenerating(true);
     setGenError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(
+      const { signed_url, underfilled } = await apiClient.generatePdf(
         resumeId,
         templateId,
         undefined,
@@ -108,6 +111,7 @@ export function PreviewPanel() {
         accentColor
       );
       setPdfSignedUrl(signed_url);
+      setPreviewUnderfilled(underfilled ?? false);
       setSpacingStale(false);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Generation failed");
@@ -315,7 +319,10 @@ export function PreviewPanel() {
 
       {/* PDF Preview Area */}
       <div className="flex-1 bg-surface-container overflow-y-auto relative">
-        <div className="relative z-10 flex justify-center items-start p-md min-h-full">
+        <div className="relative z-10 flex flex-col items-center gap-md p-md min-h-full">
+          {pdfSignedUrl && (
+            <UnderfillWarning show={previewUnderfilled} className="w-full" />
+          )}
           {pdfSignedUrl ? (
             <div className="relative w-full" style={{ aspectRatio: "1 / 1.414", minHeight: "800px" }}>
               {!iframeLoaded && (

@@ -135,8 +135,11 @@ export const apiClient = {
     paragraphSpacing?: number,
     fontChoice?: string,
     accentColor?: string | null
-  ): Promise<{ signed_url: string }> =>
-    request<{ signed_url: string }>("POST", `/resumes/${id}/pdf`, {
+    // page_count / page_fill / underfilled: "resume is shorter than a page"
+    // advisory. underfilled is true only for a single-page resume that leaves
+    // a visible empty band at the bottom.
+  ): Promise<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean }> =>
+    request<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean }>("POST", `/resumes/${id}/pdf`, {
       template_id: templateId,
       ...(contentOverride ? { content: contentOverride } : {}),
       ...(lineSpacing !== undefined ? { line_spacing: lineSpacing } : {}),

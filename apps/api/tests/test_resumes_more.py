@@ -152,7 +152,10 @@ async def test_generate_pdf_returns_signed_url():
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen, patch(
+        with patch(
+            "app.routers.resumes.generate_pdf_with_meta",
+            return_value=(b"%PDF-fake", {"page_count": 1, "page_fill": 0.42, "underfilled": True}),
+        ) as mock_gen, patch(
             "app.routers.resumes.upload_pdf", new=AsyncMock(return_value="resumes/user/resume.pdf")
         ) as mock_upload, patch(
             "app.routers.resumes.AsyncSessionLocal", new=session_factory
@@ -169,6 +172,9 @@ async def test_generate_pdf_returns_signed_url():
         body = r.json()
         assert body["signed_url"] == "data:application/pdf;base64," + base64.b64encode(b"%PDF-fake").decode()
         assert body["expires_in"] is None
+        # Page-fit metadata rides along on the render response.
+        assert body["page_count"] == 1
+        assert body["underfilled"] is True
         mock_gen.assert_called_once()
         assert resume.template_id == "ats_modern"
         # Storage persistence happens in a background task, after the response is sent.
@@ -190,7 +196,10 @@ async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_gene
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen, patch(
+        with patch(
+            "app.routers.resumes.generate_pdf_with_meta",
+            return_value=(b"%PDF-fake", {"page_count": 1, "page_fill": 0.9, "underfilled": False}),
+        ) as mock_gen, patch(
             "app.routers.resumes.upload_pdf", new=AsyncMock(return_value="resumes/user/resume.pdf")
         ), patch(
             "app.routers.resumes.AsyncSessionLocal", new=session_factory
@@ -223,7 +232,10 @@ async def test_generate_pdf_content_override_preview_does_not_persist_spacing():
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.resumes.generate_pdf", return_value=b"%PDF-fake") as mock_gen:
+        with patch(
+            "app.routers.resumes.generate_pdf_with_meta",
+            return_value=(b"%PDF-fake", {"page_count": 1, "page_fill": 0.5, "underfilled": True}),
+        ) as mock_gen:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     f"/resumes/{resume.id}/pdf",

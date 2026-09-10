@@ -23,6 +23,7 @@ export default function StudioPage({
   const queryClient = useQueryClient();
   const setResume = useResumeStore((s) => s.setResume);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
+  const setPreviewUnderfilled = useResumeStore((s) => s.setPreviewUnderfilled);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
@@ -219,8 +220,9 @@ export default function StudioPage({
     if (!storeResumeId || !pdfSignedUrl) return;
     setIsSwitchingTemplate(true);
     try {
-      const { signed_url } = await apiClient.generatePdf(storeResumeId, id, undefined, lineSpacing, paragraphSpacing);
+      const { signed_url, underfilled } = await apiClient.generatePdf(storeResumeId, id, undefined, lineSpacing, paragraphSpacing);
       setPdfSignedUrl(signed_url);
+      setPreviewUnderfilled(underfilled ?? false);
     } catch {
       // Best-effort re-render — the template choice itself is already saved;
       // the next explicit preview/download retries the render.
@@ -234,9 +236,10 @@ export default function StudioPage({
     setIsGeneratingPdf(true);
     setPdfError(null);
     try {
-      const { signed_url } = await apiClient.generatePdf(storeResumeId, templateId);
+      const { signed_url, underfilled } = await apiClient.generatePdf(storeResumeId, templateId);
       // Update the in-app preview too
       setPdfSignedUrl(signed_url);
+      setPreviewUnderfilled(underfilled ?? false);
       // Fetch as a blob so we can force a real file download regardless of CORS
       const response = await fetch(signed_url);
       const blob = await response.blob();

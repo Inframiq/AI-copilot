@@ -191,4 +191,30 @@ describe("BulletReviewPanel", () => {
     (await findByRole("button", { name: /Save…/ })).click();
     await findByRole("button", { name: /Update my resume/ });
   });
+
+  it("shows the 'shorter than a page' advisory when the tailored preview came back underfilled", () => {
+    useResumeStore.getState().setResume("resume-1", changedOriginal, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: changedPending,
+      mergedContent: changedPending,
+      previewPdfUrl: "blob:preview",
+    } as never);
+    useResumeStore.getState().setPreviewUnderfilled(true);
+
+    const { getByText } = renderPanel();
+    expect(getByText(/shorter than a full page/i)).toBeTruthy();
+  });
+
+  it("does not show the advisory when the tailored preview fills the page", () => {
+    useResumeStore.getState().setResume("resume-1", changedOriginal, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: changedPending,
+      mergedContent: changedPending,
+      previewPdfUrl: "blob:preview",
+    } as never);
+    useResumeStore.getState().setPreviewUnderfilled(false);
+
+    const { queryByText } = renderPanel();
+    expect(queryByText(/shorter than a full page/i)).toBeNull();
+  });
 });

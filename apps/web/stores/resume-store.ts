@@ -25,6 +25,12 @@ interface ResumeState {
    * successful save — surfaced in the UI so a failed save is never silent. */
   saveError: string | null;
   pdfSignedUrl: string | null;
+  /** True when the most recently rendered preview is a single page that
+   *  doesn't fill down to the bottom — drives the "resume is shorter than a
+   *  page, add more points" advisory banner. Reset whenever a new resume is
+   *  loaded; updated by whoever renders a preview (PreviewPanel, and the
+   *  tailoring store which mirrors its preview here). */
+  previewUnderfilled: boolean;
   /** Whether the split preview pane is showing. Starts closed — an empty
    *  "no preview yet" pane eats half the screen for nothing before the user
    *  has asked for one. Opened by the studio header's "Preview" button, the
@@ -56,6 +62,7 @@ interface ResumeState {
   setFontChoice: (fontChoice: string) => void;
   setAccentColor: (accentColor: string | null) => void;
   setPdfSignedUrl: (url: string | null) => void;
+  setPreviewUnderfilled: (underfilled: boolean) => void;
   setPreviewOpen: (open: boolean) => void;
   setPhotoModal: (open: boolean, revertTo?: string | null) => void;
   resetStore: () => void;
@@ -81,6 +88,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   isSaving: false,
   saveError: null,
   pdfSignedUrl: null,
+  previewUnderfilled: false,
   previewOpen: false,
   photoModalOpen: false,
   photoModalRevertTo: null,
@@ -99,6 +107,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       isSaving: false,
       saveError: null,
       pdfSignedUrl: null,
+      previewUnderfilled: false,
       previewOpen: false,
     }),
 
@@ -134,6 +143,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
+  setPreviewUnderfilled: (underfilled) => set({ previewUnderfilled: underfilled }),
+
   setPreviewOpen: (open) => set({ previewOpen: open }),
 
   setPhotoModal: (open, revertTo = null) =>
@@ -154,6 +165,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       isSaving: false,
       saveError: null,
       pdfSignedUrl: null,
+      previewUnderfilled: false,
       previewOpen: false,
       photoModalOpen: false,
       photoModalRevertTo: null,

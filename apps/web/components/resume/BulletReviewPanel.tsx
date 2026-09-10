@@ -21,6 +21,7 @@ import { getCareerProfile } from "@/lib/career-profile-client";
 import { apiClient, type AtsFix } from "@/lib/api-client";
 import { AtsGapFixPanel } from "./AtsGapFixPanel";
 import { ImportanceBadge, type ImportanceLevel } from "./ImportanceBadge";
+import { UnderfillWarning } from "./UnderfillWarning";
 
 export function BulletReviewPanel() {
   const router = useRouter();
@@ -58,6 +59,7 @@ export function BulletReviewPanel() {
 
   const resumeId = useResumeStore((s) => s.resumeId);
   const originalContent = useResumeStore((s) => s.content);
+  const previewUnderfilled = useResumeStore((s) => s.previewUnderfilled);
 
   // Tailoring is launched from the profile's master resume, and "Update my
   // resume" would overwrite that canonical copy in place with JD-specific
@@ -629,6 +631,7 @@ export function BulletReviewPanel() {
             <p className="text-caption text-on-surface-variant text-center">
               Preview updated in the panel on the right — nothing has been saved yet.
             </p>
+            <UnderfillWarning show={previewUnderfilled} />
             <div className="flex gap-sm">
               <button
                 onClick={handleDownload}

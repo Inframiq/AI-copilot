@@ -148,6 +148,11 @@ class GenerateResumeOut(BaseModel):
     template_id: str
     valid: bool
     violations: list[dict]
+    # True when the finished resume renders on a single page and leaves a
+    # visible empty band at the bottom — the frontend shows a "too few points,
+    # resume is shorter than a page" advisory. Advisory only; the resume is
+    # still created and valid may still be True.
+    underfilled: bool = False
 
 
 class ProjectScoreRequest(BaseModel):

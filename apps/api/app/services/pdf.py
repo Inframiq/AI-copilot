@@ -293,6 +293,81 @@ def _render_html(
     )
 
 
+# Below this fraction of the page's content area filled, a single-page resume
+# reads as "too short" — the advisory banner in Studio / tailoring / generation
+# nudges the user to add more content. 0.9 = anything leaving a visible empty
+# band roughly a tenth of the page or taller.
+UNDERFILL_PAGE_FILL_THRESHOLD = 0.9
+
+
+def _render_document(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
+):
+    """Lay out resume_content with the named template and return a WeasyPrint
+    Document. Shared by generate_pdf (→ .write_pdf()), count_pdf_pages, and
+    measure_pdf so every path lays out through the exact same renderer.
+    """
+    import weasyprint  # deferred so import errors surface as ImportError, not module-level
+
+    html = _render_html(
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+    )
+    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).render()
+
+
+def _last_page_fill_fraction(page) -> float:
+    """Fraction (0.0–1.0) of *page*'s content area that laid-out content
+    actually occupies vertically.
+
+    Walks the page box tree for the lowest content edge and compares it to
+    the page's available content height. Reaches into WeasyPrint layout
+    internals, so any structural surprise falls back to 1.0 ("full" — the
+    caller then never raises a false "too short" alarm).
+    """
+    try:
+        page_box = page._page_box
+        available = float(page_box.height)
+        if available <= 0:
+            return 1.0
+        top = page_box.content_box_y()
+        max_bottom = top
+        for child in page_box.descendants():
+            if child is page_box:
+                continue
+            pos_y = getattr(child, "position_y", None)
+            if pos_y is None:
+                continue
+            try:
+                bottom = float(pos_y) + float(child.margin_height())
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if bottom > max_bottom:
+                max_bottom = bottom
+        fraction = (max_bottom - top) / available
+        return min(max(fraction, 0.0), 1.0)
+    except Exception:  # pragma: no cover - defensive against layout-internals drift
+        return 1.0
+
+
+def _page_meta(document) -> dict:
+    """Page-fit summary for a rendered Document: page count, how full the last
+    page is, and whether a single-page resume is short enough to warn about.
+    """
+    pages = document.pages
+    page_count = len(pages)
+    page_fill = _last_page_fill_fraction(pages[-1]) if pages else 1.0
+    return {
+        "page_count": page_count,
+        "page_fill": round(page_fill, 4),
+        "underfilled": page_count == 1 and page_fill < UNDERFILL_PAGE_FILL_THRESHOLD,
+    }
+
+
 def generate_pdf(
     resume_content: dict,
     template_id: str,
@@ -321,10 +396,28 @@ def generate_pdf(
     Raises:
         ValueError: If template_id is not in ALLOWED_TEMPLATES.
     """
-    import weasyprint  # deferred so import errors surface as ImportError, not module-level
+    document = _render_document(
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+    )
+    return document.write_pdf()
 
-    html = _render_html(resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color)
-    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
+
+def generate_pdf_with_meta(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
+) -> tuple[bytes, dict]:
+    """Like generate_pdf but renders once and also returns _page_meta() —
+    used by the preview endpoint so the "resume is shorter than a page"
+    advisory needs no second WeasyPrint pass.
+    """
+    document = _render_document(
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+    )
+    return document.write_pdf(), _page_meta(document)
 
 
 def count_pdf_pages(resume_content: dict, template_id: str) -> int:
@@ -335,11 +428,15 @@ def count_pdf_pages(resume_content: dict, template_id: str) -> int:
     the only way to know if content fits the page-count budget is to lay it
     out exactly as the real renderer would.
     """
-    import weasyprint  # deferred, same reason as generate_pdf
+    return len(_render_document(resume_content, template_id).pages)
 
-    html = _render_html(resume_content, template_id)
-    document = weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).render()
-    return len(document.pages)
+
+def measure_pdf(resume_content: dict, template_id: str) -> dict:
+    """Render resume_content with the template defaults and return _page_meta()
+    (page_count / page_fill / underfilled). Used by the from-scratch generate
+    endpoint, which has no per-resume spacing prefs to honor yet.
+    """
+    return _page_meta(_render_document(resume_content, template_id))
 
 
 def _render_letter_html(contact: dict, date_str: str, body: str) -> str:

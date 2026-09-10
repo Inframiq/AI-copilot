@@ -184,6 +184,35 @@ describe("PreviewPanel", () => {
     );
   });
 
+  it("shows the 'shorter than a page' advisory when the render comes back underfilled", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/short.pdf",
+      page_count: 1,
+      underfilled: true,
+    });
+
+    render(<PreviewPanel />);
+
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+    expect(screen.getByText(/shorter than a full page/i)).toBeInTheDocument();
+    expect(useResumeStore.getState().previewUnderfilled).toBe(true);
+  });
+
+  it("does not show the advisory when the render fills the page", async () => {
+    useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
+    vi.mocked(apiClient.generatePdf).mockResolvedValue({
+      signed_url: "https://example.com/full.pdf",
+      page_count: 1,
+      underfilled: false,
+    });
+
+    render(<PreviewPanel />);
+
+    await waitFor(() => expect(screen.getByTitle("Resume Preview")).toBeInTheDocument());
+    expect(screen.queryByText(/shorter than a full page/i)).not.toBeInTheDocument();
+  });
+
   it("shows the matching preset label when spacing matches one, and Custom otherwise", async () => {
     useResumeStore.getState().setResume("resume-1", SAMPLE_CONTENT, "ats_clean");
     render(<PreviewPanel />);

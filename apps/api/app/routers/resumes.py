@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
-from app.services.pdf import generate_pdf, upload_pdf, get_signed_url
+from app.services.pdf import generate_pdf, generate_pdf_with_meta, measure_pdf, upload_pdf, get_signed_url
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -383,8 +383,8 @@ async def generate_resume_pdf(
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
-    pdf_bytes = await asyncio.to_thread(
-        generate_pdf,
+    pdf_bytes, page_meta = await asyncio.to_thread(
+        generate_pdf_with_meta,
         content,
         template_id,
         resume.line_spacing,
@@ -402,7 +402,10 @@ async def generate_resume_pdf(
     if not is_preview:
         background_tasks.add_task(_persist_pdf_to_storage, pdf_bytes, str(user["sub"]), resume_id)
     data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
-    return {"signed_url": data_url, "expires_in": None}
+    # page_count / page_fill / underfilled drive the "resume is shorter than a
+    # page" advisory banner in Studio's preview pane and the tailoring review
+    # panel (both render through this endpoint).
+    return {"signed_url": data_url, "expires_in": None, **page_meta}
 
 
 @router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)
@@ -466,12 +469,24 @@ async def generate_resume_endpoint(
         await db.refresh(resume)
         await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
 
+    # Separate render (defaults, no per-resume spacing prefs yet) purely to
+    # tell the user their new resume doesn't fill a page. A render failure here
+    # must never fail resume creation — fall back to "not underfilled".
+    try:
+        underfilled = (
+            await asyncio.to_thread(measure_pdf, generated.resume_content, body.template_id)
+        )["underfilled"]
+    except Exception:
+        logger.warning("measure_pdf failed for generated resume %s", resume.id, exc_info=True)
+        underfilled = False
+
     return GenerateResumeOut(
         resume_id=resume.id,
         content=generated.resume_content,
         template_id=body.template_id,
         valid=generated.validation.valid,
         violations=generated.validation.to_dict()["violations"],
+        underfilled=underfilled,
     )
 
 
