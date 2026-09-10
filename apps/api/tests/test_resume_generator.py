@@ -260,6 +260,36 @@ from app.services.resume_validator import Violation  # noqa: E402
 weasyprint = pytest.importorskip("weasyprint")
 
 
+@pytest.mark.asyncio
+async def test_generate_resume_flags_a_sparse_profile_as_underfilled():
+    """A near-empty profile renders well short of a page — GenerationResult
+    must carry underfilled=True so the endpoint can advise "add more points"."""
+    profile = {
+        "contact": {"name": "Alex Fresher", "email": "alex@example.com"},
+        "education": [{"institution": "State University", "degree": "BSc CS", "year": "2024"}],
+        "projects": [_project("Todo App", 2)],
+        "skills": ["Python", "Git"],
+    }
+    result = await generate_resume(
+        profile, "fresher", make_generator_provider(), target_role="Junior Developer"
+    )
+    assert result.underfilled is True
+
+
+@pytest.mark.asyncio
+async def test_generate_resume_does_not_flag_a_full_profile_as_underfilled():
+    profile = {
+        "contact": {"name": "Pat Senior", "email": "pat@example.com"},
+        "experience": [_job(f"Company {i}", 5, offset=i * 5) for i in range(6)],
+        "education": [{"institution": "MIT", "degree": "BSc CS", "year": "2012"}],
+        "skills": ["Python", "Go", "Rust", "TypeScript", "Kubernetes", "AWS", "Terraform", "Kafka"],
+    }
+    result = await generate_resume(
+        profile, "experienced", make_generator_provider(), target_role="Staff Engineer"
+    )
+    assert result.underfilled is False
+
+
 def test_parse_experience_label_without_disambiguator():
     assert _parse_experience_label("Acme Corp") == ("Acme Corp", None)
 

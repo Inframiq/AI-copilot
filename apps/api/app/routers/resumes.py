@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
-from app.services.pdf import generate_pdf, generate_pdf_with_meta, measure_pdf, upload_pdf, get_signed_url
+from app.services.pdf import generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -469,24 +469,15 @@ async def generate_resume_endpoint(
         await db.refresh(resume)
         await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
 
-    # Separate render (defaults, no per-resume spacing prefs yet) purely to
-    # tell the user their new resume doesn't fill a page. A render failure here
-    # must never fail resume creation — fall back to "not underfilled".
-    try:
-        underfilled = (
-            await asyncio.to_thread(measure_pdf, generated.resume_content, body.template_id)
-        )["underfilled"]
-    except Exception:
-        logger.warning("measure_pdf failed for generated resume %s", resume.id, exc_info=True)
-        underfilled = False
-
     return GenerateResumeOut(
         resume_id=resume.id,
         content=generated.resume_content,
         template_id=body.template_id,
         valid=generated.validation.valid,
         violations=generated.validation.to_dict()["violations"],
-        underfilled=underfilled,
+        # Computed inside generate_resume from the final content (see
+        # GenerationResult.underfilled) — advisory, independent of `valid`.
+        underfilled=generated.underfilled,
     )
 
 

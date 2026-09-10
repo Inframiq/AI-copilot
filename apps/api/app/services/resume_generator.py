@@ -37,6 +37,7 @@ from app.services.resume_spec import (
     HARD_LIMITS,
     resolve_section_order,
 )
+from app.services.pdf import measure_pdf
 from app.services.resume_validator import Violation, ValidationResult, validate_resume
 
 logger = logging.getLogger("app")
@@ -86,6 +87,11 @@ class GenerationResult:
     resume_content: dict
     validation: ValidationResult
     candidate_type: CandidateType
+    # True when the finished resume renders on a single page that doesn't fill
+    # down to the bottom — the caller surfaces a "too few points, resume is
+    # shorter than a page" advisory. Advisory only, independent of
+    # validation.valid (an underfilled resume can still be spec-valid).
+    underfilled: bool = False
 
 
 # ── Item indexing ────────────────────────────────────────────────────────────
@@ -543,4 +549,20 @@ async def generate_resume(
             len(result.violations), rounds, result.to_dict(),
         )
 
-    return GenerationResult(resume_content=assembled, validation=result, candidate_type=candidate_type)
+    # One more render of the final content to tell the caller whether it fills
+    # a page. The compression loop above already renders (via validate_resume →
+    # count_pdf_pages), but only for the page-count ceiling, not the floor — and
+    # it discards the document either way. A failure here is never fatal: the
+    # resume is done, this is only the advisory.
+    try:
+        underfilled = measure_pdf(assembled, template_id)["underfilled"]
+    except Exception:
+        logger.warning("generate_resume: page-fill measurement failed", exc_info=True)
+        underfilled = False
+
+    return GenerationResult(
+        resume_content=assembled,
+        validation=result,
+        candidate_type=candidate_type,
+        underfilled=underfilled,
+    )
