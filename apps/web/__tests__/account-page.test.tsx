@@ -119,18 +119,19 @@ describe("Account page", () => {
     expect(link).toHaveAttribute("href", "/plans");
   });
 
-  it("exposes the change-password form and a danger-zone delete action", async () => {
+  it("exposes a danger-zone delete action that requires typing DELETE to confirm", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     vi.mocked(getCareerProfile).mockResolvedValue(null);
     renderPage();
 
-    await userEvent.click(await screen.findByRole("button", { name: /change password/i }));
-    expect(screen.getByText("Current password")).toBeInTheDocument();
-    expect(screen.getByText("New password")).toBeInTheDocument();
-    expect(screen.getByText("Confirm new password")).toBeInTheDocument();
-
-    expect(screen.getByText("Danger zone")).toBeInTheDocument();
+    expect(await screen.findByText("Danger zone")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /delete account/i }));
     expect(await screen.findByRole("dialog", { name: /delete account/i })).toBeInTheDocument();
+    expect(screen.getByText(/type/i)).toBeInTheDocument();
+
+    const confirmButton = screen.getByRole("button", { name: /delete my account/i });
+    expect(confirmButton).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText("DELETE"), "DELETE");
+    expect(confirmButton).toBeEnabled();
   });
 });
