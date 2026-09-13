@@ -54,6 +54,10 @@ export const metadata: Metadata = {
     images: ["/icon.png"],
   },
   robots: { index: true, follow: true },
+  verification: {
+    // Google Search Console — URL-prefix property for resumebuilder.inframiq.com.
+    google: "GvW55L4DpmFFMhVrNpkZPkBIUdGSJUkyQD2zsbqpFiA",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
