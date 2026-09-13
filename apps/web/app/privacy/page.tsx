@@ -33,11 +33,14 @@ export default function PrivacyPolicyPage() {
           <p className="text-body-md text-on-surface-variant">
             {ENTITY_NAME} (&quot;{ENTITY_NAME.split(" ")[0]}&quot;, &quot;we&quot;, &quot;us&quot;, or
             &quot;our&quot;) operates Career Copilot (the &quot;Service&quot;), an AI-assisted resume,
-            job-description analysis, and interview preparation tool. This Privacy Policy explains what
-            personal data we collect, why we collect it, how it is used, where it is stored, who we share it
-            with, and the rights you have over it — wherever in the world you are using the Service from.
-            By creating an account or otherwise using the Service, you acknowledge that you have read and
-            understood this Policy.
+            job-description analysis, and interview preparation tool for individual job seekers. Career
+            Copilot is a self-service tool: you use it to build and improve your own resume, and there is no
+            employer-, recruiter-, or agency-facing product that screens, ranks, or scores you for a third
+            party. This Privacy Policy explains what personal data we collect, why, how it is used, where it
+            is stored, who we share it with, and the rights you have over it — wherever in the world you are
+            using the Service from. It also serves as our Notice at Collection for California residents (see
+            Section 10). By creating an account or otherwise using the Service, you acknowledge that you have
+            read and understood this Policy.
           </p>
 
           <section className="flex flex-col gap-sm">
@@ -47,12 +50,13 @@ export default function PrivacyPolicyPage() {
               request, or complaint about this Policy or your personal data, contact us at{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>.
               We aim to acknowledge privacy requests within 7 days and to resolve them within the timeframe
-              required by applicable law (see Section 7).
+              required by applicable law (see Section 9).
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">2. Information we collect</h2>
+            <p className="text-body-md text-on-surface-variant">This is a complete inventory of the personal data the Service collects or generates about you:</p>
             <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
               <li>
                 <strong className="text-on-surface">Account data</strong> — your name, email address, profile
@@ -63,49 +67,90 @@ export default function PrivacyPolicyPage() {
               <li>
                 <strong className="text-on-surface">Resume and profile content</strong> — work history,
                 education, skills, contact details, and any resume file or text you upload, type, or generate
-                within the Service.
+                within the Service. Resumes commonly contain your address, phone number, and photo if you
+                choose to include them — these are optional and provided entirely at your discretion; we do
+                not require or request sensitive personal data (such as health, religious, or biometric
+                information) and ask that you avoid including it in resume content unless it is something you
+                specifically intend to share as part of your own document.
               </li>
               <li>
                 <strong className="text-on-surface">Job descriptions</strong> you paste in for analysis,
                 ATS scoring, or tailoring.
               </li>
               <li>
+                <strong className="text-on-surface">AI prompts, outputs, and generation history</strong> — the
+                text sent to an AI provider for a given feature and the content it returns (tailored resume
+                text, cover letters, interview questions, ATS scores), which we store so you can view and
+                reuse your past results within the Service.
+              </li>
+              <li>
                 <strong className="text-on-surface">Networking data</strong> — professional profile links
                 (e.g. LinkedIn or GitHub URLs) and connection information you choose to enter if you use the
                 Networking feature. These are optional fields you type in yourself, not data obtained from a
-                third-party login.
+                third-party login or by us visiting those profiles on your behalf.
               </li>
               <li>
                 <strong className="text-on-surface">Plan and credit data</strong> — your subscription tier
-                and remaining credit balance. If and when paid plans involve a card payment, that payment
-                will be collected and processed directly by a PCI-compliant third-party payment processor;
-                we do not store full card numbers on our servers.
+                and remaining credit balance. If and when paid plans involve a card payment, the payment
+                itself is collected and processed directly by a PCI-compliant third-party payment processor;
+                we store a transaction reference and the plan/amount, not your full card number.
+              </li>
+              <li>
+                <strong className="text-on-surface">Support communications</strong> — anything you send us at{" "}
+                {CONTACT_EMAIL} or through an in-app feedback form, including your email address and the
+                content of your message.
               </li>
               <li>
                 <strong className="text-on-surface">Usage and device data</strong> — IP address, browser
                 type, device identifiers, pages visited, timestamps, and error/diagnostic logs, collected
-                automatically to operate, secure, and troubleshoot the Service.
+                automatically to operate, secure, and troubleshoot the Service. Authentication events (sign-in
+                and sign-out) are logged for security purposes for a limited period as described in Section 8.
               </li>
               <li>
-                <strong className="text-on-surface">Cookies and session identifiers</strong> — see Section 6.
+                <strong className="text-on-surface">Cookies and local storage</strong> — see Section 7.
               </li>
             </ul>
+            <p className="text-body-md text-on-surface-variant">
+              Nearly all of this data comes directly from you or is generated by your use of the Service.
+              The one exception is Account data, which we receive from Google when you sign in — we do not
+              obtain personal data about you from any other third-party source, data broker, or public
+              scraping.
+            </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">3. How we use your information</h2>
-            <p className="text-body-md text-on-surface-variant">We use personal data only for the following purposes:</p>
+            <h2 className="text-headline-md text-on-surface font-semibold">3. How we use your information, and our legal basis for doing so</h2>
+            <p className="text-body-md text-on-surface-variant">
+              We use personal data only for the purposes below. For users in the EEA, UK, or Switzerland, each
+              purpose is matched to the legal basis we rely on under GDPR/UK GDPR:
+            </p>
             <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
-              <li>To create and authenticate your account and provide the core features you request —
-                generating and tailoring resume content, computing ATS compatibility scores, generating cover
-                letters, and generating interview preparation questions.</li>
-              <li>To process payments, manage your subscription, and track credit usage.</li>
-              <li>To operate, maintain, secure, and improve the Service, including diagnosing technical
-                issues and preventing fraud or abuse.</li>
-              <li>To communicate with you about your account, transactional notices, and — only with your
-                consent where required by law — product updates.</li>
-              <li>To comply with legal obligations and enforce our{" "}
-                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>.</li>
+              <li>
+                <strong className="text-on-surface">Providing the Service you asked for</strong> — creating
+                and authenticating your account, generating and tailoring resume content, computing ATS
+                scores, generating cover letters and interview questions, and storing your generation
+                history so you can access it later. <em>Legal basis: performance of a contract with you</em> (our Terms of Service).
+              </li>
+              <li>
+                <strong className="text-on-surface">Payments and subscriptions</strong> — processing payments,
+                managing your plan, and tracking credit usage. <em>Legal basis: performance of a contract</em>, and compliance with tax/accounting obligations.
+              </li>
+              <li>
+                <strong className="text-on-surface">Operating and securing the Service</strong> — diagnosing
+                technical issues, monitoring for abuse or fraud, and maintaining authentication logs. <em>Legal basis: our legitimate interest</em> in keeping the Service secure and functioning, balanced against
+                your privacy interests — you may object to this processing (Section 9).
+              </li>
+              <li>
+                <strong className="text-on-surface">Transactional communications</strong> — account, billing,
+                and security notices. <em>Legal basis: performance of a contract</em> and legitimate interest.
+                Any non-essential product update or marketing message is sent only with your <em>consent</em>,
+                which you can withdraw at any time.
+              </li>
+              <li>
+                <strong className="text-on-surface">Legal compliance and enforcement</strong> — complying with
+                applicable law and enforcing our{" "}
+                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>. <em>Legal basis: legal obligation</em>, and legitimate interest for enforcement.
+              </li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
               We do not use your resume content, job descriptions, or personal data to serve advertising, and
@@ -114,163 +159,241 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">4. AI processing and third-party subprocessors</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">4. Automated processing and AI-generated content</h2>
+            <p className="text-body-md text-on-surface-variant">
+              Career Copilot uses AI to generate suggestions — tailored resume text, cover letters, ATS
+              compatibility scores, and interview questions. This processing is <strong className="text-on-surface">advisory only</strong>: it acts on your own resume, for your own use, at your own request. No output is used
+              to make, and no part of the Service makes, an automated decision about you that produces legal
+              effects or similarly significantly affects you (for example, we do not decide whether you get
+              hired, and no employer or third party uses Career Copilot to screen or rank you) — the DPDP Act,
+              GDPR, and similar automated-decision-making safeguards accordingly do not apply to this
+              processing in the way they would for employer-facing screening tools. An ATS compatibility
+              score is an estimate intended to help you improve your resume; it does not guarantee acceptance
+              by any real applicant tracking system, which we do not control.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-sm">
+            <h2 className="text-headline-md text-on-surface font-semibold">5. AI providers and third-party subprocessors</h2>
             <p className="text-body-md text-on-surface-variant">
               To generate resume content, tailoring suggestions, ATS scores, and interview questions, the
-              resume and job-description text you submit is sent to a third-party AI model provider —
-              OpenAI or Google (Gemini), depending on which model is configured for your request — solely to
-              generate that response. We have configured these providers, to the extent they offer the
-              option, not to use API-submitted content to train their models. Each provider processes this
-              data under its own privacy and data-processing terms, which we encourage you to review:
-              OpenAI&apos;s and Google&apos;s respective privacy policies. We do not send Google OAuth
-              account credentials to these AI providers — only the resume/job-description text you actively
-              submit for a given feature.
+              resume and job-description text you submit for that specific action is sent to a third-party AI
+              provider — models from OpenAI&apos;s GPT family or Google&apos;s Gemini family, depending on the
+              feature and plan tier — solely to generate that response. Only the text relevant to the feature
+              you triggered is sent (for example, a bullet-rewrite sends the bullet and job context, not your
+              entire account); we do not send your Google account credentials, email, or payment data to
+              these providers.
             </p>
             <p className="text-body-md text-on-surface-variant">
-              Other subprocessors that may handle personal data on our behalf, each bound by a data
-              processing agreement and used solely to provide the Service: our cloud database and file
-              storage provider (Supabase), a PCI-compliant payment processor (used only for paid-plan
-              transactions, if and when they occur), and standard cloud infrastructure/hosting providers. We
-              do not permit any subprocessor to use your data for its own purposes.
+              We access both providers through their standard commercial API, under each provider&apos;s
+              published API terms, which state that API-submitted content is not used to train their general
+              models by default. We have not independently negotiated a separate data-processing agreement
+              with either provider beyond their standard API terms, and each provider may retain prompts and
+              outputs for a limited period for abuse and safety monitoring under its own policies — we do not
+              control that retention and encourage you to review OpenAI&apos;s and Google&apos;s own privacy
+              and API data-usage terms directly. If our contractual arrangement with either provider changes
+              in a way that affects how your data is used, we will update this section.
+            </p>
+            <p className="text-body-md text-on-surface-variant">
+              Other subprocessors that handle personal data on our behalf, used solely to provide the
+              Service: our cloud database and file storage provider (Supabase), a PCI-compliant payment
+              processor (used only for paid-plan transactions), and our cloud hosting provider. We do not
+              permit any subprocessor to use your data for its own purposes, and we take reasonable
+              contractual steps with each of them to protect your data, consistent with their standard terms
+              of service.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">5. Where data is stored and how it is protected</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">6. Our role: controller or processor</h2>
             <p className="text-body-md text-on-surface-variant">
-              Account and application data is stored with Supabase (PostgreSQL). Generated PDF exports and
-              uploaded files are stored in Supabase Storage. Data may be processed and stored on servers
-              located outside your country of residence, including in jurisdictions that may not offer the
-              same level of data protection as your home jurisdiction; where required (for example, for
-              transfers of personal data originating in the EEA, UK, or Switzerland), we rely on Standard
-              Contractual Clauses or an equivalent legally recognized transfer mechanism with our
-              subprocessors. Data is encrypted in transit (TLS) and at rest. Access to production data is
-              restricted to authorized personnel on a need-to-know basis. No method of transmission or
-              storage is 100% secure, and we cannot guarantee absolute security, but we maintain reasonable
-              administrative, technical, and physical safeguards appropriate to the sensitivity of the data.
+              For the personal data described in this Policy — your account, resume, and usage data — we act
+              as the <strong className="text-on-surface">data controller</strong> (or &quot;data
+              fiduciary&quot; under Indian law): we decide why and how that data is processed. We are not
+              acting as a processor on behalf of any employer, recruiter, or other organization, because no
+              such organization uses the Service to process your data. Our AI and hosting subprocessors act
+              as <strong className="text-on-surface">processors</strong> on our behalf, strictly for the
+              purposes described in Section 5.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">6. Cookies and similar technologies</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">7. Cookies and local storage</h2>
             <p className="text-body-md text-on-surface-variant">
-              We use only strictly necessary cookies/local storage — for authentication and session
-              management via Google OAuth / Supabase Auth, and to remember basic preferences (such as
-              theme). These are essential to the Service functioning and are not subject to opt-out consent
-              requirements under GDPR/ePrivacy or similar laws. We do not use third-party advertising,
-              cross-site tracking, or analytics cookies. If this changes in the future, we will update this
-              Policy and, where required, request your consent before deploying such technologies.
+              We use only the following storage technologies, all strictly necessary for the Service to
+              function — none are used for advertising, cross-site tracking, or analytics profiling:
+            </p>
+            <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
+              <li><strong className="text-on-surface">Supabase Auth session cookies</strong> — keep you
+                signed in after Google authentication; expire on sign-out or session refresh per Supabase&apos;s
+                default session lifetime.</li>
+              <li><strong className="text-on-surface">Local storage: onboarding state</strong> (
+                <code>career-copilot-onboarding-dismissed</code>) — remembers that you dismissed the
+                onboarding prompt; persists until you clear browser storage.</li>
+              <li><strong className="text-on-surface">Local storage: career-path draft</strong> (
+                <code>career-copilot-target-role</code>) — remembers your in-progress target-role input on the
+                Career Path page; persists until you clear browser storage.</li>
+            </ul>
+            <p className="text-body-md text-on-surface-variant">
+              These are exempt from opt-out/consent requirements under GDPR&apos;s ePrivacy rules and similar
+              laws because they are strictly necessary. If we ever add non-essential cookies (analytics,
+              advertising), we will update this section and request your consent first, where required.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">7. Your rights</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">8. Where data is stored, retention periods, and security</h2>
+            <p className="text-body-md text-on-surface-variant">
+              Account and application data is stored with Supabase (PostgreSQL), in the cloud region
+              configured for our project. Generated PDF exports and uploaded files are stored in
+              Supabase Storage. Data may be processed and stored on servers located outside your country of
+              residence; where required (for example, for transfers of personal data originating in the EEA,
+              UK, or Switzerland), we rely on our subprocessors&apos; Standard Contractual Clauses or
+              equivalent transfer mechanism with their own downstream infrastructure. Data is encrypted in
+              transit (TLS) and at rest. Access to production data is restricted to authorized personnel on a
+              need-to-know basis, gated by account-level access controls; we do not currently operate a
+              dedicated 24/7 security-monitoring team or hold a third-party security certification (e.g.
+              SOC 2, ISO 27001) — if you require that level of assurance before use, contact us before
+              relying on the Service for sensitive data.
+            </p>
+            <p className="text-body-md text-on-surface-variant"><strong className="text-on-surface">Retention periods:</strong></p>
+            <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
+              <li>Account, resume, job-description, and AI generation history: retained while your account is
+                active, and deleted on account deletion as described below.</li>
+              <li>Authentication/security logs: retained for up to 90 days for abuse investigation, then
+                deleted or anonymized.</li>
+              <li>Payment/transaction records: retained for 8 years to meet Indian tax and accounting record-
+                keeping obligations, even after account deletion.</li>
+              <li>Support communications: retained for up to 24 months after your last contact, then deleted
+                or anonymized.</li>
+              <li>Encrypted database backups: rolled over on a cycle of no more than 90 days.</li>
+            </ul>
+            <p className="text-body-md text-on-surface-variant">
+              When you delete your account, we remove your resumes, profile, job descriptions, generated
+              content, and account identifiers from our active production database immediately, and this
+              action cannot be undone from your side. &quot;Immediately&quot; means removal from the live
+              database that powers the Service — it does not mean your data is instantaneously erased from
+              every layer of infrastructure: residual copies may persist in encrypted backups until they age
+              out (up to 90 days), and copies already sent to an AI provider before your deletion request are
+              subject to that provider&apos;s own retention window (Section 5), which we do not control.
+              Payment records are retained per the schedule above regardless of account deletion, as required
+              by law.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-sm">
+            <h2 className="text-headline-md text-on-surface font-semibold">9. Your rights</h2>
             <p className="text-body-md text-on-surface-variant">
               You can access, edit, or delete your resumes, profile, and job descriptions at any time from
-              within the app, and you can permanently delete your account and all associated data from the
-              Account page at any time — this takes effect immediately and cannot be undone. Depending on
-              where you live, you may also have the following rights over your personal data, which you can
-              exercise by contacting <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>:
+              within the app, and delete your account from the Account page (see Section 8 for what that does
+              and does not immediately erase). Depending on where you live, you may also have the following
+              rights, which you can exercise by contacting{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
+              — please tell us which right you are exercising and the email address on your account; we will
+              verify your identity via your authenticated Google account before acting on the request, and
+              will let you know if we need more information or if an exception applies:
             </p>
             <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
               <li>
                 <strong className="text-on-surface">European Economic Area, UK, and Switzerland (GDPR/UK GDPR)</strong> —
-                the right to access, rectify, erase, restrict, or object to processing of your data; the
-                right to data portability; the right to withdraw consent at any time where processing is
-                based on consent; and the right to lodge a complaint with your local data protection
-                supervisory authority. Where we rely on legitimate interests to process your data (e.g. to
-                secure the Service), you may object at any time.
+                access, rectification, erasure, restriction, and objection to processing; data portability;
+                withdrawal of consent at any time where processing is based on consent; and the right to
+                lodge a complaint with your local data protection supervisory authority. We aim to respond
+                within 30 days, extendable by a further 60 days for complex requests, as GDPR permits.
               </li>
               <li>
                 <strong className="text-on-surface">California and other U.S. states (CCPA/CPRA and similar
                 state laws)</strong> — the right to know what personal information we collect and how it is
-                used; the right to request deletion; the right to correct inaccurate information; and the
-                right to opt out of the &quot;sale&quot; or &quot;sharing&quot; of personal information. We
-                do not sell or share personal information as those terms are defined under CCPA/CPRA, so no
-                opt-out mechanism is required, and we will not discriminate against you for exercising any
-                right under this Policy.
+                used (see Section 2 for categories, Section 8 for retention); the right to request deletion;
+                the right to correct inaccurate information; and the right to opt out of the &quot;sale&quot;
+                or &quot;sharing&quot; of personal information. We do not sell or share personal information
+                as those terms are defined under CCPA/CPRA, so no opt-out mechanism is required, and we will
+                not discriminate against you for exercising any right under this Policy. We aim to respond
+                within 45 days, extendable once by a further 45 days.
               </li>
               <li>
                 <strong className="text-on-surface">India (Digital Personal Data Protection Act, 2023)</strong> —
-                the right to access a summary of your personal data and processing activities, the right to
-                correction and erasure, and the right to grievance redressal, including the right to contact
-                our Grievance Officer (see Section 11).
+                the right to a summary of your personal data and processing activities, the right to
+                correction, updating, and erasure, and the right to grievance redressal, including contacting
+                our grievance contact (Section 13).
               </li>
               <li>
                 <strong className="text-on-surface">All other jurisdictions</strong> — we extend the same
                 core rights (access, correction, deletion, and objection) to all users of the Service
-                regardless of location, to the extent technically and legally feasible.
+                regardless of location, to the extent technically and legally feasible, and will aim to
+                respond within 30 days.
               </li>
             </ul>
-            <p className="text-body-md text-on-surface-variant">
-              We will verify your identity (via your authenticated Google account or other reasonable means)
-              before fulfilling any data request, to prevent unauthorized access to your data.
-            </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">8. Data retention</h2>
-            <p className="text-body-md text-on-surface-variant">
-              We retain your personal data for as long as your account is active, plus a limited period
-              afterward as needed to comply with legal, tax, or accounting obligations, resolve disputes, and
-              enforce our agreements. When you delete your account, your resumes, profile, job descriptions,
-              generated content, and account identifiers are permanently deleted from our production
-              database immediately; residual copies in encrypted backups are purged on our routine backup
-              rotation cycle (no longer than 90 days). Anonymized or aggregated data that can no longer be
-              linked to you may be retained indefinitely for analytics purposes.
-            </p>
-          </section>
-
-          <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">9. Children&apos;s privacy</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">10. Children&apos;s privacy</h2>
             <p className="text-body-md text-on-surface-variant">
               The Service is not directed to, and we do not knowingly collect personal data from, children
-              under the age of 16 (or the higher minimum age required by applicable local law). If you
-              believe a child has provided us with personal data, contact us at{" "}
+              under the age of 16 (or the higher minimum age required by applicable local law). Account
+              creation relies on Google&apos;s own age requirements for its accounts — we do not separately
+              verify age. If you believe a child has provided us with personal data, contact us at{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
               and we will delete it promptly.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">10. Data breach notification</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">11. Data breach notification</h2>
             <p className="text-body-md text-on-surface-variant">
               In the event of a security incident that results in unauthorized access to your personal data
-              and creates a risk to your rights, we will notify affected users and, where legally required,
-              the relevant supervisory authority, without undue delay and in line with applicable law.
+              and creates a risk to your rights, we will assess the scope and severity of the incident, take
+              reasonable steps to contain it, and notify affected users and, where legally required, the
+              relevant supervisory authority (such as under GDPR&apos;s 72-hour rule where applicable, or as
+              required under the DPDP Act and its rules), without undue delay.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">11. Grievance Officer (India)</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">12. EU/UK representative</h2>
             <p className="text-body-md text-on-surface-variant">
-              In accordance with Indian law, grievances regarding this Policy or the handling of your
-              personal data may be addressed to our Grievance Officer at{" "}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>.
-              We will acknowledge grievances within 24 hours and aim to resolve them within 15 days.
+              We have not currently appointed a representative in the European Union or United Kingdom under
+              GDPR Article 27 / UK GDPR. We will appoint one, and update this section with their contact
+              details, before we actively market the Service to, or process data at scale from, users in the
+              EU/UK on an ongoing basis. Until then, EU/UK users can reach us directly using the contact
+              details in Section 1.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">12. Changes to this Policy</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">13. Grievance contact (India)</h2>
+            <p className="text-body-md text-on-surface-variant">
+              We have not yet formally designated a named Grievance Officer with the title and contact
+              particulars that Indian law expects to be published. Until we do, grievances regarding this
+              Policy or the handling of your personal data can be sent to{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>,
+              which is monitored by {ENTITY_NAME}. We aim to acknowledge grievances within 24 hours and
+              resolve them within 15 days, and we will update this section with a named officer&apos;s details
+              as our operations formalize.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-sm">
+            <h2 className="text-headline-md text-on-surface font-semibold">14. Changes to this Policy</h2>
             <p className="text-body-md text-on-surface-variant">
               We may update this Policy from time to time to reflect changes in our practices or for legal,
               operational, or regulatory reasons. We will post the updated Policy on this page with a revised
               &quot;Last updated&quot; date, and for material changes we will provide additional notice (such
-              as an in-app notification or email) before the change takes effect. Continued use of the
-              Service after a change takes effect constitutes acceptance of the updated Policy.
+              as an in-app notification or email) before the change takes effect. Where a change requires
+              your consent under applicable law, we will ask for it rather than relying on continued use
+              alone.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">13. Contact and governing law</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">15. Contact and governing law</h2>
             <p className="text-body-md text-on-surface-variant">
               This Service is operated by {ENTITY_NAME}. Questions, requests, or complaints about this
               Policy can be sent to{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>.
               This Policy is governed by the laws of India, without prejudice to any mandatory data
               protection rights you may have under the law of your own country of residence, as described in
-              Section 7. See our{" "}
+              Section 9. See our{" "}
               <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
               for the jurisdiction and dispute-resolution terms ({JURISDICTION}) that apply to your use of
               the Service more broadly.
