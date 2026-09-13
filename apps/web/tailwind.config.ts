@@ -95,6 +95,20 @@ const config: Config = {
         "caption": ["11px", { lineHeight: "1.454545", fontWeight: "500", letterSpacing: "0.01em" }],
         "label-caps": ["12px", { lineHeight: "1", fontWeight: "500", letterSpacing: "0.05em" }],
       },
+      keyframes: {
+        "tour-float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
+        },
+        "tour-pop-in": {
+          "0%": { opacity: "0", transform: "scale(0.94) translateY(4px)" },
+          "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
+        },
+      },
+      animation: {
+        "tour-float": "tour-float 2.4s ease-in-out infinite",
+        "tour-pop-in": "tour-pop-in 0.2s ease-out",
+      },
     },
   },
   plugins: [],

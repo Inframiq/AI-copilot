@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash } from "@phosphor-icons/react";
+import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { createBrowserClient } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
@@ -226,6 +226,23 @@ export default function AccountPage() {
           </Link>
         </>
       )}
+
+      {/* Help */}
+      <Link
+        href="/dashboard?tour=1"
+        className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center justify-between gap-md hover:bg-surface-container-low transition-colors self-start w-full"
+      >
+        <div className="flex items-center gap-md">
+          <Compass size={20} weight="fill" className="text-primary shrink-0" />
+          <div>
+            <p className="text-body-md text-on-surface font-medium">Replay guide</p>
+            <p className="text-body-sm text-on-surface-variant mt-xs">
+              See the quick tour of what each section does, again.
+            </p>
+          </div>
+        </div>
+        <ArrowRight size={18} className="text-on-surface-variant shrink-0" />
+      </Link>
 
       {/* Sign out */}
       <button

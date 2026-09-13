@@ -78,7 +78,7 @@ export default function OnboardingPage() {
 
   function finish() {
     queryClient.invalidateQueries({ queryKey: ["careerProfile"] });
-    router.push("/dashboard");
+    router.push("/dashboard?tour=1");
   }
 
   function handleSkip() {

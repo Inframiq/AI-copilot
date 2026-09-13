@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTourStore } from "@/stores/tour-store";
 import {
   FileDashed,
   Brain,
@@ -67,6 +68,8 @@ const ONBOARDING_DISMISSED_KEY = "career-copilot-onboarding-dismissed";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const startTour = useTourStore((s) => s.start);
   const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -75,6 +78,16 @@ export default function DashboardPage() {
   useEffect(() => {
     setOnboardingDismissed(localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "1");
   }, []);
+
+  // "?tour=1" is set by onboarding's finish() and by the Account page's
+  // "Replay guide" link — both routes into the same trigger, so there's no
+  // separate "auto vs. replay" branch to keep in sync.
+  useEffect(() => {
+    if (searchParams.get("tour") === "1") {
+      startTour();
+      router.replace("/dashboard");
+    }
+  }, [searchParams, startTour, router]);
 
   function dismissOnboarding() {
     localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");

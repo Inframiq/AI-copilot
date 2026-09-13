@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopNav } from "@/components/layout/TopNav";
 import { PageTransition } from "@/components/PageTransition";
+import { GuidedTour } from "@/components/tour/GuidedTour";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <TopNav />
         <PageTransition>{children}</PageTransition>
       </main>
+      <GuidedTour />
     </div>
   );
 }

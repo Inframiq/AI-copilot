@@ -57,6 +57,7 @@ export function Sidebar() {
             <Link
               key={label}
               href={href}
+              data-tour={href}
               className={`flex items-center gap-md px-md py-md rounded-xl text-label-md transition-all duration-300 ${
                 active
                   ? "bg-secondary-container text-on-secondary-container font-bold shadow-sm hover:shadow-md hover:scale-[0.98]"

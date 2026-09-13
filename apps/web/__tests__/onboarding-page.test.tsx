@@ -70,7 +70,7 @@ describe("Onboarding — plan step", () => {
 
     expect(await screen.findByText("Choose your plan")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Continue on Free" }));
-    expect(pushMock).toHaveBeenCalledWith("/dashboard");
+    expect(pushMock).toHaveBeenCalledWith("/dashboard?tour=1");
   });
 
   it("opens the upgrade modal for 'Get Premium', then finishes on 'Got it'", async () => {
@@ -80,6 +80,6 @@ describe("Onboarding — plan step", () => {
 
     await user.click(await screen.findByRole("button", { name: "Get Premium" }));
     await user.click(await screen.findByRole("button", { name: /got it/i }));
-    expect(pushMock).toHaveBeenCalledWith("/dashboard");
+    expect(pushMock).toHaveBeenCalledWith("/dashboard?tour=1");
   });
 });
