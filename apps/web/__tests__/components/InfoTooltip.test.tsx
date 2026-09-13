@@ -73,4 +73,20 @@ describe("InfoTooltip", () => {
     const tooltip = await screen.findByRole("tooltip");
     expect(trigger.getAttribute("aria-describedby")).toBe(tooltip.id);
   });
+
+  it("renders outside an overflow-hidden/stacking-context ancestor instead of being clipped or buried under it", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <div className="relative overflow-hidden" style={{ width: 50, height: 50 }}>
+        <InfoTooltip text="Explains what this card does" />
+      </div>
+    );
+    await user.hover(screen.getByRole("button", { name: /more info/i }));
+    const tooltip = await screen.findByRole("tooltip");
+
+    // Portaled straight to document.body — not a descendant of the clipping
+    // container, so no ancestor overflow/stacking context can hide it.
+    expect(container.contains(tooltip)).toBe(false);
+    expect(document.body.contains(tooltip)).toBe(true);
+  });
 });

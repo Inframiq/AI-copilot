@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "@phosphor-icons/react";
 
 interface InfoTooltipProps {
@@ -8,22 +9,68 @@ interface InfoTooltipProps {
   className?: string;
 }
 
+const BUBBLE_MAX_WIDTH = 220;
+const VIEWPORT_MARGIN = 8;
+
 /** A small "i" affordance that reveals `text` in a floating card on hover,
  * keyboard focus, or tap — so it works for mouse, keyboard, and touch users
  * alike. The bubble always uses inverse-surface/inverse-on-surface (a fixed
  * dark background with near-white text), which keeps contrast solidly
- * WCAG-AA regardless of what it's floating over. */
+ * WCAG-AA regardless of what it's floating over.
+ *
+ * The bubble is portaled to document.body and positioned from the trigger's
+ * real viewport coordinates, rather than a plain CSS `position: absolute`
+ * nested wherever the trigger happens to live — cards across this app use
+ * `overflow-hidden`, their own stacking contexts, scrollable inner lists,
+ * etc., any of which would otherwise clip the bubble or bury it under a
+ * sibling instead of floating above everything. */
 export function InfoTooltip({ text, className }: InfoTooltipProps) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
   const tooltipId = useId();
-  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const triggerWrapperRef = useRef<HTMLSpanElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function place() {
+      const trigger = triggerWrapperRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const clampedLeft = Math.min(
+        Math.max(centerX, VIEWPORT_MARGIN + BUBBLE_MAX_WIDTH / 2),
+        window.innerWidth - VIEWPORT_MARGIN - BUBBLE_MAX_WIDTH / 2
+      );
+      setPos({ top: rect.bottom + 6, left: clampedLeft });
+    }
+    place();
+
+    // Position is computed once per open rather than tracked continuously —
+    // simplest robust option, and a tooltip that outlives the scroll that
+    // opened it is more surprising than one that just closes.
+    function onScroll() {
+      setOpen(false);
+    }
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      const insideTrigger = triggerWrapperRef.current?.contains(target);
+      const insideBubble = bubbleRef.current?.contains(target);
+      if (!insideTrigger && !insideBubble) setOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -37,7 +84,7 @@ export function InfoTooltip({ text, className }: InfoTooltipProps) {
   }, [open]);
 
   return (
-    <span ref={wrapperRef} className={`relative inline-flex ${className ?? ""}`}>
+    <span ref={triggerWrapperRef} className={`relative inline-flex ${className ?? ""}`}>
       <button
         type="button"
         aria-label="More info"
@@ -59,15 +106,19 @@ export function InfoTooltip({ text, className }: InfoTooltipProps) {
       >
         <Info size={16} weight="bold" />
       </button>
-      {open && (
-        <span
-          id={tooltipId}
-          role="tooltip"
-          className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-xs w-max max-w-[220px] rounded-lg bg-inverse-surface text-inverse-on-surface text-caption leading-snug px-sm py-xs shadow-lg text-left"
-        >
-          {text}
-        </span>
-      )}
+      {mounted && open && pos &&
+        createPortal(
+          <div
+            ref={bubbleRef}
+            id={tooltipId}
+            role="tooltip"
+            className="fixed z-[999] w-max max-w-[220px] rounded-lg bg-inverse-surface text-inverse-on-surface text-caption leading-snug px-sm py-xs shadow-lg text-left"
+            style={{ top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+          >
+            {text}
+          </div>,
+          document.body
+        )}
     </span>
   );
 }
