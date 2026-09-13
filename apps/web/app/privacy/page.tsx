@@ -191,22 +191,24 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-headline-md text-on-surface font-semibold">5. AI providers and third-party subprocessors</h2>
             <p className="text-body-md text-on-surface-variant">
               To generate resume content, tailoring suggestions, ATS scores, and interview questions, the
-              resume and job-description text you submit for that specific action is sent to a third-party AI
-              provider — models from OpenAI&apos;s GPT family or Google&apos;s Gemini family, depending on the
-              feature and plan tier — solely to generate that response. Only the text relevant to the feature
-              you triggered is sent (for example, a bullet-rewrite sends the bullet and job context, not your
-              entire account); we do not send your Google account credentials, email, or payment data to
-              these providers.
+              resume and job-description text you submit for that specific action is sent to OpenAI, the
+              single AI provider Career Copilot currently uses in production, solely to generate that
+              response. Only the text relevant to the feature you triggered is sent (for example, a
+              bullet-rewrite sends the bullet and job context, not your entire account); we do not send your
+              Google account credentials, email, or payment data to OpenAI. We may add or switch to a
+              different or additional AI provider (such as Google Gemini) in the future — if we do, we will
+              update this section and our{" "}
+              <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link> before the
+              change takes effect, and, where it materially changes how your data is used, notify you as
+              described in Section 14.
             </p>
             <p className="text-body-md text-on-surface-variant">
-              We access both providers through their standard commercial API, under each provider&apos;s
-              published API terms, which state that API-submitted content is not used to train their general
-              models by default. We have not independently negotiated a separate data-processing agreement
-              with either provider beyond their standard API terms, and each provider may retain prompts and
-              outputs for a limited period for abuse and safety monitoring under its own policies — we do not
-              control that retention and encourage you to review OpenAI&apos;s and Google&apos;s own privacy
-              and API data-usage terms directly. If our contractual arrangement with either provider changes
-              in a way that affects how your data is used, we will update this section.
+              We access OpenAI through its standard commercial API, under OpenAI&apos;s published API terms,
+              which state that API-submitted content is not used to train its general models by default. We
+              have not independently negotiated a separate data-processing agreement with OpenAI beyond its
+              standard API terms, and OpenAI may retain prompts and outputs for a limited period for abuse
+              and safety monitoring under its own policies — we do not control that retention and encourage
+              you to review OpenAI&apos;s own privacy and API data-usage terms directly.
             </p>
             <p className="text-body-md text-on-surface-variant">
               Other subprocessors that handle personal data on our behalf, used solely to provide the

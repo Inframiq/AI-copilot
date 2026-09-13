@@ -44,8 +44,10 @@ export default function TermsOfServicePage() {
             <p className="text-body-md text-on-surface-variant">
               Career Copilot provides AI-assisted resume building, job-description analysis, ATS
               compatibility scoring, cover letter generation, and interview preparation. Outputs are
-              generated using third-party large language models (currently OpenAI and/or Google Gemini,
-              depending on configuration) and are provided for informational purposes only. AI-generated
+              currently generated using OpenAI&apos;s models; we may switch to or add other AI providers in
+              the future, and will update this section and our{" "}
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link> if we do.
+              Generated content is provided for informational purposes only. AI-generated
               content, including resume text, ATS scores, and interview questions, may be inaccurate,
               incomplete, or unsuitable for your specific circumstances. You are solely responsible for
               reviewing, editing, fact-checking, and verifying any generated content before relying on it,
@@ -100,10 +102,13 @@ export default function TermsOfServicePage() {
               subprocessors as described in our{" "}
               <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>). This
               license ends when Your Content is deleted from the Service, subject to residual copies in
-              backups being purged on our routine cycle. As between you and us, you own the output the
-              Service generates for you (e.g. tailored resume text, cover letters), subject to the
-              limitations in Section 1 regarding accuracy and to any rights that may vest in third-party AI
-              providers under their own terms. The Service itself — including its software, design,
+              backups being purged as described in Section 6 and our{" "}
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>. As between
+              you and us, you own the output the Service generates for you (e.g. tailored resume text, cover
+              letters) — under OpenAI&apos;s API terms as they stand today, output belongs to the user who
+              requested it, and we pass that same ownership on to you, subject to the accuracy limitations in
+              Section 1. If we change or add AI providers, we will confirm this ownership position still
+              holds before making the change effective. The Service itself — including its software, design,
               branding, and underlying technology — is owned by {ENTITY_NAME} and its licensors and is
               protected by intellectual property laws. Nothing in these Terms grants you any right to our
               trademarks, logos, or branding.
@@ -113,26 +118,45 @@ export default function TermsOfServicePage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">5. Plans, credits, and payment</h2>
             <p className="text-body-md text-on-surface-variant">
-              Certain features consume credits allotted under your plan. We may offer free and paid plans,
-              change credit costs, or modify plan features at any time, with reasonable notice for material
-              changes to paid plans. Fees for paid plans, where applicable, are processed by a third-party
-              payment processor and are non-refundable except where required by applicable law or expressly
-              stated at the time of purchase. Unused credits do not entitle you to a cash refund unless
-              required by law.
+              Certain features consume credits allotted under your plan. We currently offer a free plan; if
+              and when we introduce paid plans, the price, currency, billing cycle (e.g. monthly, one-time),
+              renewal terms, and any credit-expiry rule for that plan will be shown to you and require your
+              confirmation at checkout before you are charged — this section&apos;s general terms below apply
+              once that happens, alongside whatever specific terms are shown at checkout, which control if
+              the two conflict. Fees for paid plans are processed by a third-party payment processor. If a
+              payment fails or is declined, your plan may be downgraded or your paid features paused until
+              payment succeeds; we will notify you first where practical. Fees are non-refundable except
+              where required by applicable law (including consumer-protection and cancellation-right law in
+              your country of residence) or expressly stated at checkout. Unused credits do not entitle you
+              to a cash refund unless required by law or stated at checkout.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">6. Termination</h2>
             <p className="text-body-md text-on-surface-variant">
-              You may stop using the Service and delete your account at any time from the Account page,
-              which permanently and immediately deletes your resumes, profile, job descriptions, generated
-              content, and account data as described in our{" "}
-              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>. We may
-              suspend or terminate your access to the Service, in whole or in part, at any time, with or
-              without cause or notice, including for violation of these Terms, suspected fraud or abuse, or
-              legal or regulatory requirements. Sections 1, 4 (as to rights already granted), 7, 8, 9, 10,
-              and 11 survive termination.
+              You may stop using the Service and delete your account at any time from the Account page. This
+              removes your resumes, profile, job descriptions, generated content, and account identifiers
+              from our active production systems immediately; it does not instantaneously erase every copy
+              everywhere — residual copies may remain in encrypted backups for up to 90 days, and payment
+              records are retained longer where required by law. The full timing and scope is set out in our{" "}
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>, which
+              controls over any general statement in this section.
+            </p>
+            <p className="text-body-md text-on-surface-variant">
+              We may suspend or terminate your access to the Service, in whole or in part, for violation of
+              these Terms, suspected fraud or abuse, or legal or regulatory requirements — this may happen
+              immediately and without advance notice where we reasonably believe urgent action is needed to
+              protect the Service, other users, or comply with the law. For any other termination on our
+              part — for example, discontinuing the Service or a plan — we will give you reasonable advance
+              notice where practical, a reasonable opportunity to export Your Content first, and a way to
+              reach us at{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
+              if you believe a suspension or termination was made in error. If we terminate your account for
+              a reason other than your breach of these Terms while you have a prepaid, unused, non-expired
+              credit or subscription balance, we will refund the unused portion on a pro-rata basis, unless
+              applicable law provides for something different. Sections 1, 4 (as to rights already granted),
+              7, 8, 9, 10, and 11 survive termination.
             </p>
           </section>
 
@@ -153,29 +177,38 @@ export default function TermsOfServicePage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">8. Limitation of liability</h2>
             <p className="text-body-md text-on-surface-variant">
-              TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW: (A) {ENTITY_NAME.toUpperCase()} AND ITS
-              OFFICERS, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
-              CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL,
-              OR EMPLOYMENT OPPORTUNITY, ARISING OUT OF OR RELATED TO YOUR USE OF, OR INABILITY TO USE, THE
-              SERVICE, WHETHER BASED ON CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR OTHERWISE, EVEN IF
-              WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES; AND (B) OUR TOTAL AGGREGATE LIABILITY
-              TO YOU FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THE SERVICE OR THESE TERMS SHALL NOT EXCEED
-              THE GREATER OF (I) THE AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM, OR (II) 2,000
-              INDIAN RUPEES (₹2,000). SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR LIMITATION OF CERTAIN
-              DAMAGES, SO SOME OF THE ABOVE LIMITATIONS MAY NOT APPLY TO YOU TO THE EXTENT PROHIBITED BY LAW
-              IN YOUR JURISDICTION.
+              THIS SECTION LIMITS OUR LIABILITY WHERE THE LAW ALLOWS IT TO BE LIMITED — IT DOES NOT MAKE US
+              IMMUNE FROM CLAIMS, AND WHERE A LIMIT BELOW WOULD BE UNENFORCEABLE OR UNFAIR UNDER MANDATORY
+              LAW THAT APPLIES TO YOU (INCLUDING CONSUMER-PROTECTION LAW IN YOUR COUNTRY OF RESIDENCE, SUCH
+              AS EU/UK RULES AGAINST UNFAIR TERMS IN CONSUMER CONTRACTS), THAT LIMIT DOES NOT APPLY TO YOU TO
+              THAT EXTENT — THE REST OF THIS SECTION REMAINS IN EFFECT. SUBJECT TO THAT: TO THE FULLEST
+              EXTENT PERMITTED BY APPLICABLE LAW, (A) {ENTITY_NAME.toUpperCase()} AND ITS OFFICERS,
+              EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
+              EXEMPLARY, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR EMPLOYMENT
+              OPPORTUNITY, ARISING OUT OF OR RELATED TO YOUR USE OF, OR INABILITY TO USE, THE SERVICE,
+              WHETHER BASED ON CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR OTHERWISE, EVEN IF WE HAVE
+              BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES; AND (B) OUR TOTAL AGGREGATE LIABILITY TO YOU
+              FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THE SERVICE OR THESE TERMS SHALL NOT EXCEED THE
+              GREATER OF (I) THE AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM, OR (II) 2,000
+              INDIAN RUPEES (₹2,000). NOTHING IN THIS SECTION LIMITS LIABILITY THAT CANNOT LAWFULLY BE
+              LIMITED, INCLUDING (WHERE APPLICABLE LAW SO PROVIDES) LIABILITY FOR DEATH, PERSONAL INJURY, OR
+              FRAUD CAUSED BY OUR NEGLIGENCE OR WILLFUL MISCONDUCT.
             </p>
           </section>
 
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">9. Indemnification</h2>
             <p className="text-body-md text-on-surface-variant">
-              You agree to defend, indemnify, and hold harmless {ENTITY_NAME}, its officers, employees, and
-              agents from and against any claims, liabilities, damages, losses, and expenses, including
-              reasonable legal fees, arising out of or in any way connected with: (a) your access to or use
-              of the Service; (b) Your Content, including any claim that it infringes a third party&apos;s
-              rights or is inaccurate or misleading; (c) your violation of these Terms; or (d) your violation
-              of any applicable law or the rights of any third party.
+              You agree to indemnify and hold harmless {ENTITY_NAME}, its officers, employees, and agents
+              against third-party claims, liabilities, damages, and reasonable legal fees, to the extent
+              arising from: (a) Your Content infringing a third party&apos;s intellectual property or other
+              rights; (b) your fraud, or your unlawful or malicious conduct in using the Service; or (c) your
+              material breach of Section 3 (Acceptable use). This obligation is proportionate to your own
+              conduct and does not extend to any part of a claim caused by our own negligence, willful
+              misconduct, or violation of law, or by a defect in the Service itself rather than in Your
+              Content or your conduct. Where applicable consumer-protection law limits or prohibits an
+              indemnity like this one for individual, non-commercial users, this section applies only to the
+              extent that law permits.
             </p>
           </section>
 
@@ -199,9 +232,16 @@ export default function TermsOfServicePage() {
                 representative action.
               </strong>{" "}
               Where mandatory consumer-protection or data-protection law in your country of residence gives
-              you a non-waivable right to bring a claim in your local courts or before a local regulator
-              (such as an EU/UK consumer or data protection claim, or an Indian DPDP Act grievance), this
-              section does not override that right.
+              you a non-waivable right to bring a claim in your local courts or before a local regulator or
+              consumer forum (such as an EU/UK consumer or data protection claim, an Indian DPDP Act
+              grievance, or — for consumers in India specifically — the right under the Consumer Protection
+              Act, 2019 to approach a District, State, or National Consumer Disputes Redressal Commission
+              notwithstanding this arbitration agreement), this section does not override that right. This
+              arbitration and class-action-waiver clause is intended to apply as broadly as each
+              jurisdiction&apos;s law allows, and no more broadly than that — if a court or regulator with
+              authority over a given claim holds that this clause cannot validly apply to it, that finding
+              affects only that claim and jurisdiction, and the rest of this section continues to apply to
+              other claims and users.
             </p>
           </section>
 
@@ -216,10 +256,13 @@ export default function TermsOfServicePage() {
               enforce any right or provision is not a waiver of that right or provision. You may not assign
               or transfer these Terms without our prior written consent; we may assign these Terms in
               connection with a merger, acquisition, or sale of assets. We may update these Terms from time
-              to time; we will post the revised Terms here with an updated &quot;Last updated&quot; date, and
-              for material changes we will provide additional notice before the change takes effect.
-              Continued use of the Service after a change takes effect constitutes your acceptance of the
-              updated Terms.
+              to time; we will post the revised Terms here with an updated &quot;Last updated&quot; date. For
+              a routine or clarifying change, continued use of the Service after the change takes effect
+              constitutes your acceptance of the updated Terms. For a material change — including to
+              pricing, the liability or indemnity sections, dispute resolution, or how we use your data — we
+              will give you advance notice (in-app or by email) and ask you to affirmatively accept the
+              updated Terms again before it takes effect for you; if you don&apos;t, your access may be
+              limited to what the prior Terms cover until you do, or your account may be closed.
             </p>
           </section>
 

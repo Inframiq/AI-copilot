@@ -226,6 +226,22 @@ class Subscription(Base):
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class PolicyAcceptance(Base):
+    """One row per user — the Terms of Service / Privacy Policy version they
+    most recently agreed to and when. Written by POST /me/policy-acceptance,
+    called right after a successful sign-in (see (auth)/callback/route.ts),
+    since the checkbox on the login/register page is the only place consent
+    is actually captured but is lost across the Google OAuth redirect. This
+    is deliberately evidence of acceptance, not just a UI checkbox state."""
+
+    __tablename__ = "policy_acceptances"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    terms_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    privacy_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class AiUsageEvent(Base):
     """Append-only ledger — one row per LLM API call, written from the
     provider via app.core.usage.record_ai_usage(). Powers per-user cost

@@ -1,8 +1,11 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import create_client
 
@@ -16,6 +19,7 @@ from app.db.models import (
     ExternalContact,
     JobDescription,
     LearningItem,
+    PolicyAcceptance,
     Resume,
     ResumeDeletionLog,
     Subscription,
@@ -46,6 +50,41 @@ async def get_my_subscription(
     sub = await resolve_subscription(db, uuid.UUID(user["sub"]))
     await db.commit()  # persist a first-touch free row / any rollover
     return subscription_public(sub)
+
+
+class PolicyAcceptanceIn(BaseModel):
+    terms_version: str = Field(..., max_length=20)
+    privacy_version: str = Field(..., max_length=20)
+
+
+@router.put("/policy-acceptance", status_code=status.HTTP_204_NO_CONTENT)
+async def record_policy_acceptance(
+    body: PolicyAcceptanceIn,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upserts the signed-in user's latest accepted Terms/Privacy version and
+    timestamp. Called once per sign-in, right after the OAuth callback
+    establishes a session — the login/register checkbox itself doesn't
+    survive the Google redirect, so this is the durable record of consent."""
+    uid = uuid.UUID(user["sub"])
+    stmt = pg_insert(PolicyAcceptance).values(
+        user_id=uid,
+        terms_version=body.terms_version,
+        privacy_version=body.privacy_version,
+        accepted_at=datetime.now(timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PolicyAcceptance.user_id],
+        set_={
+            "terms_version": stmt.excluded.terms_version,
+            "privacy_version": stmt.excluded.privacy_version,
+            "accepted_at": stmt.excluded.accepted_at,
+        },
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
@@ -109,6 +148,7 @@ async def delete_my_account(
         AiUsageEvent,
         Subscription,
         ResumeDeletionLog,
+        PolicyAcceptance,
     ):
         await db.execute(delete(model).where(model.user_id == uid))
 
