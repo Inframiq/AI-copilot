@@ -6,7 +6,11 @@ const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const JURISDICTION = "Visakhapatnam, Andhra Pradesh, India";
 
-export const metadata = { title: "Privacy Policy — Career Copilot" };
+export const metadata = {
+  title: "Privacy Policy",
+  description: "How Career Copilot collects, uses, and protects your personal data.",
+  robots: { index: false, follow: true },
+};
 
 export default function PrivacyPolicyPage() {
   return (

@@ -15,9 +15,45 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 });
 
+const SITE_URL = "https://resumebuilder.inframiq.com";
+
 export const metadata: Metadata = {
-  title: "Career Copilot",
-  description: "AI-powered resume tailoring and interview prep",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Career Copilot — AI Resume Builder & Resume Tailoring Tool",
+    template: "%s | Career Copilot",
+  },
+  description:
+    "Career Copilot is a free AI resume builder that tailors your resume to any job description in seconds, scores it against real ATS criteria, and generates interview questions targeting your exact skill gaps.",
+  keywords: [
+    "resume builder",
+    "AI resume builder",
+    "tailor resume",
+    "resume tailoring",
+    "ATS resume score",
+    "resume checker",
+    "cover letter generator",
+    "interview prep AI",
+  ],
+  authors: [{ name: "Inframiq Solutions Private Limited" }],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "Career Copilot",
+    title: "Career Copilot — AI Resume Builder & Resume Tailoring Tool",
+    description:
+      "Tailor your resume to any job description in seconds, get a real ATS compatibility score, and generate interview questions targeting your exact skill gaps.",
+    images: [{ url: "/icon.png", width: 512, height: 512, alt: "Career Copilot" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Career Copilot — AI Resume Builder & Resume Tailoring Tool",
+    description:
+      "Tailor your resume to any job description in seconds, get a real ATS compatibility score, and generate interview questions targeting your exact skill gaps.",
+    images: ["/icon.png"],
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

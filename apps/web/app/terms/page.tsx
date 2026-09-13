@@ -6,7 +6,11 @@ const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const SEAT_CITY = "Visakhapatnam, Andhra Pradesh, India";
 
-export const metadata = { title: "Terms of Service — Career Copilot" };
+export const metadata = {
+  title: "Terms of Service",
+  description: "The terms governing your use of Career Copilot.",
+  robots: { index: false, follow: true },
+};
 
 export default function TermsOfServicePage() {
   return (
