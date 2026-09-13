@@ -273,6 +273,17 @@ export default function AccountPage() {
       </div>
 
       {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
+
+      {/* Legal */}
+      <p className="text-body-sm text-on-surface-variant text-center pt-md">
+        <Link href="/terms" className="hover:text-on-surface hover:underline">
+          Terms of Service
+        </Link>
+        <span className="mx-sm text-outline-variant">·</span>
+        <Link href="/privacy" className="hover:text-on-surface hover:underline">
+          Privacy Policy
+        </Link>
+      </p>
     </div>
   );
 }
