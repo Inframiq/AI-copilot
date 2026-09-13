@@ -136,20 +136,34 @@ export default function PrivacyPolicyPage() {
                 managing your plan, and tracking credit usage. <em>Legal basis: performance of a contract</em>, and compliance with tax/accounting obligations.
               </li>
               <li>
-                <strong className="text-on-surface">Operating and securing the Service</strong> — diagnosing
-                technical issues, monitoring for abuse or fraud, and maintaining authentication logs. <em>Legal basis: our legitimate interest</em> in keeping the Service secure and functioning, balanced against
-                your privacy interests — you may object to this processing (Section 9).
+                <strong className="text-on-surface">Fraud prevention and security</strong> — detecting abuse
+                (e.g. credential stuffing, credit-limit circumvention) and maintaining authentication logs. <em>Legal basis: our legitimate interest</em> in keeping the Service and its users safe from fraud and
+                abuse. We have weighed this against your privacy interest by limiting this processing to
+                security-relevant metadata (Section 8), not resume or job-description content, and you may
+                object to this processing at any time (Section 9), though we may need to weigh an objection
+                against our ability to keep the Service secure.
               </li>
               <li>
-                <strong className="text-on-surface">Transactional communications</strong> — account, billing,
-                and security notices. <em>Legal basis: performance of a contract</em> and legitimate interest.
-                Any non-essential product update or marketing message is sent only with your <em>consent</em>,
-                which you can withdraw at any time.
+                <strong className="text-on-surface">Essential account, billing, and security notices</strong> —
+                messages you need to receive to use the Service (e.g. sign-in alerts, payment receipts,
+                policy changes). <em>Legal basis: performance of a contract</em> — these are not optional and
+                are not marketing, so there is no separate opt-out for them short of closing your account.
               </li>
               <li>
-                <strong className="text-on-surface">Legal compliance and enforcement</strong> — complying with
-                applicable law and enforcing our{" "}
-                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>. <em>Legal basis: legal obligation</em>, and legitimate interest for enforcement.
+                <strong className="text-on-surface">Optional product updates or marketing</strong> — sent only
+                if you opt in. <em>Legal basis: consent.</em> You can withdraw consent at any time via the
+                unsubscribe link in any such message or by emailing{" "}
+                {CONTACT_EMAIL}; withdrawing stops future messages but does not affect the lawfulness of
+                anything already sent while consent was in effect.
+              </li>
+              <li>
+                <strong className="text-on-surface">Legal compliance and enforcement</strong> — retaining
+                payment/tax records (Section 8), responding to lawful requests from courts or regulators, and
+                enforcing our{" "}
+                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
+                against violations such as abuse of credit limits or unlawful content. <em>Legal basis: legal
+                obligation</em> for regulatory/tax retention specifically, and <em>legitimate interest</em>{" "}
+                for Terms enforcement more broadly.
               </li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
@@ -162,14 +176,14 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-headline-md text-on-surface font-semibold">4. Automated processing and AI-generated content</h2>
             <p className="text-body-md text-on-surface-variant">
               Career Copilot uses AI to generate suggestions — tailored resume text, cover letters, ATS
-              compatibility scores, and interview questions. This processing is <strong className="text-on-surface">advisory only</strong>: it acts on your own resume, for your own use, at your own request. No output is used
-              to make, and no part of the Service makes, an automated decision about you that produces legal
-              effects or similarly significantly affects you (for example, we do not decide whether you get
-              hired, and no employer or third party uses Career Copilot to screen or rank you) — the DPDP Act,
-              GDPR, and similar automated-decision-making safeguards accordingly do not apply to this
-              processing in the way they would for employer-facing screening tools. An ATS compatibility
-              score is an estimate intended to help you improve your resume; it does not guarantee acceptance
-              by any real applicant tracking system, which we do not control.
+              compatibility scores, and interview questions. This processing is <strong className="text-on-surface">advisory only</strong>: it acts on your own resume, at your own request, and you decide whether to use,
+              edit, or discard any output. No employer, recruiter, or other third party uses Career Copilot to
+              screen, rank, or evaluate you — there is no feature through which anyone other than you receives
+              or acts on this output. An ATS compatibility score is an estimate intended to help you improve
+              your resume; it does not guarantee acceptance by any real applicant tracking system, which we do
+              not control. We describe this so you can assess for yourself, or with your own advisor, how
+              automated-decision-making rules under GDPR, the DPDP Act, or other applicable law apply to your
+              specific situation — we do not make that determination for you in this Policy.
             </p>
           </section>
 
@@ -327,14 +341,16 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="flex flex-col gap-sm">
-            <h2 className="text-headline-md text-on-surface font-semibold">10. Children&apos;s privacy</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold">10. Age requirement and children&apos;s privacy</h2>
             <p className="text-body-md text-on-surface-variant">
-              The Service is not directed to, and we do not knowingly collect personal data from, children
-              under the age of 16 (or the higher minimum age required by applicable local law). Account
-              creation relies on Google&apos;s own age requirements for its accounts — we do not separately
-              verify age. If you believe a child has provided us with personal data, contact us at{" "}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
-              and we will delete it promptly.
+              The Service is intended solely for users who are at least 18 years old, worldwide — including
+              in India, where the Digital Personal Data Protection Act, 2023 defines a &quot;child&quot; as
+              anyone under 18. We do not offer a parental-consent mechanism, so if you are under 18 you are
+              not permitted to create an account or use the Service. Account creation relies on your Google
+              account&apos;s own age standing — we do not perform independent, separate age verification
+              beyond that. If we learn that we have collected personal data from someone under 18, we will
+              delete the associated account and data promptly. If you believe this has happened, contact us
+              at <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>.
             </p>
           </section>
 

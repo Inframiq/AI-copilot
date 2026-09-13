@@ -58,8 +58,8 @@ export default function TermsOfServicePage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">2. Eligibility and account access</h2>
             <p className="text-body-md text-on-surface-variant">
-              You must be at least 16 years old, or the minimum age of digital consent in your jurisdiction if
-              higher, to use the Service. Accounts are created and accessed exclusively through Google
+              You must be at least 18 years old to use the Service, worldwide — we do not offer a
+              parental-consent mechanism for younger users. Accounts are created and accessed exclusively through Google
               Sign-In (OAuth) — we do not offer or support username/password accounts. You are responsible
               for maintaining the security of the Google account linked to your Career Copilot account, and
               for all activity that occurs under your account. You must provide accurate information and are
