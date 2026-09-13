@@ -31,9 +31,9 @@ export default function RegisterPage() {
         {/* Logo */}
         <div className="flex items-center gap-md mb-xl">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-on-primary text-lg font-bold">C</span>
+            <span className="text-on-primary text-lg font-bold">K</span>
           </div>
-          <span className="text-headline-md text-on-surface font-bold">Career Copilot</span>
+          <span className="text-headline-md text-on-surface font-bold">KripaX</span>
         </div>
 
         <h1 className="text-headline-lg text-on-surface mb-md">Create account</h1>

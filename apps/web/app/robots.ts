@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://resumebuilder.inframiq.com";
+const SITE_URL = "https://kripax.inframiq.com";
 
 export default function robots(): MetadataRoute.Robots {
   return {

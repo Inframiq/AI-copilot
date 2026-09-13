@@ -44,9 +44,9 @@ describe("Sidebar", () => {
     }
   });
 
-  it("links the Career Copilot wordmark back to the dashboard", () => {
+  it("links the KripaX wordmark back to the dashboard", () => {
     renderSidebar();
-    const wordmarkLink = screen.getByText("Career Copilot").closest("a");
+    const wordmarkLink = screen.getByText("KripaX").closest("a");
     expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
   });
 

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { RocketLaunch } from "@phosphor-icons/react/dist/ssr";
 
-const LAST_UPDATED = "September 13, 2026";
+const LAST_UPDATED = "September 14, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const JURISDICTION = "Visakhapatnam, Andhra Pradesh, India";
 
 export const metadata = {
   title: "Privacy Policy",
-  description: "How Career Copilot collects, uses, and protects your personal data.",
+  description: "How KripaX collects, uses, and protects your personal data.",
   robots: { index: false, follow: true },
 };
 
@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight">Career Copilot</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight">KripaX</span>
         </Link>
         <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
           Back to home
@@ -36,9 +36,9 @@ export default function PrivacyPolicyPage() {
 
           <p className="text-body-md text-on-surface-variant">
             {ENTITY_NAME} (&quot;{ENTITY_NAME.split(" ")[0]}&quot;, &quot;we&quot;, &quot;us&quot;, or
-            &quot;our&quot;) operates Career Copilot (the &quot;Service&quot;), an AI-assisted resume,
-            job-description analysis, and interview preparation tool for individual job seekers. Career
-            Copilot is a self-service tool: you use it to build and improve your own resume, and there is no
+            &quot;our&quot;) operates KripaX (the &quot;Service&quot;), an AI-assisted resume,
+            job-description analysis, and interview preparation tool for individual job seekers. KripaX
+            is a self-service tool: you use it to build and improve your own resume, and there is no
             employer-, recruiter-, or agency-facing product that screens, ranks, or scores you for a third
             party. This Privacy Policy explains what personal data we collect, why, how it is used, where it
             is stored, who we share it with, and the rights you have over it — wherever in the world you are
@@ -179,9 +179,9 @@ export default function PrivacyPolicyPage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">4. Automated processing and AI-generated content</h2>
             <p className="text-body-md text-on-surface-variant">
-              Career Copilot uses AI to generate suggestions — tailored resume text, cover letters, ATS
+              KripaX uses AI to generate suggestions — tailored resume text, cover letters, ATS
               compatibility scores, and interview questions. This processing is <strong className="text-on-surface">advisory only</strong>: it acts on your own resume, at your own request, and you decide whether to use,
-              edit, or discard any output. No employer, recruiter, or other third party uses Career Copilot to
+              edit, or discard any output. No employer, recruiter, or other third party uses KripaX to
               screen, rank, or evaluate you — there is no feature through which anyone other than you receives
               or acts on this output. An ATS compatibility score is an estimate intended to help you improve
               your resume; it does not guarantee acceptance by any real applicant tracking system, which we do
@@ -196,7 +196,7 @@ export default function PrivacyPolicyPage() {
             <p className="text-body-md text-on-surface-variant">
               To generate resume content, tailoring suggestions, ATS scores, and interview questions, the
               resume and job-description text you submit for that specific action is sent to OpenAI, the
-              single AI provider Career Copilot currently uses in production, solely to generate that
+              single AI provider KripaX currently uses in production, solely to generate that
               response. Only the text relevant to the feature you triggered is sent (for example, a
               bullet-rewrite sends the bullet and job context, not your entire account); we do not send your
               Google account credentials, email, or payment data to OpenAI. We may add or switch to a

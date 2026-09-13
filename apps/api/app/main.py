@@ -11,7 +11,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Career Copilot API", version="1.0.0")
+app = FastAPI(title="KripaX API", version="1.0.0")
 
 # Rate limiter
 app.state.limiter = limiter
@@ -41,7 +41,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://resumebuilder.inframiq.com",
+        "https://kripax.inframiq.com",
         *_extra_origins,
     ],
     allow_origin_regex=r"https://[\w-]+\.vercel\.app",

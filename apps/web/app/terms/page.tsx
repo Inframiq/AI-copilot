@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { RocketLaunch } from "@phosphor-icons/react/dist/ssr";
 
-const LAST_UPDATED = "September 13, 2026";
+const LAST_UPDATED = "September 14, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const SEAT_CITY = "Visakhapatnam, Andhra Pradesh, India";
 
 export const metadata = {
   title: "Terms of Service",
-  description: "The terms governing your use of Career Copilot.",
+  description: "The terms governing your use of KripaX.",
   robots: { index: false, follow: true },
 };
 
@@ -20,7 +20,7 @@ export default function TermsOfServicePage() {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight">Career Copilot</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight">KripaX</span>
         </Link>
         <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
           Back to home
@@ -37,7 +37,7 @@ export default function TermsOfServicePage() {
           <p className="text-body-md text-on-surface-variant">
             These Terms of Service (&quot;Terms&quot;) form a binding legal agreement between you and{" "}
             {ENTITY_NAME} (&quot;{ENTITY_NAME.split(" ")[0]}&quot;, &quot;we&quot;, &quot;us&quot;, or
-            &quot;our&quot;) governing your access to and use of Career Copilot (the &quot;Service&quot;),
+            &quot;our&quot;) governing your access to and use of KripaX (the &quot;Service&quot;),
             wherever in the world you access it from. By creating an account, signing in with Google, or
             otherwise using the Service, you accept these Terms in full. If you do not agree, do not use the
             Service.
@@ -46,7 +46,7 @@ export default function TermsOfServicePage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">1. The Service</h2>
             <p className="text-body-md text-on-surface-variant">
-              Career Copilot provides AI-assisted resume building, job-description analysis, ATS
+              KripaX provides AI-assisted resume building, job-description analysis, ATS
               compatibility scoring, cover letter generation, and interview preparation. Outputs are
               currently generated using OpenAI&apos;s models; we may switch to or add other AI providers in
               the future, and will update this section and our{" "}
@@ -67,7 +67,7 @@ export default function TermsOfServicePage() {
               You must be at least 18 years old to use the Service, worldwide — we do not offer a
               parental-consent mechanism for younger users. Accounts are created and accessed exclusively through Google
               Sign-In (OAuth) — we do not offer or support username/password accounts. You are responsible
-              for maintaining the security of the Google account linked to your Career Copilot account, and
+              for maintaining the security of the Google account linked to your KripaX account, and
               for all activity that occurs under your account. You must provide accurate information and are
               solely responsible for the content you upload, submit, or generate. Notify us immediately at{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}

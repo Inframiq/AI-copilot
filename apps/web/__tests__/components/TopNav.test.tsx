@@ -33,9 +33,9 @@ describe("TopNav", () => {
     expect(screen.getByText("Resume")).toBeInTheDocument();
   });
 
-  it("links the Career Copilot wordmark back to the dashboard", () => {
+  it("links the KripaX wordmark back to the dashboard", () => {
     renderTopNav();
-    const wordmarkLink = screen.getByText("Career Copilot").closest("a");
+    const wordmarkLink = screen.getByText("KripaX").closest("a");
     expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
   });
 

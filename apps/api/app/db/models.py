@@ -266,7 +266,7 @@ class AiUsageEvent(Base):
 
 
 class ExternalContact(Base):
-    """People tracked outside the platform (not Career Copilot users) —
+    """People tracked outside the platform (not KripaX users) —
     distinct from Networking's Profile/connection_requests, which is for
     in-platform users."""
 

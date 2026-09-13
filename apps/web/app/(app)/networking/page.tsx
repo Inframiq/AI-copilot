@@ -327,7 +327,7 @@ export default function NetworkingPage() {
           Networking
         </h1>
         <p className="text-body-lg text-on-surface-variant">
-          Connect with other Career Copilot users and grow your professional
+          Connect with other KripaX users and grow your professional
           network.
         </p>
       </section>
@@ -365,7 +365,7 @@ export default function NetworkingPage() {
                     Set up your profile
                   </h2>
                   <p className="text-body-sm text-on-surface-variant">
-                    Create your public profile so other Career Copilot users
+                    Create your public profile so other KripaX users
                     can find and connect with you.
                   </p>
                 </div>
@@ -558,7 +558,7 @@ export default function NetworkingPage() {
                   <p className="text-body-sm text-on-surface-variant">
                     {discoverSearch
                       ? "Try a different search term."
-                      : "Invite colleagues to join Career Copilot."}
+                      : "Invite colleagues to join KripaX."}
                   </p>
                 </div>
               ) : (
@@ -765,7 +765,7 @@ export default function NetworkingPage() {
             />
             External Contacts ({contacts.length})
           </button>
-          <InfoTooltip text="For tracking people you know who aren't on Career Copilot — recruiters, referrals, contacts from networking events. Click a contact's status pill to cycle it: New → Follow Up → Connected." />
+          <InfoTooltip text="For tracking people you know who aren't on KripaX — recruiters, referrals, contacts from networking events. Click a contact's status pill to cycle it: New → Follow Up → Connected." />
         </div>
 
         {contactsOpen && (

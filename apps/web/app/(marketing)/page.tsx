@@ -5,7 +5,7 @@ import { RocketLaunch, FileText, Brain, ChartLineUp } from "@phosphor-icons/reac
 export const metadata: Metadata = {
   title: "AI Resume Builder — Tailor Your Resume to Any Job in Seconds",
   description:
-    "Free AI resume builder and resume tailoring tool. Paste a job description and Career Copilot rewrites your resume to match it, scores it against real ATS criteria, and generates interview questions for your exact skill gaps.",
+    "Free AI resume builder and resume tailoring tool. Paste a job description and KripaX rewrites your resume to match it, scores it against real ATS criteria, and generates interview questions for your exact skill gaps.",
   alternates: { canonical: "/" },
 };
 
@@ -14,13 +14,13 @@ export const metadata: Metadata = {
 const JSON_LD = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "Career Copilot",
+  name: "KripaX",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   description:
     "AI resume builder that tailors your resume to any job description, scores it against ATS criteria, and generates targeted interview prep questions.",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  url: "https://resumebuilder.inframiq.com",
+  url: "https://kripax.inframiq.com",
 };
 
 export default function LandingPage() {
@@ -36,7 +36,7 @@ export default function LandingPage() {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight">Career Copilot</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight">KripaX</span>
         </div>
         <div className="flex items-center gap-md">
           <Link
@@ -60,7 +60,7 @@ export default function LandingPage() {
             AI Resume Builder That Tailors Your Resume to Any Job
           </h1>
           <p className="text-body-lg text-on-surface-variant mb-xl max-w-[36rem] mx-auto">
-            Career Copilot is a free AI resume builder — paste a job description and it
+            KripaX is a free AI resume builder — paste a job description and it
             tailors your resume to match, calculates a real ATS compatibility score, and
             generates interview questions targeting your exact skill gaps.
           </p>

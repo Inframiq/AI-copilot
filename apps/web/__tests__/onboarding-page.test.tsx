@@ -47,7 +47,7 @@ function renderOnboarding() {
 
 async function advanceToPlanStep(user: ReturnType<typeof userEvent.setup>) {
   // Step 1 — details. Name/email prefill from the mocked getUser (async effect).
-  await screen.findByText("Welcome to Career Copilot");
+  await screen.findByText("Welcome to KripaX");
   await screen.findByDisplayValue("Jane"); // wait for the prefill effect to land
   await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "5551234567");
   await user.selectOptions(screen.getByRole("combobox"), "working");

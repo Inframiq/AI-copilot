@@ -306,7 +306,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-headline-md text-on-surface font-semibold">Get started</h2>
             <p className="text-body-sm text-on-surface-variant mt-xs">
-              A few quick steps to get the most out of Career Copilot.
+              A few quick steps to get the most out of KripaX.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-sm">

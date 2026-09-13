@@ -1,9 +1,9 @@
 ---
 name: run-ai-copilot
-description: Build, start, and drive Career Copilot (Next.js web app + FastAPI API). Use when asked to run the project, start the dev servers, take a screenshot of the web app, or verify the API/web are up.
+description: Build, start, and drive KripaX (Next.js web app + FastAPI API). Use when asked to run the project, start the dev servers, take a screenshot of the web app, or verify the API/web are up.
 ---
 
-Career Copilot is two services: a FastAPI backend (`apps/api`) and a
+KripaX is two services: a FastAPI backend (`apps/api`) and a
 Next.js frontend (`apps/web`), started separately (there is no Docker
 Compose / single launch command). Drive it via
 `.claude/skills/run-ai-copilot/driver.mjs` — a Playwright script (no
