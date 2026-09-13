@@ -1,5 +1,6 @@
 "use client";
 import * as RadixSlider from "@radix-ui/react-slider";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export function HumanizeSlider({
   value,
@@ -19,7 +20,10 @@ export function HumanizeSlider({
   return (
     <div className="flex flex-col gap-sm">
       <div className="flex justify-between items-center">
-        <span className="text-label-md text-on-surface-variant">Humanize Level</span>
+        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+          Humanize Level
+          <InfoTooltip text="Lower keeps your bullets close to their original wording. Higher leans harder into matching this JD's exact keywords, which can read a bit more mechanical." />
+        </span>
         <span className="text-label-md text-primary font-bold">{value}</span>
       </div>
       <div className="flex items-center justify-between text-caption text-on-surface-variant mb-xs">

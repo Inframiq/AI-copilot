@@ -7,6 +7,7 @@ import { QuestionCard } from "@/components/interview/QuestionCard";
 import { TopicList } from "@/components/interview/TopicList";
 import type { PrepQuestionOut } from "@career-copilot/types";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export default function InterviewPage({
   params,
@@ -75,8 +76,9 @@ export default function InterviewPage({
         <div className="flex gap-gutter">
           {/* Topic sidebar */}
           <aside className="w-64 flex-shrink-0">
-            <p className="text-label-md text-on-surface-variant uppercase tracking-wider mb-md">
+            <p className="text-label-md text-on-surface-variant uppercase tracking-wider mb-md flex items-center gap-sm">
               Topics
+              <InfoTooltip text="All questions from this session, grouped by topic — pick one to jump straight to it." />
             </p>
             <TopicList
               questions={questions}

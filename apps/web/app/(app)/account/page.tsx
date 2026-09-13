@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api-client";
 import { createBrowserClient } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { Subscription } from "@career-copilot/types";
 
 // Only actions the user actively triggers with a button. Interview prep
@@ -89,6 +90,7 @@ export default function AccountPage() {
           <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
             <User size={20} weight="fill" className="text-primary" />
             Your details
+            <InfoTooltip text="Pulled from My Profile — edit it there and it updates everywhere, including every resume and cover letter Copilot generates." />
           </h2>
           <Link
             href="/profile"
@@ -137,6 +139,7 @@ export default function AccountPage() {
                 <span className="text-headline-md text-on-surface font-semibold capitalize">
                   {sub.plan} plan
                 </span>
+                <InfoTooltip text="Your plan sets how many credits you get and whether they refill monthly or are a one-time grant." />
                 <span
                   className={`text-caption font-semibold px-sm py-[2px] rounded-full capitalize ${
                     sub.status === "active"
@@ -162,6 +165,7 @@ export default function AccountPage() {
               <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
                 <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
                 Credits remaining
+                <InfoTooltip text="Most actions (tailoring, cover letters, bullet rewrites) spend credits — see the table below for exact costs. Interview prep questions are free." />
               </span>
               <span className={`text-headline-xl font-bold ${low ? "text-error" : "text-on-surface"}`}>
                 {sub.credits_remaining}
@@ -186,7 +190,10 @@ export default function AccountPage() {
 
           {/* Costs */}
           <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-            <h2 className="text-headline-md text-on-surface font-semibold mb-md">What credits cost</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold mb-md flex items-center gap-sm">
+              What credits cost
+              <InfoTooltip text="How many credits each action deducts from your balance. Actions with 0 shown are free." />
+            </h2>
             <div className="flex flex-col divide-y divide-outline-variant/20">
               {ACTION_ORDER.filter((a) => a in sub.costs).map((action) => {
                 const cost = sub.costs[action];
@@ -258,6 +265,7 @@ export default function AccountPage() {
         <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
           <Warning size={20} weight="fill" className="text-error" />
           Danger zone
+          <InfoTooltip text="Deletes your resumes, cover letters, job descriptions, career profile, and plan — immediately and permanently. See the Privacy Policy for exactly what happens to backups." />
         </h2>
         <p className="text-body-sm text-on-surface-variant mt-xs">
           Permanently delete your account and everything in it. This cannot be

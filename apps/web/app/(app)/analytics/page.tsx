@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { Resume, JobDescription } from "@career-copilot/types";
 
 // ATS scores live on the JD (each JD's latest completed tailoring session),
@@ -115,32 +116,39 @@ export default function AnalyticsPage() {
         {[
           {
             label: "Resumes Created",
+            tooltip: "The total number of resumes you've saved in Resume Builder, tailored or not.",
             value: resumes.length > 0 ? resumes.length : "—",
             trend: null as null | "up" | "down",
             icon: FileDashed,
           },
           {
             label: "Best ATS Score",
+            tooltip: "The highest ATS compatibility score across every job description you've tailored a resume to.",
             value: topAts != null && topAts > 0 ? `${topAts}%` : "—",
             trend: topAts != null && topAts > 0 ? ("up" as const) : null,
             icon: Brain,
           },
           {
             label: "Avg ATS Score",
+            tooltip: "The average ATS score across all your scored job descriptions.",
             value: avgAts != null && avgAts > 0 ? `${avgAts}%` : "—",
             trend: null as null | "up" | "down",
             icon: ChartLineUp,
           },
           {
             label: "JDs Analyzed",
+            tooltip: "How many job descriptions you've run through JD Analyzer in total.",
             value: jds.length > 0 ? jds.length : "—",
             trend: null as null | "up" | "down",
             icon: Briefcase,
           },
-        ].map(({ label, value, trend, icon: Icon }) => (
+        ].map(({ label, tooltip, value, trend, icon: Icon }) => (
           <div key={label} className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col justify-between h-32 relative overflow-hidden">
             <div className="flex justify-between items-start">
-              <span className="text-label-md text-on-surface-variant">{label}</span>
+              <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                {label}
+                <InfoTooltip text={tooltip} />
+              </span>
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <Icon size={18} weight="fill" className="text-primary" />
               </div>
@@ -157,7 +165,10 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
         {/* ATS Score Trend */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg">ATS Score Trend</h2>
+          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+            ATS Score Trend
+            <InfoTooltip text="Your best ATS score per month, from job descriptions you've tailored a resume against — the last 6 months with data." />
+          </h2>
           {atsTrend.length > 0 ? (
             <div className="flex items-end gap-md h-40">
               {atsTrend.map(({ label, score }) => (
@@ -185,7 +196,10 @@ export default function AnalyticsPage() {
 
         {/* Weekly Applications */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg">Applications per Week</h2>
+          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+            Applications per Week
+            <InfoTooltip text="How many job descriptions you analyzed each week, over the last 6 weeks." />
+          </h2>
           {jds.length > 0 ? (
             <div className="flex items-end gap-md h-40">
               {weeklyApps.map(({ week, count }) => (
@@ -214,7 +228,10 @@ export default function AnalyticsPage() {
 
       {/* Application Funnel */}
       <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-        <h2 className="text-headline-md text-on-surface font-semibold mb-lg">Application Funnel</h2>
+        <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+          Application Funnel
+          <InfoTooltip text="How your applications progress: Applied is every JD analyzed, ATS Passed is those scoring 70% or higher, and Interview/Final Round/Offer reflect the status you've set on each JD." />
+        </h2>
         {jds.length > 0 || sessionId ? (
           <div className="flex flex-col gap-sm">
             {funnel.map(({ stage, count, color }) => {
@@ -249,7 +266,10 @@ export default function AnalyticsPage() {
           property of "this resume against that job", not of a resume file. */}
       {jds.length > 0 && (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg">JD Match Scores</h2>
+          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+            JD Match Scores
+            <InfoTooltip text="Every job description you've analyzed, with its ATS score — the match between your tailored resume and that specific job." />
+          </h2>
           <div className="flex flex-col gap-sm">
             {jds.map((jd) => (
               <div

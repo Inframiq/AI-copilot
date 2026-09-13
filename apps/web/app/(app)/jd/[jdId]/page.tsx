@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
@@ -199,6 +200,7 @@ export default function JDPage({
         <Card className="lg:col-span-2 flex flex-col gap-md">
           <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
             Skills from JD
+            <InfoTooltip text="Every skill our parser found in this job description's text." />
           </h2>
           {jd?.parsed_skills && jd.parsed_skills.length > 0 ? (
             <div className="flex flex-wrap gap-xs">
@@ -226,6 +228,7 @@ export default function JDPage({
           <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
             <Target size={20} className="text-primary" />
             Keywords — Matched &amp; Not Matched
+            <InfoTooltip text="Which of this JD's skills your resume already covers, and which are missing. Click a missing skill to prioritize it on your next Tailor run." />
           </h2>
 
           {!masterResume ? (
@@ -377,6 +380,7 @@ export default function JDPage({
         <Card className="lg:col-span-2 flex flex-col gap-md">
           <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
             Generated for This JD
+            <InfoTooltip text="Your latest tailored resume, interview prep progress, and cover letter for this specific job — from your most recent Tailor run." />
           </h2>
 
           {!jdDetails?.session_id ? (

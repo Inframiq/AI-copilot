@@ -32,6 +32,7 @@ import { SaveAnalysisModal } from "@/components/jd/SaveAnalysisModal";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { JobDescription, JDStatus, Resume, LearningItem } from "@career-copilot/types";
 
 const STATUS_LABEL: Record<JDStatus, string> = {
@@ -508,6 +509,7 @@ export default function JDIndexPage() {
             <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
               <ClipboardText size={24} className="text-primary" />
               Job Description Input
+              <InfoTooltip text="Paste the full posting text — Analyze compares it against your resume, and Tailor rewrites your resume's bullets to fit it." />
             </h2>
             <div className="flex items-center gap-xs">
               {jdText.trim() && (
@@ -574,6 +576,7 @@ export default function JDIndexPage() {
           <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
             <Target size={24} className="text-primary" />
             Profile Match &amp; Keywords
+            <InfoTooltip text="The gauge is your ATS match score — how well your resume's keywords cover this JD. Matched/Not Matched break that down by skill." />
           </h2>
 
           <div className="flex flex-col sm:flex-row gap-sm">
@@ -733,6 +736,7 @@ export default function JDIndexPage() {
               <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
                 <Lightbulb size={24} className="text-primary" />
                 Quick Scan
+                <InfoTooltip text="Seniority, location, pay, and culture signals pulled straight from the JD text you pasted — pattern-matched, not an AI call, so treat it as a hint rather than a verified fact." />
               </h2>
               <span className="text-caption text-on-surface-variant uppercase tracking-wider">
                 Keyword-based, not AI-verified

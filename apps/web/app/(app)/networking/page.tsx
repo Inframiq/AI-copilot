@@ -32,6 +32,7 @@ import {
 import { ProfileForm } from "@/components/networking/ProfileForm";
 import { ProfileCard } from "@/components/networking/ProfileCard";
 import { ConnectionDrawer } from "@/components/networking/ConnectionDrawer";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { apiClient } from "@/lib/api-client";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import type { ExternalContact } from "@career-copilot/types";
@@ -753,16 +754,19 @@ export default function NetworkingPage() {
 
       {/* ── EXTERNAL CONTACTS (collapsible) ──────────────────────────────────── */}
       <div className="border-t border-outline-variant/20 pt-lg">
-        <button
-          onClick={() => setContactsOpen((o) => !o)}
-          className="flex items-center gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors mb-md"
-        >
-          <CaretDown
-            size={18}
-            className={`transition-transform duration-200 ${contactsOpen ? "rotate-180" : ""}`}
-          />
-          External Contacts ({contacts.length})
-        </button>
+        <div className="flex items-center gap-sm mb-md">
+          <button
+            onClick={() => setContactsOpen((o) => !o)}
+            className="flex items-center gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            <CaretDown
+              size={18}
+              className={`transition-transform duration-200 ${contactsOpen ? "rotate-180" : ""}`}
+            />
+            External Contacts ({contacts.length})
+          </button>
+          <InfoTooltip text="For tracking people you know who aren't on Career Copilot — recruiters, referrals, contacts from networking events. Click a contact's status pill to cycle it: New → Follow Up → Connected." />
+        </div>
 
         {contactsOpen && (
           <div className="flex flex-col gap-lg">

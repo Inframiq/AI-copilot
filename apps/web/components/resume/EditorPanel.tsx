@@ -6,6 +6,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { HumanizeSlider } from "./HumanizeSlider";
 import { BulletReviewPanel } from "./BulletReviewPanel";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { sameCompany } from "@/lib/career-profile-client";
 import { CaretDown, CaretRight, CheckCircle, FileText, Target, Trash, WarningCircle, Sparkle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
@@ -108,30 +109,33 @@ export function EditorPanel() {
   return (
     <div className="flex flex-col gap-lg h-full overflow-y-auto p-lg">
       {/* Header — collapsible in tailoring mode */}
-      <button
-        onClick={() => setEditorOpen((o) => !o)}
-        className={`flex items-center justify-between w-full text-left ${
-          isTailoringMode ? "cursor-pointer group" : "cursor-default"
-        }`}
-        disabled={!isTailoringMode}
-      >
-        <h3 className="text-headline-md font-bold text-primary">Content Editor</h3>
-        {isTailoringMode && (
-          <span className="flex items-center gap-xs text-label-sm text-on-surface-variant group-hover:text-primary transition-colors">
-            {editorOpen ? (
-              <>
-                <CaretDown size={16} />
-                Hide
-              </>
-            ) : (
-              <>
-                <CaretRight size={16} />
-                Expand to edit
-              </>
-            )}
-          </span>
-        )}
-      </button>
+      <div className="flex items-center gap-sm w-full">
+        <button
+          onClick={() => setEditorOpen((o) => !o)}
+          className={`flex-1 flex items-center justify-between text-left ${
+            isTailoringMode ? "cursor-pointer group" : "cursor-default"
+          }`}
+          disabled={!isTailoringMode}
+        >
+          <h3 className="text-headline-md font-bold text-primary">Content Editor</h3>
+          {isTailoringMode && (
+            <span className="flex items-center gap-xs text-label-sm text-on-surface-variant group-hover:text-primary transition-colors">
+              {editorOpen ? (
+                <>
+                  <CaretDown size={16} />
+                  Hide
+                </>
+              ) : (
+                <>
+                  <CaretRight size={16} />
+                  Expand to edit
+                </>
+              )}
+            </span>
+          )}
+        </button>
+        <InfoTooltip text="Edit your resume's contact info, summary, experience, education, and skills here. Switch tabs above to jump between sections." />
+      </div>
 
       {/* Content editor tabs — hidden when collapsed in tailoring mode, always visible otherwise */}
       {(!isTailoringMode || editorOpen) && <Tabs.Root defaultValue="contact">
@@ -767,6 +771,7 @@ function TailoringForm({
       <div className="flex items-center gap-sm">
         <Sparkle size={18} className="text-primary" />
         <p className="text-label-md font-bold text-on-surface">Tailor Resume to this JD</p>
+        <InfoTooltip text="Rewrites your resume's bullets to match this job description's keywords, prioritizing any skills you picked in JD Analyzer, at the Humanize level you set below." />
       </div>
 
       {/* ATS context badge — only if analysis was run */}

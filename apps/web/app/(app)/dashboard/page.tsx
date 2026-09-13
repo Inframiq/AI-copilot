@@ -17,6 +17,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { Resume, JobDescription, LearningItem, PrepQuestionWithJdOut } from "@career-copilot/types";
 
@@ -229,6 +230,7 @@ export default function DashboardPage() {
 
   const metrics: Array<{
     label: string;
+    tooltip: string;
     value: string;
     badge: string;
     icon: typeof Heartbeat;
@@ -237,6 +239,7 @@ export default function DashboardPage() {
   }> = [
     {
       label: "Profile Health",
+      tooltip: "How complete My Profile is — name, contact, work history, education, and skills. A fuller profile means better tailored resumes.",
       value: hasProfile ? `${profileScore}%` : "—",
       badge: hasProfile ? profileLabel : "Complete profile",
       icon: Heartbeat,
@@ -245,6 +248,7 @@ export default function DashboardPage() {
     },
     {
       label: "Active Applications",
+      tooltip: "The number of job descriptions you've analyzed in JD Analyzer.",
       value: String(jds.length),
       badge: jdsThisWeek > 0 ? `+${jdsThisWeek} this week` : "Track your JDs",
       icon: Briefcase,
@@ -253,6 +257,7 @@ export default function DashboardPage() {
     },
     {
       label: "Interview Readiness",
+      tooltip: "Based on the milestones in Interview Center: resume created, JD analyzed, a prep session started, and questions practiced.",
       value: `${interviewReadiness}%`,
       badge: interviewLabel,
       icon: Brain,
@@ -261,6 +266,7 @@ export default function DashboardPage() {
     },
     {
       label: "Tailored Resumes",
+      tooltip: "How many resume versions you've tailored to a specific job description in Resume Builder.",
       value: tailoredCount > 0 ? String(tailoredCount) : "—",
       badge: tailoredCount > 0 ? "Versions saved" : "Tailor to a JD",
       icon: FileDashed,
@@ -328,7 +334,7 @@ export default function DashboardPage() {
 
       {/* Key Metrics Bento Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
-        {metrics.map(({ label, value, badge, icon: Icon, barWidth, action }) => {
+        {metrics.map(({ label, tooltip, value, badge, icon: Icon, barWidth, action }) => {
           const Card = action ? "button" : "div";
           return (
             <Card
@@ -337,7 +343,10 @@ export default function DashboardPage() {
               className={`bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden flex flex-col justify-between h-32 w-full text-left${action ? " cursor-pointer active:scale-[0.98]" : ""}`}
             >
               <div className="flex justify-between items-start">
-                <span className="text-label-md text-on-surface-variant">{label}</span>
+                <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                  {label}
+                  <InfoTooltip text={tooltip} />
+                </span>
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <Icon size={20} weight="fill" className="text-primary" />
                 </div>
@@ -362,7 +371,10 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
         {/* Quick Actions */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
-          <h2 className="text-headline-md text-on-surface font-semibold">Quick Actions</h2>
+          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+            Quick Actions
+            <InfoTooltip text="The fastest way into the app's three core flows — analyzing a JD, building a resume, or practicing interview questions." />
+          </h2>
           {createError && (
             <p className="text-body-sm text-error">{createError}</p>
           )}
@@ -409,7 +421,10 @@ export default function DashboardPage() {
         {/* Recent Resumes */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
           <div className="flex items-center justify-between">
-            <h2 className="text-headline-md text-on-surface font-semibold">Recent Resumes</h2>
+            <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+              Recent Resumes
+              <InfoTooltip text="Your most recently updated resumes — click one to open it in Resume Builder. The percentage is its ATS score, if it's been tailored to a JD." />
+            </h2>
             <button
               onClick={createNewResume}
               className="text-label-sm text-primary hover:text-primary-container transition-colors"
@@ -468,6 +483,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-sm">
             <BookOpen size={20} className="text-primary" />
             <h2 className="text-headline-md text-on-surface font-semibold">Learning Path</h2>
+            <InfoTooltip text="Skills a job description flagged as missing from your profile. Click a skill's status pill to cycle it: Not started → Learning → Done." />
             <span className="text-caption text-on-surface-variant">
               {learningItems.filter((li) => li.status === "done").length}/{learningItems.length} done
             </span>

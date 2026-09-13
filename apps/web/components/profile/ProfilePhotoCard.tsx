@@ -1,5 +1,6 @@
 "use client";
 import { UserCircle } from "@phosphor-icons/react";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 interface ProfilePhotoCardProps {
   photoUrl: string | null;
@@ -22,8 +23,9 @@ export function ProfilePhotoCard({
 }: ProfilePhotoCardProps) {
   return (
     <section className={cardCls}>
-      <h2 className="text-headline-md text-on-surface font-bold tracking-tight mb-lg">
+      <h2 className="text-headline-md text-on-surface font-bold tracking-tight mb-lg flex items-center gap-sm">
         Profile Photo
+        <InfoTooltip text="Optional — only some resume templates include a photo. You'll be prompted to add one in Resume Builder if you pick one of those without a photo here yet." />
       </h2>
       <div className="flex items-center gap-lg">
         {photoUrl ? (

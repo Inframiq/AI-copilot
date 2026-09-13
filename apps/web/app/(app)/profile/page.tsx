@@ -56,6 +56,7 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -78,13 +79,14 @@ const emptyProject = (): ProjectEntry => ({
 });
 
 // ── Section header ─────────────────────────────────────────────────────────────
-function SectionHeader({ title, onAdd, addLabel }: {
-  title: string; onAdd?: () => void; addLabel?: string;
+function SectionHeader({ title, info, onAdd, addLabel }: {
+  title: string; info?: string; onAdd?: () => void; addLabel?: string;
 }) {
   return (
     <div className="flex items-center justify-between mb-lg">
-      <h2 className="text-headline-md text-on-surface font-bold tracking-tight">
+      <h2 className="text-headline-md text-on-surface font-bold tracking-tight flex items-center gap-sm">
         {title}
+        {info && <InfoTooltip text={info} />}
       </h2>
       {onAdd && (
         <button
@@ -547,7 +549,10 @@ export default function ProfilePage() {
 
       {/* ── Resume upload ─────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader title="Resume" />
+        <SectionHeader
+          title="Resume"
+          info="This is your master copy — uploading or re-parsing fills in the profile fields below for you to review, but doesn't touch resumes you've built or tailored in Resume Builder."
+        />
         <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
 
@@ -740,7 +745,12 @@ export default function ProfilePage() {
 
       {/* ── Experience ─────────────────────────────────────────────────────── */}
       <section className={cardCls}>
-        <SectionHeader title="Experience" onAdd={addExp} addLabel="Add Experience" />
+        <SectionHeader
+          title="Experience"
+          info="Add roles in any order. If you add a second role at the same company, they're grouped together automatically and their combined time there is totaled."
+          onAdd={addExp}
+          addLabel="Add Experience"
+        />
         {experiences.length === 0 ? (
           <button type="button" onClick={addExp}
             className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">

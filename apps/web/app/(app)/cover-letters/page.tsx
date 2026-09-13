@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { Card } from "@/components/ui/Card";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { CoverLetter, Resume, JobDescription } from "@career-copilot/types";
 
 export default function CoverLettersPage() {
@@ -117,7 +118,10 @@ export default function CoverLettersPage() {
       </section>
 
       <Card className="flex flex-col gap-md">
-        <h2 className="text-headline-md text-on-surface font-semibold">New Cover Letter</h2>
+        <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+          New Cover Letter
+          <InfoTooltip text="The resume used is picked for you: the one already tailored for this job if there is one, otherwise your master resume from My Profile." />
+        </h2>
         <div className="flex flex-col gap-xs max-w-[28rem]">
           <label htmlFor="jd-select" className="text-label-sm text-on-surface-variant font-semibold">Job Description</label>
           <select

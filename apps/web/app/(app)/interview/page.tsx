@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import type { PrepQuestionWithJdOut, Resume, JobDescription } from "@career-copilot/types";
 
@@ -359,7 +360,10 @@ export default function InterviewIndexPage() {
 
         {/* Overall Readiness */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h3 className="text-headline-md text-on-surface mb-lg font-semibold">Overall Readiness</h3>
+          <h3 className="text-headline-md text-on-surface mb-lg font-semibold flex items-center gap-sm">
+            Overall Readiness
+            <InfoTooltip text="20% each for analyzing a JD, generating questions, and starting a practice session, plus up to 40% based on how many of your questions you've marked practiced." />
+          </h3>
 
           {/* Circular gauge */}
           <div className="relative w-32 h-32 mx-auto mb-lg flex items-center justify-center">
@@ -411,6 +415,7 @@ export default function InterviewIndexPage() {
             <div>
               <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
                 <ThumbsUp size={18} weight="fill" className="text-success-accent" /> Strengths
+                <InfoTooltip text="Topics from questions you've practiced, or skills your resume already matched in the JD — whichever you have." />
               </h4>
               <div className="flex flex-wrap gap-sm">
                 {hasAnyQuestions && answeredTopics.length > 0 ? (
@@ -433,6 +438,7 @@ export default function InterviewIndexPage() {
             <div>
               <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
                 <TrendDown size={18} weight="fill" className="text-error" /> Needs Focus
+                <InfoTooltip text="Topics from questions you haven't practiced yet, or skills the JD wanted that your resume was missing." />
               </h4>
               <div className="flex flex-wrap gap-sm">
                 {hasAnyQuestions && unansweredTopics.length > 0 ? (
