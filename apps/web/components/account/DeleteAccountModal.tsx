@@ -16,12 +16,14 @@ const REMOVED = [
   "Your plan and any remaining credits",
 ];
 
+const CONFIRM_WORD = "DELETE";
+
 export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const supabase = createBrowserClient();
 
-  const [password, setPassword] = useState("");
+  const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<"form" | "deleting" | "done">("form");
 
@@ -35,29 +37,9 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
 
   async function handleDelete(e: React.FormEvent) {
     e.preventDefault();
-    if (!password || phase !== "form") return;
+    if (confirmText !== CONFIRM_WORD || phase !== "form") return;
     setError("");
     setPhase("deleting");
-
-    // Re-authenticate with the current password before doing anything
-    // destructive — updateUser/deleteAccount would otherwise run off nothing
-    // more than a still-open session.
-    const { data: userData } = await supabase.auth.getUser();
-    const email = userData.user?.email;
-    if (!email) {
-      setError("Your session has expired. Sign in again and retry.");
-      setPhase("form");
-      return;
-    }
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (authError) {
-      setError("That password is incorrect.");
-      setPhase("form");
-      return;
-    }
 
     try {
       await apiClient.deleteAccount();
@@ -152,15 +134,19 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
               <form onSubmit={handleDelete} className="mt-md flex flex-col gap-md">
                 <label className="flex flex-col gap-xs">
                   <span className="text-label-md text-on-surface-variant">
-                    Enter your password to confirm
+                    Type <strong className="text-on-surface">{CONFIRM_WORD}</strong> to confirm
                   </span>
                   <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
+                    type="text"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                     disabled={phase === "deleting"}
+                    placeholder={CONFIRM_WORD}
                     className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-error disabled:opacity-60"
                   />
                 </label>
@@ -175,7 +161,7 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
                   </button>
                   <button
                     type="submit"
-                    disabled={!password || phase === "deleting"}
+                    disabled={confirmText !== CONFIRM_WORD || phase === "deleting"}
                     className="px-lg py-md rounded-xl text-label-md font-semibold bg-error text-on-error hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
                     {phase === "deleting" ? "Deleting…" : "Delete my account"}

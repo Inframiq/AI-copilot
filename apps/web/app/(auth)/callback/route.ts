@@ -38,9 +38,9 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      // Only the plain login/register flow (no explicit `next`, e.g. password
-      // reset's next=/reset-password) should ever land on onboarding — first
-      // sign-in for an account with no career_profiles row yet.
+      // Only the plain login/register flow (no explicit `next`) should ever
+      // land on onboarding — first sign-in for an account with no
+      // career_profiles row yet.
       if (rawNext === null) {
         const {
           data: { user },

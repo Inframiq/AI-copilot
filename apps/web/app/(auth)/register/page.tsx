@@ -1,117 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
-  const [resendError, setResendError] = useState("");
   const supabase = createBrowserClient();
 
-  async function handleResend() {
-    setResendState("sending");
-    setResendError("");
-    const { error } = await supabase.auth.resend({ type: "signup", email });
-    if (error) {
-      setResendError(error.message);
-      setResendState("idle");
-      return;
-    }
-    setResendState("sent");
-  }
-
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-      },
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    // Email confirmation is disabled, so signUp() already returns a live
-    // session — go straight into onboarding instead of telling the user to
-    // check an email that will never arrive. The "check your email" screen
-    // below is a fallback for environments where confirmation IS required
-    // (signUp() then returns no session).
-    if (data.session) {
-      router.push("/onboarding");
-      return;
-    }
-
-    setSuccess(true);
-  }
-
   async function handleGoogleSignUp() {
+    if (!agreed) return;
     setError("");
+    setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/callback`,
       },
     });
-    if (error) setError(error.message);
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-gutter">
-        <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl text-center max-w-[28rem] w-full">
-          <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto mb-lg">
-            <span className="text-2xl">✉️</span>
-          </div>
-          <p className="text-headline-md text-on-surface font-bold mb-sm">Check your email</p>
-          <p className="text-body-md text-on-surface-variant">
-            We sent a confirmation link to{" "}
-            <strong className="text-on-surface">{email}</strong>.
-          </p>
-          <p className="text-body-sm text-on-surface-variant mt-md">
-            After confirming,{" "}
-            <a href="/login" className="text-primary font-semibold hover:underline">
-              sign in here
-            </a>
-            .
-          </p>
-
-          {resendError && (
-            <p className="text-body-sm text-error mt-md">{resendError}</p>
-          )}
-
-          {resendState === "sent" ? (
-            <p className="text-body-sm text-primary font-semibold mt-lg">
-              Confirmation email resent — check your inbox.
-            </p>
-          ) : (
-            <button
-              onClick={handleResend}
-              disabled={resendState === "sending"}
-              className="mt-lg text-label-sm text-primary font-semibold hover:underline disabled:opacity-60"
-            >
-              {resendState === "sending" ? "Resending…" : "Didn't get it? Resend confirmation email"}
-            </button>
-          )}
-        </div>
-      </div>
-    );
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
   }
 
   return (
@@ -133,55 +44,33 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleRegister} className="flex flex-col gap-md mb-lg">
+        <label className="flex items-start gap-sm mb-lg cursor-pointer">
           <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Full name"
-            required
-            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-[3px] w-4 h-4 shrink-0 rounded border-outline-variant text-primary focus:ring-2 focus:ring-primary"
           />
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            required
-            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password (min 8 characters)"
-            minLength={8}
-            required
-            className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-md rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:bg-primary-container transition-colors disabled:opacity-60"
-          >
-            {loading ? "Creating account…" : "Create Account"}
-          </button>
-        </form>
-
-        <div className="relative mb-lg">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-outline-variant" />
-          </div>
-          <div className="relative flex justify-center text-body-sm">
-            <span className="bg-surface-container-lowest px-sm text-on-surface-variant">or continue with</span>
-          </div>
-        </div>
+          <span className="text-body-sm text-on-surface-variant">
+            I agree to the{" "}
+            <a href="/terms" target="_blank" className="text-primary hover:underline">Terms of Service</a>{" "}
+            and{" "}
+            <a href="/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</a>.
+          </span>
+        </label>
 
         <button
           onClick={handleGoogleSignUp}
-          className="w-full py-md rounded-lg border border-outline-variant text-on-surface text-label-md hover:bg-surface-container-low transition-colors"
+          disabled={!agreed || loading}
+          className="w-full py-md rounded-lg border border-outline-variant text-on-surface text-label-md hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-sm"
         >
-          Continue with Google
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.56 2.7-3.87 2.7-6.62z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z" />
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97l2.97 2.33C4.66 5.17 6.65 3.58 9 3.58z" />
+          </svg>
+          {loading ? "Redirecting…" : "Continue with Google"}
         </button>
 
         <p className="text-body-sm text-on-surface-variant mt-lg text-center">
@@ -189,13 +78,6 @@ export default function RegisterPage() {
           <a href="/login" className="text-primary font-semibold hover:underline">
             Sign in
           </a>
-        </p>
-
-        <p className="text-caption text-on-surface-variant mt-md text-center">
-          By continuing, you agree to our{" "}
-          <a href="/terms" className="text-primary hover:underline">Terms</a>{" "}
-          and{" "}
-          <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>.
         </p>
       </div>
     </div>

@@ -7,7 +7,6 @@ import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash } f
 import { apiClient } from "@/lib/api-client";
 import { createBrowserClient } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
-import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import type { Subscription } from "@career-copilot/types";
 
@@ -119,9 +118,6 @@ export default function AccountPage() {
           </p>
         )}
       </div>
-
-      {/* Password */}
-      <ChangePasswordCard />
 
       {subError ? (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
