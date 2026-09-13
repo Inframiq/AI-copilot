@@ -42,6 +42,12 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001",
         "https://kripax.inframiq.com",
+        # TEMPORARY — the old domain now 308-redirects at the edge
+        # (apps/web/middleware.ts) before its JS ever runs, so this
+        # shouldn't be hit in practice, but it's a cheap safety net for an
+        # already-open old tab or a cached page during the cutover. Remove
+        # once resumebuilder.inframiq.com's domain attachment is torn down.
+        "https://resumebuilder.inframiq.com",
         *_extra_origins,
     ],
     allow_origin_regex=r"https://[\w-]+\.vercel\.app",

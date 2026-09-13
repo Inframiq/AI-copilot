@@ -1,7 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// TEMPORARY — remove once resumebuilder.inframiq.com's DNS/Vercel domain
+// attachment is actually torn down. Until then, anyone hitting the old
+// domain (bookmarks, old search results, old links) gets bounced straight
+// to the new one instead of a broken/stale page. 308 = permanent + keeps
+// the HTTP method, and carries most of the old domain's SEO signal over.
+const OLD_HOST = "resumebuilder.inframiq.com";
+const NEW_HOST = "kripax.inframiq.com";
+
 export async function middleware(request: NextRequest) {
+  const host = request.headers.get("host") ?? "";
+  if (host === OLD_HOST || host.startsWith(`${OLD_HOST}:`)) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https";
+    url.hostname = NEW_HOST;
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
   let response = NextResponse.next({ request });
 
   // Skip Supabase when running with placeholder credentials (local preview)
