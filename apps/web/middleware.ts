@@ -1,11 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Flip this to true only once kripax.inframiq.com is actually live (DNS +
-// Vercel domain attached and resolving) — until then resumebuilder.inframiq.com
-// is still the only working entry point, and redirecting it anywhere would
-// take the whole site down. See chat for the cutover steps.
-const OLD_DOMAIN_CUTOVER_LIVE = false;
+// kripax.inframiq.com is live and confirmed working (Google Sign-In tested
+// end to end on 2026-09-14) — resumebuilder.inframiq.com now 308-redirects
+// here instead of serving its own copy of the app.
+const OLD_DOMAIN_CUTOVER_LIVE = true;
 const OLD_HOST = "resumebuilder.inframiq.com";
 const NEW_HOST = "kripax.inframiq.com";
 
