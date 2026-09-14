@@ -297,7 +297,7 @@ export default function StudioIndexPage() {
                 isDragging ? "border-primary bg-primary/5" : "border-outline-variant/40 bg-surface-container/30"
               }`}
             >
-              <div className="flex items-center gap-xl p-lg">
+              <div className="flex flex-col sm:flex-row items-center gap-md sm:gap-xl p-lg text-center sm:text-left">
                 {/* Icon */}
                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
                   isDragging ? "bg-primary/15" : "bg-surface-container"

@@ -286,7 +286,7 @@ export function EditorPanel() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-md">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
                 <div className="flex flex-col gap-xs">
                   <label className="text-label-sm text-on-surface-variant">Company</label>
                   <input
@@ -420,7 +420,7 @@ export function EditorPanel() {
                   className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-md">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
                 <div className="flex flex-col gap-xs">
                   <label className="text-label-sm text-on-surface-variant">Degree</label>
                   <input

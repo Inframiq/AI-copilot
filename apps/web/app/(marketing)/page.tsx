@@ -31,23 +31,23 @@ export default function LandingPage() {
         // eslint-disable-next-line react/no-danger -- static, hardcoded JSON-LD, not user input
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full">
-        <div className="flex items-center gap-md">
-          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
+      <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full gap-sm">
+        <div className="flex items-center gap-md min-w-0">
+          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">
             <RocketLaunch size={18} weight="fill" className="text-on-primary" />
           </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight">KripaX</span>
+          <span className="text-headline-md font-black text-on-background tracking-tight truncate">KripaX</span>
         </div>
-        <div className="flex items-center gap-md">
+        <div className="flex items-center gap-md shrink-0">
           <Link
             href="/login"
-            className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
+            className="hidden sm:inline-flex text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
           >
             Sign In
           </Link>
           <Link
             href="/register"
-            className="px-lg py-sm rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
+            className="px-md sm:px-lg py-sm rounded-lg text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all whitespace-nowrap"
           >
             Get Started Free
           </Link>

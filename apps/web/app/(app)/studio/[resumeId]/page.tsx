@@ -294,14 +294,14 @@ export default function StudioPage({
     <div className="flex-1 flex flex-col overflow-hidden bg-background relative">
       {/* Glassmorphic Toolbar */}
       <header
-        className="h-16 z-30 flex items-center justify-between px-lg border-b border-outline-variant/20 shrink-0"
+        className="min-h-16 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-sm px-md sm:px-lg py-sm sm:py-0 border-b border-outline-variant/20 shrink-0"
         style={{
           background: "rgba(255, 255, 255, 0.7)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           {isEditingTitle ? (
             <input
               autoFocus
@@ -313,16 +313,16 @@ export default function StudioPage({
                 if (e.key === "Escape") setIsEditingTitle(false);
               }}
               maxLength={200}
-              className="text-headline-md text-primary font-semibold bg-transparent border-b-2 border-primary outline-none"
+              className="text-headline-md text-primary font-semibold bg-transparent border-b-2 border-primary outline-none min-w-0"
             />
           ) : (
             <button
               onClick={startEditingTitle}
-              className="group flex items-center gap-2 text-headline-md text-primary font-semibold hover:opacity-80 transition-opacity"
+              className="group flex items-center gap-2 text-headline-md text-primary font-semibold hover:opacity-80 transition-opacity min-w-0"
               title="Rename resume"
             >
-              {resume?.title || "Resume Studio"}
-              <PencilSimple size={16} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+              <span className="truncate">{resume?.title || "Resume Studio"}</span>
+              <PencilSimple size={16} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
             </button>
           )}
           {saveError ? (
@@ -348,13 +348,13 @@ export default function StudioPage({
           )}
           {titleError && <span className="text-caption text-error">{titleError}</span>}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
           <select
             value={templateId}
             onChange={(e) => handleTemplateChange(e.target.value)}
             disabled={isSwitchingTemplate}
             title="Change template"
-            className="px-3 py-2 rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer"
+            className="px-2 sm:px-3 py-2 rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer max-w-[120px] sm:max-w-none"
           >
             {RESUME_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
@@ -362,28 +362,29 @@ export default function StudioPage({
           </select>
           <button
             onClick={() => setPreviewOpen(!previewOpen)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-label-md transition-all ${
+            title={previewOpen ? "Hide Preview" : "Preview"}
+            className={`flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg text-label-md transition-all ${
               previewOpen
                 ? "bg-secondary-container text-on-secondary-container font-semibold"
                 : "text-on-surface-variant hover:bg-surface-container-low"
             }`}
           >
             {previewOpen ? <EyeSlash size={20} /> : <Eye size={20} />}
-            {previewOpen ? "Hide Preview" : "Preview"}
+            <span className="hidden sm:inline">{previewOpen ? "Hide Preview" : "Preview"}</span>
           </button>
           <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleDeleteResume}
               disabled={isDeleting}
               title={deleteArmed ? "Click again to confirm" : "Delete resume"}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-label-md transition-all disabled:opacity-50 ${
+              className={`flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg text-label-md transition-all disabled:opacity-50 ${
                 deleteArmed
                   ? "bg-error text-on-primary"
                   : "text-on-surface-variant hover:bg-error-container/50 hover:text-error"
               }`}
             >
               <Trash size={20} />
-              {deleteArmed && (isDeleting ? "Deleting…" : "Confirm delete")}
+              {deleteArmed && <span className="hidden sm:inline">{isDeleting ? "Deleting…" : "Confirm delete"}</span>}
             </button>
             {deleteError && <span className="text-caption text-error">{deleteError}</span>}
           </div>
@@ -391,10 +392,11 @@ export default function StudioPage({
             <button
               onClick={handleExportPdf}
               disabled={isGeneratingPdf || !storeResumeId}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              title="Download PDF"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <DownloadSimple size={20} />
-              {isGeneratingPdf ? "Generating…" : "Download PDF"}
+              <span className="hidden sm:inline">{isGeneratingPdf ? "Generating…" : "Download PDF"}</span>
             </button>
             {pdfError && (
               <span className="text-caption text-error">{pdfError}</span>

@@ -844,7 +844,7 @@ export default function ProfilePage() {
                   {/* Fields */}
                   {!collapsed && (
                     <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                      <div className="grid grid-cols-2 gap-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Company *</label>
                           <input value={exp.company ?? ""} onChange={e => updateExp(exp.id, "company", e.target.value)}
@@ -898,7 +898,7 @@ export default function ProfilePage() {
                         <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
                           rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
                       </div>
-                      <div className="grid grid-cols-2 gap-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Projects completed</label>
                           <textarea value={exp.projects ?? ""} onChange={e => updateExp(exp.id, "projects", e.target.value)}
@@ -1000,7 +1000,7 @@ export default function ProfilePage() {
                       </div>
                       {/* Fields */}
                       <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                        <div className="grid grid-cols-2 gap-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant">Project Name *</label>
                             <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
@@ -1076,7 +1076,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                   {!collapsed && (
-                    <div className="p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
+                    <div className="p-md grid grid-cols-1 sm:grid-cols-2 gap-sm bg-surface-container-lowest">
                       <div className="flex flex-col gap-xs col-span-2">
                         <label className="text-caption text-on-surface-variant">Institution *</label>
                         <input value={edu.institution ?? ""} onChange={e => updateEdu(edu.id, "institution", e.target.value)}
