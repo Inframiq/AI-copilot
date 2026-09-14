@@ -54,10 +54,12 @@ export const metadata: Metadata = {
     images: ["/icon.png"],
   },
   robots: { index: true, follow: true },
-  // Google Search Console verification removed: it was issued for the old
-  // resumebuilder.inframiq.com URL-prefix property, which does not carry
-  // over to kripax.inframiq.com — a new property (and a new verification
-  // tag) is needed for the new domain. See chat for the walkthrough.
+  verification: {
+    // Google Search Console — URL-prefix property for kripax.inframiq.com.
+    // Same verification token as the old resumebuilder.inframiq.com
+    // property; Google reused it for this account's new property.
+    google: "GvW55L4DpmFFMhVrNpkZPkBIUdGSJUkyQD2zsbqpFiA",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
