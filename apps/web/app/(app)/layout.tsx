@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopNav } from "@/components/layout/TopNav";
 import { PageTransition } from "@/components/PageTransition";
 import { GuidedTour } from "@/components/tour/GuidedTour";
+import { PlanTracker } from "@/components/analytics/PlanTracker";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <PageTransition>{children}</PageTransition>
       </main>
       <GuidedTour />
+      <PlanTracker />
     </div>
   );
 }

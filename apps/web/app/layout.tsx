@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -70,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             app, legal) mounts its own via its own layout, since the root
             layout can't tell landing apart from everything else. */}
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
