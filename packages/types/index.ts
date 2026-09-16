@@ -210,6 +210,20 @@ export interface LearningItem {
   created_at: string;
 }
 
+// POST /feedback — a rating + optional comment from the feedback widget.
+export interface Feedback {
+  id: string;
+  rating: number; // 1-5
+  comment: string | null;
+  page: string | null;
+  created_at: string;
+}
+
+// GET /feedback (admin only) — same as Feedback plus who submitted it.
+export interface FeedbackAdmin extends Feedback {
+  user_id: string;
+}
+
 // GET /me/subscription — the signed-in user's plan and credit balance.
 export interface Subscription {
   plan: string; // "free" | "premium"

@@ -16,6 +16,8 @@ import type {
   AtsFix,
   Subscription,
   Plan,
+  Feedback,
+  FeedbackAdmin,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -398,4 +400,15 @@ export const apiClient = {
 
   getPlans: (): Promise<{ plans: Plan[] }> =>
     request<{ plans: Plan[] }>("GET", "/plans"),
+
+  // ── Feedback ─────────────────────────────────────────────────────────────
+  submitFeedback: (payload: {
+    rating: number;
+    comment?: string;
+    page?: string;
+  }): Promise<Feedback> => request<Feedback>("POST", "/feedback", payload),
+
+  /** Admin only — the backend returns 403 for any other account. */
+  getFeedback: (): Promise<FeedbackAdmin[]> =>
+    request<FeedbackAdmin[]>("GET", "/feedback"),
 };

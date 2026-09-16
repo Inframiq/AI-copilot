@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     openai_model_premium: str = "gpt-5.6-sol"
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
     unlimited_credit_emails: str = ""  # comma-separated emails exempt from credit metering (QA/test accounts)
+    admin_emails: str = "bharathrockz.k@gmail.com"  # comma-separated emails allowed to read GET /feedback
 
     class Config:
         env_file = ".env"

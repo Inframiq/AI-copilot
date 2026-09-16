@@ -265,6 +265,22 @@ class AiUsageEvent(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, index=True)
 
 
+class Feedback(Base):
+    """In-app rating + comment, submitted via the floating feedback widget.
+    No admin role table — GET /feedback is gated by settings.admin_emails
+    against the requester's JWT email claim instead."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Path the widget was opened from (e.g. "/dashboard") — informational only.
+    page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, index=True)
+
+
 class ExternalContact(Base):
     """People tracked outside the platform (not KripaX users) —
     distinct from Networking's Profile/connection_requests, which is for
