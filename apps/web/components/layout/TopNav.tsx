@@ -4,6 +4,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { SquaresFour, FileDashed, MicrophoneStage, FileText, MagnifyingGlass } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
+import { FeedbackWidget } from "../feedback/FeedbackWidget";
 
 const MOBILE_NAV = [
   { href: "/dashboard", icon: SquaresFour, label: "Dashboard" },
@@ -23,6 +24,7 @@ export function TopNav() {
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={127} height={28} priority />
         </Link>
         <div className="flex items-center gap-sm">
+          <FeedbackWidget />
           <CreditMeter variant="compact" />
         </div>
       </header>
@@ -39,6 +41,7 @@ export function TopNav() {
           />
         </div>
         <div className="flex items-center gap-md">
+          <FeedbackWidget />
           <CreditMeter variant="compact" />
         </div>
       </header>

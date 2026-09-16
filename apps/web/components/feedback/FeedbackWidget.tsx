@@ -6,10 +6,12 @@ import { ChatCircleDots, Star, X, CheckCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 
 /**
- * Floating "send feedback" button, mounted once in the app layout. Opens a
- * small modal with a 1-5 star rating and an optional comment, submitted to
- * POST /feedback. Renders nothing else — no persisted UI state beyond the
- * open/closed flag, so a submitted rating just resets on next open.
+ * "Send feedback" trigger, rendered inline in TopNav's header row next to
+ * the search bar / CreditMeter (not floating — a fixed-position button
+ * used to overlap the mobile bottom tab bar). Opens a small modal with a
+ * 1-5 star rating and an optional comment, submitted to POST /feedback.
+ * No persisted UI state beyond the open/closed flag, so a submitted
+ * rating just resets on next open.
  */
 export function FeedbackWidget() {
   const [open, setOpen] = useState(false);
@@ -50,10 +52,9 @@ export function FeedbackWidget() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
-        className="fixed bottom-24 md:bottom-6 right-6 z-40 flex items-center gap-xs px-lg py-md rounded-full bg-primary text-on-primary shadow-2xl hover:opacity-90 transition-opacity"
+        className="p-sm rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors shrink-0"
       >
-        <ChatCircleDots size={20} weight="fill" />
-        <span className="text-label-sm font-semibold hidden sm:inline">Feedback</span>
+        <ChatCircleDots size={20} />
       </button>
 
       {open && (
