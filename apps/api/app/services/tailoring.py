@@ -17,7 +17,7 @@ import json
 import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
@@ -75,6 +75,23 @@ class JDAnalysis(BaseModel):
     target_job_titles: list[str] = []  # the role title(s) this JD is hiring for
     nice_to_have_skills: list[str] = []  # skills the JD frames as preferred / "a plus", not required
     importance: dict[str, str] = {}  # {term_lowercased: "high"|"medium"|"low"}; "job title" key for the title signal
+
+    # Runs on EVERY construction path — a fresh Agent 1 parse AND a
+    # JDAnalysis rebuilt from a previously cached DB row (routers/ai.py's
+    # `JDAnalysis(**raw_cached)`) — so a requirement sentence ("Bachelor's
+    # degree in...", "working knowledge of X") that leaked into one of these
+    # skill-chip fields before this filter existed gets cleaned up on a JD
+    # analyzed before this fix shipped too, without needing to re-run (and
+    # re-pay for) Agent 1 on it. Never applied to core_responsibilities,
+    # domain_expertise_themes, seniority_indicators, or target_job_titles —
+    # those are meant to hold full sentences or are never surfaced as chips.
+    @field_validator(
+        "exact_technical_tools", "methodologies_and_frameworks",
+        "ats_filter_phrases", "nice_to_have_skills",
+    )
+    @classmethod
+    def _strip_requirement_prose(cls, v: list[str]) -> list[str]:
+        return _sanitize_skill_list(v)
 
 
 class _TermImportance(BaseModel):
@@ -455,19 +472,11 @@ async def _agent1_parse_jd(
         raw_importance if isinstance(raw_importance, dict)
         else {i.term: i.level for i in raw_importance}
     )
+    # JDAnalysis's own field validator strips requirement prose from the
+    # skill-chip fields (exact_technical_tools etc.) on construction here —
+    # see the comment on that validator for why it lives on the model
+    # instead of this one call site.
     result = JDAnalysis(**wire.model_dump(exclude={"importance"}), importance=importance)
-    # The fields that feed score_content's "required"/"nice" skill chips
-    # (never core_responsibilities, which are meant to be full sentences and
-    # are deliberately excluded from the chip lists in blend_scores) — Agent
-    # 1 occasionally treats a JD's plain-English requirement bullet ("A
-    # Bachelor's degree in software engineering...") as if it were a
-    # verbatim ATS phrase or tool name. Same guard as
-    # _sanitize_skill_list/_looks_like_a_skill already applies to every
-    # other skill-shaped list in this file.
-    result.exact_technical_tools = _sanitize_skill_list(result.exact_technical_tools)
-    result.methodologies_and_frameworks = _sanitize_skill_list(result.methodologies_and_frameworks)
-    result.ats_filter_phrases = _sanitize_skill_list(result.ats_filter_phrases)
-    result.nice_to_have_skills = _sanitize_skill_list(result.nice_to_have_skills)
     return _backfill_importance(result)
 
 

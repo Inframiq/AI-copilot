@@ -88,33 +88,51 @@ async def test_agent1_backfills_importance_for_unrated_terms():
     assert out.importance["looker"] == "low"
 
 
-@pytest.mark.asyncio
-async def test_agent1_strips_requirement_prose_from_skill_fields():
+def test_jdanalysis_validator_strips_requirement_prose_from_skill_fields():
     """Bug report: JD requirement bullets like "Bachelor's degree in
     software engineering..." or "working knowledge of relational
     databases" came back as clickable skill chips in the JD Analyzer /
-    Tailor Resume UI. Agent 1 is the single choke point all of those
-    fields pass through, so sanitizing here fixes every downstream
-    consumer (score_content's matched/missing chips, the tailoring
-    pipeline's suggested_skills, etc.) at once."""
-    from app.services.tailoring import _agent1_parse_jd, JDAnalysis
+    Tailor Resume UI. The filter lives on JDAnalysis itself (a field
+    validator), not just the fresh-parse code path — routers/ai.py
+    reconstructs a JDAnalysis from a JD's previously cached `parsed.agent1`
+    JSON on every later analyze/tailor call (`JDAnalysis(**raw_cached)`),
+    and a JD analyzed before this filter existed already has the prose
+    sitting in that cached blob. Validating on construction cleans that up
+    retroactively too, without needing to re-run (and re-pay for) Agent 1."""
+    raw_cached_from_db = {
+        "exact_technical_tools": ["Python", "working knowledge of relational databases"],
+        "methodologies_and_frameworks": ["Agile", "web application development experience with multiple frameworks"],
+        "domain_expertise_themes": [],
+        "seniority_indicators": [],
+        "ats_filter_phrases": ["revenue forecasting", "Bachelor's degree in software engineering or information technology"],
+        "nice_to_have_skills": ["Looker", "proficiency with content management systems"],
+    }
+    jd = JDAnalysis(**raw_cached_from_db)
 
-    raw = JDAnalysis(
+    assert jd.exact_technical_tools == ["Python"]
+    assert jd.methodologies_and_frameworks == ["Agile"]
+    assert jd.ats_filter_phrases == ["revenue forecasting"]
+    assert jd.nice_to_have_skills == ["Looker"]
+
+
+@pytest.mark.asyncio
+async def test_agent1_parse_jd_output_is_already_clean():
+    """Same validator, exercised via the normal fresh-parse path."""
+    from app.services.tailoring import _agent1_parse_jd
+
+    raw = _JDAnalysisWire(
         exact_technical_tools=["Python", "working knowledge of relational databases"],
-        methodologies_and_frameworks=["Agile", "web application development experience with multiple frameworks"],
+        methodologies_and_frameworks=["Agile"],
         domain_expertise_themes=[],
         seniority_indicators=[],
-        ats_filter_phrases=["revenue forecasting", "Bachelor's degree in software engineering or information technology"],
-        nice_to_have_skills=["Looker", "proficiency with content management systems"],
+        ats_filter_phrases=["revenue forecasting"],
+        importance=[],
     )
     provider = make_mock_provider(structured_return=raw)
 
     out = await _agent1_parse_jd("jd text", provider)
 
     assert out.exact_technical_tools == ["Python"]
-    assert out.methodologies_and_frameworks == ["Agile"]
-    assert out.ats_filter_phrases == ["revenue forecasting"]
-    assert out.nice_to_have_skills == ["Looker"]
 
 
 @pytest.mark.asyncio
