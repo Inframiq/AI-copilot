@@ -18,6 +18,7 @@ import type {
   Plan,
   Feedback,
   FeedbackAdmin,
+  AdminUser,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -411,4 +412,18 @@ export const apiClient = {
   /** Admin only — the backend returns 403 for any other account. */
   getFeedback: (): Promise<FeedbackAdmin[]> =>
     request<FeedbackAdmin[]>("GET", "/feedback"),
+
+  // ── Admin ────────────────────────────────────────────────────────────────
+  /** Admin only — the backend returns 403 for any other account. */
+  getAdminUsers: (): Promise<AdminUser[]> =>
+    request<AdminUser[]>("GET", "/admin/users"),
+
+  /** Manual override for emergencies — grants the target plan's full credit
+   * allotment and resets billing status. Admin only. */
+  updateUserPlan: (userId: string, plan: "free" | "premium"): Promise<AdminUser> =>
+    request<AdminUser>("PATCH", `/admin/users/${userId}/plan`, { plan }),
+
+  /** Tops the user's credits back up to their plan's full allotment. Admin only. */
+  refreshUserCredits: (userId: string): Promise<AdminUser> =>
+    request<AdminUser>("POST", `/admin/users/${userId}/credits/refresh`),
 };

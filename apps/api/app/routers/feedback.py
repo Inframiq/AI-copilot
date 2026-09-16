@@ -1,21 +1,13 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
 from app.db.models import Feedback
-from app.core.security import get_current_user
-from app.core.config import settings
+from app.core.security import get_current_user, require_admin
 from app.schemas.feedback import FeedbackIn, FeedbackOut, FeedbackAdminOut
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
-
-
-def _require_admin(user=Depends(get_current_user)) -> dict:
-    admin_emails = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
-    if (user.get("email") or "").lower() not in admin_emails:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
 
 
 @router.post("", response_model=FeedbackOut, status_code=201)
@@ -35,6 +27,6 @@ async def submit_feedback(
 
 
 @router.get("", response_model=list[FeedbackAdminOut])
-async def list_feedback(user=Depends(_require_admin), db: AsyncSession = Depends(get_db)):
+async def list_feedback(user=Depends(require_admin), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Feedback).order_by(Feedback.created_at.desc()))
     return result.scalars().all()

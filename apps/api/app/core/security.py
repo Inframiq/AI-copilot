@@ -96,3 +96,13 @@ async def get_current_user(
         return await _verify_jwt(credentials.credentials)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Gate for the admin dashboard (feedback list, user/plan management) —
+    no roles table, just a comma-separated allowlist in settings.admin_emails
+    checked against the JWT's email claim."""
+    admin_emails = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
+    if (user.get("email") or "").lower() not in admin_emails:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user

@@ -224,6 +224,20 @@ export interface FeedbackAdmin extends Feedback {
   user_id: string;
 }
 
+// GET /admin/users (admin only) — every signed-up user joined with their
+// plan/credit state, for the manual plan-override / credit-refresh tools.
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  created_at: string | null;
+  last_sign_in_at: string | null;
+  plan: string; // "free" | "premium"
+  status: string;
+  credits_remaining: number;
+  credits_allotment: number;
+  current_period_end: string | null;
+}
+
 // GET /me/subscription — the signed-in user's plan and credit balance.
 export interface Subscription {
   plan: string; // "free" | "premium"
