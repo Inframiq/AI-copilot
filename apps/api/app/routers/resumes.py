@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
-from app.services.pdf import generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url
+from app.services.pdf import generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url, PhotoRequiredError
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -383,15 +383,21 @@ async def generate_resume_pdf(
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
-    pdf_bytes, page_meta = await asyncio.to_thread(
-        generate_pdf_with_meta,
-        content,
-        template_id,
-        resume.line_spacing,
-        resume.paragraph_spacing,
-        resume.font_choice,
-        resume.accent_color,
-    )
+    try:
+        pdf_bytes, page_meta = await asyncio.to_thread(
+            generate_pdf_with_meta,
+            content,
+            template_id,
+            resume.line_spacing,
+            resume.paragraph_spacing,
+            resume.font_choice,
+            resume.accent_color,
+        )
+    except PhotoRequiredError:
+        raise HTTPException(
+            status_code=422,
+            detail="This template requires a profile photo. Add one before previewing or downloading.",
+        )
     # Hand the bytes straight back as a data URI so the browser can render the
     # preview immediately — the client no longer waits on a Supabase upload +
     # signed-URL round trip before it can show anything. Storage persistence

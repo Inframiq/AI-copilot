@@ -10,6 +10,8 @@ whitespace is uniform across pages.
 Requires pdfminer.six (dev-only) and system-level WeasyPrint libraries;
 skipped gracefully if either is unavailable.
 """
+from unittest.mock import patch
+
 import pytest
 
 weasyprint = pytest.importorskip("weasyprint")
@@ -18,7 +20,22 @@ pdfminer_layout = pytest.importorskip("pdfminer.layout")
 
 from io import BytesIO  # noqa: E402
 
-from app.services.pdf import ALLOWED_TEMPLATES, generate_pdf  # noqa: E402
+from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+
+# ats_sidebar/ats_professional refuse to render without a real, fetchable
+# photo (see PhotoRequiredError in pdf.py) — attach one for any template
+# that needs it.
+TRUSTED_HOST = "https://test-project.supabase.co"
+
+
+def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+    if template_id not in TEMPLATES_REQUIRING_PHOTO:
+        return base
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
+    httpx_mock.add_response(
+        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+    )
+    return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 # Deliberately long — enough bullets that every template wraps onto page 2.
 LONG_RESUME = {
@@ -43,10 +60,12 @@ MIN_TOP_MARGIN_PT = 24
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_every_page_has_a_top_margin(template_id):
-    pages = list(
-        pdfminer_high_level.extract_pages(BytesIO(generate_pdf(LONG_RESUME, template_id)))
-    )
+def test_every_page_has_a_top_margin(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, LONG_RESUME, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        pdf_bytes = generate_pdf(resume, template_id)
+    pages = list(pdfminer_high_level.extract_pages(BytesIO(pdf_bytes)))
     assert len(pages) >= 2, f"{template_id}: fixture didn't overflow to a second page"
 
     for page_no, page in enumerate(pages, start=1):

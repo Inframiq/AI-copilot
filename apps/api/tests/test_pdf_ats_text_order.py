@@ -13,6 +13,8 @@ past a spot-check with realistic-looking long sample data.
 Requires pdfminer.six (dev-only) and system-level WeasyPrint libraries
 (cairo, pango, gobject) — skipped gracefully if either is unavailable.
 """
+from unittest.mock import patch
+
 import pytest
 
 weasyprint = pytest.importorskip("weasyprint")
@@ -20,7 +22,22 @@ pdfminer_high_level = pytest.importorskip("pdfminer.high_level")
 
 from io import BytesIO  # noqa: E402
 
-from app.services.pdf import ALLOWED_TEMPLATES, generate_pdf  # noqa: E402
+from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+
+# ats_sidebar/ats_professional refuse to render without a real, fetchable
+# photo (see PhotoRequiredError in pdf.py) — attach one for any template
+# that needs it.
+TRUSTED_HOST = "https://test-project.supabase.co"
+
+
+def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+    if template_id not in TEMPLATES_REQUIRING_PHOTO:
+        return base
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
+    httpx_mock.add_response(
+        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+    )
+    return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 SHORT_RESUME = {
     "contact": {"name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100", "location": "NYC"},
@@ -39,8 +56,11 @@ def _extract_flat_text(pdf_bytes: bytes) -> str:
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_experience_dates_stay_adjacent_to_their_role_in_extracted_text(template_id):
-    pdf_bytes = generate_pdf(SHORT_RESUME, template_id)
+def test_experience_dates_stay_adjacent_to_their_role_in_extracted_text(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, SHORT_RESUME, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        pdf_bytes = generate_pdf(resume, template_id)
     flat = _extract_flat_text(pdf_bytes)
 
     idx_acme, idx_jan = flat.find("Acme"), flat.find("Jan 2022")

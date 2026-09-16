@@ -186,6 +186,34 @@ async def test_generate_pdf_returns_signed_url():
 
 
 @pytest.mark.asyncio
+async def test_generate_pdf_returns_422_when_photo_template_has_no_photo():
+    from app.services.pdf import PhotoRequiredError
+
+    override, mock_session = make_mock_db()
+    resume = make_resume()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = resume
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch(
+            "app.routers.resumes.generate_pdf_with_meta",
+            side_effect=PhotoRequiredError("Template 'ats_sidebar' requires a profile photo, but none was provided."),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    f"/resumes/{resume.id}/pdf",
+                    json={"template_id": "ats_sidebar"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 422
+        assert "profile photo" in r.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_generate_pdf():
     override, mock_session = make_mock_db()
     resume = make_resume()  # line_spacing=1.25, paragraph_spacing=12

@@ -12,6 +12,17 @@ from app.core.config import settings
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 ALLOWED_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
 
+# Mirrors apps/web/lib/resume-templates.ts's templateRequiresPhoto — these
+# two templates' whole layout (banner/sidebar photo block) only shows up
+# when a photo is present; without one they silently degrade to a plain
+# single-column resume that looks nothing like what the user picked. Refuse
+# to render rather than produce that misleading result.
+TEMPLATES_REQUIRING_PHOTO = {"ats_sidebar", "ats_professional"}
+
+
+class PhotoRequiredError(ValueError):
+    """Raised by _render_html when a photo-required template has no photo."""
+
 
 def _highlight_keywords(text: str, keywords: list) -> Markup:
     """Wrap any keyword found in *text* in a <strong class="kw"> tag.
@@ -273,6 +284,10 @@ def _render_html(
             f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
         )
     resume_content = _sanitize_resume_content(resume_content)
+    if template_id in TEMPLATES_REQUIRING_PHOTO and not resume_content.get("contact", {}).get("photo_url"):
+        raise PhotoRequiredError(
+            f"Template {template_id!r} requires a profile photo, but none was provided."
+        )
     template = _jinja_env.get_template(f"{template_id}.html")
     if accent_color and re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color):
         resolved_accent = accent_color

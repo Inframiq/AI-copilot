@@ -15,6 +15,8 @@ relevant gaps actually change, not just that the sliders are wired to
 Requires pdfminer.six (dev-only) and system-level WeasyPrint libraries;
 skipped gracefully if either is unavailable.
 """
+from unittest.mock import patch
+
 import pytest
 
 weasyprint = pytest.importorskip("weasyprint")
@@ -23,7 +25,24 @@ pdfminer_layout = pytest.importorskip("pdfminer.layout")
 
 from io import BytesIO  # noqa: E402
 
-from app.services.pdf import ALLOWED_TEMPLATES, generate_pdf  # noqa: E402
+from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+
+# ats_sidebar/ats_professional refuse to render without a real, fetchable
+# photo (see PhotoRequiredError in pdf.py) — attach one for any template
+# that needs it. Each test below renders twice (tight/loose), so the mocked
+# photo response is registered to answer any number of matching requests.
+TRUSTED_HOST = "https://test-project.supabase.co"
+
+
+def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+    if template_id not in TEMPLATES_REQUIRING_PHOTO:
+        return base
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
+    for _ in range(2):
+        httpx_mock.add_response(
+            url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+        )
+    return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 TIGHT = {"line_spacing": 1.0, "paragraph_spacing": 0}
 LOOSE = {"line_spacing": 1.6, "paragraph_spacing": 24}
@@ -74,9 +93,12 @@ def _find_y(positions: list[tuple[str, float]], needle: str) -> float:
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_line_spacing_widens_the_gap_between_bullets(template_id):
-    tight_positions = _line_positions(generate_pdf(RESUME, template_id, **TIGHT))
-    loose_positions = _line_positions(generate_pdf(RESUME, template_id, **LOOSE))
+def test_line_spacing_widens_the_gap_between_bullets(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))
+        loose_positions = _line_positions(generate_pdf(resume, template_id, **LOOSE))
 
     def bullet_gap(positions):
         y1 = _find_y(positions, "Architected a payments")
@@ -89,9 +111,12 @@ def test_line_spacing_widens_the_gap_between_bullets(template_id):
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id):
-    tight_positions = _line_positions(generate_pdf(RESUME, template_id, **TIGHT))
-    loose_positions = _line_positions(generate_pdf(RESUME, template_id, **LOOSE))
+def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))
+        loose_positions = _line_positions(generate_pdf(resume, template_id, **LOOSE))
 
     def entry_gap(positions):
         y1 = _find_y(positions, "Architected a payments")
@@ -104,9 +129,12 @@ def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_paragraph_spacing_widens_the_gap_between_education_entries(template_id):
-    tight_positions = _line_positions(generate_pdf(RESUME, template_id, **TIGHT))
-    loose_positions = _line_positions(generate_pdf(RESUME, template_id, **LOOSE))
+def test_paragraph_spacing_widens_the_gap_between_education_entries(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))
+        loose_positions = _line_positions(generate_pdf(resume, template_id, **LOOSE))
 
     def edu_gap(positions):
         y1 = _find_y(positions, "State University")

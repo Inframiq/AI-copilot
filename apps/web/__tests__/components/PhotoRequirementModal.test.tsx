@@ -148,6 +148,16 @@ describe("PhotoRequirementModal", () => {
     expect(useResumeStore.getState().photoModalOpen).toBe(false);
   });
 
+  it("Cancel with no revertTo (first-ever prompt) falls back to ats_clean instead of leaving a photo template stuck without one", async () => {
+    // No "previous" template exists — e.g. the resume was created directly
+    // on ats_sidebar — so photoModalRevertTo is undefined here.
+    useResumeStore.getState().setPhotoModal(true, undefined);
+    mount({ profilePhotoUrl: null });
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(useResumeStore.getState().templateId).toBe("ats_clean");
+    expect(useResumeStore.getState().photoModalOpen).toBe(false);
+  });
+
   it("shows an upload error and stays open", async () => {
     uploadResumePhoto.mockRejectedValue(new Error("Photo must be smaller than 5MB."));
     useResumeStore.getState().setPhotoModal(true, "ats_clean");

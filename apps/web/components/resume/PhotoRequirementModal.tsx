@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useResumeStore } from "@/stores/resume-store";
 import { uploadResumePhoto, uploadProfilePhoto } from "@/lib/photo-upload";
 import { upsertCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
+import { templateRequiresPhoto } from "@/lib/resume-templates";
 
 interface PhotoRequirementModalProps {
   /** string = profile has a photo (Case A); null = none (Case B); undefined = loading. */
@@ -24,6 +25,7 @@ export function PhotoRequirementModal({
   const revertTo = useResumeStore((s) => s.photoModalRevertTo);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
   const setTemplateId = useResumeStore((s) => s.setTemplateId);
+  const templateId = useResumeStore((s) => s.templateId);
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
   const resumeId = useResumeStore((s) => s.resumeId);
@@ -40,7 +42,15 @@ export function PhotoRequirementModal({
   }
 
   function close() {
-    if (revertTo) setTemplateId(revertTo);
+    if (revertTo) {
+      setTemplateId(revertTo);
+    } else if (templateRequiresPhoto(templateId)) {
+      // No previous template to fall back to — e.g. the resume was created
+      // directly on a photo template, so there's nothing to "go back" to.
+      // Land on the one template that never needs a photo instead of
+      // leaving the user stuck on one that can't preview or export.
+      setTemplateId("ats_clean");
+    }
     setShowUpload(false);
     setError(null);
     setBusy(false);

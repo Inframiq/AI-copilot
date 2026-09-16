@@ -7,11 +7,28 @@ conventional "one company header, roles nested underneath" resume format.
 Requires system-level WeasyPrint libraries; skipped gracefully if
 unavailable.
 """
+from unittest.mock import patch
+
 import pytest
 
 weasyprint = pytest.importorskip("weasyprint")
 
-from app.services.pdf import ALLOWED_TEMPLATES, generate_pdf  # noqa: E402
+from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+
+# ats_sidebar/ats_professional refuse to render without a real, fetchable
+# photo (see PhotoRequiredError in pdf.py) — attach one for any template
+# that needs it.
+TRUSTED_HOST = "https://test-project.supabase.co"
+
+
+def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+    if template_id not in TEMPLATES_REQUIRING_PHOTO:
+        return base
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
+    httpx_mock.add_response(
+        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+    )
+    return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 RESUME_WITH_TWO_ROLES = {
     "contact": {"name": "Jane Doe", "email": "jane@example.com"},
@@ -35,8 +52,11 @@ RESUME_WITH_TWO_ROLES = {
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_both_roles_and_all_their_bullets_survive_rendering(template_id):
-    pdf_bytes = generate_pdf(RESUME_WITH_TWO_ROLES, template_id)
+def test_both_roles_and_all_their_bullets_survive_rendering(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        pdf_bytes = generate_pdf(resume, template_id)
     from io import BytesIO
     pdfminer_high_level = pytest.importorskip("pdfminer.high_level")
     # &nbsp; (U+00A0) is used as the date-separator spacer in several
@@ -58,8 +78,11 @@ def test_both_roles_and_all_their_bullets_survive_rendering(template_id):
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_company_name_renders_once_not_once_per_role(template_id):
-    pdf_bytes = generate_pdf(RESUME_WITH_TWO_ROLES, template_id)
+def test_company_name_renders_once_not_once_per_role(template_id, httpx_mock):
+    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, httpx_mock)
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        pdf_bytes = generate_pdf(resume, template_id)
     from io import BytesIO
     pdfminer_high_level = pytest.importorskip("pdfminer.high_level")
     # &nbsp; (U+00A0) is used as the date-separator spacer in several

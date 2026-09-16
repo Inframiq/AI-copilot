@@ -17,6 +17,8 @@ weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import (  # noqa: E402
     UNDERFILL_PAGE_FILL_THRESHOLD,
+    PhotoRequiredError,
+    TEMPLATES_REQUIRING_PHOTO,
     _email_link,
     _phone_link,
     _render_html,
@@ -29,6 +31,44 @@ from app.services.pdf import (  # noqa: E402
     measure_pdf,
     upload_pdf,
 )
+
+# ---------------------------------------------------------------------------
+# ats_sidebar/ats_professional now refuse to render at all without a real,
+# successfully-fetched photo (see PhotoRequiredError) — their whole layout
+# is built around the photo banner, so silently omitting it produced a
+# resume that looked nothing like what the user picked. Tests that need one
+# of these two templates to actually succeed use this helper to attach a
+# trusted, mocked-fetchable photo_url; tests exercising the "no valid photo"
+# path (absent/untrusted/fetch-failed) now assert PhotoRequiredError instead
+# of a degraded-but-successful render.
+# ---------------------------------------------------------------------------
+TRUSTED_HOST = "https://test-project.supabase.co"
+
+
+def _with_trusted_photo(resume: dict, httpx_mock, path: str = "/storage/v1/object/public/avatars/u/r.png") -> dict:
+    photo_url = f"{TRUSTED_HOST}{path}"
+    httpx_mock.add_response(
+        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+    )
+    return {**resume, "contact": {**resume["contact"], "photo_url": photo_url}}
+
+
+def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+    """base as-is for templates that don't require a photo; base + a
+    trusted mocked photo for the two that do."""
+    if template_id in TEMPLATES_REQUIRING_PHOTO:
+        return _with_trusted_photo(base, httpx_mock)
+    return base
+
+
+@pytest.fixture
+def trusted_settings():
+    """Patches app.services.pdf.settings.supabase_url to TRUSTED_HOST so a
+    _with_trusted_photo photo_url passes the host-allowlist check in
+    _sanitize_resume_content."""
+    with patch("app.services.pdf.settings") as mock_settings:
+        mock_settings.supabase_url = TRUSTED_HOST
+        yield mock_settings
 
 SAMPLE_RESUME = {
     "contact": {
@@ -89,14 +129,16 @@ def test_generate_pdf_returns_bytes_ats_modern():
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_returns_bytes_ats_sidebar():
-    pdf = generate_pdf(SAMPLE_RESUME, "ats_sidebar")
+def test_generate_pdf_returns_bytes_ats_sidebar(httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    pdf = generate_pdf(resume, "ats_sidebar")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_returns_bytes_ats_professional():
-    pdf = generate_pdf(SAMPLE_RESUME, "ats_professional")
+def test_generate_pdf_returns_bytes_ats_professional(httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    pdf = generate_pdf(resume, "ats_professional")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
 
@@ -107,15 +149,16 @@ def test_generate_pdf_returns_bytes_ats_minimal():
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_renders_projects_section_on_every_template():
+def test_generate_pdf_renders_projects_section_on_every_template(httpx_mock, trusted_settings):
     """Projects is a standalone section (separate from experience) — students
     without work history typically have projects instead."""
     for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
-        pdf = generate_pdf(SAMPLE_RESUME, template_id)
+        resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+        pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_works_with_projects_but_no_experience():
+def test_generate_pdf_works_with_projects_but_no_experience(httpx_mock, trusted_settings):
     """The exact student scenario: no work experience, only projects."""
     student_resume = {
         "contact": {"name": "Alex Student", "email": "alex@example.com"},
@@ -131,12 +174,15 @@ def test_generate_pdf_works_with_projects_but_no_experience():
         "skills": ["Python", "Flask"],
     }
     for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
-        pdf = generate_pdf(student_resume, template_id)
+        resume = _resume_for_template(template_id, student_resume, httpx_mock)
+        pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_new_templates_work_without_optional_fields():
-    """Photo, headline, languages, certifications, awards are all optional."""
+def test_generate_pdf_new_templates_work_without_optional_fields(httpx_mock, trusted_settings):
+    """Headline, languages, certifications, awards are all optional — photo
+    is too for ats_minimal, but ats_sidebar/ats_professional require one
+    (see the PhotoRequiredError tests below)."""
     minimal_resume = {
         "contact": {"name": "Jane Doe", "email": "jane@example.com"},
         "experience": [],
@@ -144,8 +190,21 @@ def test_generate_pdf_new_templates_work_without_optional_fields():
         "skills": [],
     }
     for template_id in ("ats_sidebar", "ats_professional", "ats_minimal"):
-        pdf = generate_pdf(minimal_resume, template_id)
+        resume = _resume_for_template(template_id, minimal_resume, httpx_mock)
+        pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
+
+
+def test_generate_pdf_raises_without_photo_for_sidebar_template():
+    resume = {**SAMPLE_RESUME, "contact": {k: v for k, v in SAMPLE_RESUME["contact"].items() if k != "photo_url"}}
+    with pytest.raises(PhotoRequiredError):
+        generate_pdf(resume, "ats_sidebar")
+
+
+def test_generate_pdf_raises_without_photo_for_professional_template():
+    resume = {**SAMPLE_RESUME, "contact": {k: v for k, v in SAMPLE_RESUME["contact"].items() if k != "photo_url"}}
+    with pytest.raises(PhotoRequiredError):
+        generate_pdf(resume, "ats_professional")
 
 
 TEMPLATE_DEFAULT_ACCENT_LOWER = {
@@ -160,11 +219,12 @@ TEMPLATE_DEFAULT_ACCENT_LOWER = {
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_default_font_and_accent_preserve_original_look(template_id):
+def test_default_font_and_accent_preserve_original_look(template_id, httpx_mock, trusted_settings):
     """With no font_choice/accent_color override, every template must render
     with the exact hex it always used — a regression guard so introducing
     customization can't shift the look of an existing saved resume."""
-    html = _render_html(SAMPLE_RESUME, template_id)
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, template_id)
     assert "Arial, Helvetica, sans-serif" in html
     assert TEMPLATE_DEFAULT_ACCENT_LOWER[template_id] in html.lower()
 
@@ -172,8 +232,9 @@ def test_default_font_and_accent_preserve_original_look(template_id):
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_font_choice_overrides_body_font_stack(template_id):
-    html = _render_html(SAMPLE_RESUME, template_id, font_choice="serif")
+def test_font_choice_overrides_body_font_stack(template_id, httpx_mock, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, template_id, font_choice="serif")
     assert 'Georgia, "Times New Roman", serif' in html
     assert "Arial, Helvetica, sans-serif" not in html
 
@@ -181,14 +242,15 @@ def test_font_choice_overrides_body_font_stack(template_id):
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_accent_color_override_appears_instead_of_default(template_id):
+def test_accent_color_override_appears_instead_of_default(template_id, httpx_mock, trusted_settings):
     """Compares against the *default* render, not a literal hex absence —
     ats_minimal's own base text color happens to equal its default accent
     hex (#1a1a1a is both), so asserting the old hex is gone entirely would
     be wrong: it must still appear for unrelated body text."""
-    default_html = _render_html(SAMPLE_RESUME, template_id)
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    default_html = _render_html(resume, template_id)
     default_count = default_html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id])
-    html = _render_html(SAMPLE_RESUME, template_id, accent_color="#00aa55")
+    html = _render_html(resume, template_id, accent_color="#00aa55")
     assert "#00aa55" in html
     assert html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id]) < default_count
 
@@ -295,24 +357,26 @@ def test_generate_pdf_with_meta_returns_bytes_and_page_fit():
 # ---------------------------------------------------------------------------
 
 
-def test_generate_pdf_strips_untrusted_photo_url():
-    """A photo_url pointing at an internal/metadata host must not be fetched."""
+def test_generate_pdf_strips_untrusted_photo_url_and_refuses_to_render():
+    """A photo_url pointing at an internal/metadata host must not be
+    fetched — and since that leaves ats_sidebar with no real photo, it must
+    now refuse to render (PhotoRequiredError) rather than silently produce
+    a photo-less resume that doesn't match what the user picked."""
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "http://169.254.169.254/secret"},
     }
-    # Must not raise and must not attempt to fetch the untrusted URL.
-    pdf = generate_pdf(malicious_resume, "ats_sidebar")
-    assert pdf[:4] == b"%PDF"
+    with pytest.raises(PhotoRequiredError):
+        generate_pdf(malicious_resume, "ats_sidebar")
 
 
-def test_generate_pdf_strips_file_scheme_photo_url():
+def test_generate_pdf_strips_file_scheme_photo_url_and_refuses_to_render():
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "file:///etc/passwd"},
     }
-    pdf = generate_pdf(malicious_resume, "ats_professional")
-    assert pdf[:4] == b"%PDF"
+    with pytest.raises(PhotoRequiredError):
+        generate_pdf(malicious_resume, "ats_professional")
 
 
 # ---------------------------------------------------------------------------
@@ -321,59 +385,51 @@ def test_generate_pdf_strips_file_scheme_photo_url():
 # ---------------------------------------------------------------------------
 
 
-def test_sidebar_photo_template_crops_not_stretches():
-    html = _render_html(SAMPLE_RESUME, "ats_sidebar")
+def test_sidebar_photo_template_crops_not_stretches(httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, "ats_sidebar")
     assert "object-fit: cover" in html
 
 
-def test_professional_photo_template_crops_not_stretches():
-    html = _render_html(SAMPLE_RESUME, "ats_professional")
+def test_professional_photo_template_crops_not_stretches(httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, "ats_professional")
     assert "object-fit: cover" in html
 
 
-def test_sidebar_template_omits_photo_when_absent():
+def test_sidebar_template_raises_when_photo_absent():
     resume = {
         **SAMPLE_RESUME,
         "contact": {k: v for k, v in SAMPLE_RESUME["contact"].items() if k != "photo_url"},
     }
-    html = _render_html(resume, "ats_sidebar")
-    assert 'class="photo"' not in html
+    with pytest.raises(PhotoRequiredError):
+        _render_html(resume, "ats_sidebar")
 
 
-def test_sidebar_template_embeds_photo_when_trusted(httpx_mock):
+def test_sidebar_template_embeds_photo_when_trusted(httpx_mock, trusted_settings):
     """A trusted Supabase photo URL must be fetched and inlined as a data:
     URI — _blocked_url_fetcher rejects http/https at render time no matter
     how trusted the host is, so the raw URL can never reach the <img> tag."""
-    trusted = "https://test-project.supabase.co"
-    photo_url = f"{trusted}/storage/v1/object/public/avatars/u/r.png"
-    png_bytes = b"\x89PNG\r\n\x1a\nfake-png-bytes"
-    httpx_mock.add_response(url=photo_url, content=png_bytes, headers={"content-type": "image/png"})
-    resume = {
-        **SAMPLE_RESUME,
-        "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
-    }
-    with patch("app.services.pdf.settings") as mock_settings:
-        mock_settings.supabase_url = trusted
-        html = _render_html(resume, "ats_sidebar")
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    photo_url = resume["contact"]["photo_url"]
+    html = _render_html(resume, "ats_sidebar")
     assert 'class="photo"' in html
     assert "data:image/png;base64," in html
     assert photo_url not in html
 
 
-def test_sidebar_template_drops_photo_when_fetch_fails(httpx_mock):
-    """A trusted URL that 404s (deleted avatar, etc.) must degrade to no
-    photo in the PDF, not raise and fail the whole resume download."""
-    trusted = "https://test-project.supabase.co"
-    photo_url = f"{trusted}/storage/v1/object/public/avatars/u/r.png"
+def test_sidebar_template_raises_when_fetch_fails(httpx_mock, trusted_settings):
+    """A trusted URL that 404s (deleted avatar, etc.) leaves no real photo
+    to render — same as one never being set, so this now refuses to render
+    rather than silently degrading."""
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
     httpx_mock.add_response(url=photo_url, status_code=404)
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
     }
-    with patch("app.services.pdf.settings") as mock_settings:
-        mock_settings.supabase_url = trusted
-        html = _render_html(resume, "ats_sidebar")
-    assert 'class="photo"' not in html
+    with pytest.raises(PhotoRequiredError):
+        _render_html(resume, "ats_sidebar")
 
 
 # ---------------------------------------------------------------------------
@@ -384,11 +440,12 @@ def test_sidebar_template_drops_photo_when_fetch_fails(httpx_mock):
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_omits_missing_location_instead_of_the_word_none(template_id):
+def test_render_html_omits_missing_location_instead_of_the_word_none(template_id, httpx_mock, trusted_settings):
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "location": None},
     }
+    resume = _resume_for_template(template_id, resume, httpx_mock)
     html = _render_html(resume, template_id)
     assert "None" not in html
 
@@ -409,8 +466,9 @@ def test_render_html_still_shows_location_when_present(template_id):
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_never_renders_a_headline(template_id):
+def test_render_html_never_renders_a_headline(template_id, httpx_mock, trusted_settings):
     resume = {**SAMPLE_RESUME, "headline": "Sr. Business Analyst"}
+    resume = _resume_for_template(template_id, resume, httpx_mock)
     html = _render_html(resume, template_id)
     assert '<div class="headline">' not in html
     # SAMPLE_RESUME's headline text doesn't otherwise appear anywhere else
@@ -430,8 +488,9 @@ def test_render_html_never_renders_a_headline(template_id):
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_bullets_have_no_height_clip_at_any_line_spacing(template_id):
-    html = _render_html(SAMPLE_RESUME, template_id, line_spacing=1.6)
+def test_render_html_bullets_have_no_height_clip_at_any_line_spacing(template_id, httpx_mock, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, template_id, line_spacing=1.6)
     btxt_rule = re.search(r"\.btxt\s*\{[^}]*\}", html)
     assert btxt_rule is not None
     assert "max-height" not in btxt_rule.group()
@@ -647,7 +706,7 @@ def test_url_link_empty_renders_nothing():
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_contact_fields_render_as_real_links_in_every_template(template_id):
+def test_contact_fields_render_as_real_links_in_every_template(template_id, httpx_mock, trusted_settings):
     resume = {
         **SAMPLE_RESUME,
         "contact": {
@@ -657,6 +716,7 @@ def test_contact_fields_render_as_real_links_in_every_template(template_id):
             "website": "janedoe.dev",
         },
     }
+    resume = _resume_for_template(template_id, resume, httpx_mock)
     html = _render_html(resume, template_id)
     assert 'href="mailto:jane@example.com"' in html
     assert 'href="tel:5550100"' in html
@@ -668,8 +728,9 @@ def test_contact_fields_render_as_real_links_in_every_template(template_id):
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_project_link_renders_as_a_real_link(template_id):
-    html = _render_html(SAMPLE_RESUME, template_id)
+def test_project_link_renders_as_a_real_link(template_id, httpx_mock, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    html = _render_html(resume, template_id)
     assert 'href="https://github.com/jane/campus-marketplace"' in html
 
 
