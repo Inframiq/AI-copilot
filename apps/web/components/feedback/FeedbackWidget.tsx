@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { ChatCircleDots, Star, X, CheckCircle } from "@phosphor-icons/react";
@@ -57,8 +58,9 @@ export function FeedbackWidget() {
         <ChatCircleDots size={20} />
       </button>
 
-      {open && (
-        <>
+      {open &&
+        createPortal(
+          <>
           <div className="fixed inset-0 z-40 bg-on-surface/30 backdrop-blur-sm" onClick={close} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-lg pointer-events-none">
             <div className="pointer-events-auto w-full max-w-[26rem] bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl overflow-hidden">
@@ -132,8 +134,9 @@ export function FeedbackWidget() {
               )}
             </div>
           </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </>
   );
 }
