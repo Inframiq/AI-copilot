@@ -19,3 +19,6 @@ class FeedbackOut(BaseModel):
 
 class FeedbackAdminOut(FeedbackOut):
     user_id: uuid.UUID
+    # From Supabase auth — null if the account was since deleted.
+    name: str | None
+    email: str | None

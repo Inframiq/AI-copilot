@@ -2,34 +2,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from supabase import create_client
 from app.db.session import get_db
-from app.db.models import Subscription
+from app.db.models import Subscription, utcnow
 from app.core.security import require_admin
-from app.core.config import settings
 from app.core.credits import PLAN_CREDITS, BILLING_PERIOD, resolve_subscription
-from app.db.models import utcnow
+from app.core.supabase_admin import get_supabase_admin, extract_name, list_all_auth_users
 from app.schemas.admin import AdminUserOut, PlanUpdateIn
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-# Singleton Supabase service-role client — same pattern as routers/me.py.
-_sb_client = None
-
-
-def _supabase():
-    global _sb_client
-    if _sb_client is None:
-        _sb_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-    return _sb_client
-
-
-def _extract_name(auth_user) -> str | None:
-    """Google OAuth populates user_metadata.full_name/name on sign-up; not
-    every account will have one (email/password sign-up, or an older account
-    from before this was captured)."""
-    meta = auth_user.user_metadata or {}
-    return meta.get("full_name") or meta.get("name") or None
 
 
 def _default_free_fields() -> dict:
@@ -57,7 +37,7 @@ def _to_admin_user_out(auth_user, sub: Subscription | None) -> AdminUserOut:
     return AdminUserOut(
         id=uuid.UUID(str(auth_user.id)),
         email=auth_user.email,
-        name=_extract_name(auth_user),
+        name=extract_name(auth_user),
         created_at=auth_user.created_at,
         last_sign_in_at=auth_user.last_sign_in_at,
         **fields,
@@ -66,7 +46,7 @@ def _to_admin_user_out(auth_user, sub: Subscription | None) -> AdminUserOut:
 
 def _get_auth_user_or_404(user_id: uuid.UUID):
     try:
-        return _supabase().auth.admin.get_user_by_id(str(user_id)).user
+        return get_supabase_admin().auth.admin.get_user_by_id(str(user_id)).user
     except Exception:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -76,16 +56,7 @@ async def list_users(user=Depends(require_admin), db: AsyncSession = Depends(get
     """Every Supabase auth user joined with their subscriptions row — users
     who've never hit a metered endpoint have no row yet, so they're shown
     with the free plan's defaults without creating one."""
-    auth_users = []
-    page = 1
-    while True:
-        batch = _supabase().auth.admin.list_users(page=page, per_page=200)
-        if not batch:
-            break
-        auth_users.extend(batch)
-        if len(batch) < 200:
-            break
-        page += 1
+    auth_users = list_all_auth_users()
 
     subs_result = await db.execute(select(Subscription))
     subs_by_user = {sub.user_id: sub for sub in subs_result.scalars().all()}

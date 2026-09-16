@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import jwt as pyjwt
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
@@ -105,9 +105,47 @@ async def test_list_feedback_returns_200_for_admin():
 
     app.dependency_overrides[get_db] = override
     try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get("/feedback", headers=make_auth_header(email=settings.admin_emails.split(",")[0]))
+        with patch("app.routers.feedback.list_all_auth_users", return_value=[]):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.get("/feedback", headers=make_auth_header(email=settings.admin_emails.split(",")[0]))
         assert r.status_code == 200
         assert r.json() == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_list_feedback_includes_submitter_name_and_email():
+    from app.db.models import Feedback
+
+    override, mock_session = make_mock_db()
+    item = Feedback(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(TEST_USER_ID),
+        rating=4,
+        comment="Pretty good",
+        page="/studio",
+        created_at=datetime.now(timezone.utc),
+    )
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [item]
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute.return_value = mock_result
+
+    fake_auth_user = MagicMock()
+    fake_auth_user.id = TEST_USER_ID
+    fake_auth_user.email = "submitter@example.com"
+    fake_auth_user.user_metadata = {"full_name": "Sam Submitter"}
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.feedback.list_all_auth_users", return_value=[fake_auth_user]):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.get("/feedback", headers=make_auth_header(email=settings.admin_emails.split(",")[0]))
+        assert r.status_code == 200
+        body = r.json()
+        assert body[0]["name"] == "Sam Submitter"
+        assert body[0]["email"] == "submitter@example.com"
     finally:
         app.dependency_overrides.pop(get_db, None)

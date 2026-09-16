@@ -222,6 +222,8 @@ export interface Feedback {
 // GET /feedback (admin only) — same as Feedback plus who submitted it.
 export interface FeedbackAdmin extends Feedback {
   user_id: string;
+  name: string | null;
+  email: string | null;
 }
 
 // GET /admin/users (admin only) — every signed-up user joined with their

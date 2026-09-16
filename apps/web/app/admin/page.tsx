@@ -196,28 +196,50 @@ function FeedbackTab() {
   if (error instanceof ApiError && error.status === 403) return <AccessDenied />;
 
   return (
-    <div className="flex flex-col gap-sm">
-      {isLoading && <p className="text-body-sm text-on-surface-variant">Loading...</p>}
+    <div className="flex flex-col gap-md">
+      <p className="text-body-sm text-on-surface-variant">
+        {isLoading ? "Loading..." : `${data?.length ?? 0} submission${data?.length === 1 ? "" : "s"}`}
+      </p>
 
       {data && data.length === 0 && (
         <p className="text-body-sm text-on-surface-variant">No feedback submitted yet.</p>
       )}
 
-      {data?.map((f) => (
-        <div
-          key={f.id}
-          className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 flex flex-col gap-xs"
-        >
-          <div className="flex items-center justify-between">
-            <Stars rating={f.rating} />
-            <span className="text-label-sm text-on-surface-variant">
-              {new Date(f.created_at).toLocaleString()}
-            </span>
-          </div>
-          {f.comment && <p className="text-body-sm text-on-surface whitespace-pre-wrap">{f.comment}</p>}
-          {f.page && <p className="text-label-sm text-on-surface-variant">from {f.page}</p>}
+      {data && data.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-outline-variant/20">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container text-label-sm text-on-surface-variant">
+                <th className="px-md py-sm font-semibold">Name</th>
+                <th className="px-md py-sm font-semibold">Email</th>
+                <th className="px-md py-sm font-semibold">Rating</th>
+                <th className="px-md py-sm font-semibold">Feedback</th>
+                <th className="px-md py-sm font-semibold">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((f) => (
+                <tr key={f.id} className="border-t border-outline-variant/20 bg-surface-container-lowest align-top">
+                  <td className="px-md py-sm text-body-sm text-on-surface whitespace-nowrap">{f.name ?? "—"}</td>
+                  <td className="px-md py-sm text-body-sm text-on-surface truncate max-w-[220px]">
+                    {f.email ?? "—"}
+                  </td>
+                  <td className="px-md py-sm">
+                    <Stars rating={f.rating} />
+                  </td>
+                  <td className="px-md py-sm text-body-sm text-on-surface whitespace-pre-wrap max-w-[320px]">
+                    {f.comment ?? "—"}
+                    {f.page && <div className="text-label-sm text-on-surface-variant mt-xs">from {f.page}</div>}
+                  </td>
+                  <td className="px-md py-sm text-label-sm text-on-surface-variant whitespace-nowrap">
+                    {new Date(f.created_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      ))}
+      )}
     </div>
   );
 }

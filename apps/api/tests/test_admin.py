@@ -81,7 +81,7 @@ async def test_list_users_merges_auth_and_subscription():
     fake_sb = MagicMock()
     fake_sb.auth.admin.list_users.side_effect = [[make_fake_auth_user(name="Jane Doe")], []]
     try:
-        with patch("app.routers.admin._supabase", return_value=fake_sb):
+        with patch("app.core.supabase_admin.get_supabase_admin", return_value=fake_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.get("/admin/users", headers=admin_auth())
         assert r.status_code == 200
@@ -101,7 +101,7 @@ async def test_list_users_defaults_to_free_without_subscription_row():
     fake_sb = MagicMock()
     fake_sb.auth.admin.list_users.side_effect = [[make_fake_auth_user()], []]
     try:
-        with patch("app.routers.admin._supabase", return_value=fake_sb):
+        with patch("app.core.supabase_admin.get_supabase_admin", return_value=fake_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.get("/admin/users", headers=admin_auth())
         assert r.status_code == 200
@@ -133,7 +133,7 @@ async def test_update_user_plan_to_premium_grants_full_allotment():
     fake_sb = MagicMock()
     fake_sb.auth.admin.get_user_by_id.return_value.user = make_fake_auth_user()
     try:
-        with patch("app.routers.admin._supabase", return_value=fake_sb):
+        with patch("app.routers.admin.get_supabase_admin", return_value=fake_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.patch(
                     f"/admin/users/{OTHER_USER_ID}/plan", json={"plan": "premium"}, headers=admin_auth()
@@ -160,7 +160,7 @@ async def test_refresh_credits_resets_to_allotment():
     fake_sb = MagicMock()
     fake_sb.auth.admin.get_user_by_id.return_value.user = make_fake_auth_user()
     try:
-        with patch("app.routers.admin._supabase", return_value=fake_sb):
+        with patch("app.routers.admin.get_supabase_admin", return_value=fake_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.post(f"/admin/users/{OTHER_USER_ID}/credits/refresh", headers=admin_auth())
         assert r.status_code == 200
