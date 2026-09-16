@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
       </section>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-gutter">
         {[
           {
             label: "Resumes Created",

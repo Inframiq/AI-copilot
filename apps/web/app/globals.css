@@ -153,6 +153,18 @@
   font-family: var(--font-inter), sans-serif;
 }
 
+/* headline-xl (48px) is used unscaled as the main <h1> on nearly every page
+   (dashboard, analytics, JD analysis, marketing hero, ...) — on a phone
+   that reads oversized even though nothing technically overflows. Scaling
+   the theme token itself here (rather than adding a responsive class at
+   every call site) fixes every one of those headings in one place. */
+@media (max-width: 639px) {
+  :root {
+    --text-headline-xl: 32px;
+    --text-headline-xl--line-height: 1.15;
+  }
+}
+
 html, body {
   background-color: #fcfcfd; /* --color-background */
   height: 100%;

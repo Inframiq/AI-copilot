@@ -50,7 +50,7 @@ export function FeedbackWidget() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-xs px-lg py-md rounded-full bg-primary text-on-primary shadow-2xl hover:opacity-90 transition-opacity"
+        className="fixed bottom-24 md:bottom-6 right-6 z-40 flex items-center gap-xs px-lg py-md rounded-full bg-primary text-on-primary shadow-2xl hover:opacity-90 transition-opacity"
       >
         <ChatCircleDots size={20} weight="fill" />
         <span className="text-label-sm font-semibold hidden sm:inline">Feedback</span>
