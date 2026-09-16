@@ -2,12 +2,11 @@
 import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, DownloadSimple, Eye, EyeSlash, PencilSimple, Sparkle, Spinner, Trash, WarningCircle, X } from "@phosphor-icons/react";
+import { CheckCircle, DownloadSimple, Eye, EyeSlash, PencilSimple, Spinner, Trash, WarningCircle } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
-import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
 import { getCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
@@ -38,11 +37,6 @@ export default function StudioPage({
   const isSaving = useResumeStore((s) => s.isSaving);
   const saveError = useResumeStore((s) => s.saveError);
   const saveNow = useResumeStore((s) => s.saveNow);
-  // A tailoring session already exists once the user has come from
-  // "Tailor Resume" on either JD page — nagging them to go tailor again
-  // right after they just did is the bug being fixed here.
-  const hasTailoringSession = useTailoringStore((s) => s.sessionId !== null);
-  const [showAIPanel, setShowAIPanel] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfDownloaded, setPdfDownloaded] = useState(false);
@@ -429,53 +423,6 @@ export default function StudioPage({
           </section>
         )}
       </div>
-
-      {/* Floating AI Assistant — only nag to tailor if there's no tailoring
-          session yet for this resume; otherwise the user just did exactly
-          what this panel is suggesting. */}
-      {showAIPanel && !hasTailoringSession && (
-        <div className="absolute bottom-6 right-6 z-50">
-          <div
-            className="p-4 rounded-2xl shadow-xl shadow-on-surface/10 flex flex-col border border-primary-container/30"
-            style={{
-              background: "rgba(255, 255, 255, 0.7)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              width: "20rem",
-            }}
-          >
-            <div className="flex items-center gap-3 mb-3 border-b border-outline-variant/20 pb-2">
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary">
-                <Sparkle size={16} />
-              </div>
-              <span className="text-label-md text-primary font-bold">Resume Copilot</span>
-              <button
-                onClick={() => setShowAIPanel(false)}
-                className="ml-auto text-secondary hover:text-on-surface transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <p className="text-body-sm text-on-surface-variant mb-4">
-              Your resume is looking good! Use the JD context in the editor to tailor it with AI.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowAIPanel(false)}
-                className="flex-1 py-1.5 px-3 rounded-lg border border-outline-variant text-secondary text-label-sm hover:bg-surface-container-low transition-colors"
-              >
-                Dismiss
-              </button>
-              <button
-                onClick={() => router.push("/jd")}
-                className="flex-1 py-1.5 px-3 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-sm"
-              >
-                Tailor Resume
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <PhotoRequirementModal
         profilePhotoUrl={careerProfile === undefined ? undefined : careerProfile?.photo_url ?? null}
