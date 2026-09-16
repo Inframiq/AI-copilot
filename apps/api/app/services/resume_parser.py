@@ -45,15 +45,55 @@ class ParsedResume(BaseModel):
     certifications: list[str] | None = None
 
 
+def _extract_link_uris(page) -> list[str]:
+    """PDF hyperlinks (e.g. the word "GitHub" linking to a profile/repo URL)
+    never show up in page.extract_text() — it only returns the visible
+    anchor text, never the destination. Pulling the URIs straight from the
+    page's link annotations lets the parser prompt see the real URL instead
+    of just the word "GitHub"/"LinkedIn"/"Portfolio"."""
+    urls = []
+    for annot_ref in page.get("/Annots") or []:
+        try:
+            annot = annot_ref.get_object()
+            if annot.get("/Subtype") != "/Link":
+                continue
+            action = annot.get("/A")
+            uri = action.get("/URI") if action and action.get("/S") == "/URI" else None
+            if uri:
+                urls.append(str(uri))
+        except Exception:
+            continue
+    return urls
+
+
+def _append_link_hints(text: str, link_urls: list[str]) -> str:
+    """Same hint block for both PDF and DOCX extraction — see
+    _extract_link_uris' docstring for why this exists at all."""
+    if not link_urls:
+        return text
+    seen: set[str] = set()
+    unique_links = [u for u in link_urls if not (u in seen or seen.add(u))]
+    return (
+        text
+        + '\n\nHyperlinks found in this document (the real destination behind clickable '
+        + 'text like "GitHub" or "LinkedIn" — match each to the right field by its domain):\n'
+        + "\n".join(unique_links)
+    )
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     try:
         import pypdf  # type: ignore
         reader = pypdf.PdfReader(io.BytesIO(file_bytes))
         if len(reader.pages) > _MAX_PDF_PAGES:
             raise ValueError(f"PDF exceeds maximum page count ({_MAX_PDF_PAGES} pages).")
-        pages = [page.extract_text() or "" for page in reader.pages]
+        pages = []
+        link_uris: list[str] = []
+        for page in reader.pages:
+            pages.append(page.extract_text() or "")
+            link_uris.extend(_extract_link_uris(page))
         text = "\n".join(pages).strip()
-        return text[:_MAX_TEXT_CHARS]
+        return _append_link_hints(text, link_uris)[:_MAX_TEXT_CHARS]
     except ImportError:
         raise RuntimeError("pypdf is not installed. Add 'pypdf' to requirements.txt.")
 
@@ -65,7 +105,15 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         doc = docx.Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
         text = "\n".join(paragraphs).strip()
-        return text[:_MAX_TEXT_CHARS]
+        # Same issue as PDF's _extract_link_uris — a Word hyperlink's visible
+        # run text (e.g. "GitHub") never includes the address it points at.
+        link_urls = [
+            h.address
+            for p in doc.paragraphs
+            for h in p.hyperlinks
+            if h.address
+        ]
+        return _append_link_hints(text, link_urls)[:_MAX_TEXT_CHARS]
     except ImportError:
         raise RuntimeError("python-docx is not installed. Add 'python-docx' to requirements.txt.")
 
@@ -136,6 +184,16 @@ Return a JSON object with EXACTLY this shape:
 Rules:
 - Return only the JSON object, no markdown fences.
 - Keep all original bullet text verbatim — do not rewrite.
+- LINKS: the resume text may end with a "Hyperlinks found in this document"
+  block — these are the real destination URLs behind clickable text that
+  otherwise only shows as a bare word like "GitHub", "LinkedIn", or
+  "Portfolio" (PDF hyperlink text never contains the actual URL). Match each
+  one to the right field by its domain — a github.com URL is contact.github
+  or a project's "link", a linkedin.com/in/... URL is contact.linkedin, a
+  personal domain is contact.website — instead of guessing a URL from the
+  anchor text or leaving the field null when a real link exists. If a field
+  already has a plain-text URL printed directly in the resume body, prefer
+  that exact text over the hyperlink block.
 - If a field is not found, use null for strings and [] for arrays.
 - education "gpa": CGPA, GPA, "Grade", "Aggregate", and a percentage are the
   SAME field — capture whichever the resume shows, copied verbatim with its
