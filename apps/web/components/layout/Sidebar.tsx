@@ -41,7 +41,7 @@ export function Sidebar() {
       {/* Logo */}
       <Link href="/dashboard" className="flex flex-col gap-xs px-md py-lg mb-md">
         <Image src="/brand/logo-wordmark.png" alt="KripaX" width={154} height={34} priority />
-        <span className="text-caption text-secondary uppercase tracking-wider">Build. Tailor. Prepare.</span>
+        <span className="text-caption text-secondary uppercase tracking-wider">Build | Tailor | Score | Prepare</span>
       </Link>
 
       {/* Nav Items */}
