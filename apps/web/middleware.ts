@@ -13,7 +13,7 @@ const NEW_HOST = "kripax.inframiq.com";
 // The backend still enforces this on every API call regardless of what
 // happens here; this just keeps an admin-only account from landing on a
 // normal page shell before its first API call 403s.
-const ADMIN_ONLY_EMAILS = ["tanishqkundrapu@gmail.com"];
+const ADMIN_ONLY_EMAILS = ["bharathrockz.k@gmail.com", "tanishqkundrapu@gmail.com"];
 
 export async function middleware(request: NextRequest) {
   if (OLD_DOMAIN_CUTOVER_LIVE) {
@@ -97,7 +97,13 @@ export async function middleware(request: NextRequest) {
   ) {
     const adminUrl = request.nextUrl.clone();
     adminUrl.pathname = "/admin";
-    return NextResponse.redirect(adminUrl);
+    // NextResponse.redirect(...) builds a brand-new response, which would
+    // silently drop any refreshed session cookies Supabase just wrote onto
+    // `response` above — copy them across so a token refresh on this exact
+    // request isn't lost.
+    const redirectResponse = NextResponse.redirect(adminUrl);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
   }
 
   return response;

@@ -9,8 +9,9 @@ from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
 
-ADMIN_ONLY_EMAIL = settings.admin_only_emails.split(",")[0]
-NORMAL_ADMIN_EMAIL = "bharathrockz.k@gmail.com"
+ADMIN_ONLY_EMAILS = [e.strip() for e in settings.admin_only_emails.split(",")]
+ADMIN_ONLY_EMAIL = ADMIN_ONLY_EMAILS[0]
+NORMAL_USER_EMAIL = "nobody@example.com"
 
 
 def auth_header(email: str):
@@ -49,7 +50,15 @@ async def test_admin_only_account_can_reach_health_and_docs():
 
 
 @pytest.mark.asyncio
-async def test_regular_admin_account_keeps_normal_access():
+async def test_both_admin_only_emails_are_blocked_from_normal_routes():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        for email in ADMIN_ONLY_EMAILS:
+            r = await c.get("/learning", headers=auth_header(email))
+            assert r.status_code == 403, f"{email} should be admin-only"
+
+
+@pytest.mark.asyncio
+async def test_non_admin_account_keeps_normal_access():
     mock_session = MagicMock()
     mock_scalars = MagicMock()
     mock_scalars.all.return_value = []
@@ -63,7 +72,7 @@ async def test_regular_admin_account_keeps_normal_access():
     app.dependency_overrides[get_db] = _override
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            r = await c.get("/learning", headers=auth_header(NORMAL_ADMIN_EMAIL))
+            r = await c.get("/learning", headers=auth_header(NORMAL_USER_EMAIL))
         assert r.status_code == 200
     finally:
         app.dependency_overrides.pop(get_db, None)
