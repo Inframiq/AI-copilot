@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   SquaresFour,
   FileDashed,
   FileText,
-  RocketLaunch,
   ChartLineUp,
   MicrophoneStage,
   IdentificationCard,
@@ -39,14 +39,9 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col p-md gap-sm bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[280px] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50">
       {/* Logo */}
-      <Link href="/dashboard" className="flex items-center gap-md px-md py-lg mb-md">
-        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-          <RocketLaunch size={20} weight="fill" className="text-on-primary" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-[19px] leading-tight font-black text-primary whitespace-nowrap">KripaX</span>
-          <span className="text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
-        </div>
+      <Link href="/dashboard" className="flex flex-col gap-xs px-md py-lg mb-md">
+        <Image src="/brand/logo-wordmark.png" alt="KripaX" width={154} height={34} priority />
+        <span className="text-caption text-secondary uppercase tracking-wider">Premium Pro</span>
       </Link>
 
       {/* Nav Items */}

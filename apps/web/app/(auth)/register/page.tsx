@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { createBrowserClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
@@ -29,11 +30,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center p-gutter">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-[28rem]">
         {/* Logo */}
-        <div className="flex items-center gap-md mb-xl">
-          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-on-primary text-lg font-bold">K</span>
-          </div>
-          <span className="text-headline-md text-on-surface font-bold">KripaX</span>
+        <div className="mb-xl">
+          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={172} height={38} priority />
         </div>
 
         <h1 className="text-headline-lg text-on-surface mb-md">Create account</h1>

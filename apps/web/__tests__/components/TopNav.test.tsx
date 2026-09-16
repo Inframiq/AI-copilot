@@ -35,7 +35,7 @@ describe("TopNav", () => {
 
   it("links the KripaX wordmark back to the dashboard", () => {
     renderTopNav();
-    const wordmarkLink = screen.getByText("KripaX").closest("a");
+    const wordmarkLink = screen.getByAltText("KripaX").closest("a");
     expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
   });
 

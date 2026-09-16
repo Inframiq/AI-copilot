@@ -1,6 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
-import { RocketLaunch, FileText, Brain, ChartLineUp } from "@phosphor-icons/react/dist/ssr";
+import { FileText, Brain, ChartLineUp } from "@phosphor-icons/react/dist/ssr";
 
 export const metadata: Metadata = {
   title: "AI Resume Builder — Tailor Your Resume to Any Job in Seconds",
@@ -32,11 +33,8 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
       <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full gap-sm">
-        <div className="flex items-center gap-md min-w-0">
-          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">
-            <RocketLaunch size={18} weight="fill" className="text-on-primary" />
-          </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight truncate">KripaX</span>
+        <div className="flex items-center min-w-0">
+          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={154} height={34} priority />
         </div>
         <div className="flex items-center gap-md shrink-0">
           <Link

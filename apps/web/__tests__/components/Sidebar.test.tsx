@@ -46,7 +46,7 @@ describe("Sidebar", () => {
 
   it("links the KripaX wordmark back to the dashboard", () => {
     renderSidebar();
-    const wordmarkLink = screen.getByText("KripaX").closest("a");
+    const wordmarkLink = screen.getByAltText("KripaX").closest("a");
     expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
   });
 

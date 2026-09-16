@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { RocketLaunch, SquaresFour, FileDashed, MicrophoneStage, FileText, MagnifyingGlass } from "@phosphor-icons/react";
+import { SquaresFour, FileDashed, MicrophoneStage, FileText, MagnifyingGlass } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
 
 const MOBILE_NAV = [
@@ -18,11 +19,8 @@ export function TopNav() {
     <>
       {/* Mobile Top Header */}
       <header className="md:hidden flex justify-between items-center w-full px-lg h-16 bg-surface/80 backdrop-blur-md sticky top-0 z-40 border-b border-outline-variant/30 shadow-sm">
-        <Link href="/dashboard" className="flex items-center gap-sm">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-            <RocketLaunch size={18} weight="fill" className="text-on-primary" />
-          </div>
-          <span className="text-[19px] font-bold text-primary whitespace-nowrap">KripaX</span>
+        <Link href="/dashboard" className="flex items-center">
+          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={127} height={28} priority />
         </Link>
         <div className="flex items-center gap-sm">
           <CreditMeter variant="compact" />
