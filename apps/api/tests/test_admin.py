@@ -52,10 +52,11 @@ def make_mock_db(sub=None):
     return _override, mock_session
 
 
-def make_fake_auth_user(uid=OTHER_USER_ID, email="user@example.com"):
+def make_fake_auth_user(uid=OTHER_USER_ID, email="user@example.com", name=None):
     u = MagicMock()
     u.id = uid
     u.email = email
+    u.user_metadata = {"full_name": name} if name else {}
     u.created_at = datetime.now(timezone.utc)
     u.last_sign_in_at = datetime.now(timezone.utc)
     return u
@@ -78,7 +79,7 @@ async def test_list_users_merges_auth_and_subscription():
     override, _ = make_mock_db(sub)
     app.dependency_overrides[get_db] = override
     fake_sb = MagicMock()
-    fake_sb.auth.admin.list_users.side_effect = [[make_fake_auth_user()], []]
+    fake_sb.auth.admin.list_users.side_effect = [[make_fake_auth_user(name="Jane Doe")], []]
     try:
         with patch("app.routers.admin._supabase", return_value=fake_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -88,6 +89,7 @@ async def test_list_users_merges_auth_and_subscription():
         assert len(body) == 1
         assert body[0]["plan"] == "premium"
         assert body[0]["credits_remaining"] == 400
+        assert body[0]["name"] == "Jane Doe"
     finally:
         app.dependency_overrides.pop(get_db, None)
 

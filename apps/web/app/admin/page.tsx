@@ -14,7 +14,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("users");
 
   return (
-    <div className="p-xl max-w-4xl mx-auto flex flex-col gap-lg">
+    <div className="p-xl max-w-5xl mx-auto flex flex-col gap-lg">
       <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
 
       <div className="flex items-center gap-sm border-b border-outline-variant/20">
@@ -83,45 +83,90 @@ function UsersTab() {
   if (error instanceof ApiError && error.status === 403) return <AccessDenied />;
 
   return (
-    <div className="flex flex-col gap-sm">
-      {isLoading && <p className="text-body-sm text-on-surface-variant">Loading...</p>}
+    <div className="flex flex-col gap-md">
+      <p className="text-body-sm text-on-surface-variant">
+        {isLoading ? "Loading..." : `${data?.length ?? 0} user${data?.length === 1 ? "" : "s"}`}
+      </p>
 
-      {data?.map((u) => {
-        const isPending = pendingId === u.id;
-        return (
-          <div
-            key={u.id}
-            className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 flex flex-col sm:flex-row sm:items-center gap-md justify-between"
-          >
-            <div className="min-w-0">
-              <p className="text-body-md text-on-surface font-medium truncate">{u.email ?? u.id}</p>
-              <p className="text-label-sm text-on-surface-variant">
-                {u.plan} · {u.status} · {u.credits_remaining}/{u.credits_allotment} credits
-                {u.current_period_end && ` · renews ${new Date(u.current_period_end).toLocaleDateString()}`}
-              </p>
-            </div>
-            <div className="flex items-center gap-sm shrink-0">
-              <button
-                onClick={() =>
-                  planMutation.mutate({ userId: u.id, plan: u.plan === "premium" ? "free" : "premium" })
-                }
-                disabled={isPending}
-                className="px-md py-xs rounded-lg text-label-sm text-on-primary bg-primary hover:opacity-90 transition-opacity disabled:opacity-40"
-              >
-                {u.plan === "premium" ? "Downgrade to Free" : "Upgrade to Pro"}
-              </button>
-              <button
-                onClick={() => refreshMutation.mutate(u.id)}
-                disabled={isPending}
-                aria-label="Refresh credits"
-                className="p-sm rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-40"
-              >
-                <ArrowsClockwise size={16} />
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {data && data.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-outline-variant/20">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container text-label-sm text-on-surface-variant">
+                <th className="px-md py-sm font-semibold">Name</th>
+                <th className="px-md py-sm font-semibold">Email</th>
+                <th className="px-md py-sm font-semibold">Plan</th>
+                <th className="px-md py-sm font-semibold">Status</th>
+                <th className="px-md py-sm font-semibold">Credits</th>
+                <th className="px-md py-sm font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((u) => {
+                const isPending = pendingId === u.id;
+                const isActive = u.status === "active";
+                return (
+                  <tr key={u.id} className="border-t border-outline-variant/20 bg-surface-container-lowest">
+                    <td className="px-md py-sm text-body-sm text-on-surface">{u.name ?? "—"}</td>
+                    <td className="px-md py-sm text-body-sm text-on-surface truncate max-w-[220px]">
+                      {u.email ?? "—"}
+                    </td>
+                    <td className="px-md py-sm text-body-sm">
+                      <span
+                        className={`px-sm py-[2px] rounded-full text-label-sm font-medium ${
+                          u.plan === "premium"
+                            ? "bg-primary-fixed text-on-primary-fixed"
+                            : "bg-surface-container-high text-on-surface-variant"
+                        }`}
+                      >
+                        {u.plan === "premium" ? "Paid" : "Free"}
+                      </span>
+                    </td>
+                    <td className="px-md py-sm text-body-sm">
+                      <span
+                        className={`px-sm py-[2px] rounded-full text-label-sm font-medium ${
+                          isActive
+                            ? "bg-success-container text-on-success-container"
+                            : "bg-error-container text-on-error-container"
+                        }`}
+                      >
+                        {isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-md py-sm text-body-sm text-on-surface-variant whitespace-nowrap">
+                      {u.credits_remaining}/{u.credits_allotment}
+                    </td>
+                    <td className="px-md py-sm">
+                      <div className="flex items-center justify-end gap-sm">
+                        <button
+                          onClick={() =>
+                            planMutation.mutate({
+                              userId: u.id,
+                              plan: u.plan === "premium" ? "free" : "premium",
+                            })
+                          }
+                          disabled={isPending}
+                          className="px-md py-xs rounded-lg text-label-sm text-on-primary bg-primary hover:opacity-90 transition-opacity disabled:opacity-40 whitespace-nowrap"
+                        >
+                          {u.plan === "premium" ? "Downgrade to Free" : "Upgrade to Pro"}
+                        </button>
+                        <button
+                          onClick={() => refreshMutation.mutate(u.id)}
+                          disabled={isPending}
+                          aria-label="Refresh credits"
+                          className="p-sm rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-40"
+                        >
+                          <ArrowsClockwise size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

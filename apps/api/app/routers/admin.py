@@ -24,6 +24,14 @@ def _supabase():
     return _sb_client
 
 
+def _extract_name(auth_user) -> str | None:
+    """Google OAuth populates user_metadata.full_name/name on sign-up; not
+    every account will have one (email/password sign-up, or an older account
+    from before this was captured)."""
+    meta = auth_user.user_metadata or {}
+    return meta.get("full_name") or meta.get("name") or None
+
+
 def _default_free_fields() -> dict:
     return {
         "plan": "free",
@@ -32,6 +40,35 @@ def _default_free_fields() -> dict:
         "credits_allotment": PLAN_CREDITS["free"],
         "current_period_end": None,
     }
+
+
+def _to_admin_user_out(auth_user, sub: Subscription | None) -> AdminUserOut:
+    fields = (
+        {
+            "plan": sub.plan,
+            "status": sub.status,
+            "credits_remaining": sub.credits_remaining,
+            "credits_allotment": sub.credits_allotment,
+            "current_period_end": sub.current_period_end,
+        }
+        if sub
+        else _default_free_fields()
+    )
+    return AdminUserOut(
+        id=uuid.UUID(str(auth_user.id)),
+        email=auth_user.email,
+        name=_extract_name(auth_user),
+        created_at=auth_user.created_at,
+        last_sign_in_at=auth_user.last_sign_in_at,
+        **fields,
+    )
+
+
+def _get_auth_user_or_404(user_id: uuid.UUID):
+    try:
+        return _supabase().auth.admin.get_user_by_id(str(user_id)).user
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -53,31 +90,10 @@ async def list_users(user=Depends(require_admin), db: AsyncSession = Depends(get
     subs_result = await db.execute(select(Subscription))
     subs_by_user = {sub.user_id: sub for sub in subs_result.scalars().all()}
 
-    out = []
-    for au in auth_users:
-        uid = uuid.UUID(au.id)
-        sub = subs_by_user.get(uid)
-        fields = (
-            {
-                "plan": sub.plan,
-                "status": sub.status,
-                "credits_remaining": sub.credits_remaining,
-                "credits_allotment": sub.credits_allotment,
-                "current_period_end": sub.current_period_end,
-            }
-            if sub
-            else _default_free_fields()
-        )
-        out.append(
-            AdminUserOut(
-                id=uid,
-                email=au.email,
-                created_at=au.created_at,
-                last_sign_in_at=au.last_sign_in_at,
-                **fields,
-            )
-        )
-    return out
+    return [
+        _to_admin_user_out(au, subs_by_user.get(uuid.UUID(str(au.id))))
+        for au in auth_users
+    ]
 
 
 @router.patch("/users/{user_id}/plan", response_model=AdminUserOut)
@@ -103,22 +119,7 @@ async def update_user_plan(
         sub.current_period_end = None
     await db.commit()
 
-    try:
-        auth_user = _supabase().auth.admin.get_user_by_id(str(user_id)).user
-    except Exception:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return AdminUserOut(
-        id=user_id,
-        email=auth_user.email,
-        created_at=auth_user.created_at,
-        last_sign_in_at=auth_user.last_sign_in_at,
-        plan=sub.plan,
-        status=sub.status,
-        credits_remaining=sub.credits_remaining,
-        credits_allotment=sub.credits_allotment,
-        current_period_end=sub.current_period_end,
-    )
+    return _to_admin_user_out(_get_auth_user_or_404(user_id), sub)
 
 
 @router.post("/users/{user_id}/credits/refresh", response_model=AdminUserOut)
@@ -132,19 +133,4 @@ async def refresh_user_credits(
     sub.credits_remaining = sub.credits_allotment
     await db.commit()
 
-    try:
-        auth_user = _supabase().auth.admin.get_user_by_id(str(user_id)).user
-    except Exception:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return AdminUserOut(
-        id=user_id,
-        email=auth_user.email,
-        created_at=auth_user.created_at,
-        last_sign_in_at=auth_user.last_sign_in_at,
-        plan=sub.plan,
-        status=sub.status,
-        credits_remaining=sub.credits_remaining,
-        credits_allotment=sub.credits_allotment,
-        current_period_end=sub.current_period_end,
-    )
+    return _to_admin_user_out(_get_auth_user_or_404(user_id), sub)

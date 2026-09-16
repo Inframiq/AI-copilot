@@ -229,6 +229,7 @@ export interface FeedbackAdmin extends Feedback {
 export interface AdminUser {
   id: string;
   email: string | null;
+  name: string | null;
   created_at: string | null;
   last_sign_in_at: string | null;
   plan: string; // "free" | "premium"
