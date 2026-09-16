@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
     unlimited_credit_emails: str = ""  # comma-separated emails exempt from credit metering (QA/test accounts)
     admin_emails: str = "bharathrockz.k@gmail.com,tanishqkundrapu@gmail.com"  # comma-separated emails allowed to access admin endpoints
+    # Subset of admin_emails with NO normal app access at all — see
+    # app.main's admin_only_restriction_middleware. Every other admin email
+    # keeps full normal-user access in addition to the admin dashboard.
+    admin_only_emails: str = "tanishqkundrapu@gmail.com"
 
     class Config:
         env_file = ".env"

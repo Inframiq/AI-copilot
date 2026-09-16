@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from app.routers import resumes, jd, ai, learning, contacts, cover_letters, me, plans, feedback, admin
 from app.core.rate_limit import limiter
 from app.core.config import settings
+from app.core.security import get_optional_user_email, is_admin_only_email
 
 logger = logging.getLogger("app")
 
@@ -72,6 +73,34 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+# Paths an ADMIN_ONLY_EMAILS account may still reach — everything else 403s
+# for them, so a new normal-user route is locked out by default instead of
+# needing to remember to add it to a denylist.
+_ADMIN_ONLY_EXEMPT_EXACT = {"/health", "/docs", "/openapi.json"}
+
+
+@app.middleware("http")
+async def admin_only_restriction_middleware(request: Request, call_next):
+    """settings.ADMIN_ONLY_EMAILS accounts (e.g. tanishqkundrapu@gmail.com)
+    are admin-only — no normal app access, only the admin dashboard. Every
+    other admin email is unaffected and keeps full normal-user access."""
+    if request.method != "OPTIONS":
+        email = await get_optional_user_email(request)
+        if is_admin_only_email(email):
+            path = request.url.path
+            exempt = (
+                path.startswith("/admin")
+                or path.startswith("/redoc")
+                or path in _ADMIN_ONLY_EXEMPT_EXACT
+                or (path == "/feedback" and request.method == "GET")
+            )
+            if not exempt:
+                return JSONResponse(
+                    status_code=403, content={"detail": "This account is admin-only."}
+                )
+    return await call_next(request)
 
 
 app.include_router(resumes.router)

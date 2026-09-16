@@ -106,3 +106,26 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if (user.get("email") or "").lower() not in admin_emails:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+
+
+async def get_optional_user_email(request) -> str | None:
+    """Best-effort email extraction from a bearer token, used only by
+    app.main's admin_only_restriction_middleware. Returns None for any
+    missing/invalid token instead of raising — every real auth boundary
+    still goes through get_current_user/require_admin, which verify
+    properly and reject bad tokens with 401."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        return None
+    try:
+        payload = await _verify_jwt(auth_header[7:])
+    except ValueError:
+        return None
+    return payload.get("email")
+
+
+def is_admin_only_email(email: str | None) -> bool:
+    if not email:
+        return False
+    admin_only_emails = {e.strip().lower() for e in settings.admin_only_emails.split(",") if e.strip()}
+    return email.strip().lower() in admin_only_emails
