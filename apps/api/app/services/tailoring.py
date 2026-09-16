@@ -191,8 +191,19 @@ def _strip_json_fence(raw: str) -> str:
 _SKILL_LEADING_VERBS = re.compile(
     r"^(developed|managed|led|responsible for|worked|helped|created|built|"
     r"implemented|designed|collaborated|utilized|maintained|assisted|drove|"
-    r"delivered|coordinated|analyzed|performed|conducted|supported|"
-    r"experience (with|in)|proficient (with|in|at)|knowledge of|ability to)\b",
+    r"delivered|coordinated|analyzed|performed|conducted|supported)\b",
+    re.IGNORECASE,
+)
+
+# Requirement/qualifier phrasing wraps what otherwise reads like a plausible
+# noun phrase ("working knowledge of relational databases", "proficiency
+# with content management systems", "Bachelor's degree in software
+# engineering") — checked anywhere in the string, not just at the start,
+# since the qualifier is rarely the very first word.
+_SKILL_PROSE_MARKERS = re.compile(
+    r"\b(experience (with|in)|proficient (with|in|at)|proficiency (with|in)|"
+    r"knowledge of|ability to|familiarity with|understanding of|"
+    r"degree (in|with)|bachelor'?s|master'?s|ph\.?d|years? of)\b",
     re.IGNORECASE,
 )
 
@@ -208,6 +219,8 @@ def _looks_like_a_skill(s: str) -> bool:
     if ". " in s or s.count(",") > 1 or ";" in s:
         return False
     if _SKILL_LEADING_VERBS.match(s.strip()):
+        return False
+    if _SKILL_PROSE_MARKERS.search(s):
         return False
     return True
 
@@ -443,6 +456,18 @@ async def _agent1_parse_jd(
         else {i.term: i.level for i in raw_importance}
     )
     result = JDAnalysis(**wire.model_dump(exclude={"importance"}), importance=importance)
+    # The fields that feed score_content's "required"/"nice" skill chips
+    # (never core_responsibilities, which are meant to be full sentences and
+    # are deliberately excluded from the chip lists in blend_scores) — Agent
+    # 1 occasionally treats a JD's plain-English requirement bullet ("A
+    # Bachelor's degree in software engineering...") as if it were a
+    # verbatim ATS phrase or tool name. Same guard as
+    # _sanitize_skill_list/_looks_like_a_skill already applies to every
+    # other skill-shaped list in this file.
+    result.exact_technical_tools = _sanitize_skill_list(result.exact_technical_tools)
+    result.methodologies_and_frameworks = _sanitize_skill_list(result.methodologies_and_frameworks)
+    result.ats_filter_phrases = _sanitize_skill_list(result.ats_filter_phrases)
+    result.nice_to_have_skills = _sanitize_skill_list(result.nice_to_have_skills)
     return _backfill_importance(result)
 
 

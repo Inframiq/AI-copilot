@@ -89,6 +89,35 @@ async def test_agent1_backfills_importance_for_unrated_terms():
 
 
 @pytest.mark.asyncio
+async def test_agent1_strips_requirement_prose_from_skill_fields():
+    """Bug report: JD requirement bullets like "Bachelor's degree in
+    software engineering..." or "working knowledge of relational
+    databases" came back as clickable skill chips in the JD Analyzer /
+    Tailor Resume UI. Agent 1 is the single choke point all of those
+    fields pass through, so sanitizing here fixes every downstream
+    consumer (score_content's matched/missing chips, the tailoring
+    pipeline's suggested_skills, etc.) at once."""
+    from app.services.tailoring import _agent1_parse_jd, JDAnalysis
+
+    raw = JDAnalysis(
+        exact_technical_tools=["Python", "working knowledge of relational databases"],
+        methodologies_and_frameworks=["Agile", "web application development experience with multiple frameworks"],
+        domain_expertise_themes=[],
+        seniority_indicators=[],
+        ats_filter_phrases=["revenue forecasting", "Bachelor's degree in software engineering or information technology"],
+        nice_to_have_skills=["Looker", "proficiency with content management systems"],
+    )
+    provider = make_mock_provider(structured_return=raw)
+
+    out = await _agent1_parse_jd("jd text", provider)
+
+    assert out.exact_technical_tools == ["Python"]
+    assert out.methodologies_and_frameworks == ["Agile"]
+    assert out.ats_filter_phrases == ["revenue forecasting"]
+    assert out.nice_to_have_skills == ["Looker"]
+
+
+@pytest.mark.asyncio
 async def test_agent2_semantic_map_requests_premium_tier():
     # Agent 2 (JD+resume semantic mapping) is the one call in the pipeline
     # that requests the pricier model — every other agent still requests
@@ -862,6 +891,20 @@ def test_looks_like_a_skill_rejects_long_or_sentence_shaped_text():
     assert _looks_like_a_skill("Led a cross-functional team of five engineers.") is False
     assert _looks_like_a_skill("Knowledge of distributed systems design") is False
     assert _looks_like_a_skill("Built, deployed, and maintained microservices") is False
+
+
+def test_looks_like_a_skill_rejects_requirement_bullets_reported_as_skill_chips():
+    """A real bug report: these four JD requirement bullets showed up as
+    clickable "skill" chips in the JD Analyzer / Tailor Resume UI instead of
+    being filtered out. Each wraps what reads like a plausible noun phrase
+    in qualifier language a real skill name never uses."""
+    assert _looks_like_a_skill("Bachelor's degree in software engineering or information technology") is False
+    assert _looks_like_a_skill("working knowledge of relational databases") is False
+    assert _looks_like_a_skill("proficiency with content management systems") is False
+    assert _looks_like_a_skill("web application development experience with multiple frameworks") is False
+    # The underlying real skills must still pass on their own.
+    assert _looks_like_a_skill("Relational Databases") is True
+    assert _looks_like_a_skill("Content Management Systems") is True
 
 
 def test_agent2_prompt_skill_cap_is_internally_consistent():
