@@ -1,0 +1,52 @@
+{
+  "name": "experienced_backend_ic",
+  "description": "The common case: a mid-level backend engineer with real metrics, applying to an adjacent stack. Baseline for every other fixture.",
+  "jd_text": "Senior Backend Engineer\n\nWe're hiring a Senior Backend Engineer to own our payments platform.\n\nWhat you'll do:\n- Own end-to-end delivery of payment processing services\n- Design and scale distributed systems handling high transaction volume\n- Partner with product on roadmap prioritisation\n- Mentor engineers on system design and code quality\n\nRequirements:\n- 5+ years building production backend services\n- Strong Python and PostgreSQL\n- Experience with Kubernetes and CI/CD pipelines\n- Familiarity with event-driven architecture and Kafka\n\nNice to have:\n- Go\n- Experience in fintech or payments\n",
+  "resume_content": {
+    "contact": {
+      "name": "Alex Rivera",
+      "email": "alex@example.com"
+    },
+    "headline": "Backend Engineer",
+    "summary": "Backend engineer with six years building transactional services for high-traffic consumer products.",
+    "experience": [
+      {
+        "company": "Northwind Retail",
+        "title": "Backend Engineer",
+        "start": "2021",
+        "end": "Present",
+        "bullets": [
+          "Built the order fulfilment API in Python, cutting average order processing time from 800ms to 240ms",
+          "Migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records",
+          "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+          "Worked with the product team to plan quarterly engineering priorities",
+          "Helped newer engineers with code reviews and design feedback"
+        ]
+      },
+      {
+        "company": "Cobalt Labs",
+        "title": "Software Engineer",
+        "start": "2019",
+        "end": "2021",
+        "bullets": [
+          "Developed internal reporting tools used by 40 people across three departments",
+          "Fixed a recurring data sync bug that had caused 12 incidents in six months"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "State University",
+        "degree": "BS Computer Science",
+        "year": "2019"
+      }
+    ],
+    "skills": [
+      "Python",
+      "PostgreSQL",
+      "Docker",
+      "REST APIs",
+      "Git"
+    ]
+  }
+}

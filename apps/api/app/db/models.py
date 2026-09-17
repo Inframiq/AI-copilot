@@ -113,6 +113,10 @@ class TailoringSession(Base):
         UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="CASCADE")
     )
     ats_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The score the résumé had BEFORE this run; ats_score above is the after.
+    # NULL for sessions tailored before this was persisted, which the UI reads
+    # as "no lift to show" and falls back to the after-score alone.
+    ats_score_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     missing_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     tailored_content: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -122,6 +126,14 @@ class TailoringSession(Base):
     suggested_skills: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     ats_fixes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     bullet_importance: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Rewrites the deterministic fact-lock rejected (services/bullet_guard.py):
+    # the bullet kept its original text. NULL for sessions completed before the
+    # guard existed, which the frontend reads as "nothing was reverted".
+    reverted_bullets: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # {bullet_id: {"responsibility": str, "keywords": [str]}} — Agent 2's
+    # account of why each bullet was transformed, shown on the review screen.
+    # NULL for sessions tailored before this was persisted.
+    bullet_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     resume: Mapped["Resume | None"] = relationship(back_populates="sessions")

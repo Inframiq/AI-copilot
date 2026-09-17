@@ -1333,3 +1333,353 @@ async def test_project_score_applies_only_accepted_fixes_no_llm():
         provider_spy.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# ── The projected score must reflect the bullets the user actually kept ──────
+# Regression: project-score always scored session.tailored_content — the
+# all-bullets-accepted snapshot — so rejecting every tailored bullet left the
+# projected "→ N%" completely unmoved. The client already builds the exact
+# merged content for its preview; scoring that covers bullet decisions, skill
+# decisions, role overrides and inline edits in one pass.
+
+def _project_score_session():
+    from app.db.models import TailoringSession, JobDescription
+    import uuid as _uuid
+
+    jd = JobDescription(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), title="T",
+        raw_text="need Python and Kubernetes",
+        parsed={"agent1": {
+            "exact_technical_tools": ["Python", "Kubernetes"],
+            "methodologies_and_frameworks": [], "domain_expertise_themes": [],
+            "seniority_indicators": [], "ats_filter_phrases": [],
+            "core_responsibilities": [], "target_job_titles": [],
+            "nice_to_have_skills": [], "importance": {},
+        }, "semantic": {"fingerprint": "x", "verdicts": {}}},
+        status="applied",
+    )
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=jd.id,
+        status="completed", ats_score=100, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[], ats_fixes=[],
+        # The tailored bullet mentions both tools -> scores 100 on its own.
+        tailored_content={"skills": [],
+                          "experience": [{"title": "E", "bullets": ["Shipped Python services on Kubernetes"]}]},
+    )
+    sess.jd = jd
+    return sess
+
+
+async def _post_project_score(sess, payload):
+    override, mock_session = make_mock_db()
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=MagicMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                return await client.post("/ai/project-score", json=payload, headers=make_auth_header())
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_project_score_scores_the_content_the_client_sends():
+    """Rejecting the tailored bullet reverts it to the original, which no
+    longer mentions Kubernetes — the projected score must drop."""
+    sess = _project_score_session()
+    r = await _post_project_score(sess, {
+        "session_id": str(sess.id),
+        "accepted_fix_ids": [],
+        "content": {"skills": [], "experience": [{"title": "E", "bullets": ["Shipped Python services"]}]},
+    })
+    assert r.status_code == 200
+    assert r.json()["projected_score"] == 50   # Python only, Kubernetes gone
+
+
+@pytest.mark.asyncio
+async def test_project_score_without_a_content_override_uses_the_session():
+    sess = _project_score_session()
+    r = await _post_project_score(sess, {"session_id": str(sess.id), "accepted_fix_ids": []})
+    assert r.status_code == 200
+    assert r.json()["projected_score"] == 100
+
+
+@pytest.mark.asyncio
+async def test_project_score_rejects_an_oversized_content_override():
+    sess = _project_score_session()
+    r = await _post_project_score(sess, {
+        "session_id": str(sess.id),
+        "content": {"experience": [{"title": "E", "bullets": ["x" * 250_000]}]},
+    })
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_session_returns_reverted_bullets():
+    """The fact-lock guard's rejections have to reach the review screen —
+    a bullet silently left unchanged is indistinguishable from one the
+    pipeline chose not to touch."""
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=70, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[], ats_fixes=[],
+        tailored_content={"experience": []},
+        reverted_bullets=[{"bullet_id": "exp0_b0", "reasons": ["invented metric(s) not in the original bullet: 2"],
+                           "original_text": "Built checkout.", "rejected_text": "Built checkout for 2M users."}],
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["reverted_bullets"][0]["bullet_id"] == "exp0_b0"
+        assert "invented" in body["reverted_bullets"][0]["reasons"][0]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_session_defaults_reverted_bullets_to_empty_for_older_sessions():
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=70, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[], ats_fixes=[],
+        tailored_content={"experience": []}, reverted_bullets=None,
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.json()["reverted_bullets"] == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_session_returns_bullet_rationale():
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=70, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[], ats_fixes=[],
+        tailored_content={"experience": []},
+        bullet_rationale={"exp0_b0": {"responsibility": "own checkout delivery",
+                                      "keywords": ["Python"]}},
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.json()["bullet_rationale"]["exp0_b0"]["responsibility"] == "own checkout delivery"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_session_defaults_bullet_rationale_for_older_sessions():
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=70, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[], ats_fixes=[],
+        tailored_content={"experience": []}, bullet_rationale=None,
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.json()["bullet_rationale"] == {}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_refunds_the_credit_when_the_model_returns_nothing():
+    """Regression: the provider used to return None for an empty response
+    instead of raising, so the router's except/refund block was skipped and
+    `rewritten.strip()` — which sits OUTSIDE the try — raised AttributeError.
+    The user was charged a credit, got a 500, and was never refunded.
+
+    Wired through the REAL provider rather than a hand-rolled mock, because
+    the contract under test is exactly "the provider raises here".
+    """
+    from app.services.ai_engine.openai_provider import OpenAIProvider
+    from app.db.models import Resume
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    res = MagicMock(); res.scalar_one_or_none.return_value = Resume(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), title="R",
+        content={"experience": []}, template_id="ats_clean",
+    )
+    mock_session.execute = AsyncMock(return_value=res)
+
+    client_mock = MagicMock()
+    empty = MagicMock(output_text="", status="completed", usage=None)
+    empty.incomplete_details = None
+    empty.output = []
+    client_mock.responses.create = AsyncMock(return_value=empty)
+    with patch("app.services.ai_engine.openai_provider.AsyncOpenAI", return_value=client_mock):
+        provider = OpenAIProvider(api_key="fake", fast_model="f", premium_model="p")
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=provider), \
+             patch("app.routers.ai.spend_credits", new=AsyncMock()), \
+             patch("app.routers.ai.refund_credits", new=AsyncMock()) as refund:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                with pytest.raises(Exception):
+                    await c.post(
+                        "/ai/rewrite-bullet",
+                        json={"bullet_text": "Built checkout", "mode": "rewrite",
+                              "humanize_level": 50, "field": "bullet"},
+                        headers=make_auth_header(),
+                    )
+        refund.assert_awaited_once()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def _gap_fix_session():
+    """A session whose one gap fix is a naturally-worded bullet — it closes
+    "infrastructure as code" without containing the phrase."""
+    from app.db.models import TailoringSession, JobDescription
+    import uuid as _uuid
+
+    jd = JobDescription(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), title="T",
+        raw_text="need Python and IaC",
+        parsed={"agent1": {
+            "exact_technical_tools": ["Python"],
+            "methodologies_and_frameworks": [], "domain_expertise_themes": [],
+            "seniority_indicators": [], "ats_filter_phrases": ["infrastructure as code"],
+            "core_responsibilities": [], "target_job_titles": [],
+            "nice_to_have_skills": [], "importance": {},
+        }, "semantic": {"fingerprint": "x", "verdicts": {"infrastructure as code": "missing"}}},
+        status="applied",
+    )
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=jd.id,
+        status="completed", ats_score=50, matched_skills=[], missing_skills=[],
+        company_keywords=[], suggested_skills=[],
+        tailored_content={"skills": ["Python"],
+                          "experience": [{"title": "E", "bullets": ["Used Python"]}]},
+        ats_fixes=[{
+            "id": "bullet:infrastructure-as-code", "type": "bullet",
+            "gap": "infrastructure as code", "importance": "high", "grounded": False,
+            "text": "Automated cloud provisioning using declarative configuration templates.",
+            "experience_index": 0, "score_delta": 50, "default_accept": False,
+        }],
+    )
+    sess.jd = jd
+    return sess
+
+
+@pytest.mark.asyncio
+async def test_projected_score_credits_an_accepted_gap_bullet_written_naturally():
+    """Regression: the projected score only moved for a fix whose text echoed
+    the JD phrase verbatim, so accepting a well-written gap bullet appeared to
+    be worth nothing."""
+    sess = _gap_fix_session()
+    r = await _post_project_score(sess, {
+        "session_id": str(sess.id),
+        "accepted_fix_ids": ["bullet:infrastructure-as-code"],
+    })
+    assert r.status_code == 200
+    assert r.json()["projected_score"] == 100
+
+
+@pytest.mark.asyncio
+async def test_projected_score_credits_the_gap_when_the_client_sends_merged_content():
+    """The client applies fixes itself and sends the merged résumé, but still
+    reports which fixes it accepted — that's what names the gaps to credit."""
+    sess = _gap_fix_session()
+    r = await _post_project_score(sess, {
+        "session_id": str(sess.id),
+        "accepted_fix_ids": ["bullet:infrastructure-as-code"],
+        "content": {"skills": ["Python"], "experience": [{"title": "E", "bullets": [
+            "Used Python",
+            "Automated cloud provisioning using declarative configuration templates.",
+        ]}]},
+    })
+    assert r.json()["projected_score"] == 100
+
+
+@pytest.mark.asyncio
+async def test_projected_score_does_not_credit_a_gap_the_user_rejected():
+    sess = _gap_fix_session()
+    r = await _post_project_score(sess, {"session_id": str(sess.id), "accepted_fix_ids": []})
+    assert r.json()["projected_score"] == 50
+
+
+@pytest.mark.asyncio
+async def test_get_session_returns_the_pre_tailoring_score():
+    """The lift is the product's core claim. Without the before-score the UI
+    can only show a bare number, which says nothing about what tailoring did."""
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=81, ats_score_before=62,
+        matched_skills=[], missing_skills=[], company_keywords=[],
+        suggested_skills=[], ats_fixes=[], tailored_content={"experience": []},
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.json()["ats_score_before"] == 62
+        assert r.json()["ats_score"] == 81
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_session_leaves_the_pre_tailoring_score_null_for_older_sessions():
+    from app.db.models import TailoringSession
+    import uuid as _uuid
+
+    override, mock_session = make_mock_db()
+    sess = TailoringSession(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), jd_id=_uuid.uuid4(),
+        status="completed", ats_score=81, ats_score_before=None,
+        matched_skills=[], missing_skills=[], company_keywords=[],
+        suggested_skills=[], ats_fixes=[], tailored_content={"experience": []},
+    )
+    res = MagicMock(); res.scalar_one_or_none.return_value = sess
+    mock_session.execute = AsyncMock(return_value=res)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/ai/sessions/{sess.id}", headers=make_auth_header())
+        assert r.json()["ats_score_before"] is None
+    finally:
+        app.dependency_overrides.pop(get_db, None)

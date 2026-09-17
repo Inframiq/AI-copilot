@@ -141,3 +141,106 @@ async def test_complete_does_not_raise_when_usage_is_missing():
     result = await provider.complete("system", "user")
 
     assert result == "ok"
+
+
+# ── Truncated / refused / empty structured responses ─────────────────────────
+# The Responses API returns output_parsed=None when the model ran out of
+# output budget mid-JSON, refused, or produced nothing. The provider used to
+# return that None straight to the caller, which then died on an opaque
+# AttributeError ('NoneType' object has no attribute 'mapping_plan') — the
+# whole tailoring run failed and the credit was refunded with nothing in the
+# logs saying why.
+
+from app.services.ai_engine.base import (
+    AIEmptyResponseError, AIRefusalError, AIResponseError, AITruncatedError,
+)
+
+
+def _parse_returns(response) -> MagicMock:
+    mc = MagicMock()
+    mc.responses.parse = AsyncMock(return_value=response)
+    return mc
+
+
+@pytest.mark.asyncio
+async def test_a_response_truncated_by_the_token_cap_raises_truncated():
+    resp = MagicMock(output_parsed=None, status="incomplete")
+    resp.incomplete_details.reason = "max_output_tokens"
+    provider = _make_provider(_parse_returns(resp))
+
+    with pytest.raises(AITruncatedError):
+        await provider.complete_structured("s", "u", _Schema, max_output_tokens=16384)
+
+
+@pytest.mark.asyncio
+async def test_the_truncation_error_names_the_call_and_the_budget_it_hit():
+    """The message is the only diagnostic a failed background run leaves."""
+    resp = MagicMock(output_parsed=None, status="incomplete")
+    resp.incomplete_details.reason = "max_output_tokens"
+    provider = _make_provider(_parse_returns(resp))
+
+    with pytest.raises(AITruncatedError) as exc:
+        await provider.complete_structured(
+            "s", "u", _Schema, max_output_tokens=16384, call_name="agent3_write",
+        )
+    assert "agent3_write" in str(exc.value)
+    assert "16384" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_a_model_refusal_raises_refusal():
+    resp = MagicMock(output_parsed=None, status="completed")
+    resp.incomplete_details = None
+    resp.output = [MagicMock(content=[MagicMock(refusal="I can't help with that")])]
+    provider = _make_provider(_parse_returns(resp))
+
+    with pytest.raises(AIRefusalError):
+        await provider.complete_structured("s", "u", _Schema)
+
+
+@pytest.mark.asyncio
+async def test_an_empty_parse_with_no_stated_reason_raises_empty():
+    resp = MagicMock(output_parsed=None, status="completed")
+    resp.incomplete_details = None
+    resp.output = []
+    provider = _make_provider(_parse_returns(resp))
+
+    with pytest.raises(AIEmptyResponseError):
+        await provider.complete_structured("s", "u", _Schema)
+
+
+@pytest.mark.asyncio
+async def test_every_empty_response_error_shares_one_catchable_base():
+    """Callers that only want "the model gave us nothing usable" should not
+    have to enumerate the subclasses."""
+    for cls in (AITruncatedError, AIRefusalError, AIEmptyResponseError):
+        assert issubclass(cls, AIResponseError)
+
+
+@pytest.mark.asyncio
+async def test_a_successful_parse_is_returned_unchanged():
+    resp = MagicMock(output_parsed=_Schema(text="ok"), status="completed")
+    provider = _make_provider(_parse_returns(resp))
+
+    assert (await provider.complete_structured("s", "u", _Schema)).text == "ok"
+
+
+@pytest.mark.asyncio
+async def test_an_incomplete_status_still_returns_a_parse_that_did_come_back():
+    """Only a MISSING parse is an error — a status quirk alongside usable
+    output must not throw away work already paid for."""
+    resp = MagicMock(output_parsed=_Schema(text="ok"), status="incomplete")
+    resp.incomplete_details.reason = "max_output_tokens"
+    provider = _make_provider(_parse_returns(resp))
+
+    assert (await provider.complete_structured("s", "u", _Schema)).text == "ok"
+
+
+@pytest.mark.asyncio
+async def test_complete_raises_empty_rather_than_returning_none_text():
+    mc = MagicMock()
+    mc.responses.create = AsyncMock(return_value=MagicMock(output_text=None, status="completed"))
+    provider = _make_provider(mc)
+
+    with pytest.raises(AIResponseError):
+        await provider.complete("s", "u")

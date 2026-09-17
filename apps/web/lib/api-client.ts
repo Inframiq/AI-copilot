@@ -71,6 +71,22 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+/** Why one bullet was transformed: the JD responsibility the rewrite is meant
+ * to demonstrate, and the JD keywords woven in to do it. */
+export interface BulletRationale {
+  responsibility: string;
+  keywords: string[];
+}
+
+/** One rewrite the server's fact-lock refused, with the reason(s) why. The
+ * bullet was left at its original text. */
+export interface RevertedBullet {
+  bullet_id: string;
+  reasons: string[];
+  original_text: string;
+  rejected_text: string;
+}
+
 export const apiClient = {
   // ── Resumes ──────────────────────────────────────────────────────────────
   getResumes: (): Promise<Resume[]> => request<Resume[]>("GET", "/resumes"),
@@ -325,6 +341,16 @@ export const apiClient = {
     /** {original_bullet_id: "high"|"medium"|"low"} for the résumé's existing
      * bullets. `{}` on pre-feature sessions. */
     bullet_importance?: Record<string, "high" | "medium" | "low">;
+    /** Rewrites the server's deterministic fact-lock rejected — the bullet
+     * kept its original text. `[]` on sessions tailored before the guard
+     * shipped. See apps/api/app/services/bullet_guard.py. */
+    reverted_bullets?: RevertedBullet[];
+    /** {bullet_id: rationale} — Agent 2's account of why each bullet was
+     * transformed. `{}` on sessions tailored before it was persisted. */
+    bullet_rationale?: Record<string, BulletRationale>;
+    /** The score before tailoring ran; `ats_score` is the after. Null on
+     * sessions tailored before it was recorded. */
+    ats_score_before?: number | null;
   }> => request("GET", `/ai/sessions/${sessionId}`),
 
   // Pure re-score of a completed session's résumé with a chosen subset of its
@@ -332,11 +358,16 @@ export const apiClient = {
   // number. No LLM call server-side.
   projectScore: (
     sessionId: string,
-    acceptedFixIds: string[]
+    acceptedFixIds: string[],
+    // The résumé exactly as the review screen currently shows it. When given,
+    // the server scores this instead of the session's stored (all-accepted)
+    // tailored_content, so rejected bullet rewrites actually move the number.
+    content?: ResumeContent
   ): Promise<{ projected_score: number }> =>
     request<{ projected_score: number }>("POST", "/ai/project-score", {
       session_id: sessionId,
       accepted_fix_ids: acceptedFixIds,
+      ...(content ? { content } : {}),
     }),
 
   // Most recent completed session across every JD — resolves Interview

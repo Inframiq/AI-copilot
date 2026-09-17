@@ -21,7 +21,9 @@ from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import (
     run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
 )
-from app.services.ats import build_resume_text, score_content, apply_fixes, AtsFix
+from app.services.ats import (
+    build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
+)
 from app.services.resume_spec import HARD_LIMITS
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -180,6 +182,7 @@ async def _run_tailoring_background(
         if not row:
             return  # session row is gone — nothing to update
         row.ats_score = result.ats_score
+        row.ats_score_before = result.ats_score_before
         row.matched_skills = result.matched_skills
         row.missing_skills = result.missing_skills
         row.tailored_content = result.tailored_content
@@ -187,6 +190,8 @@ async def _run_tailoring_background(
         row.suggested_skills = result.suggested_skills
         row.ats_fixes = [f.model_dump() for f in result.ats_fixes]
         row.bullet_importance = result.bullet_importance
+        row.reverted_bullets = result.reverted_bullets
+        row.bullet_rationale = result.bullet_rationale
         row.status = "completed"
         session_db.add_all(
             [
@@ -368,8 +373,15 @@ async def project_score(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Re-score a completed tailoring session's résumé with a chosen subset
-    of its ats_fixes applied. Pure computation — no model call."""
+    """Re-score a completed tailoring session's résumé. Pure computation — no
+    model call.
+
+    Two shapes, see ProjectScoreRequest.content:
+      - body.content given  — score exactly that (the review screen's current
+        merged state, fixes already applied client-side).
+      - body.content absent — score the stored tailored_content with
+        body.accepted_fix_ids applied here.
+    """
     uid = uuid.UUID(user["sub"])
     session = (
         await db.execute(
@@ -391,8 +403,23 @@ async def project_score(
 
     accepted = set(body.accepted_fix_ids)
     fixes = [AtsFix(**f) for f in (session.ats_fixes or []) if f.get("id") in accepted]
-    merged = apply_fixes(session.tailored_content, fixes)
-    return ProjectScoreOut(projected_score=score_content(merged, jd_analysis, verdicts).ats_score)
+    if body.content is not None:
+        # The client already applied the fixes into the content it sent, but
+        # accepted_fix_ids still names WHICH gaps those fixes close — which is
+        # what the verdicts below need.
+        merged = body.content
+    else:
+        merged = apply_fixes(session.tailored_content, fixes)
+    # Credit each accepted fix for its own gap. Without this the stored
+    # verdicts still say "missing" for a gap the user just closed, so a
+    # naturally-worded gap bullet moved the projected score by nothing while a
+    # bullet that parroted the JD phrase moved it — the number argued for
+    # keyword stuffing. See ats.verdicts_with_fixes.
+    return ProjectScoreOut(
+        projected_score=score_content(
+            merged, jd_analysis, verdicts_with_fixes(verdicts, fixes),
+        ).ats_score
+    )
 
 
 @router.get("/sessions/latest")
@@ -426,12 +453,15 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
         "status": session.status,
         "tailored_content": session.tailored_content,
         "ats_score": session.ats_score,
+        "ats_score_before": session.ats_score_before,
         "matched_skills": session.matched_skills,
         "missing_skills": session.missing_skills,
         "company_keywords": session.company_keywords,
         "suggested_skills": session.suggested_skills,
         "ats_fixes": session.ats_fixes or [],
         "bullet_importance": session.bullet_importance or {},
+        "reverted_bullets": session.reverted_bullets or [],
+        "bullet_rationale": session.bullet_rationale or {},
     }
 
 
@@ -458,12 +488,15 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         "status": session.status,
         "tailored_content": session.tailored_content,
         "ats_score": session.ats_score,
+        "ats_score_before": session.ats_score_before,
         "matched_skills": session.matched_skills,
         "missing_skills": session.missing_skills,
         "company_keywords": session.company_keywords,
         "suggested_skills": session.suggested_skills,
         "ats_fixes": session.ats_fixes or [],
         "bullet_importance": session.bullet_importance or {},
+        "reverted_bullets": session.reverted_bullets or [],
+        "bullet_rationale": session.bullet_rationale or {},
     }
 
 

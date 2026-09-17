@@ -123,7 +123,7 @@ describe("BulletReviewPanel", () => {
     expect(queryByRole("button", { name: /Kubernetes/ })).not.toBeNull();
   });
 
-  it("shows current → projected ATS score in the review header", () => {
+  it("shows the projected score as the current figure in the review header", () => {
     useResumeStore.getState().setResume(
       "resume-1",
       {
@@ -145,8 +145,10 @@ describe("BulletReviewPanel", () => {
       },
     } as never);
 
-    const { container } = renderPanel();
-    expect(container.textContent).toMatch(/ATS Score:\s*60%\s*→\s*72%/);
+    // Rendered by ScoreLift now, not as a caption — the projected score wins
+    // over atsScore because it describes the resume actually on screen.
+    const { getByTestId } = renderPanel();
+    expect(getByTestId("score-current").textContent).toContain("72");
   });
 
   const changedOriginal = {
@@ -216,5 +218,177 @@ describe("BulletReviewPanel", () => {
 
     const { queryByText } = renderPanel();
     expect(queryByText(/shorter than a full page/i)).toBeNull();
+  });
+});
+
+describe("BulletReviewPanel fact-lock notice", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+  });
+  afterEach(() => cleanup());
+
+  const content = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+    education: [],
+    skills: [],
+  };
+
+  it("tells the user a bullet was kept unchanged and why", () => {
+    useResumeStore.getState().setResume("resume-1", content as never, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: content,
+      revertedBullets: [{
+        bullet_id: "exp0_b0",
+        reasons: ["invented metric(s) not in the original bullet: 2"],
+        original_text: "Built checkout.",
+        rejected_text: "Built checkout for 2M users.",
+      }],
+    } as never);
+
+    const { getByTestId } = renderPanel();
+    const notice = getByTestId("fact-lock-notice");
+    expect(notice.textContent).toContain("invented metric");
+  });
+
+  it("renders nothing when no rewrite was rejected", () => {
+    useResumeStore.getState().setResume("resume-1", content as never, "ats_clean");
+    useTailoringStore.setState({ pendingContent: content, revertedBullets: [] } as never);
+
+    const { queryByTestId } = renderPanel();
+    expect(queryByTestId("fact-lock-notice")).toBeNull();
+  });
+});
+
+describe("BulletReviewPanel bullet diff and rationale", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+  });
+  afterEach(() => cleanup());
+
+  const original = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built the checkout flow"] }],
+    education: [],
+    skills: [],
+  };
+  const pending = {
+    ...original,
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Engineered the checkout pipeline"] }],
+  };
+
+  function setup(extra: Record<string, unknown> = {}) {
+    useResumeStore.getState().setResume("resume-1", original as never, "ats_clean");
+    useTailoringStore.setState({ pendingContent: pending, ...extra } as never);
+    return renderPanel();
+  }
+
+  /** All text marked as changed on one side, joined — "the words the rewrite
+   * added/removed", which may be several runs within the bullet. */
+  const marked = (q: ReturnType<typeof renderPanel>["getAllByTestId"], id: string) =>
+    q(id).map((el) => el.textContent).join(" ");
+
+  it("highlights the words the rewrite added", () => {
+    const { getAllByTestId } = setup();
+    const added = marked(getAllByTestId, "bullet-diff-added-exp0_b0");
+    expect(added).toContain("Engineered");
+    expect(added).toContain("pipeline");
+  });
+
+  it("highlights the words the rewrite removed", () => {
+    const { getAllByTestId } = setup();
+    const removed = marked(getAllByTestId, "bullet-diff-removed-exp0_b0");
+    expect(removed).toContain("Built");
+    expect(removed).toContain("flow");
+  });
+
+  it("does not mark unchanged words as changed", () => {
+    const { getAllByTestId } = setup();
+    expect(marked(getAllByTestId, "bullet-diff-added-exp0_b0")).not.toContain("checkout");
+    expect(marked(getAllByTestId, "bullet-diff-removed-exp0_b0")).not.toContain("checkout");
+  });
+
+  it("names the JD responsibility the rewrite demonstrates", () => {
+    const { getByTestId } = setup({
+      bulletRationale: {
+        exp0_b0: { responsibility: "own end-to-end delivery of the checkout pipeline", keywords: [] },
+      },
+    });
+    expect(getByTestId("bullet-rationale-exp0_b0").textContent)
+      .toContain("own end-to-end delivery of the checkout pipeline");
+  });
+
+  it("lists the JD keywords woven into the bullet", () => {
+    const { getByTestId } = setup({
+      bulletRationale: { exp0_b0: { responsibility: "", keywords: ["CI/CD", "checkout pipeline"] } },
+    });
+    const el = getByTestId("bullet-rationale-exp0_b0");
+    expect(el.textContent).toContain("CI/CD");
+    expect(el.textContent).toContain("checkout pipeline");
+  });
+
+  it("renders no rationale block when the session carries none", () => {
+    const { queryByTestId } = setup();
+    expect(queryByTestId("bullet-rationale-exp0_b0")).toBeNull();
+  });
+});
+
+describe("BulletReviewPanel score lift", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+  });
+  afterEach(() => cleanup());
+
+  const content = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+    education: [],
+    skills: [],
+  };
+
+  function setup(extra: Record<string, unknown>) {
+    useResumeStore.getState().setResume("resume-1", content as never, "ats_clean");
+    useTailoringStore.setState({ pendingContent: content, ...extra } as never);
+    return renderPanel();
+  }
+
+  it("shows the lift tailoring produced, not just the final score", () => {
+    const { getByTestId } = setup({ atsScore: 81, atsScoreBefore: 62 });
+    const el = getByTestId("score-lift");
+    expect(el.textContent).toContain("62");
+    expect(el.textContent).toContain("81");
+  });
+
+  it("labels the gain so the number reads as a result", () => {
+    const { getByTestId } = setup({ atsScore: 81, atsScoreBefore: 62 });
+    expect(getByTestId("score-lift").textContent).toContain("+19");
+  });
+
+  // score-current is always the figure describing the resume on screen;
+  // score-lift is the before->after pair, which only exists once a
+  // before-score has been recorded.
+  it("shows the score alone when no before-score was recorded", () => {
+    const { queryByTestId, getByTestId } = setup({ atsScore: 81, atsScoreBefore: null });
+    expect(queryByTestId("score-lift")).toBeNull();
+    expect(getByTestId("score-current").textContent).toContain("81");
+  });
+
+  it("renders nothing at all before a score exists", () => {
+    const { queryByTestId } = setup({ atsScore: null, atsScoreBefore: null });
+    expect(queryByTestId("score-current")).toBeNull();
+  });
+
+  it("prefers the projected score as the current figure once fixes are chosen", () => {
+    const { getByTestId } = setup({ atsScore: 81, atsScoreBefore: 62, projectedAtsScore: 88 });
+    expect(getByTestId("score-current").textContent).toContain("88");
   });
 });

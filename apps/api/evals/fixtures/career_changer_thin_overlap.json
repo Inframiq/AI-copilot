@@ -1,0 +1,38 @@
+{
+  "name": "career_changer_thin_overlap",
+  "description": "Marketing to analytics. Genuine overlap is thin, so this is the fixture that catches a scorer inflating matches or a writer inventing experience to close the gap.",
+  "jd_text": "Data Analyst\n\nWhat you'll do:\n- Build dashboards and reports for revenue stakeholders\n- Run SQL analyses to answer business questions\n- Partner with finance on revenue forecasting\n\nRequirements:\n- Strong SQL\n- Experience with a BI tool such as Tableau or Looker\n- Comfort with statistical analysis\n\nNice to have:\n- Python\n- Experience in a subscription business\n",
+  "resume_content": {
+    "contact": {
+      "name": "Jordan Lee",
+      "email": "jordan@example.com"
+    },
+    "headline": "Marketing Coordinator",
+    "experience": [
+      {
+        "company": "Brightline Media",
+        "title": "Marketing Coordinator",
+        "start": "2022",
+        "end": "Present",
+        "bullets": [
+          "Ran monthly reporting on campaign performance across six channels",
+          "Built spreadsheet models that forecast quarterly campaign spend",
+          "Presented results to the leadership team each quarter",
+          "Coordinated with the design team on creative production schedules"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "City College",
+        "degree": "BA Communications",
+        "year": "2022"
+      }
+    ],
+    "skills": [
+      "Excel",
+      "Google Analytics",
+      "Canva"
+    ]
+  }
+}

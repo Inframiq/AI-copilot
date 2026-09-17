@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { apiClient, type AtsFix } from "@/lib/api-client";
+import { apiClient, type AtsFix, type RevertedBullet, type BulletRationale } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent } from "@career-copilot/types";
@@ -81,6 +81,76 @@ export interface BulletChange {
   tailored: string;
 }
 
+// Every bullet the tailoring pass actually rewrote, in the order the review
+// screen lists them. Experience first, then projects — matching the
+// bullet_id prefixes in apps/api/app/services/tailoring.py's _BULLET_SECTIONS.
+// A rewritten bullet missing from this list is one that ships without the
+// user ever seeing it, so both sections must be walked here.
+// "exp0_b2" / "proj1_b0" -> which section, which entry, which bullet. The
+// prefixes mirror _BULLET_SECTIONS in apps/api/app/services/tailoring.py.
+const _BULLET_KEY_RE = /^(exp|proj)(\d+)_b(\d+)$/;
+
+export function parseBulletKey(
+  key: string,
+): { section: "experience" | "projects"; entryIdx: number; bulletIdx: number } | null {
+  const m = _BULLET_KEY_RE.exec(key);
+  if (!m) return null;
+  return {
+    section: m[1] === "exp" ? "experience" : "projects",
+    entryIdx: Number(m[2]),
+    bulletIdx: Number(m[3]),
+  };
+}
+
+export function deriveBulletChanges(
+  pendingContent: ResumeContent | null,
+  originalContent: ResumeContent | null,
+): BulletChange[] {
+  if (!pendingContent || !originalContent) return [];
+  const out: BulletChange[] = [];
+
+  const walk = (
+    entries: Array<{ bullets: string[] }> | undefined,
+    originals: Array<{ bullets: string[] }> | undefined,
+    prefix: string,
+    label: (entryIdx: number) => { jobTitle: string; company: string },
+  ) => {
+    (entries ?? []).forEach((entry, entryIdx) => {
+      const origEntry = originals?.[entryIdx];
+      (entry.bullets ?? []).forEach((bullet, bulletIdx) => {
+        const original = origEntry?.bullets?.[bulletIdx] ?? "";
+        if (bullet.trim() === original.trim()) return;
+        out.push({
+          key: `${prefix}${entryIdx}_b${bulletIdx}`,
+          jobIdx: entryIdx,
+          bulletIdx,
+          original,
+          tailored: bullet,
+          ...label(entryIdx),
+        });
+      });
+    });
+  };
+
+  walk(pendingContent.experience, originalContent.experience, "exp", (i) => {
+    const job = pendingContent.experience?.[i];
+    const orig = originalContent.experience?.[i];
+    return {
+      jobTitle: job?.title || orig?.title || "Unknown Role",
+      company: job?.company || orig?.company || "",
+    };
+  });
+  walk(pendingContent.projects, originalContent.projects, "proj", (i) => {
+    const proj = pendingContent.projects?.[i];
+    const orig = originalContent.projects?.[i];
+    // Projects have no company — the name carries the grouping label, and an
+    // empty company keeps the review screen's "Title · Company" join clean.
+    return { jobTitle: proj?.name || orig?.name || "Project", company: "" };
+  });
+
+  return out;
+}
+
 // Merge accepted bullet decisions into the original content — shared by
 // generatePreview (renders a PDF from this) and reanalyzePreview (scores
 // this against the JD). Never written to the resume store or backend.
@@ -92,17 +162,31 @@ function buildMergedContent(
   atsFixes: AtsFix[] = [],
   fixExperienceIndex: Record<string, number> = {},
 ): ResumeContent {
-  // Merge: use tailored bullet unless user rejected it.
-  const mergedExperience = pendingContent.experience.map((job, jobIdx) => {
-    const origJob = originalContent.experience[jobIdx];
-    const mergedBullets = job.bullets.map((bullet, bulletIdx) => {
-      const key = `exp${jobIdx}_b${bulletIdx}`;
-      const origBullet = origJob?.bullets[bulletIdx] ?? "";
-      const decision = bulletDecisions[key] ?? "accept";
-      return decision === "reject" ? origBullet : bullet;
+  // Merge: use tailored bullet unless user rejected it. The bullet_id prefixes
+  // ("exp"/"proj") mirror _BULLET_SECTIONS in apps/api/app/services/tailoring.py
+  // — the pipeline rewrites project bullets too, and a rewrite the user can't
+  // reject is a rewrite that ships silently.
+  function mergeBullets<T extends { bullets: string[] }>(
+    entries: T[] | undefined,
+    originals: T[] | undefined,
+    prefix: string,
+  ): T[] | undefined {
+    if (!entries) return entries;
+    return entries.map((entry, entryIdx) => {
+      const origEntry = originals?.[entryIdx];
+      const mergedBullets = entry.bullets.map((bullet, bulletIdx) => {
+        const decision = bulletDecisions[`${prefix}${entryIdx}_b${bulletIdx}`] ?? "accept";
+        return decision === "reject" ? (origEntry?.bullets[bulletIdx] ?? "") : bullet;
+      });
+      return { ...entry, bullets: mergedBullets };
     });
-    return { ...job, bullets: mergedBullets };
-  });
+  }
+
+  const mergedExperience =
+    mergeBullets(pendingContent.experience, originalContent.experience, "exp") ?? [];
+  const mergedProjects = mergeBullets(
+    pendingContent.projects, originalContent.projects, "proj",
+  );
 
   // Summary: untouched by the initial tailoring pass (pendingContent.summary
   // starts identical to originalContent.summary) — only ever diverges once
@@ -171,6 +255,10 @@ function buildMergedContent(
     ...pendingContent,
     headline,
     experience: expWithFixes,
+    // Only set when the résumé actually has projects — spreading
+    // pendingContent already carries `projects: undefined` through otherwise,
+    // and writing an explicit undefined key would change the JSON we POST.
+    ...(mergedProjects ? { projects: mergedProjects } : {}),
     skills: skillsWithFixes,
     summary: mergedSummary,
   };
@@ -182,6 +270,9 @@ interface TailoringState {
   companyName: string;
   sessionId: string | null;
   atsScore: number | null;
+  /** The score before tailoring ran. Paired with atsScore this is the
+   * lift — the product's core claim, and previously never returned. */
+  atsScoreBefore: number | null;
   matchedSkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
@@ -196,6 +287,13 @@ interface TailoringState {
   // {original_bullet_id: "high"|"medium"|"low"} — importance mark for each
   // existing résumé bullet, shown in the bullet review list.
   bulletImportance: Record<string, ImportanceLevel>;
+  /** Rewrites the server's fact-lock rejected; those bullets kept their
+   * original text. Shown in review so a bullet left unchanged reads as a
+   * deliberate, explained decision rather than the pipeline doing nothing. */
+  revertedBullets: RevertedBullet[];
+  /** Why each bullet was transformed, keyed by bullet id. Shown per bullet in
+   * review so a rewrite reads as a reasoned change rather than "trust me". */
+  bulletRationale: Record<string, BulletRationale>;
   // Running ATS score for the résumé with the currently-accepted fixes folded
   // in — pure server re-score (POST /ai/project-score), null until computed.
   projectedAtsScore: number | null;
@@ -244,7 +342,11 @@ interface TailoringState {
   refreshProjectedScore: () => void;
   setAllBulletDecisions: (changes: BulletChange[], decision: BulletDecision) => void;
   applyBulletDecisions: (decisions: Record<string, BulletDecision>) => void;
-  updatePendingBullet: (jobIdx: number, bulletIdx: number, text: string) => void;
+  /** Replace one bullet's text, addressed by its review key ("exp0_b2",
+   * "proj1_b0"). Keyed, not by bare index — a project and an experience
+   * entry can share an index, and addressing by index sent a project
+   * bullet's rewrite into the wrong section. */
+  updatePendingBullet: (key: string, text: string) => void;
   updatePendingSummary: (text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
   runTailoring: (resumeId: string) => Promise<void>;
@@ -282,6 +384,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   suggestedSkills: [],
   atsFixes: [],
   bulletImportance: {},
+  revertedBullets: [],
+  bulletRationale: {},
+  atsScoreBefore: null,
   projectedAtsScore: null,
   fixExperienceIndex: {},
   prioritySkills: [],
@@ -348,17 +453,35 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   setBulletDecision: (key, decision) => {
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, [key]: decision }, previewPdfUrl: null }));
     useResumeStore.getState().setPdfSignedUrl(null);
+    // Accepting or rejecting a rewrite changes the résumé being scored, so
+    // the projected number has to move with it — not only with fix toggles.
+    get().refreshProjectedScore();
   },
   refreshProjectedScore: () => {
-    const { sessionId, atsFixes, bulletDecisions } = get();
+    const {
+      sessionId, atsFixes, bulletDecisions, pendingContent,
+      suggestedSkills, fixExperienceIndex,
+    } = get();
     if (!sessionId) return;
     const acceptedIds = atsFixes
       .map((f) => f.id)
       .filter((fid) => bulletDecisions[`fix:${fid}`] === "accept");
+    // Score the résumé as the review screen actually shows it — accepted /
+    // rejected rewrites, chosen skills, role overrides and inline edits all
+    // folded in. Falls back to the server-side (all-accepted + fix ids) path
+    // when there's nothing merged yet to send.
+    const originalContent = useResumeStore.getState().content;
+    const merged =
+      pendingContent && originalContent
+        ? buildMergedContent(
+            pendingContent, originalContent, bulletDecisions,
+            suggestedSkills, atsFixes, fixExperienceIndex,
+          )
+        : undefined;
     if (_projectScoreTimer) clearTimeout(_projectScoreTimer);
     _projectScoreTimer = setTimeout(async () => {
       try {
-        const { projected_score } = await apiClient.projectScore(sessionId, acceptedIds);
+        const { projected_score } = await apiClient.projectScore(sessionId, acceptedIds, merged);
         set({ projectedAtsScore: projected_score });
       } catch {
         /* transient failure — keep the last projected score on screen */
@@ -396,15 +519,23 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     useResumeStore.getState().setPdfSignedUrl(null);
   },
 
-  updatePendingBullet: (jobIdx, bulletIdx, text) => {
+  updatePendingBullet: (key, text) => {
     const { pendingContent } = get();
     if (!pendingContent) return;
-    const newExp = pendingContent.experience.map((job, ji) => {
-      if (ji !== jobIdx) return job;
-      const newBullets = job.bullets.map((b, bi) => (bi === bulletIdx ? text : b));
-      return { ...job, bullets: newBullets };
+    const parsed = parseBulletKey(key);
+    if (!parsed) return;
+    const { section, entryIdx, bulletIdx } = parsed;
+    const entries = pendingContent[section];
+    if (!entries?.[entryIdx]) return;
+    const updated = entries.map((entry, ei) =>
+      ei === entryIdx
+        ? { ...entry, bullets: entry.bullets.map((b, bi) => (bi === bulletIdx ? text : b)) }
+        : entry,
+    );
+    set({
+      pendingContent: { ...pendingContent, [section]: updated },
+      previewPdfUrl: null,
     });
-    set({ pendingContent: { ...pendingContent, experience: newExp }, previewPdfUrl: null });
     useResumeStore.getState().setPdfSignedUrl(null);
   },
 
@@ -506,6 +637,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       suggestedSkills: [],
       atsFixes: [],
       bulletImportance: {},
+  revertedBullets: [],
+  bulletRationale: {},
+  atsScoreBefore: null,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       sessionId: null,
@@ -571,15 +705,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         if (session.tailored_content) {
           const originalContent = useResumeStore.getState().content;
           if (originalContent && Array.isArray(originalContent.experience)) {
-            session.tailored_content.experience?.forEach((job, jobIdx) => {
-              const origJob = originalContent.experience[jobIdx];
-              job.bullets?.forEach((bullet, bulletIdx) => {
-                const origBullet = origJob?.bullets?.[bulletIdx] ?? "";
-                if (bullet !== origBullet) {
-                  initialDecisions[`exp${jobIdx}_b${bulletIdx}`] = "accept";
-                }
-              });
-            });
+            // Every section the pipeline rewrites — see deriveBulletChanges,
+            // which decides what the review screen lists off the same keys.
+            for (const change of deriveBulletChanges(session.tailored_content, originalContent)) {
+              initialDecisions[change.key] = "accept";
+            }
             const originalSkillsSet = new Set(originalContent.skills || []);
             const tailoredSkillsSet = new Set(session.tailored_content.skills || []);
             for (const s of session.tailored_content.skills || []) {
@@ -618,6 +748,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           suggestedSkills: session.suggested_skills ?? [],
           atsFixes,
           bulletImportance: (session.bullet_importance ?? {}) as Record<string, ImportanceLevel>,
+          atsScoreBefore: session.ats_score_before ?? null,
+          revertedBullets: session.reverted_bullets ?? [],
+          bulletRationale: session.bullet_rationale ?? {},
           projectedAtsScore: session.ats_score ?? null,
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
@@ -795,6 +928,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       suggestedSkills: [],
       atsFixes: [],
       bulletImportance: {},
+  revertedBullets: [],
+  bulletRationale: {},
+  atsScoreBefore: null,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       mergedContent: null,
@@ -821,6 +957,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       suggestedSkills: [],
       atsFixes: [],
       bulletImportance: {},
+  revertedBullets: [],
+  bulletRationale: {},
+  atsScoreBefore: null,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       prioritySkills: [],

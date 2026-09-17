@@ -26,6 +26,8 @@ from app.services.ats import (
     bullet_already_present,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
+from app.services.bullet_guard import guard_rewrite
+from app.services.ai_engine.base import AITruncatedError
 
 logger = logging.getLogger("app")
 
@@ -252,6 +254,23 @@ def _sanitize_skill_list(skills: list[str]) -> list[str]:
     return result
 
 
+# Every résumé section whose entries carry rewritable bullets, with the
+# bullet_id prefix each one uses. Projects are here because a fresher's
+# technical evidence lives there — indexing only "experience" meant Agent 2
+# and Agent 3 never saw those bullets and a fresher's tailor run was a no-op.
+_BULLET_SECTIONS: list[tuple[str, str]] = [("experience", "exp"), ("projects", "proj")]
+
+
+def _collect_all_bullets(content: dict) -> list[str]:
+    """Every bullet string across all rewritable sections, in section order."""
+    return [
+        b
+        for section, _prefix in _BULLET_SECTIONS
+        for entry in (content.get(section) or [])
+        for b in (entry.get("bullets") or [])
+    ]
+
+
 def _index_bullets(resume_content: dict) -> tuple[dict, dict[str, str]]:
     """
     Assign a stable ID to every bullet in resume_content.
@@ -262,18 +281,75 @@ def _index_bullets(resume_content: dict) -> tuple[dict, dict[str, str]]:
     """
     content = deepcopy(resume_content)
     bullet_index: dict[str, str] = {}
-    for exp_i, exp in enumerate(content.get("experience", [])):
-        new_bullets = []
-        for b_i, bullet in enumerate(exp.get("bullets", [])):
-            bid = f"exp{exp_i}_b{b_i}"
-            bullet_index[bid] = f"experience[{exp_i}].bullets[{b_i}]"
-            if isinstance(bullet, str):
-                new_bullets.append({"bullet_id": bid, "text": bullet})
-            else:
-                bullet["bullet_id"] = bid
-                new_bullets.append(bullet)
-        exp["bullets"] = new_bullets
+    for section, prefix in _BULLET_SECTIONS:
+        for entry_i, entry in enumerate(content.get(section) or []):
+            new_bullets = []
+            for b_i, bullet in enumerate(entry.get("bullets") or []):
+                bid = f"{prefix}{entry_i}_b{b_i}"
+                bullet_index[bid] = f"{section}[{entry_i}].bullets[{b_i}]"
+                if isinstance(bullet, str):
+                    new_bullets.append({"bullet_id": bid, "text": bullet})
+                else:
+                    bullet["bullet_id"] = bid
+                    new_bullets.append(bullet)
+            entry["bullets"] = new_bullets
     return content, bullet_index
+
+
+def _guard_writer_output(
+    indexed_resume: dict,
+    writer: WriterOutput,
+    mapping_plan: "MappingPlan | None" = None,
+) -> tuple[WriterOutput, list[dict]]:
+    """Enforce fact-lock on Agent 3's rewrites before they reach the résumé.
+
+    Agent 3's rules about metrics, length and banned filler were prompt-only —
+    this is where they become checks. A rewrite that breaks one is reverted to
+    the candidate's own original text (see bullet_guard for why reverting is
+    always the safe remedy) and reported in the returned list so the pipeline
+    can log it and the review screen can say what happened, instead of the
+    user silently getting a bullet they never chose.
+
+    Returns (guarded_writer_output, reverted) where each `reverted` entry is
+    {bullet_id, reasons, original_text, rejected_text}.
+    """
+    originals: dict[str, str] = {}
+    for section, _prefix in _BULLET_SECTIONS:
+        for entry in indexed_resume.get(section) or []:
+            for bullet in entry.get("bullets") or []:
+                if isinstance(bullet, dict) and bullet.get("bullet_id"):
+                    originals[bullet["bullet_id"]] = bullet.get("text", "")
+
+    metrics: dict[str, list[str]] = {}
+    plan_originals: dict[str, str] = {}
+    if mapping_plan:
+        for entry in mapping_plan.mapping_plan:
+            metrics[entry.original_bullet_id] = list(entry.preserved_metrics or [])
+            plan_originals[entry.original_bullet_id] = entry.original_text
+
+    guarded: list[RewrittenBullet] = []
+    reverted: list[dict] = []
+    for rb in writer.rewritten_bullets:
+        # The indexed résumé is built locally from the user's own content, so
+        # it is the authoritative original; the mapping plan is model output
+        # and only fills in when an id somehow isn't in the indexed résumé.
+        original = originals.get(rb.bullet_id, plan_originals.get(rb.bullet_id, ""))
+        if not original:
+            guarded.append(rb)
+            continue
+        text, reasons = guard_rewrite(original, rb.rewritten_text, metrics.get(rb.bullet_id, []))
+        if reasons:
+            reverted.append({
+                "bullet_id": rb.bullet_id,
+                "reasons": reasons,
+                "original_text": original,
+                "rejected_text": rb.rewritten_text,
+            })
+        guarded.append(RewrittenBullet(
+            reasoning=rb.reasoning, bullet_id=rb.bullet_id, rewritten_text=text,
+        ))
+
+    return WriterOutput(rewritten_bullets=guarded, updated_skills=writer.updated_skills), reverted
 
 
 def _apply_writer_output(
@@ -298,22 +374,23 @@ def _apply_writer_output(
             plan_originals[entry.original_bullet_id] = entry.original_text
 
     missing_ids: list[str] = []
-    for exp in content.get("experience", []):
-        patched = []
-        for bullet in exp.get("bullets", []):
-            if isinstance(bullet, dict):
-                bid = bullet.get("bullet_id", "")
-                if bid and bid not in rewrite_map:
-                    missing_ids.append(bid)
-                # Fallback chain: rewrite → mapping plan original → indexed dict text
-                text = rewrite_map.get(
-                    bid,
-                    plan_originals.get(bid, bullet.get("text", ""))
-                )
-                patched.append(text)
-            else:
-                patched.append(bullet)
-        exp["bullets"] = patched
+    for section, _prefix in _BULLET_SECTIONS:
+        for entry in content.get(section) or []:
+            patched = []
+            for bullet in entry.get("bullets") or []:
+                if isinstance(bullet, dict):
+                    bid = bullet.get("bullet_id", "")
+                    if bid and bid not in rewrite_map:
+                        missing_ids.append(bid)
+                    # Fallback chain: rewrite → mapping plan original → indexed dict text
+                    text = rewrite_map.get(
+                        bid,
+                        plan_originals.get(bid, bullet.get("text", ""))
+                    )
+                    patched.append(text)
+                else:
+                    patched.append(bullet)
+            entry["bullets"] = patched
 
     if missing_ids:
         logger.warning(
@@ -867,8 +944,18 @@ rewritten bullets is a real risk to avoid.
 7. LENGTH — CONCISE, NOT COMPREHENSIVE: Target {bullet_words["prefer_min"]}-\
 {bullet_words["prefer_max"]} words per bullet. {bullet_words["max"]} words is \
 the absolute hard maximum — a bullet that runs long must be cut, not wrapped. \
-Say less, more precisely; do not pad a short accomplishment with filler to \
-sound more substantial.
+Say less, more precisely.
+   - NO TRAILING RESTATEMENT: never close a bullet with a clause that \
+restates what the bullet already said. A trailing ", applying X to do Y", \
+", supporting Z", ", enabling W", ", ensuring V" clause that introduces no \
+NEW tool, number, system, team, or outcome is padding — delete it. If you \
+cannot end the bullet with a new fact, end the bullet earlier. This is the \
+single most common way a rewrite gets longer without getting better.
+   - LENGTH FOLLOWS FACTS: a rewrite is longer than the original ONLY when it \
+carries more real information. If the original is short because the \
+underlying work was small, the rewrite stays short. Expanding an 8-word \
+bullet to 18 words without adding a fact makes it weaker, not stronger — \
+the target range above is a ceiling to stay under, never a quota to fill.
 8. BANNED WORDING: Never use these generic filler words/phrases unless the \
 original bullet already uses one verbatim and removing it would lose meaning: \
 {banned}. These read as vague résumé cliché, not evidence.
@@ -917,6 +1004,18 @@ approval flow, cutting average deal cycle time from 11 to 6 days."
 still speaking directly to a "cross-functional stakeholder management" / \
 "process ownership" responsibility — the reader can see the work, not just \
 the vocabulary.
+
+BAD (padded — the closing clause restates the opening and adds no fact):
+"Remediated accessibility issues flagged in client audits, aligning \
+accessible interfaces with web accessibility standards."
+— the trailing clause names no new audit, tool, standard, or outcome. It is \
+the opening claim said a second time in different words, and it makes the \
+bullet longer without making it stronger.
+
+GOOD (same fact, stops when it runs out of things to say):
+"Remediated WCAG accessibility issues flagged across client audits."
+— shorter than the original rewrite and strictly more informative: the \
+standard is named, and nothing is restated.
 </examples>
 
 <output_schema>
@@ -940,6 +1039,23 @@ async def _agent3_write(
     provider: AIProvider,
     seniority_indicators: list[str] | None = None,
 ) -> WriterOutput:
+    """Rewrite every bullet in the plan, splitting the request if it overruns.
+
+    Agent 3 emits one JSON entry per résumé bullet, so its output scales with
+    résumé size. A long résumé can exhaust _MAX_TOKENS_BULLET_WRITE mid-JSON —
+    the failure mode rule 10 of its own prompt calls the most common one. That
+    used to surface as an opaque AttributeError that failed the whole run and
+    refunded the credit.
+
+    Retrying the same request is pointless: the same plan produces the same
+    overrun. Halving it is what actually fits, so a truncation splits the plan
+    and rewrites each half, recursively. A single entry that still truncates is
+    genuinely unfixable here and re-raises.
+    """
+    entries = mapping_plan.mapping_plan
+    if not entries:
+        return WriterOutput(rewritten_bullets=[], updated_skills=list(original_skills))
+
     payload = {
         "mapping_plan": mapping_plan.model_dump()["mapping_plan"],
         "plausible_skills_to_add": _sanitize_skill_list(
@@ -947,20 +1063,45 @@ async def _agent3_write(
         ),
         "original_skills": original_skills,
     }
-    # "premium", not "pro" — Agent 3 does fact-locked rewriting of every
-    # résumé bullet in one call; on the budget model it's the call most
-    # prone to dropping bullets, fabricating metrics, or truncating the
-    # JSON. It shares the premium model with Agent 2 (see _agent2_semantic_map
-    # and OpenAIProvider._model_for). Every other pipeline call stays on the
-    # budget model.
-    return await provider.complete_structured(
-        _build_agent3_system(humanize_level, seniority_indicators),
-        json.dumps(payload),
-        WriterOutput,
-        model_tier="premium",
-        max_output_tokens=_MAX_TOKENS_BULLET_WRITE,
-        call_name="agent3_write",
-    )
+    try:
+        # "premium", not "pro" — Agent 3 does fact-locked rewriting of every
+        # résumé bullet; on the budget model it's the call most prone to
+        # dropping bullets, fabricating metrics, or truncating the JSON. It
+        # shares the premium model with Agent 2 (see _agent2_semantic_map and
+        # OpenAIProvider._model_for). Every other pipeline call stays on the
+        # budget model.
+        return await provider.complete_structured(
+            _build_agent3_system(humanize_level, seniority_indicators),
+            json.dumps(payload),
+            WriterOutput,
+            model_tier="premium",
+            max_output_tokens=_MAX_TOKENS_BULLET_WRITE,
+            call_name="agent3_write",
+        )
+    except AITruncatedError:
+        if len(entries) == 1:
+            raise
+        mid = len(entries) // 2
+        logger.warning(
+            "agent3_write truncated on %d bullets — splitting into %d + %d",
+            len(entries), mid, len(entries) - mid,
+        )
+        halves = [
+            MappingPlan(
+                mapping_plan=chunk,
+                plausible_skills_to_add=mapping_plan.plausible_skills_to_add,
+            )
+            for chunk in (entries[:mid], entries[mid:])
+        ]
+        rewritten: list[RewrittenBullet] = []
+        for half in halves:
+            part = await _agent3_write(
+                half, original_skills, humanize_level, provider, seniority_indicators,
+            )
+            rewritten.extend(part.rewritten_bullets)
+        # Skills are never Agent 3's to change (its rule 11) and a split must
+        # not let one half's answer drop them — carry the originals through.
+        return WriterOutput(rewritten_bullets=rewritten, updated_skills=list(original_skills))
 
 
 # ── Cover letter writer ────────────────────────────────────────────────────
@@ -1257,6 +1398,21 @@ class TailoringResult:
     suggested_skills: list[str]  # skills Agent 2 suggests adding — user opts in via UI
     ats_fixes: list[AtsFix] = field(default_factory=list)
     bullet_importance: dict[str, str] = field(default_factory=dict)
+    # Rewrites rejected by the deterministic fact-lock (see
+    # _guard_writer_output): the bullet kept its original text. Each entry is
+    # {bullet_id, reasons, original_text, rejected_text}. Surfaced so the user
+    # is told a bullet was left alone and why, rather than just not seeing it
+    # in the review list.
+    reverted_bullets: list[dict] = field(default_factory=list)
+    # {bullet_id: {"responsibility": str, "keywords": [str]}} — Agent 2's own
+    # account of why each bullet was transformed. Generated and billed on
+    # every run; kept so the review screen can show WHY a bullet changed,
+    # not just that it did. Bullets with neither signal (a SKIP) are absent.
+    bullet_rationale: dict[str, dict] = field(default_factory=dict)
+    # The score the résumé had BEFORE this run. ats_score above is the after.
+    # The pipeline always computed both (it logs "ats %d -> %d"); returning
+    # the pair makes the lift measurable instead of only greppable.
+    ats_score_before: int = 0
 
 
 _IMPORTANCE_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -1365,6 +1521,7 @@ async def run_tailoring_pipeline(
     company_name: str | None = None,
     priority_skills: list[str] | None = None,
     cached_jd_analysis: "JDAnalysis | None" = None,
+    cached_semantic_verdicts: "dict[str, str] | None" = None,
 ) -> TailoringResult:
     """
     Full pipeline — the "Tailor Resume" step. Re-runs analyze_jd_match (cheap,
@@ -1388,10 +1545,19 @@ async def run_tailoring_pipeline(
 
     cached_jd_analysis — pass a pre-computed JDAnalysis (no company-name
     variant) to skip Agent 1 and get a consistent skill list / ATS score.
+
+    cached_semantic_verdicts — verdicts for the ORIGINAL resume from a previous
+    analyze of the same resume text (routers/ai.py caches these per resume
+    fingerprint). Applied only to the pre-tailoring analysis; the post-tailoring
+    one always re-verifies, since the whole point is that the resume changed.
+    Pinning Agent 1 alone still left ats_score_before swinging up to 10 points
+    between identical runs, because this second model call re-ran each time —
+    which made controlled prompt A/Bs impossible. See evals/README.md.
     """
     analysis = await analyze_jd_match(
         resume_content, jd_text, provider, company_name,
         cached_jd_analysis=cached_jd_analysis,
+        cached_semantic_verdicts=cached_semantic_verdicts,
     )
 
     # ── assign bullet IDs, build indexed resume for Agent 2 ──────────────────
@@ -1416,8 +1582,19 @@ async def run_tailoring_pipeline(
     # ~15-20% of a run's tokens. This pipeline no longer needs `db`.
     questions: list[PrepQuestionData] = []
 
-    # ── patch rewritten bullets back into the original structure ─────────────
-    tailored_content = _apply_writer_output(indexed_resume, tailored_raw, mapping_plan)
+    # ── fact-lock Agent 3's output, then patch it back in ───────────────────
+    # Rules 2, 7 and 8 of the Agent 3 prompt are promises; this is the check.
+    # A rewrite that fabricates a metric, drops one Agent 2 flagged to keep,
+    # runs past the word cap, or reaches for banned filler is reverted to the
+    # candidate's own text before it ever reaches the résumé.
+    guarded, reverted_bullets = _guard_writer_output(indexed_resume, tailored_raw, mapping_plan)
+    if reverted_bullets:
+        logger.warning(
+            "fact-lock reverted %d/%d rewritten bullet(s): %s",
+            len(reverted_bullets), len(tailored_raw.rewritten_bullets),
+            [(r["bullet_id"], r["reasons"]) for r in reverted_bullets],
+        )
+    tailored_content = _apply_writer_output(indexed_resume, guarded, mapping_plan)
 
     # ── re-score against the *tailored* resume ──────────────────────────────
     # The first analyze_jd_match ran on the resume the user started with — its
@@ -1434,7 +1611,7 @@ async def run_tailoring_pipeline(
     # ── diagnostics: what did tailoring actually move? ──────────────────────
     before_missing = {m.strip().lower() for m in analysis.missing_skills}
     after_missing = {m.strip().lower() for m in post.missing_skills}
-    n_bullets = sum(len(e.get("bullets") or []) for e in (resume_content.get("experience") or []))
+    n_bullets = len(_collect_all_bullets(resume_content))
     logger.info(
         "tailoring delta: ats %d -> %d | title %r -> %r | "
         "missing %d -> %d (closed: %s) | bullets rewritten %d/%d | skills unchanged (%d)",
@@ -1493,10 +1670,7 @@ async def run_tailoring_pipeline(
     # accepting one can't duplicate what's already there. Pin it to the
     # most-recent role (index 0); the review UI lets the user move it. Skip
     # any that still restate an existing bullet as a belt-and-braces guard.
-    all_bullets = [
-        b for exp in (tailored_content.get("experience") or [])
-        for b in (exp.get("bullets") or [])
-    ]
+    all_bullets = _collect_all_bullets(tailored_content)
     n_roles = len(tailored_content.get("experience") or [])
     for b in gap_out.bullets:
         if bullet_already_present(all_bullets, b.bullet_text):
@@ -1523,10 +1697,17 @@ async def run_tailoring_pipeline(
     fixes.sort(key=lambda f: (_IMPORTANCE_RANK[f.importance], -f.score_delta))
 
     bullet_importance: dict[str, str] = {}
+    bullet_rationale: dict[str, dict] = {}
     for m in mapping_plan.mapping_plan:
-        terms = [t for t in ([m.jd_responsibility_addressed] + list(m.target_jd_keywords_to_inject or [])) if t]
+        responsibility = (m.jd_responsibility_addressed or "").strip()
+        keywords = [k.strip() for k in (m.target_jd_keywords_to_inject or []) if k and k.strip()]
+        terms = [t for t in ([responsibility] + keywords) if t]
         if terms:
             bullet_importance[m.original_bullet_id] = _max_importance([_imp(t) for t in terms])
+            bullet_rationale[m.original_bullet_id] = {
+                "responsibility": responsibility,
+                "keywords": keywords,
+            }
 
     # ── merge in the user's priority skills — a code-level guarantee, not
     #    just a prompt instruction, that they show up for review ─────────────
@@ -1548,6 +1729,9 @@ async def run_tailoring_pipeline(
         suggested_skills=suggested,
         ats_fixes=fixes,
         bullet_importance=bullet_importance,
+        reverted_bullets=reverted_bullets,
+        bullet_rationale=bullet_rationale,
+        ats_score_before=analysis.ats_score,
     )
 
 

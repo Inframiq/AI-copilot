@@ -327,3 +327,276 @@ def test_estimate_fix_delta_never_negative():
     base = score_content(content, jd, {}).ats_score  # 100
     fix = AtsFix(id="s:x", type="skill", gap="X", importance="low", grounded=True, text="X")
     assert estimate_fix_delta(content, jd, {}, base, fix) == 0
+
+
+# ── Projects / achievements / leadership are part of the résumé's evidence ───
+# Regression: build_resume_text used to walk only headline, summary,
+# experience, education, skills, certifications and awards — so a fresher
+# whose entire technical evidence lives in Projects scored against an
+# effectively empty résumé.
+
+from app.services.ats import build_resume_text
+
+
+def test_build_resume_text_includes_project_bullets():
+    content = {"projects": [{"name": "ML Pipeline", "tech_stack": "Python, Kubernetes",
+                             "bullets": ["Built end-to-end ML pipelines."]}]}
+    full_text, _ = build_resume_text(content)
+    assert "Built end-to-end ML pipelines." in full_text
+
+
+def test_build_resume_text_includes_project_name_and_tech_stack():
+    content = {"projects": [{"name": "ML Pipeline", "tech_stack": "Python, Kubernetes", "bullets": []}]}
+    full_text, _ = build_resume_text(content)
+    assert "ML Pipeline" in full_text
+    assert "Kubernetes" in full_text
+
+
+def test_build_resume_text_includes_achievements_leadership_and_volunteer():
+    content = {"achievements": ["Won the 2025 internal hackathon"],
+               "leadership": ["Led the campus coding club"],
+               "volunteer": ["Taught Python at a local school"]}
+    full_text, _ = build_resume_text(content)
+    assert "hackathon" in full_text
+    assert "campus coding club" in full_text
+    assert "Taught Python" in full_text
+
+
+def test_build_resume_text_includes_language_names():
+    content = {"languages": [{"name": "German", "level": "Fluent"}]}
+    full_text, _ = build_resume_text(content)
+    assert "German" in full_text
+
+
+def test_score_content_credits_a_skill_evidenced_only_in_projects():
+    jd = _jd(exact_technical_tools=["Kubernetes"])
+    content = {"experience": [], "skills": [],
+               "projects": [{"name": "Deploy tool",
+                             "bullets": ["Shipped a service on Kubernetes."]}]}
+    out = score_content(content, jd, {})
+    assert out.matched == ["Kubernetes"]
+    assert out.ats_score == 100
+
+
+# ── Multi-word phrase matching is precision-first ────────────────────────────
+# Regression: pass 3 matched a phrase when ⌈2/3⌉ of its >2-char tokens
+# appeared ANYWHERE in the résumé, counting filler words ("through") and
+# repeats ("growth"..."growth") as evidence. A marketing coordinator scored
+# "distributed systems design" as matched. A lexical MISS is recovered by the
+# semantic verifier downstream; a lexical FALSE POSITIVE is reviewed by
+# nothing — so this pass must not guess.
+
+from app.services.ats import _skill_matches
+
+
+def _text(*segments: str) -> tuple[str, str]:
+    return " | ".join(segments), ""
+
+
+def test_phrase_not_matched_when_a_distinctive_token_is_absent():
+    full, skills = _text("Designed systems for distributed content teams.")
+    assert _skill_matches("distributed systems design", full, skills) is False
+
+
+def test_filler_words_do_not_count_as_evidence():
+    full, skills = _text("Ran growth campaigns driving revenue through referral programs.")
+    assert _skill_matches("revenue growth through product-led growth", full, skills) is False
+
+
+def test_a_repeated_token_counts_once_not_twice():
+    full, skills = _text("Drove growth in growth markets.")
+    assert _skill_matches("growth marketing growth strategy", full, skills) is False
+
+
+def test_phrase_matched_when_every_token_appears_in_one_segment():
+    full, skills = _text("Built end-to-end machine learning pipelines in Python.")
+    assert _skill_matches("end-to-end machine learning pipelines", full, skills) is True
+
+
+def test_tokens_scattered_across_separate_sections_do_not_match():
+    full, skills = _text("Built machine tooling.", "Studied learning theory.", "Ran data pipelines.")
+    assert _skill_matches("machine learning pipelines", full, skills) is False
+
+
+def test_token_order_within_a_segment_does_not_matter():
+    full, skills = _text("Pipelines for learning models, machine-driven.")
+    assert _skill_matches("machine learning pipelines", full, skills) is True
+
+
+def test_phrase_of_only_filler_words_never_matches():
+    full, skills = _text("Worked with the team and the other teams.")
+    assert _skill_matches("with the other", full, skills) is False
+
+
+def test_exact_phrase_in_skills_list_still_wins():
+    assert _skill_matches("Machine Learning", "", "Machine Learning | Python") is True
+
+
+def test_exact_phrase_in_body_text_still_wins():
+    full, skills = _text("Applied distributed systems design to the billing platform.")
+    assert _skill_matches("distributed systems design", full, skills) is True
+
+
+# ── Importance actually moves the score ──────────────────────────────────────
+# Regression: Agent 1 rates every JD term high/medium/low, _backfill_importance
+# guarantees full coverage, and the UI badges it — but blend_scores weighted
+# every required phrase at 1.0, so missing a stated hard requirement cost
+# exactly what missing a peripheral phrase cost.
+#
+# Multipliers are centred on medium = 1.0, so a JD with no importance data
+# (an old cached parse) scores exactly as it did before this existed.
+
+
+def test_missing_a_high_importance_skill_costs_more_than_a_low_one():
+    verdicts = {"Kubernetes": "missing", "Figma": "matched"}
+    lost_high = blend_scores(verdicts, importance={"kubernetes": "high", "figma": "low"})
+    # Same two phrases, importance swapped: now the matched one is the
+    # important one and the missing one is peripheral.
+    lost_low = blend_scores(verdicts, importance={"kubernetes": "low", "figma": "high"})
+    assert lost_high.ats_score < lost_low.ats_score
+
+
+def test_high_importance_weight_is_three_times_low():
+    high_missing = blend_scores({"A": "missing", "B": "matched"},
+                                importance={"a": "high", "b": "low"})
+    low_missing = blend_scores({"A": "matched", "B": "missing"},
+                               importance={"a": "high", "b": "low"})
+    # high=1.5, low=0.5 → missing the high one keeps 0.5/2.0; missing the low
+    # one keeps 1.5/2.0.
+    assert high_missing.ats_score == 25
+    assert low_missing.ats_score == 75
+
+
+def test_omitting_importance_scores_exactly_as_medium():
+    verdicts = {"A": "matched", "B": "missing", "C": "partial"}
+    assert blend_scores(verdicts).ats_score == blend_scores(
+        verdicts, importance={"a": "medium", "b": "medium", "c": "medium"}
+    ).ats_score
+
+
+def test_unrated_term_falls_back_to_medium_not_zero():
+    both_rated = blend_scores({"A": "matched", "B": "missing"},
+                              importance={"a": "medium", "b": "medium"})
+    one_unrated = blend_scores({"A": "matched", "B": "missing"}, importance={"a": "medium"})
+    assert one_unrated.ats_score == both_rated.ats_score
+
+
+def test_unknown_importance_level_falls_back_to_medium():
+    assert blend_scores({"A": "matched", "B": "missing"},
+                        importance={"a": "critical", "b": "whatever"}).ats_score == 50
+
+
+def test_title_weight_scales_with_the_job_title_importance_rating():
+    strong = blend_scores({"A": "matched"}, title_verdict="missing",
+                          importance={"job title": "high"})
+    weak = blend_scores({"A": "matched"}, title_verdict="missing",
+                        importance={"job title": "low"})
+    # A title miss should hurt more when the posting hinges on the title.
+    assert strong.ats_score < weak.ats_score
+
+
+def test_score_content_reads_importance_off_the_jd_analysis():
+    jd = _jd(exact_technical_tools=["Kubernetes", "Figma"],
+             importance={"kubernetes": "high", "figma": "low"})
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Figma"]}], "skills": ["Figma"]}
+    out = score_content(content, jd, {})
+    # Matched the low-importance one only → 0.5 of 2.0 weight.
+    assert out.ats_score == 25
+
+
+def test_score_content_without_importance_attribute_still_works():
+    jd = _jd(exact_technical_tools=["Python"])
+    content = {"experience": [], "skills": ["Python"]}
+    assert score_content(content, jd, {}).ats_score == 100
+
+
+def test_a_parenthesised_acronym_is_not_a_required_token():
+    """"Search Engine Optimization (SEO)" must match a résumé that spells the
+    term out. The acronym in parentheses is a gloss on the phrase, not a
+    fourth word the résumé has to repeat."""
+    full, skills = _text("Owned Search Engine Optimization for the marketing site.")
+    assert _skill_matches("Search Engine Optimization (SEO)", full, skills) is True
+
+
+def test_a_phrase_is_still_rejected_when_a_real_token_is_missing_despite_an_acronym():
+    full, skills = _text("Owned Search Engine work for the marketing site.")
+    assert _skill_matches("Search Engine Optimization (SEO)", full, skills) is False
+
+
+# ── A fix is credited for the gap it exists to close ─────────────────────────
+# estimate_fix_delta re-scored the patched résumé against the semantic verdicts
+# computed BEFORE the fix, so only a fix whose text lexically echoed the JD
+# phrase could move the number. A gap-filler bullet written in natural language
+# scored +0 and the UI hides a zero delta entirely — so the only fixes that
+# looked worth accepting were the ones that parroted the JD, which is precisely
+# what Agent 2 rule 4 and Agent 3 rule 3 forbid. The score was teaching the
+# opposite of the prompts.
+#
+# A gap-filler bullet is generated FOR one named gap, and accepting it is the
+# user asserting it's true of them. So for estimation, that gap is covered.
+
+from app.services.ats import verdicts_with_fixes
+
+
+def _bullet_fix(gap: str, text: str) -> AtsFix:
+    return AtsFix(id=fix_slug("bullet", gap), type="bullet", gap=gap, importance="high",
+                  grounded=False, text=text, experience_index=0)
+
+
+def test_a_fix_marks_its_own_gap_as_covered():
+    assert verdicts_with_fixes({}, [_bullet_fix("CI/CD", "Automated releases")])["ci/cd"] == "matched"
+
+
+def test_an_unrelated_gap_is_left_alone():
+    out = verdicts_with_fixes({"kubernetes": "missing"}, [_bullet_fix("CI/CD", "x")])
+    assert out["kubernetes"] == "missing"
+
+
+def test_the_original_verdicts_are_not_mutated():
+    original = {"ci/cd": "missing"}
+    verdicts_with_fixes(original, [_bullet_fix("CI/CD", "x")])
+    assert original == {"ci/cd": "missing"}
+
+
+def test_no_fixes_leaves_the_verdicts_unchanged():
+    assert verdicts_with_fixes({"a": "partial"}, []) == {"a": "partial"}
+
+
+def test_a_naturally_worded_gap_bullet_now_scores_above_zero():
+    """The regression this whole block exists for."""
+    jd = _jd(exact_technical_tools=["Python"], ats_filter_phrases=["infrastructure as code"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    base = score_content(content, jd, {}).ats_score
+    fix = _bullet_fix("infrastructure as code",
+                      "Automated cloud provisioning using declarative configuration templates.")
+    assert estimate_fix_delta(content, jd, {}, base, fix) > 0
+
+
+def test_a_keyword_echoing_bullet_is_not_worth_more_than_a_natural_one():
+    """Both close the same gap, so both must be worth the same — otherwise the
+    number still nudges the user toward parroting the JD."""
+    jd = _jd(exact_technical_tools=["Python"], ats_filter_phrases=["infrastructure as code"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    base = score_content(content, jd, {}).ats_score
+    natural = _bullet_fix("infrastructure as code",
+                          "Automated cloud provisioning using declarative configuration templates.")
+    echoing = _bullet_fix("infrastructure as code",
+                          "Managed infrastructure as code across staging and production.")
+    assert estimate_fix_delta(content, jd, {}, base, natural) == \
+           estimate_fix_delta(content, jd, {}, base, echoing)
+
+
+def test_a_skill_fix_still_scores_the_same_as_before():
+    jd = _jd(exact_technical_tools=["Python", "Kubernetes"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    base = score_content(content, jd, {}).ats_score
+    fix = AtsFix(id="skill:k8s", type="skill", gap="Kubernetes", importance="high",
+                 grounded=True, text="Kubernetes")
+    assert estimate_fix_delta(content, jd, {}, base, fix) == 50
+
+
+def test_a_fix_for_a_gap_the_resume_already_covers_adds_nothing():
+    jd = _jd(exact_technical_tools=["Python"])
+    content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+    base = score_content(content, jd, {}).ats_score
+    assert estimate_fix_delta(content, jd, {}, base, _bullet_fix("Python", "More Python work")) == 0

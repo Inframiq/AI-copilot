@@ -1,0 +1,45 @@
+{
+  "name": "fresher_projects_only",
+  "description": "The case that was entirely broken before projects were scored or rewritten: a new grad whose only technical evidence lives in Projects.",
+  "jd_text": "Junior Data Engineer\n\nResponsibilities:\n- Build and maintain ETL pipelines\n- Work with the analytics team to model data for reporting\n- Automate data quality checks\n\nRequirements:\n- Familiarity with Python and SQL\n- Exposure to cloud data warehouses\n- Understanding of data pipeline concepts\n\nNice to have:\n- Apache Airflow\n- dbt\n",
+  "resume_content": {
+    "contact": {
+      "name": "Priya Nair",
+      "email": "priya@example.com"
+    },
+    "objective": "Recent computer science graduate seeking a data engineering role.",
+    "experience": [],
+    "projects": [
+      {
+        "name": "Campus Course Analytics",
+        "tech_stack": "Python, SQL, Airflow",
+        "bullets": [
+          "Built a pipeline pulling course enrolment data from three campus systems into a single warehouse",
+          "Scheduled nightly refreshes with Airflow and added checks that flagged malformed records",
+          "Created a dashboard that 200 students used to compare course workloads"
+        ]
+      },
+      {
+        "name": "Transit Delay Tracker",
+        "tech_stack": "Python, PostgreSQL",
+        "bullets": [
+          "Collected live bus arrival data over 6 months and stored it in PostgreSQL",
+          "Wrote SQL models that surfaced the 10 most delay-prone routes in the city"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "State University",
+        "degree": "BS Computer Science",
+        "year": "2026",
+        "gpa": "3.8"
+      }
+    ],
+    "skills": [
+      "Python",
+      "SQL",
+      "Git"
+    ]
+  }
+}

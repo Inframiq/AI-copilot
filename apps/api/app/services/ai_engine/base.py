@@ -2,6 +2,32 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel
 
 
+class AIResponseError(RuntimeError):
+    """The model returned nothing a caller can use.
+
+    Providers raise one of the subclasses below instead of handing back None.
+    Returning None meant every caller died on an opaque AttributeError
+    ('NoneType' object has no attribute 'mapping_plan'), a whole tailoring run
+    failed, the user's credit was refunded, and nothing in the logs said why.
+    Catch this base class to mean "no usable output, whatever the reason".
+    """
+
+
+class AITruncatedError(AIResponseError):
+    """The model hit its output-token ceiling mid-response, so the structured
+    output never closed. Retrying identically will truncate identically — the
+    fix is a smaller request (see tailoring._agent3_write, which splits its
+    mapping plan) or a larger ceiling."""
+
+
+class AIRefusalError(AIResponseError):
+    """The model declined to answer."""
+
+
+class AIEmptyResponseError(AIResponseError):
+    """Empty output with no stated reason."""
+
+
 class AIProvider(ABC):
     @abstractmethod
     async def complete(

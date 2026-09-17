@@ -15,13 +15,178 @@ import {
   MagnifyingGlass,
   Target,
 } from "@phosphor-icons/react";
-import { useTailoringStore, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
+import { useTailoringStore, deriveBulletChanges, type BulletChange, MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile } from "@/lib/career-profile-client";
-import { apiClient, type AtsFix } from "@/lib/api-client";
+import { apiClient, type AtsFix, type RevertedBullet, type BulletRationale } from "@/lib/api-client";
 import { AtsGapFixPanel } from "./AtsGapFixPanel";
 import { ImportanceBadge, type ImportanceLevel } from "./ImportanceBadge";
 import { UnderfillWarning } from "./UnderfillWarning";
+import { ScoreRing } from "@/components/ui/ScoreRing";
+import { diffWords } from "@/lib/word-diff";
+
+
+// A rewrite the server's deterministic fact-lock rejected leaves the bullet at
+// its original text. Without this the bullet simply doesn't appear in the
+// review list, which is indistinguishable from the pipeline having chosen not
+// to touch it. See apps/api/app/services/bullet_guard.py.
+function FactLockNotice({ reverted }: { reverted: RevertedBullet[] }) {
+  if (reverted.length === 0) return null;
+  const many = reverted.length !== 1;
+  return (
+    <div
+      data-testid="fact-lock-notice"
+      className="rounded-xl border border-tertiary/40 bg-tertiary/5 p-md flex flex-col gap-xs"
+    >
+      <p className="text-label-sm font-bold text-on-surface">
+        {reverted.length} bullet{many ? "s" : ""} kept as you wrote {many ? "them" : "it"}
+      </p>
+      <p className="text-caption text-on-surface-variant">
+        The AI&rsquo;s rewrite broke a fact-checking rule, so your original was kept.
+      </p>
+      <ul className="flex flex-col gap-xs mt-xs">
+        {reverted.map((r) => (
+          <li key={r.bullet_id} className="text-caption text-on-surface-variant">
+            <span className="text-on-surface">&ldquo;{r.original_text}&rdquo;</span>
+            <br />
+            {r.reasons.join("; ")}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+
+// One side of a word-level diff. The review screen exists to answer "how well
+// was my bullet rephrased?" — a whole-line strikethrough above the rewrite
+// makes the reader diff two sentences by eye on every bullet; highlighting
+// only the words that moved answers it at a glance.
+function BulletDiff({
+  original, tailored, side, testId,
+}: {
+  original: string;
+  tailored: string;
+  side: "added" | "removed";
+  testId: string;
+}) {
+  const ops = useMemo(() => diffWords(original, tailored), [original, tailored]);
+  const drop = side === "added" ? "delete" : "insert";
+  const mark = side === "added" ? "insert" : "delete";
+  return (
+    <>
+      {ops
+        .filter((op) => op.type !== drop)
+        .map((op, i) =>
+          op.type === mark ? (
+            <mark
+              key={i}
+              data-testid={testId}
+              className={
+                side === "added"
+                  ? "bg-primary/15 text-on-surface rounded-sm px-0.5"
+                  : "bg-error/10 text-on-surface-variant line-through rounded-sm px-0.5"
+              }
+            >
+              {op.text}
+            </mark>
+          ) : (
+            <span key={i}>{side === "added" ? op.tailoredText ?? op.text : op.text}</span>
+          ),
+        )}
+    </>
+  );
+}
+
+// Agent 2 produces a responsibility and a keyword list for every bullet it
+// transforms. Both are billed on every run and were previously discarded.
+function BulletRationaleLine({
+  rationale, testId,
+}: {
+  rationale?: BulletRationale;
+  testId: string;
+}) {
+  if (!rationale) return null;
+  const { responsibility, keywords } = rationale;
+  if (!responsibility && keywords.length === 0) return null;
+  return (
+    <div data-testid={testId} className="flex flex-col gap-xs pt-xs border-t border-outline-variant/20">
+      {responsibility && (
+        <p className="text-caption text-on-surface-variant">
+          <span className="font-semibold text-on-surface">Now shows: </span>
+          {responsibility}
+        </p>
+      )}
+      {keywords.length > 0 && (
+        <p className="text-caption text-on-surface-variant flex flex-wrap items-center gap-xs">
+          <span className="font-semibold text-on-surface">Keywords woven in:</span>
+          {keywords.map((k) => (
+            <span
+              key={k}
+              className="px-xs py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20"
+            >
+              {k}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+
+// The lift tailoring produced — the product's core claim, previously invisible.
+// The score rendered as caption text inside a subheading ("· ATS Score: 74%"),
+// with no before-score to compare against, while ScoreRing sat in the codebase
+// imported by nothing.
+//
+// `current` prefers the projected score once fixes are chosen, so the figure
+// always describes the résumé actually on screen.
+function ScoreLift({
+  before, after, projected,
+}: {
+  before: number | null;
+  after: number | null;
+  projected: number | null;
+}) {
+  const current = projected ?? after;
+  if (current === null) return null;
+  const gain = before === null ? null : current - before;
+  return (
+    <div className="flex items-center gap-md rounded-xl border border-outline-variant/30 bg-surface p-md">
+      {before !== null ? (
+        <div data-testid="score-lift" className="flex items-center gap-sm">
+          <div className="flex flex-col items-center gap-0.5">
+            <ScoreRing score={before} size={56} />
+            <span className="text-caption text-on-surface-variant uppercase tracking-wider">Before</span>
+          </div>
+          <span className="text-on-surface-variant" aria-hidden>&rarr;</span>
+          <div data-testid="score-current" className="flex flex-col items-center gap-0.5">
+            <ScoreRing score={current} size={72} />
+            <span className="text-caption text-primary font-bold uppercase tracking-wider">Now</span>
+          </div>
+          <span
+            className={`text-label-md font-bold ${gain !== null && gain > 0 ? "text-success" : "text-on-surface-variant"}`}
+          >
+            {gain !== null && gain > 0 ? `+${gain}` : gain}
+          </span>
+        </div>
+      ) : (
+        <div data-testid="score-current" className="flex flex-col items-center gap-0.5">
+          <ScoreRing score={current} size={72} />
+          <span className="text-caption text-on-surface-variant uppercase tracking-wider">
+            JD match
+          </span>
+        </div>
+      )}
+      <p className="text-caption text-on-surface-variant flex-1">
+        {before === null
+          ? "How much of this job description your résumé currently covers."
+          : "How much of this job description your résumé covers, before and after tailoring."}
+      </p>
+    </div>
+  );
+}
 
 export function BulletReviewPanel() {
   const router = useRouter();
@@ -47,6 +212,9 @@ export function BulletReviewPanel() {
   const missingSkills = useTailoringStore((s) => s.missingSkills);
   const bulletImportance = useTailoringStore((s) => s.bulletImportance);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
+  const revertedBullets = useTailoringStore((s) => s.revertedBullets);
+  const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
+  const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
   const setFixDecision = useTailoringStore((s) => s.setFixDecision);
   const refreshProjectedScore = useTailoringStore((s) => s.refreshProjectedScore);
@@ -97,29 +265,14 @@ export function BulletReviewPanel() {
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  // ── Bullet changes (experience only) ─────────────────────────────────────
-  const bulletChanges = useMemo<BulletChange[]>(() => {
-    if (!pendingContent || !originalContent) return [];
-    const out: BulletChange[] = [];
-    pendingContent.experience.forEach((job, jobIdx) => {
-      const origJob = originalContent.experience[jobIdx];
-      job.bullets.forEach((bullet, bulletIdx) => {
-        const origBullet = origJob?.bullets[bulletIdx] ?? "";
-        if (bullet.trim() !== origBullet.trim()) {
-          out.push({
-            key: `exp${jobIdx}_b${bulletIdx}`,
-            jobIdx,
-            bulletIdx,
-            jobTitle: job.title || origJob?.title || "Unknown Role",
-            company: job.company || origJob?.company || "",
-            original: origBullet,
-            tailored: bullet,
-          });
-        }
-      });
-    });
-    return out;
-  }, [pendingContent, originalContent]);
+  // ── Bullet changes (experience + projects) ───────────────────────────────
+  // Derived by the store's deriveBulletChanges so the key scheme stays in one
+  // place and is unit-tested — the panel used to walk experience inline and
+  // silently omitted every rewritten project bullet from review.
+  const bulletChanges = useMemo<BulletChange[]>(
+    () => deriveBulletChanges(pendingContent, originalContent),
+    [pendingContent, originalContent],
+  );
 
   // JD-gap skills come through as `type:"skill"` fixes. They render inside the
   // single SkillsBlock (as chips carrying their own importance + "+N%"), so
@@ -164,7 +317,7 @@ export function BulletReviewPanel() {
         jd_context: mode === "rewrite" ? jdText : undefined,
         humanize_level: humanizeLevel,
       });
-      updatePendingBullet(change.jobIdx, change.bulletIdx, rewritten_text);
+      updatePendingBullet(change.key, rewritten_text);
       // Auto-accept the updated version
       setBulletDecision(change.key, "accept");
       if (mode === "humanize") setHasHumanized(true);
@@ -301,6 +454,8 @@ export function BulletReviewPanel() {
             No changes to review — your resume is already well-aligned with this JD.
           </p>
         </div>
+        <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} />
+        <FactLockNotice reverted={revertedBullets} />
         {/* Summary + Skills + generate still shown */}
         <SummaryBlock
           originalSummary={originalContent?.summary ?? ""}
@@ -356,18 +511,13 @@ export function BulletReviewPanel() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-label-md font-bold text-on-surface">Review AI Changes</p>
+          {/* The score used to live here as caption text. ScoreLift above
+              now carries it, with the before-score alongside — repeating it
+              here would show the same number twice, once without its
+              context. */}
           <p className="text-caption text-on-surface-variant">
             {acceptedBullets} of {bulletChanges.length} bullet
             {bulletChanges.length !== 1 ? "s" : ""} accepted
-            {atsScore !== null && (
-              <>
-                {" · ATS Score: "}
-                {atsScore}%
-                {projectedAtsScore !== null && projectedAtsScore !== atsScore && (
-                  <span className="text-primary font-semibold"> → {projectedAtsScore}%</span>
-                )}
-              </>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-xs">
@@ -427,6 +577,9 @@ export function BulletReviewPanel() {
         </div>
       )}
 
+      <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} />
+      <FactLockNotice reverted={revertedBullets} />
+
       {/* ── Summary ── */}
       <SummaryBlock
         originalSummary={originalContent?.summary ?? ""}
@@ -469,27 +622,46 @@ export function BulletReviewPanel() {
                   </div>
                 )}
 
-                {/* Original */}
+                {/* Original — only the words the rewrite dropped are struck,
+                    so what survived reads normally instead of the whole line
+                    being crossed out. */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-on-surface-variant uppercase tracking-wider">
                     Original
                   </span>
-                  <p className="text-body-sm text-on-surface-variant line-through leading-relaxed">
-                    {change.original || (
+                  <p className="text-body-sm text-on-surface-variant leading-relaxed">
+                    {change.original ? (
+                      <BulletDiff
+                        original={change.original}
+                        tailored={change.tailored}
+                        side="removed"
+                        testId={`bullet-diff-removed-${change.key}`}
+                      />
+                    ) : (
                       <em className="not-italic opacity-50">— empty —</em>
                     )}
                   </p>
                 </div>
 
-                {/* AI Tailored */}
+                {/* AI Tailored — added words highlighted */}
                 <div className="flex flex-col gap-xs">
                   <span className="text-caption text-primary uppercase tracking-wider font-bold">
                     AI Tailored
                   </span>
                   <p className="text-body-sm text-on-surface leading-relaxed">
-                    {change.tailored}
+                    <BulletDiff
+                      original={change.original}
+                      tailored={change.tailored}
+                      side="added"
+                      testId={`bullet-diff-added-${change.key}`}
+                    />
                   </p>
                 </div>
+
+                {/* Why it changed — Agent 2's own rationale. Without this the
+                    review is "trust me"; with it the reader can judge whether
+                    the rewrite actually earns the claim. */}
+                <BulletRationaleLine rationale={bulletRationale[change.key]} testId={`bullet-rationale-${change.key}`} />
 
                 {/* Actions row */}
                 <div className="flex items-center gap-xs pt-xs flex-wrap">

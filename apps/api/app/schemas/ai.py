@@ -158,6 +158,16 @@ class GenerateResumeOut(BaseModel):
 class ProjectScoreRequest(BaseModel):
     session_id: uuid.UUID
     accepted_fix_ids: list[str] = []
+    # The résumé exactly as the review screen currently shows it — accepted /
+    # rejected bullet rewrites, chosen skills, per-fix role overrides and
+    # inline edits already merged in by the client. When present this IS the
+    # content to score and accepted_fix_ids is ignored (the client already
+    # applied them). Omitted, the endpoint falls back to scoring the session's
+    # stored tailored_content with accepted_fix_ids applied server-side —
+    # which silently ignored every bullet the user rejected.
+    content: dict | None = None
+
+    _check_content_size = field_validator("content")(_validate_content_size)
 
 
 class ProjectScoreOut(BaseModel):

@@ -1,0 +1,3 @@
+# Pins are per-environment, regenerated on first run.
+*.json
+!.gitignore

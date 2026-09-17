@@ -1,0 +1,5 @@
+# Ad-hoc run output stays local. The named reference runs the README cites are
+# tracked, because a baseline nobody else has is not a baseline.
+*.json
+!baseline.json
+!rule7-tightened.json

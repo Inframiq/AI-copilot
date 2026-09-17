@@ -1,0 +1,39 @@
+{
+  "name": "management_seniority_signals",
+  "description": "A lead role. Exercises Agent 3 rule 12's seniority-aware emphasis \u2014 bullets should foreground team scope and outcomes through others, not hands-on depth.",
+  "jd_text": "Engineering Manager, Platform\n\nWhat you'll do:\n- Lead a team of 8-12 engineers across two squads\n- Own the platform roadmap and delivery commitments\n- Grow engineers through coaching and career development\n- Partner with senior leadership on technical strategy\n\nRequirements:\n- 3+ years managing engineering teams\n- Track record shipping platform or infrastructure work\n- Strong communication with executive stakeholders\n",
+  "resume_content": {
+    "contact": {
+      "name": "Sam Okafor",
+      "email": "sam@example.com"
+    },
+    "headline": "Senior Software Engineer",
+    "experience": [
+      {
+        "company": "Vantage Systems",
+        "title": "Tech Lead",
+        "start": "2022",
+        "end": "Present",
+        "bullets": [
+          "Led a squad of 6 engineers delivering the internal platform used by every product team",
+          "Ran the quarterly planning process and cut missed delivery commitments from 40% to 10%",
+          "Coached two engineers to promotion within 18 months",
+          "Rebuilt the service scaffolding so a new service took 2 days to stand up instead of 3 weeks"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "State University",
+        "degree": "BS Computer Science",
+        "year": "2016"
+      }
+    ],
+    "skills": [
+      "Go",
+      "Kubernetes",
+      "Terraform",
+      "Team Leadership"
+    ]
+  }
+}

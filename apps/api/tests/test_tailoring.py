@@ -480,10 +480,42 @@ async def test_analyze_jd_match_scores_core_responsibilities_at_half_weight():
 
     result = await analyze_jd_match(resume, "JD text", provider)
 
-    # 1 skill matched (w1·v1) + 1 responsibility missing (w0.5·v0) -> 100·1/1.5
-    assert result.ats_score == 67
+    # analyze_jd_match backfills importance, so both weights carry an
+    # importance multiplier on top of their structural base:
+    #   Python  — a hard tool, so rated high: base 1.0 × 1.5 = 1.5, matched
+    #   the responsibility — rated medium:   base 0.5 × 1.0 = 0.5, missing
+    # -> 100 · 1.5/2.0
+    assert result.ats_score == 75
     assert result.matched_skills == ["Python"]
     assert result.missing_skills == []  # responsibilities are not skill chips
+
+
+@pytest.mark.asyncio
+async def test_a_responsibility_still_weighs_less_than_a_skill_of_equal_importance():
+    """The structural half-weight survives importance weighting — this is what
+    the score above is really asserting, independent of the exact arithmetic."""
+    jd_analysis = make_jd_analysis(
+        exact_technical_tools=["Python"],
+        core_responsibilities=["mentor junior engineers on system design"],
+    )
+    resume = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
+
+    missing_responsibility = await analyze_jd_match(
+        resume, "JD text",
+        make_semantic_provider(jd_analysis, {"mentor junior engineers on system design": "missing"}),
+    )
+    jd_flipped = make_jd_analysis(
+        exact_technical_tools=["Kubernetes"],
+        core_responsibilities=["mentor junior engineers on system design"],
+    )
+    missing_skill = await analyze_jd_match(
+        resume, "JD text",
+        make_semantic_provider(
+            jd_flipped,
+            {"Kubernetes": "missing", "mentor junior engineers on system design": "matched"},
+        ),
+    )
+    assert missing_skill.ats_score < missing_responsibility.ats_score
 
 
 @pytest.mark.asyncio
@@ -549,7 +581,14 @@ async def test_analyze_jd_match_nice_to_have_scored_at_half_weight():
 
     result = await analyze_jd_match(resume, "JD text", provider)
 
-    assert result.ats_score == 67  # round(100 * 1.0 / 1.5)
+    # Both discounts compound, by design: the structural base says WHICH
+    # bucket the phrase is in, the importance multiplier says how hard THIS
+    # JD leans on it. default_importance rates every nice-to-have "low", and
+    # Agent 1 can override that upward for one the JD actually stresses.
+    #   Python  — hard tool, high:     base 1.0 × 1.5 = 1.5, matched
+    #   GraphQL — nice-to-have, low:   base 0.5 × 0.5 = 0.25, missing
+    # -> round(100 · 1.5/1.75)
+    assert result.ats_score == 86
     assert result.matched_skills == ["Python"]
     assert result.missing_skills == ["GraphQL"]  # still surfaced as a gap
 
@@ -691,7 +730,7 @@ async def test_run_tailoring_pipeline_returns_result():
             plausible_skills_to_add=[],
         ),
         WriterOutput: WriterOutput(
-            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Engineered Python services end to end")],
             updated_skills=["Python"],
         ),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(
@@ -709,7 +748,7 @@ async def test_run_tailoring_pipeline_returns_result():
 
     assert isinstance(result, TailoringResult)
     assert result.ats_score >= 0
-    assert result.tailored_content["experience"][0]["bullets"] == ["Leveraged Python extensively"]
+    assert result.tailored_content["experience"][0]["bullets"] == ["Engineered Python services end to end"]
 
 
 @pytest.mark.asyncio
@@ -814,7 +853,7 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
             plausible_skills_to_add=[],
         ),
         WriterOutput: WriterOutput(
-            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Leveraged Python extensively")],
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Engineered Python services end to end")],
             updated_skills=["Python"],
         ),
     }
@@ -832,7 +871,7 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
     result = await run_tailoring_pipeline(resume, "Need Python and AWS exp.", 50, provider, db)
 
     assert isinstance(result, TailoringResult)
-    assert result.tailored_content["experience"][0]["bullets"] == ["Leveraged Python extensively"]
+    assert result.tailored_content["experience"][0]["bullets"] == ["Engineered Python services end to end"]
     assert result.prep_questions == []
 
 
@@ -840,9 +879,20 @@ async def test_run_tailoring_pipeline_survives_prep_question_failure():
 async def test_run_tailoring_pipeline_reraises_agent3_failure():
     # Unlike prep questions, Agent 3 failing IS fatal — there is no tailored
     # resume to return without it, so this must still propagate.
+    # The plan must be non-empty: _agent3_write short-circuits an empty one
+    # without calling the model at all (no bullets to rewrite, no reason to
+    # spend a premium call), so an empty plan would never reach the failure
+    # this test is about.
     responses = {
         _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
-        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Used Python",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = MagicMock()
@@ -1107,3 +1157,556 @@ async def test_pipeline_gap_bullets_are_always_speculative():
 
     bullet_fixes = [f for f in result.ats_fixes if f.type == "bullet"]
     assert bullet_fixes and all(not f.grounded and not f.default_accept for f in bullet_fixes)
+
+
+# ── Project bullets go through the rewriter too ──────────────────────────────
+# Regression: _index_bullets walked only resume_content["experience"], so
+# Agent 2 and Agent 3 never saw a project. For a fresher — whose projects
+# carry the technical evidence — "Tailor Resume" charged a credit and
+# changed nothing that gets scored.
+
+from app.services.tailoring import (
+    _index_bullets, _apply_writer_output, WriterOutput, RewrittenBullet,
+)
+
+
+def test_index_bullets_assigns_ids_to_project_bullets():
+    content = {"experience": [], "projects": [{"name": "P", "bullets": ["Built a thing."]}]}
+    indexed, index_map = _index_bullets(content)
+    assert indexed["projects"][0]["bullets"][0] == {"bullet_id": "proj0_b0", "text": "Built a thing."}
+    assert index_map["proj0_b0"] == "projects[0].bullets[0]"
+
+
+def test_index_bullets_keeps_experience_ids_unchanged():
+    content = {"experience": [{"company": "A", "bullets": ["Shipped."]}],
+               "projects": [{"name": "P", "bullets": ["Built."]}]}
+    indexed, index_map = _index_bullets(content)
+    assert indexed["experience"][0]["bullets"][0]["bullet_id"] == "exp0_b0"
+    assert index_map["exp0_b0"] == "experience[0].bullets[0]"
+
+
+def test_apply_writer_output_patches_rewritten_project_bullets():
+    content = {"experience": [], "projects": [{"name": "P", "bullets": ["Built a thing."]}]}
+    indexed, _ = _index_bullets(content)
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="proj0_b0", rewritten_text="Engineered a thing.")],
+        updated_skills=[],
+    )
+    out = _apply_writer_output(indexed, writer)
+    assert out["projects"][0]["bullets"] == ["Engineered a thing."]
+
+
+def test_apply_writer_output_falls_back_to_original_project_bullet_text():
+    content = {"experience": [], "projects": [{"name": "P", "bullets": ["Built a thing."]}]}
+    indexed, _ = _index_bullets(content)
+    writer = WriterOutput(rewritten_bullets=[], updated_skills=[])
+    out = _apply_writer_output(indexed, writer)
+    assert out["projects"][0]["bullets"] == ["Built a thing."]
+
+
+def test_collect_all_bullets_spans_experience_and_projects():
+    """The gap-filler's duplicate guard must see project bullets too, or it
+    proposes a "new" bullet restating one the résumé already has."""
+    from app.services.tailoring import _collect_all_bullets
+    content = {"experience": [{"company": "A", "bullets": ["Shipped the API."]}],
+               "projects": [{"name": "P", "bullets": ["Built a CI pipeline."]}]}
+    assert _collect_all_bullets(content) == ["Shipped the API.", "Built a CI pipeline."]
+
+
+# ── The pipeline enforces fact-lock on Agent 3's output ──────────────────────
+# Until this existed, a rewrite that fabricated a metric, dropped a real one,
+# ran past the word cap or reached for banned filler shipped straight to the
+# user. bullet_guard is the rule set; this is the wiring that applies it.
+
+from app.services.tailoring import _guard_writer_output, BulletMapping, MappingPlan
+
+
+def _plan(*entries) -> MappingPlan:
+    return MappingPlan(mapping_plan=list(entries), plausible_skills_to_add=[])
+
+
+def _entry(bid, original, metrics=()):
+    return BulletMapping(
+        original_bullet_id=bid, original_text=original,
+        target_jd_keywords_to_inject=[], preserved_metrics=list(metrics),
+        strategic_instruction="REINFORCE",
+    )
+
+
+def _indexed(*bullets):
+    return {"experience": [{"company": "A", "bullets": [
+        {"bullet_id": f"exp0_b{i}", "text": t} for i, t in enumerate(bullets)
+    ]}]}
+
+
+def test_a_clean_rewrite_passes_through_untouched():
+    indexed = _indexed("Reduced latency by 40%.")
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Cut API latency 40%.")],
+        updated_skills=[],
+    )
+    guarded, reverted = _guard_writer_output(indexed, writer, _plan(_entry("exp0_b0", "Reduced latency by 40%.")))
+    assert guarded.rewritten_bullets[0].rewritten_text == "Cut API latency 40%."
+    assert reverted == []
+
+
+def test_a_rewrite_that_invents_a_metric_is_reverted_to_the_original():
+    indexed = _indexed("Built the checkout flow.")
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
+                                           rewritten_text="Built checkout serving 2M users.")],
+        updated_skills=[],
+    )
+    guarded, reverted = _guard_writer_output(indexed, writer, _plan(_entry("exp0_b0", "Built the checkout flow.")))
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built the checkout flow."
+    assert len(reverted) == 1
+    assert reverted[0]["bullet_id"] == "exp0_b0"
+    assert any("invented" in r for r in reverted[0]["reasons"])
+
+
+def test_a_rewrite_that_drops_a_preserved_metric_is_reverted():
+    indexed = _indexed("Reduced latency by 40%.")
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Improved API latency.")],
+        updated_skills=[],
+    )
+    guarded, reverted = _guard_writer_output(
+        indexed, writer, _plan(_entry("exp0_b0", "Reduced latency by 40%.", ["40%"])),
+    )
+    assert guarded.rewritten_bullets[0].rewritten_text == "Reduced latency by 40%."
+    assert any("dropped preserved metric" in r for r in reverted[0]["reasons"])
+
+
+def test_one_bad_bullet_does_not_revert_its_clean_neighbours():
+    indexed = _indexed("Built the checkout flow.", "Led the payments team.")
+    writer = WriterOutput(rewritten_bullets=[
+        RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built checkout serving 2M users."),
+        RewrittenBullet(bullet_id="exp0_b1", rewritten_text="Directed the payments team."),
+    ], updated_skills=[])
+    guarded, reverted = _guard_writer_output(indexed, writer, _plan(
+        _entry("exp0_b0", "Built the checkout flow."),
+        _entry("exp0_b1", "Led the payments team."),
+    ))
+    texts = {b.bullet_id: b.rewritten_text for b in guarded.rewritten_bullets}
+    assert texts["exp0_b0"] == "Built the checkout flow."
+    assert texts["exp0_b1"] == "Directed the payments team."
+    assert [r["bullet_id"] for r in reverted] == ["exp0_b0"]
+
+
+def test_it_guards_project_bullets_too():
+    indexed = {"experience": [], "projects": [{"name": "P", "bullets": [
+        {"bullet_id": "proj0_b0", "text": "Built a parser."}]}]}
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="proj0_b0",
+                                           rewritten_text="Built a parser handling 500 files/sec.")],
+        updated_skills=[],
+    )
+    guarded, reverted = _guard_writer_output(indexed, writer, _plan(_entry("proj0_b0", "Built a parser.")))
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built a parser."
+    assert reverted[0]["bullet_id"] == "proj0_b0"
+
+
+def test_it_falls_back_to_the_indexed_text_when_the_plan_lacks_the_bullet():
+    """The mapping plan is Agent 2's output and can omit an id; the indexed
+    résumé is built locally and always has it."""
+    indexed = _indexed("Built the checkout flow.")
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
+                                           rewritten_text="Built checkout serving 2M users.")],
+        updated_skills=[],
+    )
+    guarded, reverted = _guard_writer_output(indexed, writer, _plan())
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built the checkout flow."
+    assert reverted
+
+
+@pytest.mark.asyncio
+async def test_pipeline_reverts_a_fabricated_metric_and_reports_it():
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built the checkout flow",
+                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0",
+                rewritten_text="Built a Python checkout flow serving 2M users",
+            )],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    assert result.tailored_content["experience"][0]["bullets"] == ["Built the checkout flow"]
+    assert len(result.reverted_bullets) == 1
+    assert result.reverted_bullets[0]["bullet_id"] == "exp0_b0"
+    assert any("invented" in r for r in result.reverted_bullets[0]["reasons"])
+
+
+@pytest.mark.asyncio
+async def test_pipeline_reports_no_reverts_for_an_honest_rewrite():
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built the checkout flow",
+                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0", rewritten_text="Engineered the Python checkout flow",
+            )],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    assert result.tailored_content["experience"][0]["bullets"] == ["Engineered the Python checkout flow"]
+    assert result.reverted_bullets == []
+
+
+# ── Agent 2's per-bullet rationale reaches the caller ────────────────────────
+# jd_responsibility_addressed and target_jd_keywords_to_inject are generated
+# and billed on every run, then were discarded — only a single derived
+# importance level survived. They are what lets the review screen say WHY a
+# bullet changed instead of just showing that it did.
+
+@pytest.mark.asyncio
+async def test_pipeline_returns_the_responsibility_and_keywords_per_bullet():
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(
+            exact_technical_tools=["Python"],
+            core_responsibilities=["own end-to-end delivery of the checkout pipeline"],
+        ),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built the checkout flow",
+                jd_responsibility_addressed="own end-to-end delivery of the checkout pipeline",
+                target_jd_keywords_to_inject=["Python", "checkout pipeline"],
+                preserved_metrics=[], strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0", rewritten_text="Owned the Python checkout pipeline end to end",
+            )],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    rationale = result.bullet_rationale["exp0_b0"]
+    assert rationale["responsibility"] == "own end-to-end delivery of the checkout pipeline"
+    assert rationale["keywords"] == ["Python", "checkout pipeline"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_omits_rationale_for_a_bullet_with_neither_signal():
+    """A SKIPped bullet has no responsibility and no keywords — an entry of
+    two empty fields is noise the review screen would have to filter."""
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built the checkout flow",
+                jd_responsibility_addressed="", target_jd_keywords_to_inject=[],
+                preserved_metrics=[], strategic_instruction="SKIP",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built the checkout flow")],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    assert "exp0_b0" not in result.bullet_rationale
+
+
+@pytest.mark.asyncio
+async def test_pipeline_returns_the_pre_tailoring_score_alongside_the_post_one():
+    """The lift tailoring produced is the product's core claim. The pipeline
+    already logs "ats %d -> %d"; returning it makes that measurable rather
+    than only greppable."""
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built services",
+                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0", rewritten_text="Built Python services on Kubernetes",
+            )],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    assert result.ats_score_before == 0        # neither tool present to start
+    assert result.ats_score > result.ats_score_before
+
+
+# ── Agent 3 recovers from a truncated response by halving its plan ───────────
+# Agent 3 rewrites every bullet in one call. On a long résumé that response can
+# hit the 16384-token ceiling mid-JSON — the failure mode its own prompt calls
+# "the most common". Retrying identically truncates identically; asking for
+# half the bullets at a time is what actually fits.
+
+import json
+
+from app.services.tailoring import SemanticMatchResult
+from app.services.ai_engine.base import AITruncatedError
+from app.services.tailoring import _agent3_write
+
+
+def _plan_of(n: int) -> MappingPlan:
+    return MappingPlan(
+        mapping_plan=[
+            BulletMapping(
+                original_bullet_id=f"exp0_b{i}", original_text=f"Did thing {i}",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )
+            for i in range(n)
+        ],
+        plausible_skills_to_add=[],
+    )
+
+
+def _writer_for(ids) -> WriterOutput:
+    return WriterOutput(
+        rewritten_bullets=[RewrittenBullet(bullet_id=i, rewritten_text=f"Rewrote {i}") for i in ids],
+        updated_skills=[],
+    )
+
+
+def _splitting_provider(truncate_above: int):
+    """Truncates any call carrying more than *truncate_above* plan entries —
+    the shape of a real output-budget overrun."""
+    provider = MagicMock()
+    calls = []
+
+    async def complete_structured(system, user, schema, **kw):
+        entries = json.loads(user)["mapping_plan"]
+        calls.append(len(entries))
+        if len(entries) > truncate_above:
+            raise AITruncatedError("ran out of output budget")
+        return _writer_for(e["original_bullet_id"] for e in entries)
+
+    provider.complete_structured = AsyncMock(side_effect=complete_structured)
+    provider.batch_sizes = calls
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_a_truncated_agent3_call_is_split_and_every_bullet_still_comes_back():
+    provider = _splitting_provider(truncate_above=4)
+    out = await _agent3_write(_plan_of(8), [], 50, provider)
+
+    assert [b.bullet_id for b in out.rewritten_bullets] == [f"exp0_b{i}" for i in range(8)]
+
+
+@pytest.mark.asyncio
+async def test_the_split_keeps_halving_until_the_request_fits():
+    provider = _splitting_provider(truncate_above=2)
+    out = await _agent3_write(_plan_of(8), [], 50, provider)
+
+    assert len(out.rewritten_bullets) == 8
+    assert max(provider.batch_sizes[1:]) <= 4  # it kept shrinking, not retrying at size
+
+
+@pytest.mark.asyncio
+async def test_a_plan_that_fits_is_sent_as_one_call():
+    provider = _splitting_provider(truncate_above=100)
+    await _agent3_write(_plan_of(6), [], 50, provider)
+
+    assert provider.batch_sizes == [6]  # no needless extra spend
+
+
+@pytest.mark.asyncio
+async def test_a_single_bullet_that_still_truncates_gives_up_rather_than_looping():
+    provider = _splitting_provider(truncate_above=0)
+    with pytest.raises(AITruncatedError):
+        await _agent3_write(_plan_of(1), [], 50, provider)
+
+
+@pytest.mark.asyncio
+async def test_an_empty_plan_makes_no_call_at_all():
+    provider = _splitting_provider(truncate_above=100)
+    out = await _agent3_write(_plan_of(0), [], 50, provider)
+
+    assert out.rewritten_bullets == []
+    assert provider.batch_sizes == []
+
+
+@pytest.mark.asyncio
+async def test_skills_survive_the_split_unchanged():
+    """Agent 3 rule 11: updated_skills must equal original_skills. A split
+    must not let one half's answer drop them."""
+    provider = _splitting_provider(truncate_above=4)
+    out = await _agent3_write(_plan_of(8), ["Python", "Go"], 50, provider)
+
+    assert out.updated_skills == ["Python", "Go"]
+
+
+def test_agent3_prompt_forbids_trailing_restatement_clauses():
+    """The first live baseline measured 1.61x word growth: every rewrite closed
+    with a comma + gerund clause restating its own first half. Rule 7's generic
+    "do not pad" was obeyed to the letter (every bullet sat inside the 15-28
+    word target) while being violated in spirit, so the prompt has to name the
+    pattern. See evals/README.md."""
+    prompt = _build_agent3_system(50)
+    assert "TRAILING RESTATEMENT" in prompt
+
+
+def test_agent3_prompt_ties_bullet_length_to_new_facts():
+    prompt = _build_agent3_system(50)
+    assert "LENGTH FOLLOWS FACTS" in prompt
+
+
+def test_agent3_prompt_shows_a_worked_padding_example():
+    """An abstract rule already failed once here. The prompt carries a
+    before/after taken from real output so the model has the shape, not just
+    the instruction."""
+    prompt = _build_agent3_system(50)
+    assert "BAD (padded" in prompt
+
+
+# ── Pinning the pre-tailoring analysis ───────────────────────────────────────
+# A controlled A/B needs a fixed "before" score. Pinning Agent 1 alone was not
+# enough: the semantic verifier is a second model call that re-runs each time
+# and returns different verdicts, which moved ats_before by up to 10 points
+# between two runs whose Agent 1 parse was identical. analyze_jd_match already
+# accepts cached verdicts (routers/ai.py caches them per resume fingerprint);
+# the pipeline just never passed them through.
+
+@pytest.mark.asyncio
+async def test_pipeline_accepts_cached_semantic_verdicts_for_the_before_analysis():
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built services",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built services")],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
+
+    # Both JD tools claimed present by the cached verdicts -> before score 100.
+    result = await run_tailoring_pipeline(
+        resume, "Need Python.", 50, provider, make_mock_db_with_rows([]),
+        cached_semantic_verdicts={"python": "matched", "kubernetes": "matched"},
+    )
+    assert result.ats_score_before == 100
+
+
+@pytest.mark.asyncio
+async def test_cached_verdicts_make_the_before_score_repeatable():
+    def run():
+        responses = {
+            _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+            MappingPlan: MappingPlan(
+                mapping_plan=[BulletMapping(
+                    original_bullet_id="exp0_b0", original_text="Built services",
+                    target_jd_keywords_to_inject=[], preserved_metrics=[],
+                    strategic_instruction="REINFORCE",
+                )],
+                plausible_skills_to_add=[],
+            ),
+            WriterOutput: WriterOutput(
+                rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built services")],
+                updated_skills=[],
+            ),
+        }
+        return make_provider_dispatching_by_schema(responses)
+
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
+    verdicts = {"python": "partial", "kubernetes": "missing"}
+    a = await run_tailoring_pipeline(resume, "Need Python.", 50, run(),
+                                     make_mock_db_with_rows([]), cached_semantic_verdicts=verdicts)
+    b = await run_tailoring_pipeline(resume, "Need Python.", 50, run(),
+                                     make_mock_db_with_rows([]), cached_semantic_verdicts=verdicts)
+    assert a.ats_score_before == b.ats_score_before
+
+
+@pytest.mark.asyncio
+async def test_the_after_analysis_is_never_served_from_the_cached_verdicts():
+    """The cache describes the ORIGINAL resume. Reusing it for the post-tailor
+    score would report the rewrite as having changed nothing semantically."""
+    verify_calls = []
+    responses = {
+        # Two tools: the rewrite picks up Kubernetes lexically, Terraform stays
+        # unmatched — so the post-tailor analysis still has something to verify.
+        # (With nothing left unmatched it correctly makes no call at all.)
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Kubernetes", "Terraform"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built services",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(
+                bullet_id="exp0_b0", rewritten_text="Ran workloads on Kubernetes")],
+            updated_skills=[],
+        ),
+    }
+    provider = MagicMock()
+
+    async def cs(system, user, schema, **kw):
+        if schema is SemanticMatchResult:
+            verify_calls.append(user)
+            return SemanticMatchResult(verdicts=[])
+        return responses[schema]
+
+    provider.complete_structured = AsyncMock(side_effect=cs)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
+
+    await run_tailoring_pipeline(
+        resume, "Need Kubernetes.", 50, provider, make_mock_db_with_rows([]),
+        cached_semantic_verdicts={"kubernetes": "missing", "terraform": "missing"},
+    )
+    # Exactly one verification: the post-tailor one. The pre-tailor one was
+    # served from the cache.
+    assert len(verify_calls) == 1
+    assert "Terraform" in verify_calls[0]

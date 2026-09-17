@@ -40,7 +40,7 @@ const mockCompletedSession = {
   suggested_skills: [],
 };
 
-import { useTailoringStore, MAX_MERGED_SKILLS } from "../stores/tailoring-store";
+import { useTailoringStore, MAX_MERGED_SKILLS, deriveBulletChanges } from "../stores/tailoring-store";
 import { useResumeStore } from "../stores/resume-store";
 import { apiClient } from "../lib/api-client";
 
@@ -850,7 +850,7 @@ describe("useTailoringStore", () => {
     };
     useTailoringStore.setState({ pendingContent: initialContent });
 
-    useTailoringStore.getState().updatePendingBullet(0, 1, "Bullet 2 updated");
+    useTailoringStore.getState().updatePendingBullet("exp0_b1", "Bullet 2 updated");
 
     const updated = useTailoringStore.getState().pendingContent;
     expect(updated?.experience[0].bullets[1]).toBe("Bullet 2 updated");
@@ -985,7 +985,9 @@ describe("useTailoringStore", () => {
         useTailoringStore.getState().setFixDecision("skill:k8s", "accept");
         await vi.advanceTimersByTimeAsync(400);
 
-        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"]);
+        // No pendingContent in this setup, so no merged content to send —
+        // the server falls back to scoring tailored_content + these ids.
+        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"], undefined);
         expect(useTailoringStore.getState().projectedAtsScore).toBe(88);
       } finally {
         vi.useRealTimers();
@@ -1065,12 +1067,334 @@ describe("useTailoringStore", () => {
         useTailoringStore.getState().refreshProjectedScore();
         await vi.advanceTimersByTimeAsync(400);
 
-        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-9", ["skill:k8s", "bullet:kubernetes"]);
+        expect(apiClient.projectScore).toHaveBeenCalledWith(
+          "sess-9", ["skill:k8s", "bullet:kubernetes"], undefined,
+        );
         expect(useTailoringStore.getState().projectedAtsScore).toBe(91);
       } finally {
         vi.useRealTimers();
       }
     });
   });
+
+
+  describe("refreshProjectedScore", () => {
+    // Regression: the projected score was computed from the session's stored
+    // tailored_content (every bullet accepted) plus the accepted fix ids, so
+    // rejecting a tailored bullet left the "→ N%" on screen unmoved.
+    async function tailorWithOneBullet() {
+      const original: ResumeContent = {
+        ...SAMPLE_CONTENT,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+      };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+        ...mockCompletedSession,
+        tailored_content: {
+          ...mockCompletedSession.tailored_content,
+          experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+        },
+      });
+      await useTailoringStore.getState().runTailoring("resume-abc");
+      vi.mocked(apiClient.projectScore).mockResolvedValue({ projected_score: 70 });
+    }
+
+    it("sends the merged content, not just the accepted fix ids", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailorWithOneBullet();
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "reject");
+        useTailoringStore.getState().refreshProjectedScore();
+        await vi.advanceTimersByTimeAsync(500);
+
+        const content = vi.mocked(apiClient.projectScore).mock.calls.at(-1)?.[2];
+        expect(content?.experience[0].bullets).toEqual(["Did stuff"]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("sends the tailored bullet when the user keeps it", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailorWithOneBullet();
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "accept");
+        useTailoringStore.getState().refreshProjectedScore();
+        await vi.advanceTimersByTimeAsync(500);
+
+        const content = vi.mocked(apiClient.projectScore).mock.calls.at(-1)?.[2];
+        expect(content?.experience[0].bullets).toEqual(["Did stuff, tailored"]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("recomputes when a bullet decision changes, not only when a fix is toggled", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailorWithOneBullet();
+        vi.mocked(apiClient.projectScore).mockClear();
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "reject");
+        await vi.advanceTimersByTimeAsync(500);
+
+        expect(apiClient.projectScore).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("seeds an accept decision for a rewritten project bullet, like experience", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+      projects: [{ name: "Pipeline", bullets: ["Built a thing"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+        projects: [{ name: "Pipeline", bullets: ["Engineered a thing"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const decisions = useTailoringStore.getState().bulletDecisions;
+    expect(decisions["exp0_b0"]).toBe("accept");
+    expect(decisions["proj0_b0"]).toBe("accept");
+  });
+
+  it("hydrates revertedBullets from the session", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+      },
+      reverted_bullets: [{
+        bullet_id: "exp0_b0",
+        reasons: ["invented metric(s) not in the original bullet: 2"],
+        original_text: "Built checkout.",
+        rejected_text: "Built checkout for 2M users.",
+      }],
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const reverted = useTailoringStore.getState().revertedBullets;
+    expect(reverted).toHaveLength(1);
+    expect(reverted[0].bullet_id).toBe("exp0_b0");
+  });
+
+  it("defaults revertedBullets to empty when the session omits them", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce(mockCompletedSession);
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().revertedBullets).toEqual([]);
+  });
+
+  it("clears revertedBullets on reset", async () => {
+    useTailoringStore.setState({ revertedBullets: [{ bullet_id: "x", reasons: [], original_text: "", rejected_text: "" }] } as never);
+    useTailoringStore.getState().resetStore();
+    expect(useTailoringStore.getState().revertedBullets).toEqual([]);
+  });
+
+  it("hydrates bulletRationale from the session", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      bullet_rationale: { exp0_b0: { responsibility: "own checkout delivery", keywords: ["Python"] } },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().bulletRationale["exp0_b0"].keywords).toEqual(["Python"]);
+  });
+
+  it("defaults bulletRationale to empty when the session omits it", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce(mockCompletedSession);
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().bulletRationale).toEqual({});
+  });
+
+  it("hydrates atsScoreBefore from the session", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession, ats_score: 81, ats_score_before: 62,
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().atsScoreBefore).toBe(62);
+    expect(useTailoringStore.getState().atsScore).toBe(81);
+  });
+
+  it("leaves atsScoreBefore null for a session tailored before it was recorded", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce(mockCompletedSession);
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().atsScoreBefore).toBeNull();
+  });
+
+  describe("project bullets in the review merge", () => {
+    // The pipeline now rewrites project bullets too (bullet_id "proj{i}_b{j}").
+    // buildMergedContent must honour accept/reject on them — otherwise a
+    // rewritten project bullet ships no matter what the user decided.
+    function setup() {
+      const original: ResumeContent = {
+        ...SAMPLE_CONTENT,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+        projects: [{ name: "Pipeline", bullets: ["Built a thing"] }],
+      };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+        ...mockCompletedSession,
+        tailored_content: {
+          ...mockCompletedSession.tailored_content,
+          experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+          projects: [{ name: "Pipeline", bullets: ["Engineered a thing, tailored"] }],
+        },
+      });
+      return useTailoringStore.getState().runTailoring("resume-abc");
+    }
+
+    it("keeps a rejected project bullet at its original text", async () => {
+      await setup();
+      useTailoringStore.getState().setBulletDecision("proj0_b0", "reject");
+      await useTailoringStore.getState().generatePreview("resume-abc");
+
+      const merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.projects?.[0].bullets).toEqual(["Built a thing"]);
+    });
+
+    it("uses the tailored project bullet when accepted", async () => {
+      await setup();
+      useTailoringStore.getState().setBulletDecision("proj0_b0", "accept");
+      await useTailoringStore.getState().generatePreview("resume-abc");
+
+      const merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.projects?.[0].bullets).toEqual(["Engineered a thing, tailored"]);
+    });
+
+    it("leaves a resume with no projects untouched", async () => {
+      const original: ResumeContent = {
+        ...SAMPLE_CONTENT,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+      };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce(mockCompletedSession);
+      await useTailoringStore.getState().runTailoring("resume-abc");
+      await useTailoringStore.getState().generatePreview("resume-abc");
+
+      const merged = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
+      expect(merged?.projects ?? []).toEqual([]);
+    });
+  });
+
 });
 
+describe("deriveBulletChanges", () => {
+  // What the review screen lists. A bullet the pipeline rewrote but this
+  // function doesn't return is a change that ships with no review at all.
+  const base = { contact: { name: "J", email: "j@j.com" }, education: [], skills: [] };
+
+  it("lists a changed experience bullet", () => {
+    const original = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff"] }] };
+    const pending = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff, tailored"] }] };
+    const changes = deriveBulletChanges(pending as never, original as never);
+    expect(changes.map((c) => c.key)).toEqual(["exp0_b0"]);
+    expect(changes[0].original).toBe("Did stuff");
+    expect(changes[0].tailored).toBe("Did stuff, tailored");
+  });
+
+  it("lists a changed project bullet", () => {
+    const original = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Built a thing"] }] };
+    const pending = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Engineered a thing"] }] };
+    const changes = deriveBulletChanges(pending as never, original as never);
+    expect(changes.map((c) => c.key)).toEqual(["proj0_b0"]);
+    expect(changes[0].tailored).toBe("Engineered a thing");
+  });
+
+  it("labels a project change by its project name", () => {
+    const original = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Built a thing"] }] };
+    const pending = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Engineered a thing"] }] };
+    expect(deriveBulletChanges(pending as never, original as never)[0].jobTitle).toBe("Pipeline");
+  });
+
+  it("omits an unchanged bullet", () => {
+    const original = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff"] }] };
+    expect(deriveBulletChanges(original as never, original as never)).toEqual([]);
+  });
+
+  it("ignores whitespace-only differences", () => {
+    const original = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff"] }] };
+    const pending = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["  Did stuff  "] }] };
+    expect(deriveBulletChanges(pending as never, original as never)).toEqual([]);
+  });
+
+  it("lists experience changes before project changes", () => {
+    const original = {
+      ...base,
+      experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff"] }],
+      projects: [{ name: "Pipeline", bullets: ["Built a thing"] }],
+    };
+    const pending = {
+      ...base,
+      experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Did stuff, tailored"] }],
+      projects: [{ name: "Pipeline", bullets: ["Engineered a thing"] }],
+    };
+    expect(deriveBulletChanges(pending as never, original as never).map((c) => c.key))
+      .toEqual(["exp0_b0", "proj0_b0"]);
+  });
+
+  it("returns nothing when either side is missing", () => {
+    expect(deriveBulletChanges(null as never, null as never)).toEqual([]);
+  });
+});
+
+describe("updatePendingBullet across sections", () => {
+  // The review screen's Rewrite/Humanize buttons write back through this.
+  // Addressing by bare index would send a project bullet's rewrite into the
+  // experience entry at the same index.
+  const pending = {
+    contact: { name: "J", email: "j@j.com" }, education: [], skills: [],
+    experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Exp bullet"] }],
+    projects: [{ name: "Pipeline", bullets: ["Proj bullet"] }],
+  };
+
+  it("writes an experience bullet by its key", () => {
+    useTailoringStore.setState({ pendingContent: pending } as never);
+    useTailoringStore.getState().updatePendingBullet("exp0_b0", "Rewritten exp");
+    const c = useTailoringStore.getState().pendingContent!;
+    expect(c.experience[0].bullets).toEqual(["Rewritten exp"]);
+    expect(c.projects![0].bullets).toEqual(["Proj bullet"]);
+  });
+
+  it("writes a project bullet by its key without touching experience", () => {
+    useTailoringStore.setState({ pendingContent: pending } as never);
+    useTailoringStore.getState().updatePendingBullet("proj0_b0", "Rewritten proj");
+    const c = useTailoringStore.getState().pendingContent!;
+    expect(c.projects![0].bullets).toEqual(["Rewritten proj"]);
+    expect(c.experience[0].bullets).toEqual(["Exp bullet"]);
+  });
+
+  it("ignores a key for a section the resume does not have", () => {
+    const noProjects = { ...pending, projects: undefined };
+    useTailoringStore.setState({ pendingContent: noProjects } as never);
+    useTailoringStore.getState().updatePendingBullet("proj0_b0", "nope");
+    expect(useTailoringStore.getState().pendingContent!.experience[0].bullets).toEqual(["Exp bullet"]);
+  });
+});

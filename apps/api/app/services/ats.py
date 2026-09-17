@@ -32,6 +32,15 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
         for bullet in exp.get("bullets") or []:
             parts.append(str(bullet))
 
+    # Projects carry a fresher's entire technical evidence and, per
+    # resume_spec.SECTION_ORDER, outrank Experience for that candidate type —
+    # leaving them out scored those résumés as if they were empty.
+    for proj in resume_content.get("projects") or []:
+        parts.append(str(proj.get("name") or ""))
+        parts.append(str(proj.get("tech_stack") or ""))
+        for bullet in proj.get("bullets") or []:
+            parts.append(str(bullet))
+
     for edu in resume_content.get("education") or []:
         parts.append(str(edu.get("degree") or ""))
         parts.append(str(edu.get("institution") or ""))
@@ -39,10 +48,15 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
     skills: list[str] = [str(s) for s in (resume_content.get("skills") or []) if s]
     parts.extend(skills)
 
-    for cert in resume_content.get("certifications") or []:
-        parts.append(str(cert))
-    for award in resume_content.get("awards") or []:
-        parts.append(str(award))
+    # Every remaining free-text section a résumé can carry. These hold real
+    # JD-relevant evidence ("Led the campus coding club", "Taught Python at a
+    # local school") and were previously invisible to the scorer.
+    for key in ("certifications", "awards", "achievements", "leadership", "volunteer"):
+        for item in resume_content.get(key) or []:
+            parts.append(str(item))
+
+    for lang in resume_content.get("languages") or []:
+        parts.append(str(lang.get("name") or "") if isinstance(lang, dict) else str(lang))
 
     full_text = " | ".join(p for p in parts if p.strip())
     skills_text = " | ".join(skills)
@@ -57,6 +71,53 @@ def _exact_pattern(term: str) -> re.Pattern:
     )
 
 
+# Words that carry no evidence of a skill on their own. A phrase's meaning
+# lives in its distinctive tokens ("revenue", "product"), never in its
+# connectives ("through", "with") — counting those as matched tokens is how
+# "revenue growth through product-led growth" scored against a résumé whose
+# only overlap was the words "revenue", "growth" and "through".
+# Tokens of ≤ 2 chars ("of", "to", "in") are dropped by length and need no
+# entry here.
+_PHRASE_STOPWORDS = frozenset("""
+    the and for with from through into using via across over under per about
+    within without upon among between during against than then that this these
+    those their its our your you are was were been being has have had will
+    would can could may might must not but else while which who whom whose
+    all any each both few more most other same such some only own too very
+    ability able strong excellent proven solid deep broad hands experience
+    experienced knowledge familiarity proficiency proficient understanding
+    work working works year years plus bonus etc related relevant various
+    including include includes new general overall key core
+""".split())
+
+
+def _distinctive_tokens(phrase: str) -> list[str]:
+    """The tokens of *phrase* that actually carry meaning, de-duplicated and
+    in first-appearance order.
+
+    Drops short tokens, filler words, and parenthesised fragments like
+    "(LLMs)" (an acronym the exact-phrase passes already tried). De-duplicates
+    so a phrase that repeats a word ("growth ... growth") cannot satisfy its
+    own threshold twice off a single occurrence in the résumé.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in re.split(r"[\s\-/]+", phrase):
+        # A parenthesised fragment is a gloss on the phrase, not another word
+        # the résumé has to repeat: "Search Engine Optimization (SEO)" must
+        # still match a résumé that only spells the term out. Passes 1 and 2
+        # already tried the acronym as part of the full phrase.
+        if raw.startswith("(") and raw.endswith(")"):
+            continue
+        t = raw.strip("()[],.;:")
+        low = t.lower()
+        if len(t) <= 2 or low in _PHRASE_STOPWORDS or low in seen:
+            continue
+        seen.add(low)
+        out.append(t)
+    return out
+
+
 def _skill_matches(skill: str, full_text: str, skills_text: str) -> bool:
     """Return True if *skill* is considered present in the resume.
 
@@ -67,11 +128,20 @@ def _skill_matches(skill: str, full_text: str, skills_text: str) -> bool:
 
     2. Exact phrase anywhere in the full resume text.
 
-    3. Majority-token match for long phrases (≥ 3 meaningful tokens):
-       if ≥ ⌈2/3⌉ of the tokens appear individually anywhere in the resume,
-       the phrase is considered matched.  This handles cases like
-       "Large Language Models (LLMs)" where the resume says "LLMs" or where
-       the phrase is split across multiple bullets.
+    3. All-token match within a single segment, for long phrases
+       (≥ 3 distinctive tokens): every distinctive token of the phrase must
+       appear inside ONE segment of the resume (a bullet, a title, the
+       summary — whatever build_resume_text joined with " | ").  Filler
+       words are not distinctive and are dropped rather than required, and a
+       token repeated in the phrase counts once.
+
+       This pass is deliberately precision-first.  A phrase it MISSES is
+       handed to the LLM semantic verifier (tailoring._verify_semantic_presence),
+       which recovers paraphrases, synonyms and abbreviations — so recall
+       costs nothing here.  A phrase it wrongly MATCHES is reviewed by
+       nothing: it is scored as evidence the candidate does not have, and it
+       inflates the "before" score, shrinking the measured lift from
+       tailoring.  When in doubt, this pass says no.
     """
     skill = skill.strip()
     if not skill:
@@ -87,30 +157,43 @@ def _skill_matches(skill: str, full_text: str, skills_text: str) -> bool:
     if pat.search(full_text):
         return True
 
-    # Pass 3 — majority-token match for long multi-word skills
-    # Split on spaces, hyphens, slashes; discard tokens ≤ 2 chars or
-    # parenthesised fragments like "(LLMs)" since those are usually acronyms
-    # that will fail individually but the core phrase already tried above.
-    raw_tokens = re.split(r"[\s\-/]+", skill)
-    tokens = [t for t in raw_tokens if len(t) > 2 and not (t.startswith("(") and t.endswith(")"))]
-
+    # Pass 3 — all distinctive tokens inside one segment
+    tokens = _distinctive_tokens(skill)
     if len(tokens) >= 3:
-        threshold = -(-len(tokens) * 2 // 3)  # ceiling division: ⌈2/3 * n⌉
-        matched_tokens = sum(
-            1 for t in tokens
-            if re.search(
-                r"(?<![A-Za-z0-9])" + re.escape(t) + r"(?![A-Za-z0-9])",
-                full_text,
-                re.IGNORECASE,
-            )
-        )
-        if matched_tokens >= threshold:
-            return True
+        for segment in full_text.split(" | "):
+            if all(
+                re.search(
+                    r"(?<![A-Za-z0-9])" + re.escape(t) + r"(?![A-Za-z0-9])",
+                    segment,
+                    re.IGNORECASE,
+                )
+                for t in tokens
+            ):
+                return True
 
     return False
 
 
 _VERDICT_VALUE = {"matched": 1.0, "partial": 0.5, "missing": 0.0}
+
+# How much a phrase's JD importance scales its weight in the score. Centred on
+# medium = 1.0 so a JD with no importance data — an Agent 1 parse cached before
+# importance existed, or a term the model didn't rate — scores exactly as it
+# did before this was weighted at all. High-importance phrases are worth 3x a
+# low-importance one, so missing a stated hard requirement finally costs more
+# than missing something the JD mentions in passing.
+_IMPORTANCE_WEIGHT = {"high": 1.5, "medium": 1.0, "low": 0.5}
+_DEFAULT_IMPORTANCE_WEIGHT = 1.0
+
+
+def _importance_weight(term: str, importance: "dict[str, str] | None") -> float:
+    """Multiplier for *term*'s rated importance. Unrated or unrecognised
+    levels fall back to medium — never to zero, which would silently drop the
+    phrase out of the score entirely."""
+    if not importance:
+        return _DEFAULT_IMPORTANCE_WEIGHT
+    level = importance.get(term.strip().lower())
+    return _IMPORTANCE_WEIGHT.get(level, _DEFAULT_IMPORTANCE_WEIGHT)
 _RESPONSIBILITY_WEIGHT = 0.5
 _NICE_TO_HAVE_WEIGHT = 0.5
 # Title alignment is, per every ATS-scoring writeup, the single highest-weight
@@ -136,6 +219,7 @@ def blend_scores(
     responsibility_verdicts: dict[str, str] | None = None,
     nice_to_have_verdicts: dict[str, str] | None = None,
     title_verdict: str | None = None,
+    importance: dict[str, str] | None = None,
 ) -> DeltaResult:
     """Turn per-phrase verdicts into a blended ATS score.
 
@@ -159,10 +243,20 @@ def blend_scores(
                                   ``None`` → the JD had no extractable title, so
                                   the signal is left out of the score entirely.
 
+        importance             — {phrase_lowercased: "high"|"medium"|"low"}
+                                  from Agent 1, plus a "job title" key.
+                                  Scales each phrase's weight (see
+                                  ``_IMPORTANCE_WEIGHT``).  Omitted or
+                                  unrated phrases are treated as medium, so
+                                  leaving this out reproduces the old
+                                  flat-weight score exactly.
+
     Score = round(100 × Σ(weightᵢ · valueᵢ) / Σ(weightᵢ)), where value is
-    1.0 / 0.5 / 0.0 for matched / partial / missing and weight is 1.0 for a
-    required skill, 0.5 for a responsibility or nice-to-have, and
-    ``_TITLE_WEIGHT`` for the title.  An unknown verdict counts as "missing".
+    1.0 / 0.5 / 0.0 for matched / partial / missing and weight is
+    ``base × importance``.  The base is 1.0 for a required skill, 0.5 for a
+    responsibility or nice-to-have, and ``_TITLE_WEIGHT`` for the title; the
+    importance multiplier is 1.5 / 1.0 / 0.5 for high / medium / low.  An
+    unknown verdict counts as "missing".
 
     matched — required + nice-to-have phrases with verdict "matched".
     missing — required + nice-to-have phrases with verdict "partial" or
@@ -173,9 +267,10 @@ def blend_scores(
     weighted_hit = 0.0
     weighted_total = 0.0
 
-    def _add_chip_group(verdicts: dict[str, str], weight: float) -> None:
+    def _add_chip_group(verdicts: dict[str, str], base_weight: float) -> None:
         nonlocal weighted_hit, weighted_total
         for phrase, verdict in verdicts.items():
+            weight = base_weight * _importance_weight(phrase, importance)
             weighted_hit += weight * _VERDICT_VALUE.get(verdict, 0.0)
             weighted_total += weight
             (matched if verdict == "matched" else missing).append(phrase)
@@ -183,13 +278,17 @@ def blend_scores(
     _add_chip_group(skill_verdicts, 1.0)
     _add_chip_group(nice_to_have_verdicts or {}, _NICE_TO_HAVE_WEIGHT)
 
-    for verdict in (responsibility_verdicts or {}).values():
-        weighted_hit += _RESPONSIBILITY_WEIGHT * _VERDICT_VALUE.get(verdict, 0.0)
-        weighted_total += _RESPONSIBILITY_WEIGHT
+    for phrase, verdict in (responsibility_verdicts or {}).items():
+        weight = _RESPONSIBILITY_WEIGHT * _importance_weight(phrase, importance)
+        weighted_hit += weight * _VERDICT_VALUE.get(verdict, 0.0)
+        weighted_total += weight
 
     if title_verdict is not None:
-        weighted_hit += _TITLE_WEIGHT * _VERDICT_VALUE.get(title_verdict, 0.0)
-        weighted_total += _TITLE_WEIGHT
+        # "job title" is the key Agent 1 is told to rate for exactly this —
+        # how much the posting hinges on a title match (_AGENT1_SYSTEM rule 9).
+        weight = _TITLE_WEIGHT * _importance_weight("job title", importance)
+        weighted_hit += weight * _VERDICT_VALUE.get(title_verdict, 0.0)
+        weighted_total += weight
 
     score = round((weighted_hit / weighted_total) * 100) if weighted_total > 0 else 0
     return DeltaResult(matched=matched, missing=missing, ats_score=score)
@@ -251,7 +350,12 @@ def score_content(content: dict, jd_analysis, semantic_verdicts: dict[str, str])
             resume_titles.append(str(exp.get("title") or ""))
         title_verdict = title_match_verdict(jd_titles, [t for t in resume_titles if t])
 
-    blended = blend_scores(skill_verdicts, resp_verdicts, nice_verdicts, title_verdict)
+    # getattr, not attribute access: a JDAnalysis rebuilt from a cache written
+    # before `importance` existed (and the test doubles) may not carry it.
+    blended = blend_scores(
+        skill_verdicts, resp_verdicts, nice_verdicts, title_verdict,
+        importance=getattr(jd_analysis, "importance", None) or {},
+    )
     return JdScore(
         matched=blended.matched,
         missing=blended.missing,
@@ -352,6 +456,34 @@ def apply_fixes(content: dict, fixes: list[AtsFix]) -> dict:
     return out
 
 
+def verdicts_with_fixes(
+    semantic_verdicts: dict[str, str], fixes: "list[AtsFix]"
+) -> dict[str, str]:
+    """`semantic_verdicts` updated to reflect the gaps *fixes* close.
+
+    A fix exists to close one named gap — the gap-filler is prompted to write a
+    bullet FOR that gap, and accepting a speculative one is the user asserting
+    it is true of them. Scoring the patched résumé against the pre-fix verdicts
+    meant only a fix whose text lexically echoed the JD phrase could ever move
+    the number: a naturally-worded bullet closing the same gap scored +0, and
+    the UI hides a zero delta entirely.
+
+    So the "+X%" was telling users that parroting the JD is the only thing that
+    helps — the exact behaviour Agent 2 rule 4 and Agent 3 rule 3 spend
+    paragraphs forbidding. Crediting the gap makes the estimate agree with the
+    prompts instead of undermining them.
+
+    Returns a new dict; the input is never mutated (callers reuse it across
+    every fix in a list).
+    """
+    out = dict(semantic_verdicts)
+    for fix in fixes:
+        key = fix.gap.strip().lower()
+        if key:
+            out[key] = "matched"
+    return out
+
+
 def estimate_fix_delta(
     content: dict,
     jd_analysis,
@@ -359,8 +491,16 @@ def estimate_fix_delta(
     base_score: int,
     fix: "AtsFix",
 ) -> int:
-    """Points this one fix would add on its own, vs base_score. Pure."""
-    after = score_content(apply_fix(content, fix), jd_analysis, semantic_verdicts).ats_score
+    """Points this one fix would add on its own, vs base_score. Pure.
+
+    base_score must be the score WITHOUT this fix (computed from the unmodified
+    verdicts), so the delta measures only what the fix adds.
+    """
+    after = score_content(
+        apply_fix(content, fix),
+        jd_analysis,
+        verdicts_with_fixes(semantic_verdicts, [fix]),
+    ).ats_score
     return max(0, after - base_score)
 
 

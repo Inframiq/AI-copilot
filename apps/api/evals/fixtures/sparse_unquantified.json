@@ -1,0 +1,39 @@
+{
+  "name": "sparse_unquantified",
+  "description": "Almost no numbers anywhere. The fixture that catches a prompt edit making the writer invent metrics to satisfy the quantify-impact instruction.",
+  "jd_text": "Frontend Engineer\n\nResponsibilities:\n- Build accessible, responsive interfaces in React\n- Collaborate with designers on a shared component library\n- Improve page performance\n\nRequirements:\n- React and TypeScript\n- Solid CSS fundamentals\n- Understanding of web accessibility standards\n",
+  "resume_content": {
+    "contact": {
+      "name": "Robin Hale",
+      "email": "robin@example.com"
+    },
+    "headline": "Web Developer",
+    "experience": [
+      {
+        "company": "Harbour Studio",
+        "title": "Web Developer",
+        "start": "2023",
+        "end": "Present",
+        "bullets": [
+          "Built marketing pages for client campaigns",
+          "Maintained the shared component library used across client projects",
+          "Fixed accessibility issues flagged in client audits",
+          "Worked with designers to turn mockups into working pages"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Community College",
+        "degree": "AS Web Development",
+        "year": "2023"
+      }
+    ],
+    "skills": [
+      "JavaScript",
+      "React",
+      "CSS",
+      "HTML"
+    ]
+  }
+}

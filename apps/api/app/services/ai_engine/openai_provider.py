@@ -1,7 +1,12 @@
 import logging
 from openai import AsyncOpenAI
 from pydantic import BaseModel
-from app.services.ai_engine.base import AIProvider
+from app.services.ai_engine.base import (
+    AIEmptyResponseError,
+    AIProvider,
+    AIRefusalError,
+    AITruncatedError,
+)
 
 logger = logging.getLogger("app")
 
@@ -61,6 +66,41 @@ class OpenAIProvider(AIProvider):
         except Exception:
             logger.debug("record_call failed", exc_info=True)
 
+
+    @staticmethod
+    def _refusal_text(response) -> str:
+        """The refusal string the Responses API tucks inside output content,
+        or "" when the response isn't a refusal."""
+        for item in getattr(response, "output", None) or []:
+            for part in getattr(item, "content", None) or []:
+                refusal = getattr(part, "refusal", None)
+                if isinstance(refusal, str) and refusal:
+                    return refusal
+        return ""
+
+    def _raise_for_empty(self, response, call_name: str, model: str, budget: int) -> None:
+        """Turn a missing result into a typed, diagnosable error.
+
+        Only ever called when the result is absent — a response flagged
+        incomplete that nevertheless carries usable output is left alone, so a
+        status quirk never discards work already paid for.
+        """
+        details = getattr(response, "incomplete_details", None)
+        reason = getattr(details, "reason", None) if details else None
+        context = f"call={call_name} model={model} max_output_tokens={budget}"
+        if reason == "max_output_tokens":
+            raise AITruncatedError(
+                f"model ran out of output budget mid-response ({context}); "
+                "the structured output never closed"
+            )
+        refusal = self._refusal_text(response)
+        if refusal:
+            raise AIRefusalError(f"model refused ({context}): {refusal}")
+        raise AIEmptyResponseError(
+            f"model returned no usable output ({context}, "
+            f"status={getattr(response, 'status', None)!r}, reason={reason!r})"
+        )
+
     async def complete(
         self,
         system: str,
@@ -77,6 +117,9 @@ class OpenAIProvider(AIProvider):
             max_output_tokens=max_output_tokens or self._max_output_tokens,
         )
         self._log_usage(call_name, model_tier, model, getattr(response, "usage", None))
+        budget = max_output_tokens or self._max_output_tokens
+        if not response.output_text:
+            self._raise_for_empty(response, call_name, model, budget)
         return response.output_text
 
     async def complete_structured(
@@ -100,4 +143,7 @@ class OpenAIProvider(AIProvider):
             max_output_tokens=max_output_tokens or self._max_output_tokens,
         )
         self._log_usage(call_name, model_tier, model, getattr(response, "usage", None))
+        budget = max_output_tokens or self._max_output_tokens
+        if response.output_parsed is None:
+            self._raise_for_empty(response, call_name, model, budget)
         return response.output_parsed
