@@ -41,6 +41,14 @@
   --color-inverse-surface: #1e2028;
   --color-inverse-on-surface: #f3f3f6;
 
+  /* Desk — the recessed plane the rendered resume page floats on.
+     Deliberately dark: a white page on a near-white background has no
+     separation, which is what made the old preview pane read flat. */
+  --color-desk: #1a1c22;
+  --color-desk-raised: #23262e;
+  --color-desk-line: #343842;
+  --color-on-desk: #b9bcc6;
+
   /* secondary — refined slate; containers stay soft-neutral */
   --color-secondary: #4a5064;
   --color-secondary-container: #eaecf3;
@@ -412,4 +420,11 @@ html, body {
     transition: none;
     transform: none;
   }
+}
+
+/* Scores and any animated counter — without this, count-up animations
+   jitter as glyph widths change between frames. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }

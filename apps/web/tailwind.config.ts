@@ -59,6 +59,11 @@ const config: Config = {
         "success-container": "#ddf1e5",
         "on-success": "#ffffff",
         "on-success-container": "#093521",
+        // Desk plane — keep in sync with app/globals.css @theme.
+        "desk": "#1a1c22",
+        "desk-raised": "#23262e",
+        "desk-line": "#343842",
+        "on-desk": "#b9bcc6",
       },
       borderRadius: {
         DEFAULT: "0.25rem",
