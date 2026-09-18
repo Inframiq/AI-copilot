@@ -315,6 +315,32 @@ def _render_html(
 UNDERFILL_PAGE_FILL_THRESHOLD = 0.9
 
 
+
+def render_resume_html(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
+) -> str:
+    """The exact HTML generate_pdf hands to WeasyPrint.
+
+    Public wrapper over _render_html so the Studio can edit the same document
+    that will be exported — there is no second copy of the templates to drift.
+    Kept as a wrapper rather than renaming the private one so generate_pdf and
+    count_pdf_pages are untouched.
+    """
+    return _render_html(
+        resume_content,
+        template_id,
+        line_spacing,
+        paragraph_spacing,
+        font_choice,
+        accent_color,
+    )
+
+
 def _render_document(
     resume_content: dict,
     template_id: str,

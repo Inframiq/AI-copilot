@@ -11,7 +11,10 @@ from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
-from app.services.pdf import generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url, PhotoRequiredError
+from app.services.pdf import (
+    generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
+    render_resume_html, PhotoRequiredError,
+)
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -412,6 +415,48 @@ async def generate_resume_pdf(
     # page" advisory banner in Studio's preview pane and the tailoring review
     # panel (both render through this endpoint).
     return {"signed_url": data_url, "expires_in": None, **page_meta}
+
+
+@router.post("/{resume_id}/html")
+@limiter.limit("30/minute")
+async def render_resume_html_endpoint(
+    request: Request,
+    resume_id: uuid.UUID,
+    body: PdfGenerateRequest | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The document the Studio edits in place.
+
+    Same template path as the PDF route, so what the user edits is exactly
+    what will export. Unlike that route this persists nothing and uploads
+    nothing — it is a pure render, which is why its rate limit is looser.
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    template_id = (body.template_id if body else None) or resume.template_id
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+
+    content = (body.content if body and body.content is not None else resume.content) or {}
+    try:
+        html = await asyncio.to_thread(
+            render_resume_html,
+            content,
+            template_id,
+            (body.line_spacing if body else None) or resume.line_spacing,
+            (body.paragraph_spacing if body else None) or resume.paragraph_spacing,
+            (body.font_choice if body else None) or resume.font_choice,
+            (body.accent_color if body else None) or resume.accent_color,
+        )
+    except PhotoRequiredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"html": html}
 
 
 @router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)
