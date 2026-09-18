@@ -1,5 +1,5 @@
 "use client";
-import { CheckCircle, Sparkle, Target, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, Sparkle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 
@@ -11,8 +11,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 //
 //   • the JD-context form (its `TailoringForm` sub-component), shown when
 //     the user arrived from the JD Analyzer with a saved JD (`jdId` set):
-//     ATS context, the gap keywords they can flag as priorities, and the
-//     target company;
+//     ATS context and the target company;
 //   • the manual-paste form (EditorPanel's `jdId`-unset branch): target
 //     company plus a textarea for a job description pasted right here.
 //
@@ -30,15 +29,11 @@ export function SourcePanel() {
   const setCompanyName = useTailoringStore((s) => s.setCompanyName);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
-  const missingSkills = useTailoringStore((s) => s.missingSkills);
-  const prioritySkills = useTailoringStore((s) => s.prioritySkills);
-  const togglePrioritySkill = useTailoringStore((s) => s.togglePrioritySkill);
   const runTailoring = useTailoringStore((s) => s.runTailoring);
   const isLoading = useTailoringStore((s) => s.isLoading);
   const error = useTailoringStore((s) => s.error);
 
   const hasJdContext = !!jdId;
-  const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
 
   function handleTailor() {
     if (resumeId) runTailoring(resumeId);
@@ -134,49 +129,6 @@ export function SourcePanel() {
                   )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Gap keywords the user can flag for the AI to weave in. */}
-          {missingSkills.length > 0 && (
-            <div className="flex flex-col gap-sm rounded-xl border border-outline-variant/30 bg-surface-container-low p-lg">
-              <div className="flex items-center gap-xs">
-                <Target size={16} className="shrink-0 text-on-surface-variant" />
-                <h3 className="text-label-caps text-on-surface-variant">Keywords to Prioritize</h3>
-              </div>
-              <p className="text-body-md text-on-surface-variant">
-                Click any gap keyword to tell the AI to weave it into your bullets.
-              </p>
-              <div className="flex flex-wrap gap-xs">
-                {missingSkills.map((skill) => {
-                  const selected = prioritySet.has(skill.toLowerCase());
-                  return (
-                    <button
-                      key={skill}
-                      type="button"
-                      onClick={() => togglePrioritySkill(skill)}
-                      className={`flex items-center gap-xs rounded-md border px-sm py-xs text-caption font-medium transition-all ${
-                        selected
-                          ? "border-primary bg-primary text-on-primary"
-                          : "border-error/25 bg-error-container/30 text-on-error-container hover:border-primary hover:text-primary"
-                      }`}
-                    >
-                      {selected ? (
-                        <CheckCircle size={12} weight="fill" className="shrink-0" />
-                      ) : (
-                        <WarningCircle size={12} weight="fill" className="shrink-0 text-error" />
-                      )}
-                      {skill}
-                    </button>
-                  );
-                })}
-              </div>
-              {prioritySkills.length > 0 && (
-                <p className="text-caption font-medium text-primary">
-                  {prioritySkills.length} keyword{prioritySkills.length !== 1 ? "s" : ""} flagged — AI
-                  will focus on these.
-                </p>
-              )}
             </div>
           )}
 

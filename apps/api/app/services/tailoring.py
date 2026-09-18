@@ -1889,5 +1889,11 @@ async def run_tailoring_pipeline(
         bullet_rationale=bullet_rationale,
         ats_score_before=analysis.ats_score,
         jd_analysis=analysis.jd_analysis,
-        score_verdicts={"before": before_verdicts, "after": after_verdicts},
+        # Everything project-score needs to re-score this run: the verdicts,
+        # and the JD parse itself for runs that never cached one on the JD.
+        score_verdicts={
+            "before": before_verdicts,
+            "after": after_verdicts,
+            "jd_analysis": analysis.jd_analysis.model_dump(),
+        },
     )

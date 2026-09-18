@@ -1340,7 +1340,8 @@ async def test_project_score_applies_only_accepted_fixes_no_llm():
          "score_delta": 0, "default_accept": False},
     ]
     res = MagicMock(); res.scalar_one_or_none.return_value = sess
-    mock_session.execute = AsyncMock(return_value=res)
+    jd_res = MagicMock(); jd_res.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[res, jd_res])
 
     provider_spy = MagicMock()
     app.dependency_overrides[get_db] = override
@@ -1392,10 +1393,14 @@ def _project_score_session():
     return sess
 
 
-async def _post_project_score(sess, payload):
+async def _post_project_score(sess, payload, jd=None):
+    """POST /ai/project-score against a fake DB that answers the session
+    query, then the JD query — the endpoint must fetch the JD explicitly (see
+    test_project_score_does_not_lazy_load_the_jd)."""
     override, mock_session = make_mock_db()
     res = MagicMock(); res.scalar_one_or_none.return_value = sess
-    mock_session.execute = AsyncMock(return_value=res)
+    jd_res = MagicMock(); jd_res.scalar_one_or_none.return_value = jd if jd is not None else sess.__dict__.get("jd")
+    mock_session.execute = AsyncMock(side_effect=[res, jd_res])
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.ai.get_ai_provider", return_value=MagicMock()):
@@ -1769,3 +1774,21 @@ async def test_the_summary_field_does_not_get_bullet_rules():
             "humanize_level": 50, "field": "summary"}
     _, provider = await _post_rewrite(body, "Backend engineer with six years experience.")
     assert "PRESERVE SPECIFICS" not in provider.complete.call_args.args[0]
+
+
+# ── project-score must not lazy-load session.jd ──────────────────────────────
+# Regression: the endpoint read `session.jd`, a lazy relationship, inside an
+# AsyncSession. Async SQLAlchemy cannot lazy-load — it raises MissingGreenlet —
+# so every re-score 500'd in production and the review's live score never
+# moved. The tests hid it by assigning sess.jd by hand. A session loaded from
+# the DB has no JD attached; the endpoint must query it.
+
+@pytest.mark.asyncio
+async def test_project_score_does_not_lazy_load_the_jd():
+    sess = _project_score_session()
+    jd = sess.jd
+    del sess.__dict__["jd"]          # as loaded from the DB: relationship not populated
+    sess.jd_id = jd.id
+    r = await _post_project_score(sess, {"session_id": str(sess.id), "accepted_fix_ids": []}, jd=jd)
+    assert r.status_code == 200
+    assert r.json()["projected_score"] == 100

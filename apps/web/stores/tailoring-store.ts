@@ -320,7 +320,6 @@ interface TailoringState {
   // Per-bullet-fix role override: {fixId: experienceIndex}. Set by the review
   // screen's role dropdown; buildMergedContent places the bullet there.
   fixExperienceIndex: Record<string, number>;
-  prioritySkills: string[];  // user-picked "not matched" keywords to prioritize — set from the JD detail page before calling runTailoring
   humanizeLevel: number;
   isLoading: boolean;
   isAnalyzing: boolean;
@@ -339,8 +338,6 @@ interface TailoringState {
 
   setJd: (id: string, text: string) => void;
   setCompanyName: (name: string) => void;
-  setPrioritySkills: (skills: string[]) => void;
-  togglePrioritySkill: (skill: string) => void;
   /** Hydrate analysis results directly — used when navigating from the JD
    * detail page (which runs its own react-query analysis) to the studio. */
   setAnalysisResults: (results: {
@@ -421,7 +418,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   projectedScoreStale: false,
   projectedAtsScore: null,
   fixExperienceIndex: {},
-  prioritySkills: [],
   humanizeLevel: 50,
   isLoading: false,
   isAnalyzing: false,
@@ -433,10 +429,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   mergedContent: null,
   previewPdfUrl: null,
 
-  // Changing the JD invalidates any priority-skill picks made for the
-  // previous one — EditorPanel's own JD-context textarea calls this too,
-  // and unlike the two JD pages, it never explicitly sets prioritySkills
-  // itself, so this is the one place that must clear it for everyone.
   setJd: (id, text) => {
     const current = get();
     // Only reset analysis results if setting a genuinely different JD
@@ -455,7 +447,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       bulletImportance: isDifferentJd ? {} : current.bulletImportance,
       projectedAtsScore: isDifferentJd ? null : current.projectedAtsScore,
       fixExperienceIndex: isDifferentJd ? {} : current.fixExperienceIndex,
-      prioritySkills: isDifferentJd ? [] : current.prioritySkills,
       pendingContent: null,
       sessionId: isDifferentJd ? null : current.sessionId,
       bulletDecisions: {},
@@ -465,13 +456,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     });
   },
   setCompanyName: (name) => set({ companyName: name }),
-  setPrioritySkills: (skills) => set({ prioritySkills: skills }),
-  togglePrioritySkill: (skill) =>
-    set((s) => ({
-      prioritySkills: s.prioritySkills.includes(skill)
-        ? s.prioritySkills.filter((s2) => s2 !== skill)
-        : [...s.prioritySkills, skill],
-    })),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
   setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance }) =>
     set({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance: jdImportance ?? {} }),
@@ -660,7 +644,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
 
   runTailoring: async (resumeId: string, opts?: { fresh?: boolean }) => {
     let { jdId } = get();
-    const { jdText, humanizeLevel, companyName, prioritySkills } = get();
+    const { jdText, humanizeLevel, companyName } = get();
 
     if (!jdId) {
       if (!jdText.trim()) {
@@ -710,7 +694,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         jdId,
         humanizeLevel,
         companyName || undefined,
-        prioritySkills,
         opts?.fresh ?? false,
       );
     } catch (e: unknown) {
@@ -782,10 +765,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           }
         }
 
-        // suggested_skills is the user's priority picks plus the skills Agent 2
-        // judged plausible from the résumé itself. Both start accepted: with
-        // them off, the "after" score measured rewording alone. The user can
-        // still untick any of them.
+        // suggested_skills are the skills Agent 2 judged plausible from the
+        // résumé itself. They start accepted: with them off, the "after"
+        // score measured rewording alone. The user can still untick any.
         for (const s of session.suggested_skills || []) {
           initialDecisions[`skill_add:${s}`] = "accept";
         }
@@ -1043,7 +1025,6 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   projectedScoreStale: false,
       projectedAtsScore: null,
       fixExperienceIndex: {},
-      prioritySkills: [],
       humanizeLevel: 50,
       isLoading: false,
       isAnalyzing: false,

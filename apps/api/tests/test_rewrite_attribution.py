@@ -95,3 +95,18 @@ def test_migration_025_adds_score_verdicts():
     spec.loader.exec_module(m)
     assert m.revision == "025" and m.down_revision == "024"
     assert TailoringSession.__table__.columns["score_verdicts"].nullable
+
+
+@pytest.mark.asyncio
+async def test_project_score_falls_back_to_the_runs_own_jd_analysis():
+    """A run with a company name never caches Agent 1 on the JD, and
+    project-score used to 409 on it — the review's score then showed the
+    error. The session keeps its run's analysis for exactly this."""
+    sess, content = _session()
+    agent1 = dict(sess.jd.parsed["agent1"])
+    sess.jd.parsed = {}
+    sess.score_verdicts = {**sess.score_verdicts, "jd_analysis": agent1}
+    r = await _post_project_score(sess, {
+        "session_id": str(sess.id), "content": content, "accepted_bullet_ids": ["exp0_b0"]})
+    assert r.status_code == 200
+    assert r.json()["projected_score"] == 100

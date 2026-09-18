@@ -261,7 +261,6 @@ describe("useTailoringStore", () => {
       "jd-001",
       50,
       undefined,
-      [],
       false,
     );
 
@@ -301,7 +300,6 @@ describe("useTailoringStore", () => {
       "jd-created-001",
       50,
       undefined,
-      [],
       false,
     );
     const state = useTailoringStore.getState();
@@ -726,38 +724,9 @@ describe("useTailoringStore", () => {
     expect(state.humanizeLevel).toBe(50);
   });
 
-  it("setPrioritySkills and togglePrioritySkill manage the priority list", () => {
-    useTailoringStore.getState().setPrioritySkills(["Kubernetes", "Terraform"]);
-    expect(useTailoringStore.getState().prioritySkills).toEqual(["Kubernetes", "Terraform"]);
-
-    useTailoringStore.getState().togglePrioritySkill("Kubernetes"); // already present → removed
-    expect(useTailoringStore.getState().prioritySkills).toEqual(["Terraform"]);
-
-    useTailoringStore.getState().togglePrioritySkill("Docker"); // absent → added
-    expect(useTailoringStore.getState().prioritySkills).toEqual(["Terraform", "Docker"]);
-  });
-
-  it("runTailoring forwards the current prioritySkills to apiClient.tailorResume", async () => {
+  it("runTailoring auto-accepts every suggested skill — the AI's plausible-from-your-résumé set", async () => {
     useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
-    useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
-
-    await useTailoringStore.getState().runTailoring("resume-abc");
-
-    expect(apiClient.tailorResume).toHaveBeenCalledWith(
-      "resume-abc",
-      "jd-001",
-      50,
-      undefined,
-      ["Kubernetes"],
-      false,
-    );
-  });
-
-  it("runTailoring auto-accepts every suggested skill — the user's picks and the AI's plausible ones", async () => {
-    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
-    useTailoringStore.getState().setJd("jd-001", "raw text");
-    useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
     vi.mocked(apiClient.getSession).mockResolvedValueOnce({
       ...mockCompletedSession,
       suggested_skills: ["Kubernetes", "Docker"],
@@ -777,10 +746,10 @@ describe("useTailoringStore", () => {
     useTailoringStore.getState().setJd("jd-001", "raw text");
 
     await useTailoringStore.getState().runTailoring("resume-abc");
-    expect(vi.mocked(apiClient.tailorResume).mock.calls[0][5]).toBe(false);
+    expect(vi.mocked(apiClient.tailorResume).mock.calls[0][4]).toBe(false);
 
     await useTailoringStore.getState().runTailoring("resume-abc", { fresh: true });
-    expect(vi.mocked(apiClient.tailorResume).mock.calls[1][5]).toBe(true);
+    expect(vi.mocked(apiClient.tailorResume).mock.calls[1][4]).toBe(true);
   });
 
   it("runTailoring remembers when the server handed back an identical earlier run", async () => {
@@ -935,12 +904,6 @@ describe("useTailoringStore", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("resetStore clears prioritySkills", () => {
-    useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
-    useTailoringStore.getState().resetStore();
-    expect(useTailoringStore.getState().prioritySkills).toEqual([]);
   });
 
   it("runTailoring polls until the session status is completed", async () => {

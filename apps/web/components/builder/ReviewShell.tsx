@@ -64,10 +64,8 @@ export function ReviewShell({
   const projectedScoreStale = useTailoringStore((s) => s.projectedScoreStale);
   const isProjecting = useTailoringStore((s) => s.isProjecting);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
-  const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const matchedSkills = useTailoringStore((s) => s.matchedSkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
-  const companyKeywords = useTailoringStore((s) => s.companyKeywords);
   const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const revertedBullets = useTailoringStore((s) => s.revertedBullets);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
@@ -296,9 +294,7 @@ export function ReviewShell({
                   originalSkills={originalContent?.skills ?? []}
                   suggestedSkills={dedupedSuggestedSkills}
                   skillFixes={skillFixes}
-                  prioritySkills={prioritySkills}
-                  missingSkills={missingSkills}
-                  companyKeywords={companyKeywords}
+                  matchedSkills={matchedSkills}
                   decisions={bulletDecisions}
                   onDecide={setBulletDecision}
                   onFixDecision={setFixDecision}

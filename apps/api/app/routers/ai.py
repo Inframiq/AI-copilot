@@ -448,7 +448,9 @@ async def rewrite_bullet(
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)
-@limiter.limit("30/minute")
+# Fires on every tick in the review (debounced 400ms) and is pure scoring —
+# no model call — so a user working through a list must never hit the cap.
+@limiter.limit("120/minute")
 async def project_score(
     request: Request,
     body: ProjectScoreRequest,
@@ -476,8 +478,17 @@ async def project_score(
     if not session or session.status != "completed" or not session.tailored_content:
         raise HTTPException(status_code=404, detail="Completed session not found")
 
-    jd_row = session.jd
-    agent1 = (jd_row.parsed or {}).get("agent1") if jd_row else None
+    # Queried, not `session.jd`: that relationship is lazy, and async
+    # SQLAlchemy cannot lazy-load (MissingGreenlet) — every re-score 500'd.
+    jd_row = (
+        await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
+    ).scalar_one_or_none()
+    # The JD's cached parse, else the one this run used: a run with a company
+    # name never caches Agent 1 on the JD, and 409ing here showed the review
+    # an error instead of a score.
+    agent1 = ((jd_row.parsed or {}).get("agent1") if jd_row else None) or (
+        (session.score_verdicts or {}).get("jd_analysis")
+    )
     if not agent1:
         raise HTTPException(status_code=409, detail="Session JD has no cached analysis")
     jd_analysis = JDAnalysis(**agent1)

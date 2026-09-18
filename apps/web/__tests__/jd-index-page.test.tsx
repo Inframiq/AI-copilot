@@ -78,9 +78,9 @@ describe("JDIndexPage — Tailor Resume", () => {
   // Tailor Resume, navigate back to JD Analyzer (component unmount+remount
   // — the store and query cache survive that, same as a real client-side
   // nav), paste a second, unrelated JD, Analyze, Tailor Resume again. None
-  // of JD1's analysis or priority-skill picks should still be present once
-  // JD2's own analysis has completed.
-  it("does not leak ATS results or priority skills from one JD into the next", async () => {
+  // of JD1's analysis should still be present once JD2's own analysis has
+  // completed.
+  it("does not leak ATS results from one JD into the next", async () => {
     const user = userEvent.setup();
     useResumeStore.getState().setResume(
       "resume-1",
@@ -118,14 +118,12 @@ describe("JDIndexPage — Tailor Resume", () => {
     await waitFor(() => expect(useTailoringStore.getState().atsScore).toBe(40));
     expect(useTailoringStore.getState().jdId).toBe("jd-1");
 
-    // Flag a "Not Matched" keyword as a priority pick for JD1 — this is
-    // local component state (selectedPriority) until "Tailor Resume" is
-    // clicked, which is what actually pushes it into the store.
-    await user.click(screen.getByText("AWS"));
+    // "Not Matched" keywords are information, not a picker: which gaps
+    // tailoring closes is decided on the review screen, ranked by ATS gain.
+    expect(screen.getByText("AWS").closest("[aria-pressed]")).toBeNull();
 
     await user.click(screen.getByText("Tailor Resume"));
     expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review");
-    expect(useTailoringStore.getState().prioritySkills).toEqual(["AWS"]);
 
     // Simulate navigating away to Studio and back to JD Analyzer — the
     // store and query cache persist across this, a full component remount
@@ -162,8 +160,6 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(state.jdId).toBe("jd-2");
     expect(state.matchedSkills).toEqual(["React", "TypeScript"]);
     expect(state.missingSkills).toEqual(["GraphQL"]);
-    // JD1's priority-skill pick must be gone.
-    expect(state.prioritySkills).toEqual([]);
 
     await user.click(screen.getByText("Tailor Resume"));
 
@@ -172,6 +168,5 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(finalState.matchedSkills).toEqual(["React", "TypeScript"]);
     expect(finalState.missingSkills).toEqual(["GraphQL"]);
     expect(finalState.jdId).toBe("jd-2");
-    expect(finalState.prioritySkills).toEqual([]);
   });
 });

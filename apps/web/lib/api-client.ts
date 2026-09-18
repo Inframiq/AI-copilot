@@ -319,7 +319,6 @@ export const apiClient = {
     jdId: string,
     humanizeLevel: number,
     companyName?: string,
-    prioritySkills?: string[],
     /** Skip reusing an identical earlier run — "Try another version". */
     fresh = false,
   ): Promise<{ session_id: string; status: string; reused?: boolean }> =>
@@ -328,7 +327,6 @@ export const apiClient = {
       jd_id: jdId,
       humanize_level: humanizeLevel,
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
-      ...(prioritySkills && prioritySkills.length > 0 ? { priority_skills: prioritySkills } : {}),
       ...(fresh ? { fresh: true } : {}),
     }),
 
