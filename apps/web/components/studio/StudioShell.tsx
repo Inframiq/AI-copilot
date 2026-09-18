@@ -18,6 +18,7 @@ import { StepSpine } from "./spine/StepSpine";
 import { SectionRail } from "./rail/SectionRail";
 import { BoostPanel } from "./rail/BoostPanel";
 import { SectionChain } from "./canvas/SectionChain";
+import { SourcePanel } from "./canvas/SourcePanel";
 import { SummaryCard } from "./review/SummaryCard";
 import { SkillsCard } from "./review/SkillsCard";
 import { TriageDeck } from "./review/TriageDeck";
@@ -594,6 +595,11 @@ export function StudioShell({
         </div>
       )}
     </>
+  ) : activeStep === "source" || activeStep === "match" ? (
+    // The spine's first two nodes need a control behind them: SourcePanel is
+    // the studio's only entry point into tailoring (paste a JD, or run
+    // against the one carried over from the JD Analyzer).
+    <SourcePanel />
   ) : (
     <SectionChain
       content={originalContent}
