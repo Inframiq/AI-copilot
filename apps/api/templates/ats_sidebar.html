@@ -101,7 +101,7 @@
   {% if summary %}
   <div class="section">
     <div class="section-label">Summary</div>
-    <div class="section-body"><p class="summary">{{ summary }}</p></div>
+    <div class="section-body"><p class="summary" data-field="summary">{{ summary }}</p></div>
   </div>
   {% elif objective %}
   <div class="section">
@@ -141,14 +141,14 @@
         {% for job in group.roles %}
         <div class="role-block">
           <div class="job-title-line"><span class="title">{{ job.title }}</span> <span class="dates">| {{ job.start }} – {{ job.end or "Current" }}</span></div>
-          <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+          <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         </div>
         {% endfor %}
         {% else %}
         {% set job = group.roles[0] %}
         <div class="job-title-line"><span class="title">{{ job.title }}</span> <span class="dates">| {{ job.start }} – {{ job.end or "Current" }}</span></div>
         <div class="job-company">{{ job.company }}</div>
-        <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+        <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         {% endif %}
       </div>
       {% endfor %}

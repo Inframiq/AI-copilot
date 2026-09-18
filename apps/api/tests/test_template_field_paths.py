@@ -12,8 +12,12 @@ import re
 import pytest
 from app.services.pdf import render_resume_html
 
+# Imported so pytest can see them as fixtures here; the photo templates
+# need the same trusted-host + mocked-fetch setup test_pdf.py uses.
+from tests.test_pdf import trusted_settings, _with_trusted_photo  # noqa: F401
+
 CONTENT = {
-    "contact": {"name": "Jane Doe", "email": "jane@example.com", "photo_url": None},
+    "contact": {"name": "Jane Doe", "email": "jane@example.com"},
     "summary": "Backend engineer.",
     "experience": [
         {"company": "Acme", "title": "Engineer", "start": "2019", "end": "2021",
@@ -28,48 +32,71 @@ CONTENT = {
 }
 
 
-def _html():
-    return render_resume_html(CONTENT, "ats_clean")
+# ats_sidebar and ats_professional refuse to render without a trusted,
+# successfully-fetched photo, which needs test_pdf.py's httpx_mock machinery.
+# They get their own test below rather than dragging that into every case.
+TEMPLATES = ["ats_clean", "ats_modern", "ats_minimal"]
+PHOTO_TEMPLATES = ["ats_sidebar", "ats_professional"]
 
 
-def test_the_summary_is_addressable():
-    assert 'data-field="summary"' in _html()
+def _html(template_id="ats_clean"):
+    return render_resume_html(CONTENT, template_id)
 
 
-def test_each_experience_bullet_is_addressable():
-    html = _html()
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_the_summary_is_addressable(template_id):
+    assert 'data-field="summary"' in _html(template_id)
+
+
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_each_experience_bullet_is_addressable(template_id):
+    html = _html(template_id)
     assert 'data-field="experience.0.bullets.0"' in html
     assert 'data-field="experience.2.bullets.0"' in html
 
 
-def test_a_grouped_role_uses_its_original_index_not_its_group_position():
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_a_grouped_role_uses_its_original_index_not_its_group_position(template_id):
     # Acme's second role is experience[1]. Inside its group it sits at
     # position 1 too, but Globex's only role is experience[2] — which a
     # group-relative index would have called 0.
-    html = _html()
+    html = _html(template_id)
     assert 'data-field="experience.1.bullets.0"' in html
     assert 'data-field="experience.2.bullets.0"' in html
 
 
-def test_job_titles_are_addressable():
-    assert 'data-field="experience.2.title"' in _html()
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_job_titles_are_addressable(template_id):
+    assert 'data-field="experience.2.title"' in _html(template_id)
 
 
-def test_education_is_addressable():
-    html = _html()
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_education_is_addressable(template_id):
+    html = _html(template_id)
     assert 'data-field="education.0.institution"' in html
     assert 'data-field="education.0.degree"' in html
 
 
-def test_every_data_field_uses_the_dot_path_format():
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_every_data_field_uses_the_dot_path_format(template_id):
     # Guards against a stray "experience[0]" creeping in, which field-path.ts
     # would silently decline to resolve.
-    for path in re.findall(r'data-field="([^"]+)"', _html()):
+    for path in re.findall(r'data-field="([^"]+)"', _html(template_id)):
         assert re.fullmatch(r"[A-Za-z_]+(\.[A-Za-z_0-9]+)*", path), path
 
 
-def test_annotating_does_not_change_the_rendered_text():
-    text = re.sub(r"<[^>]+>", " ", _html())
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_annotating_does_not_change_the_rendered_text(template_id):
+    text = re.sub(r"<[^>]+>", " ", _html(template_id))
     assert "Built the thing." in text
-    assert "Jane Doe" in text
     assert "State University" in text
+    # Not the name: ats_minimal renders it through | upper.
+    assert "Backend engineer." in text
+
+
+@pytest.mark.parametrize("template_id", PHOTO_TEMPLATES)
+def test_the_photo_templates_are_addressable_too(template_id, httpx_mock, trusted_settings):
+    """Same annotation, but these two need a real photo to render at all."""
+    html = render_resume_html(_with_trusted_photo(CONTENT, httpx_mock), template_id)
+    assert 'data-field="summary"' in html
+    assert 'data-field="experience.2.bullets.0"' in html

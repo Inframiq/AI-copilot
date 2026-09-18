@@ -62,7 +62,7 @@
 {% macro render_summary_or_objective() %}
   {% if summary %}
   <h2>Summary</h2>
-  <p class="summary">{{ summary }}</p>
+  <p class="summary" data-field="summary">{{ summary }}</p>
   {% elif objective %}
   <h2>Objective</h2>
   <p class="summary">{{ objective }}</p>
@@ -77,13 +77,13 @@
     {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
     <div class="company-header">{{ group.company }}</div>
     {% for job in group.roles %}
-    <div class="role-row"><span class="job-title">{{ job.title }}</span> <span class="dates">&nbsp;·&nbsp; {{ job.start }} – {{ job.end or "Present" }}</span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">&nbsp;·&nbsp; {{ job.start }} – {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endfor %}
     {% else %}
     {% set job = group.roles[0] %}
-    <div class="job-header"><span class="job-title">{{ job.title }}</span> &nbsp;·&nbsp; <b class="company">{{ job.company }}</b> <span class="dates">&nbsp;·&nbsp; {{ job.start }} – {{ job.end or "Present" }}</span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <div class="job-header"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> &nbsp;·&nbsp; <b class="company">{{ job.company }}</b> <span class="dates">&nbsp;·&nbsp; {{ job.start }} – {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endif %}
   {% endfor %}
   {% endif %}
@@ -104,7 +104,7 @@
   {% if education %}
   <h2>Education</h2>
   {% for edu in education %}
-  <div class="edu-row"><span class="job-title">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company">{{ edu.institution }}</span> <span class="dates">&nbsp;·&nbsp; {{ edu.year }}</span></div>
+  <div class="edu-row"><span class="job-title" data-field="education.{{ loop.index0 }}.degree">{{ edu.degree }}</span> &nbsp;·&nbsp; <span class="company" data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</span> <span class="dates">&nbsp;·&nbsp; {{ edu.year }}</span></div>
   {% endfor %}
   {% endif %}
 {% endmacro %}

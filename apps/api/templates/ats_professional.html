@@ -80,7 +80,7 @@
 {% macro render_summary_or_objective() %}
   {% if summary %}
   <h2>Summary</h2>
-  <p class="summary">{{ summary }}</p>
+  <p class="summary" data-field="summary">{{ summary }}</p>
   {% elif objective %}
   <h2>Objective</h2>
   <p class="summary">{{ objective }}</p>
@@ -95,13 +95,13 @@
     {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
     <div class="company-header">{{ group.company }}</div>
     {% for job in group.roles %}
-    <div class="role-row"><span class="job-title">{{ job.title }}</span> <span class="job-dates">| {{ job.start }} — {{ job.end or "Present" }}</span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="job-dates">| {{ job.start }} — {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endfor %}
     {% else %}
     {% set job = group.roles[0] %}
-    <div class="job-row"><span class="job-title">{{ job.title }}, <b>{{ job.company }}</b></span> <span class="job-dates">| {{ job.start }} — {{ job.end or "Present" }}</span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <div class="job-row"><span class="job-title">{{ job.title }}, <b data-field="experience.{{ job._index }}.company">{{ job.company }}</b></span> <span class="job-dates">| {{ job.start }} — {{ job.end or "Present" }}</span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endif %}
   {% endfor %}
   {% endif %}
