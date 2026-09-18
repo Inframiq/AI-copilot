@@ -30,6 +30,20 @@ const AFFORDANCE_CSS = `
 `;
 
 /**
+ * The page margin the document declares for print.
+ *
+ * `@page` is print-only — every browser ignores it — so without this the
+ * document sits edge-to-edge on screen while the exported PDF carries half an
+ * inch of margin, and the Studio stops being a preview of the PDF. Read from
+ * the document's own rule rather than hardcoded, because the templates do not
+ * agree on it (0.5in for résumés, 1in for the letter).
+ */
+export function pageMargin(html: string): string | null {
+  const match = /@page[^{]*\{[^}]*\bmargin\s*:\s*([^;}]+)/i.exec(html);
+  return match ? match[1].trim() : null;
+}
+
+/**
  * `plaintext-only` keeps pasted rich text from injecting markup into the
  * document. It is invalid in browsers that lack it — and an invalid value
  * makes the element *not* editable — so it is feature-detected rather than
@@ -66,7 +80,7 @@ export function ResumeCanvas({
 }: {
   html: string;
   editable: boolean;
-  onEdit: (path: string, value: string) => void;
+  onEdit: (path: string, value: string | string[]) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<ShadowRoot | null>(null);
@@ -78,6 +92,13 @@ export function ResumeCanvas({
       rootRef.current = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     }
     rootRef.current.innerHTML = html;
+
+    // On the host, not inside the shadow root: injecting a full document as
+    // innerHTML makes the parser drop <html>/<head>/<body>, so a `body`
+    // padding rule would have nothing to match.
+    const margin = pageMargin(html);
+    host.style.padding = margin ?? "";
+    host.style.boxSizing = margin ? "border-box" : "";
   }, [html]);
 
   useEffect(() => {
@@ -110,7 +131,18 @@ export function ResumeCanvas({
         if (next === committed) return;
         committed = next;
         const path = node.dataset.field;
-        if (path) onEdit(path, next);
+        if (!path) return;
+        // A joined list (skills, rendered as one comma-separated line) is one
+        // field on screen but an array in the résumé, so it splits back on the
+        // separator the template used. Blanks from a trailing or doubled
+        // separator are dropped rather than stored as empty skills.
+        const separator = node.dataset.fieldSplit;
+        onEdit(
+          path,
+          separator
+            ? next.split(separator.trim() || separator).map((s) => s.trim()).filter(Boolean)
+            : next,
+        );
       };
 
       const handleKeyDown = (event: KeyboardEvent) => {

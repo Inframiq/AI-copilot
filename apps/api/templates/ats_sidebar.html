@@ -14,7 +14,7 @@
      a bare <img>, sits beside it. */
   .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 6px; }
   .photo { width: 80px; height: 80px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-  .name { font-size: 19pt; font-weight: 800; color: #2b2b2b; margin: 2px 0 4px; letter-spacing: 0.02em; line-height: 1.1; }
+  .name { text-transform: uppercase; font-size: 19pt; font-weight: 800; color: #2b2b2b; margin: 2px 0 4px; letter-spacing: 0.02em; line-height: 1.1; }
   .contact-line { font-size: 9pt; color: #333; }
   /* section_gap is 1.5x paragraph_spacing — the gap between one section's
      content and the next section's label. */
@@ -90,8 +90,15 @@
 <div class="header">
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}
   <div>
-    <div class="name">{{ contact.name | upper }}</div>
-    <div class="contact-line">{{ [contact.location, contact.phone | phone_link, contact.email | email_link, contact.linkedin | url_link, contact.github | url_link] | select | join('  ·  ') }}</div>
+    <div class="name" data-field="contact.name">{{ contact.name }}</div>
+    {% set contact_parts = [
+  ('contact.location', contact.location),
+  ('contact.phone', contact.phone | phone_link),
+  ('contact.email', contact.email | email_link),
+  ('contact.linkedin', contact.linkedin | url_link),
+  ('contact.github', contact.github | url_link)
+] %}
+    <div class="contact-line">{% for path, value in contact_parts if value %}{% if not loop.first %}  ·  {% endif %}<span data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
   </div>
 </div>
 
@@ -121,7 +128,7 @@
         <div class="skills-line"><b>{{ category }}:</b> {{ items | join(", ") }}</div>
         {% endfor %}
       {% else %}
-      <div class="skills-line">{{ skills | join(", ") }}</div>
+      <div class="skills-line" data-field="skills" data-field-split=", ">{{ skills | join(", ") }}</div>
       {% endif %}
     </div>
   </div>
@@ -137,16 +144,16 @@
       <div class="job">
         {% if group.roles | length > 1 %}
         {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it, still inside a single .job wrapper so the between-entries divider applies between companies, not between roles. #}
-        <div class="company-header">{{ group.company }}</div>
+        <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
         {% for job in group.roles %}
         <div class="role-block">
-          <div class="job-title-line"><span class="title">{{ job.title }}</span> <span class="dates">| {{ job.start }} – {{ job.end or "Current" }}</span></div>
+          <div class="job-title-line"><span class="title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Current" }}</span></span></div>
           <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         </div>
         {% endfor %}
         {% else %}
         {% set job = group.roles[0] %}
-        <div class="job-title-line"><span class="title">{{ job.title }}</span> <span class="dates">| {{ job.start }} – {{ job.end or "Current" }}</span></div>
+        <div class="job-title-line"><span class="title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Current" }}</span></span></div>
         <div class="job-company">{{ job.company }}</div>
         <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         {% endif %}
@@ -164,7 +171,7 @@
     <div class="section-body">
       {% for p in projects %}
       <div class="job">
-        <div class="job-title-line"><span class="title">{{ p.name }}</span>{% if p.start %} <span class="dates">| {{ p.start }} – {{ p.end or "Current" }}</span>{% endif %}</div>
+        <div class="job-title-line"><span class="title" data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.start %} <span class="dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> – <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Current" }}</span></span>{% endif %}</div>
         {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link | url_link }}</div>{% endif %}
         <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>
@@ -181,8 +188,8 @@
     <div class="section-body">
       {% for edu in education %}
       <div class="edu-item">
-        <span class="school">{{ edu.institution }}, {{ edu.year }}</span>
-        <span class="degree">{{ edu.degree }}</span>
+        <span class="school"><span data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</span>, <span data-field="education.{{ loop.index0 }}.year">{{ edu.year }}</span></span>
+        <span class="degree" data-field="education.{{ loop.index0 }}.degree">{{ edu.degree }}</span>
       </div>
       {% endfor %}
     </div>
@@ -200,7 +207,7 @@
                         "a2": 35, "basic": 35, "a1": 20, "beginner": 20} %}
       {% for l in languages %}
       <div class="lang-row">
-        <div class="lang-name"><b>{{ l.name }}</b></div>
+        <div class="lang-name"><b data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</b></div>
         <div class="lang-bar-track"><div class="lang-bar-fill" style="width: {{ levels.get(l.level | lower, 60) }}%;"></div></div>
         <div style="font-size: 9pt; color: #555; width: 90px;">{{ l.level }}</div>
       </div>
@@ -214,7 +221,7 @@
   {% if certifications %}
   <div class="section">
     <div class="section-label">Certifications</div>
-    <div class="section-body"><ul class="plain">{% for c in certifications %}<li>{{ c }}</li>{% endfor %}</ul></div>
+    <div class="section-body"><ul class="plain">{% for c in certifications %}<li data-field="certifications.{{ loop.index0 }}">{{ c }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
 {% endmacro %}
@@ -223,7 +230,7 @@
   {% if awards %}
   <div class="section">
     <div class="section-label">Awards</div>
-    <div class="section-body"><ul class="plain">{% for a in awards %}<li>{{ a }}</li>{% endfor %}</ul></div>
+    <div class="section-body"><ul class="plain">{% for a in awards %}<li data-field="awards.{{ loop.index0 }}">{{ a }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
 {% endmacro %}
@@ -232,7 +239,7 @@
   {% if achievements %}
   <div class="section">
     <div class="section-label">Achievements</div>
-    <div class="section-body"><ul class="plain">{% for a in achievements %}<li>{{ a }}</li>{% endfor %}</ul></div>
+    <div class="section-body"><ul class="plain">{% for a in achievements %}<li data-field="achievements.{{ loop.index0 }}">{{ a }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
 {% endmacro %}
@@ -241,7 +248,7 @@
   {% if leadership %}
   <div class="section">
     <div class="section-label">Leadership</div>
-    <div class="section-body"><ul class="plain">{% for l in leadership %}<li>{{ l }}</li>{% endfor %}</ul></div>
+    <div class="section-body"><ul class="plain">{% for l in leadership %}<li data-field="leadership.{{ loop.index0 }}">{{ l }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
 {% endmacro %}
@@ -250,7 +257,7 @@
   {% if volunteer %}
   <div class="section">
     <div class="section-label">Volunteer</div>
-    <div class="section-body"><ul class="plain">{% for v in volunteer %}<li>{{ v }}</li>{% endfor %}</ul></div>
+    <div class="section-body"><ul class="plain">{% for v in volunteer %}<li data-field="volunteer.{{ loop.index0 }}">{{ v }}</li>{% endfor %}</ul></div>
   </div>
   {% endif %}
 {% endmacro %}

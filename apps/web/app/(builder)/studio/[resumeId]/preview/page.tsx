@@ -72,7 +72,7 @@ export default function StudioPreviewPage({
   });
 
   const handleEdit = useCallback(
-    (path: string, value: string) => {
+    (path: string, value: string | string[]) => {
       const current = useResumeStore.getState().content;
       if (!current) return;
       // writeField ignores a path that no longer resolves, so a stale

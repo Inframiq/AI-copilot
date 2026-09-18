@@ -40,7 +40,7 @@ export function readField(content: ResumeContent, path: string): string | undefi
 export function writeField(
   content: ResumeContent,
   path: string,
-  value: string,
+  value: string | string[],
 ): ResumeContent {
   const keys = segments(path);
   if (keys.length === 0) return content;

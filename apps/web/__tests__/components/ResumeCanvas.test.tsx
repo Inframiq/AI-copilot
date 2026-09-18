@@ -116,4 +116,67 @@ describe("ResumeCanvas", () => {
     expect(fireEvent.keyDown(node, { key: "Enter", shiftKey: true })).toBe(true);
     expect(onEdit).not.toHaveBeenCalled();
   });
+
+  // @page is a print-only rule: browsers ignore it entirely, so the document
+  // rendered edge-to-edge on screen while the exported PDF had half an inch
+  // of margin. The Studio's whole premise is that they are the same document.
+  it("gives the page the margin its own @page rule declares", () => {
+    const html = `<style>@page { margin: 0.5in; }</style><p data-field="summary">x</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable={false} onEdit={() => {}} />);
+    const host = container.querySelector("[data-canvas]") as HTMLElement;
+    expect(host.style.padding).toBe("0.5in");
+  });
+
+  it("reads the margin past other @page descriptors", () => {
+    const html = `<style>@page { size: Letter; margin: 1in; }</style><p data-field="summary">x</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable={false} onEdit={() => {}} />);
+    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("1in");
+  });
+
+  it("leaves the page unpadded when it declares no page margin", () => {
+    const { container } = render(<ResumeCanvas html={HTML} editable={false} onEdit={() => {}} />);
+    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("");
+  });
+
+  // Skills render as one comma-joined line, so the whole line is the field and
+  // it has to be split back into the array the résumé actually stores.
+  it("splits a joined list back into an array on its own separator", () => {
+    const onEdit = vi.fn();
+    const html = `<div data-field="skills" data-field-split=", ">Python, SQL</div>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.textContent = "Python, SQL, Go";
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("skills", ["Python", "SQL", "Go"]);
+  });
+
+  it("drops blanks left by trailing or doubled separators", () => {
+    const onEdit = vi.fn();
+    const html = `<div data-field="skills" data-field-split=", ">Python</div>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.textContent = "Python,  , SQL,";
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("skills", ["Python", "SQL"]);
+  });
+
+  it("splits on a separator that is not a comma", () => {
+    const onEdit = vi.fn();
+    const html = `<div data-field="skills" data-field-split=" · ">Python · SQL</div>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.textContent = "Python · SQL · Go";
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("skills", ["Python", "SQL", "Go"]);
+  });
+
+  it("leaves an ordinary field a plain string", () => {
+    const onEdit = vi.fn();
+    const { container } = render(<ResumeCanvas html={HTML} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.textContent = "New summary.";
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("summary", "New summary.");
+  });
 });
+
