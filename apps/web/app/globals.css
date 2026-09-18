@@ -270,6 +270,82 @@ html, body {
   }
 }
 
+/* ── Tailoring star ──────────────────────────────────────────────────────────
+   The loader for a 30–90s wait, so it has to bear looking at: a lit star with
+   a flare turning behind it, a gleam crossing its face, and satellites
+   twinkling out of step. Every layer is on its own period — nothing lands on
+   the same beat twice, which is what keeps it from reading as a spinner. */
+.tstar {
+  /* Without fill-box every transform below would pivot on the SVG's origin
+     rather than the shape's own centre, throwing each piece across the canvas. */
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+@keyframes tstar-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.055); }
+}
+
+@keyframes tstar-bloom {
+  0%, 100% { opacity: 0.42; transform: scale(0.94); }
+  50%      { opacity: 0.8;  transform: scale(1.1); }
+}
+
+/* Rays reach and settle. They used to rotate; aligned to the star's own axes
+   they read as light coming off it instead of as a shape behind it. */
+@keyframes tstar-reach {
+  0%, 100% { transform: scale(0.9);  opacity: 0.55; }
+  50%      { transform: scale(1.06); opacity: 1; }
+}
+
+/* The shining outline leaving the star. */
+@keyframes tstar-pulse {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  70%  { opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+@keyframes tstar-blink {
+  0%, 100% { opacity: 0.12; transform: scale(0.5); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+
+/* Sweeps across in the first stretch, then waits offstage — a gleam that
+   never pauses stops reading as a gleam. */
+@keyframes tstar-sweep {
+  0%        { transform: translateX(0); }
+  45%, 100% { transform: translateX(150px); }
+}
+
+.tstar-core       { animation: tstar-breathe 3.6s ease-in-out infinite; }
+.tstar-halo       { animation: tstar-bloom 3.6s ease-in-out infinite; }
+.tstar-flare      { animation: tstar-reach 5.2s ease-in-out infinite; }
+.tstar-flare-slow { animation: tstar-reach 6.8s ease-in-out infinite reverse; }
+.tstar-pulse      { animation: tstar-pulse 3.6s ease-out infinite; }
+.tstar-twinkle    { animation: tstar-blink 2.8s ease-in-out infinite; }
+.tstar-gleam      { animation: tstar-sweep 3.6s cubic-bezier(0.45, 0, 0.2, 1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tstar-core,
+  .tstar-halo,
+  .tstar-flare,
+  .tstar-flare-slow,
+  .tstar-twinkle,
+  .tstar-pulse,
+  .tstar-gleam {
+    animation: none;
+  }
+  /* Parked mid-sweep it would read as a seam across the star; a frozen
+     outline ring would read as a second, misdrawn star. */
+  .tstar-gleam,
+  .tstar-pulse { opacity: 0; }
+  /* The satellites' resting keyframe is nearly invisible; at rest they should
+     simply be stars. */
+  .tstar-twinkle { opacity: 0.7; }
+}
+
 /* ── Premium ambient backdrop ────────────────────────────────────────────────
    A luminous sapphire "aurora" filling the whole viewport: five saturated,
    heavily-blurred colour bodies spread top → bottom that sweep across the

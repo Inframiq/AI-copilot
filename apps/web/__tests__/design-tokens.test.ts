@@ -58,12 +58,28 @@ describe("design tokens", () => {
 describe("global classes", () => {
   const css = readFileSync("app/globals.css", "utf8");
 
-  it.each(["section-enter"])("defines .%s", (name) => {
+  const ANIMATED = [
+    "section-enter",
+    "tstar-halo",
+    "tstar-flare",
+    "tstar-flare-slow",
+    "tstar-pulse",
+    "tstar-twinkle",
+    "tstar-core",
+    "tstar-gleam",
+  ];
+
+  it.each(ANIMATED)("defines .%s", (name) => {
     expect(css).toContain(`.${name}`);
   });
 
-  it("exempts .section-enter from motion for reduced-motion users", () => {
-    const reduced = css.slice(css.indexOf(".section-enter"));
-    expect(reduced).toMatch(/prefers-reduced-motion[\s\S]{0,300}\.section-enter/);
+  it.each(ANIMATED)("exempts .%s from motion for reduced-motion users", (name) => {
+    // Every reduced-motion block, concatenated — the rule may live in any of
+    // them, and a class that appears in none is one that keeps animating for
+    // a user who asked it not to.
+    const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\n}/g)]
+      .map((m) => m[0])
+      .join("\n");
+    expect(blocks).toContain(`.${name}`);
   });
 });

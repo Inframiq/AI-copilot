@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowsClockwise, Sparkle, WarningCircle } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore, deriveBulletChanges, type BulletChange } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
@@ -15,6 +15,7 @@ import {
 import { SkillsCard } from "@/components/studio/review/SkillsCard";
 import { ScoreRail, ScoreDock, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
+import { TailoringStar } from "./TailoringStar";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
 /**
@@ -347,10 +348,7 @@ function TailoringProgress() {
   return (
     <div className="flex flex-col gap-lg" aria-busy="true">
       <div className="flex flex-col items-center gap-sm rounded-3xl border border-outline-variant/30 bg-surface-container-lowest px-lg py-xl text-center shadow-sm">
-        <span className="relative flex h-14 w-14 items-center justify-center">
-          <span className="absolute inset-0 animate-ping rounded-full bg-primary/15 motion-reduce:animate-none" />
-          <Sparkle size={28} weight="fill" className="relative text-primary" />
-        </span>
+        <TailoringStar />
         <p className="text-body-lg font-semibold text-on-surface">Tailoring your résumé</p>
         <p className="tabular text-caption text-on-surface-variant">
           {seconds}s · usually 30–90 seconds
