@@ -61,13 +61,17 @@ export function Sidebar() {
       {/* Collapse flap — an edge handle, the conventional place to find this.
           It lived in the footer under eight identically-styled nav links and
           was invisible there. Carries no text, so the 72px rail never
-          constrains it. */}
+          constrains it.
+
+          Anchored near the top beside the logo rather than centred: centred,
+          it sat mid-content on every page and overlapped whatever <main>
+          rendered at that height. */}
       <button
         type="button"
         onClick={toggle}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="absolute top-1/2 right-0 translate-x-full -translate-y-1/2 z-10 flex items-center justify-center w-5 h-16 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:w-6 hover:text-primary hover:border-primary/40 transition-all duration-200"
+        className="absolute top-lg right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:w-6 hover:text-primary hover:border-primary/40 transition-all duration-200"
       >
         {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
       </button>

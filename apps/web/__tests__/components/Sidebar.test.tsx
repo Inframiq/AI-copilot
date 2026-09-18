@@ -189,6 +189,26 @@ describe("Sidebar collapse", () => {
     expect(flap.className).toMatch(/translate-x-full/);
   });
 
+  it("sits near the top rather than centred on the edge", () => {
+    // Centred, it landed mid-content on every page. Anchored to the top it
+    // sits beside the logo, clear of whatever the page renders below.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    const flap = screen.getByRole("button", { name: /collapse sidebar/i });
+    expect(flap.className).not.toMatch(/top-1\/2/);
+    expect(flap.className).not.toMatch(/-translate-y-1\/2/);
+    expect(flap.className).toMatch(/top-\w+/);
+  });
+
+  it("keeps the flap a small tab, not a slab", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    const flap = screen.getByRole("button", { name: /collapse sidebar/i });
+    // h-16 (64px) read as a bar stuck to the side; h-10 is 40px, still a
+    // comfortable target but clearly a tab.
+    expect(flap.className).toMatch(/\bh-10\b/);
+  });
+
   it("keeps the flap reachable when collapsed", () => {
     useSidebarStore.setState({ override: "collapsed" });
     renderSidebar();
