@@ -208,8 +208,10 @@
       {% for l in languages %}
       <div class="lang-row">
         <div class="lang-name"><b data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</b></div>
-        <div class="lang-bar-track"><div class="lang-bar-fill" style="width: {{ levels.get(l.level | lower, 60) }}%;"></div></div>
-        <div style="font-size: 9pt; color: #555; width: 90px;">{{ l.level }}</div>
+        {# No stated level means no bar and no label: a default-width bar
+           would invent the proficiency in picture form. #}
+        {% if l.level %}<div class="lang-bar-track"><div class="lang-bar-fill" style="width: {{ levels.get(l.level | lower, 60) }}%;"></div></div>
+        <div style="font-size: 9pt; color: #555; width: 90px;">{{ l.level }}</div>{% endif %}
       </div>
       {% endfor %}
     </div>

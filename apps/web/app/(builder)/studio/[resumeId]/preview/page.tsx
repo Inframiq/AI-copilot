@@ -3,7 +3,7 @@ import { use, useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
-import { apiClient } from "@/lib/api-client";
+import { ApiError, apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
@@ -66,7 +66,7 @@ export default function StudioPreviewPage({
   // Keyed on the content so an inline edit re-renders the document it was
   // made on. The server render is the only source — rendering client-side
   // would reintroduce the template drift this whole design avoids.
-  const { data, isPending, isError, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["resumeHtml", resumeId, templateId, content],
     queryFn: () => apiClient.renderResumeHtml(resumeId, { content: content ?? undefined }),
     enabled: !!content,
@@ -115,11 +115,15 @@ export default function StudioPreviewPage({
       );
     }
     if (isError) {
+      // A 409 is a refusal with a reason the user can act on — most often a
+      // template that needs a photo. Burying that under the generic message
+      // sends them hunting for a fault that is really a one-line fix.
+      const refusal = error instanceof ApiError && error.status === 409 ? error.message : null;
       return (
         <CanvasNotice
           icon={<WarningCircle size={28} />}
-          title="We couldn't render your résumé"
-          detail="Your work is saved. This is usually temporary."
+          title={refusal ? "This template needs something more" : "We couldn't render your résumé"}
+          detail={refusal ?? "Your work is saved. This is usually temporary."}
           action={
             <button
               type="button"

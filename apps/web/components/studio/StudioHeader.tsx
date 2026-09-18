@@ -1,6 +1,7 @@
 "use client";
 import { ArrowLeft, CircleNotch, DownloadSimple, SlidersHorizontal } from "@phosphor-icons/react";
 import { FOCUS_RING } from "@/lib/focus";
+import { StudioControls } from "./StudioControls";
 
 export type StudioMode = "edit" | "preview";
 
@@ -87,6 +88,8 @@ export function StudioHeader({
           </button>
         ))}
       </div>
+
+      <StudioControls />
 
       {onEditFull && (
         <button

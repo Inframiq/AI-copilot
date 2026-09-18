@@ -177,7 +177,7 @@ Return a JSON object with EXACTLY this shape:
     }
   ],
   "skills": ["Skill1", "Skill2"],
-  "languages": [{"name": "English", "level": "Native"}],
+  "languages": [{"name": "language exactly as printed", "level": "level as printed, or null"}],
   "certifications": ["Cert name if any"]
 }
 
@@ -195,6 +195,13 @@ Rules:
   already has a plain-text URL printed directly in the resume body, prefer
   that exact text over the hyperlink block.
 - If a field is not found, use null for strings and [] for arrays.
+- languages: take these ONLY from an explicit Languages section. Never infer a
+  language from the language the resume is written in, from a nationality, a
+  location, or a name, and never assume English. A resume with no Languages
+  section gives "languages": []. If a language is listed with no proficiency
+  beside it, set "level": null rather than choosing one — claiming "Native"
+  or "Fluent" on someone's behalf is a fabricated credential, and it is their
+  claim to make, not ours.
 - education "gpa": CGPA, GPA, "Grade", "Aggregate", and a percentage are the
   SAME field — capture whichever the resume shows, copied verbatim with its
   scale or "%" sign (e.g. "8.6", "8.6/10", "3.9/4.0", "85%"). Never convert

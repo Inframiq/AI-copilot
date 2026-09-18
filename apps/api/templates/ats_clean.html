@@ -132,7 +132,7 @@
 {% macro render_languages() %}
   {% if languages %}
   <h2>Languages</h2>
-  <div class="skills">{% for l in languages %}<span data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</span> (<span data-field="languages.{{ loop.index0 }}.level">{{ l.level }}</span>){% if not loop.last %}, {% endif %}{% endfor %}</div>
+  <div class="skills">{% for l in languages %}<span data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</span>{% if l.level %} (<span data-field="languages.{{ loop.index0 }}.level">{{ l.level }}</span>){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</div>
   {% endif %}
 {% endmacro %}
 

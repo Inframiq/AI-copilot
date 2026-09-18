@@ -39,6 +39,55 @@ const SPECIMEN_STACKS: Record<(typeof FONT_CHOICES)[number]["value"], string> = 
 // accent color swatch that used to sit in PreviewPanel's wrapping control
 // bar. Self-contained: trigger + popover in one component, so DockToolbar
 // just drops it in.
+export function TypePanel() {
+  const templateId = useResumeStore((s) => s.templateId);
+  const fontChoice = useResumeStore((s) => s.fontChoice);
+  const accentColor = useResumeStore((s) => s.accentColor);
+  const setFontChoice = useResumeStore((s) => s.setFontChoice);
+  const setAccentColor = useResumeStore((s) => s.setAccentColor);
+
+  return (
+    <div className="flex flex-col gap-xs">
+
+    <ul className="flex flex-col gap-xs">
+      {FONT_CHOICES.map((f) => {
+        const selected = f.value === fontChoice;
+        return (
+          <li key={f.value}>
+            <button
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setFontChoice(f.value)}
+              className={`flex w-full items-center justify-between rounded-xl px-sm py-sm transition-colors ${
+                selected ? "bg-primary/20 text-primary" : "text-on-surface-variant hover:bg-surface-container-low"
+              }`}
+            >
+              <span className="text-body-md" style={{ fontFamily: SPECIMEN_STACKS[f.value] }}>
+                {f.label}
+              </span>
+              {selected && <Check size={14} weight="bold" />}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+
+    <div className="my-xs h-px bg-outline-variant/40" />
+
+    <label className="flex items-center justify-between gap-sm px-sm">
+      <span className="text-label-sm text-on-surface-variant">Accent color</span>
+      <input
+        aria-label="Accent color"
+        type="color"
+        value={accentColor ?? TEMPLATE_DEFAULT_ACCENT[templateId] ?? "#111111"}
+        onChange={(e) => setAccentColor(e.target.value)}
+        className="h-8 w-8 cursor-pointer rounded-md border border-outline-variant/40 bg-transparent p-0"
+      />
+    </label>
+    </div>
+  );
+}
+
 export function TypePopover() {
   const templateId = useResumeStore((s) => s.templateId);
   const fontChoice = useResumeStore((s) => s.fontChoice);

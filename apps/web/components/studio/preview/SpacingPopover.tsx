@@ -37,6 +37,90 @@ function DensityGlyph({ lineSpacing }: { lineSpacing: number }) {
 // dropdown and its two range inputs that used to sit in PreviewPanel's
 // wrapping control bar. Self-contained: trigger + popover in one component,
 // so DockToolbar just drops it in.
+export function SpacingPanel() {
+  const lineSpacing = useResumeStore((s) => s.lineSpacing);
+  const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
+  const setSpacing = useResumeStore((s) => s.setSpacing);
+  const [customOpen, setCustomOpen] = useState(false);
+
+  const activePreset = SPACING_PRESETS.find(
+    (p) => p.lineSpacing === lineSpacing && p.paragraphSpacing === paragraphSpacing
+  );
+
+  return (
+    <div className="flex flex-col gap-sm">
+
+    <div className="grid grid-cols-3 gap-xs">
+      {SPACING_PRESETS.map((p) => {
+        const selected = p.label === activePreset?.label;
+        return (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => setSpacing(p.lineSpacing, p.paragraphSpacing)}
+            className={`flex flex-col items-center gap-xs rounded-xl border p-sm transition-colors ${
+              selected ? "border-primary bg-primary/10" : "border-outline-variant/40 hover:border-primary/40"
+            }`}
+          >
+            <DensityGlyph lineSpacing={p.lineSpacing} />
+            <span className={`text-caption ${selected ? "text-primary" : "text-on-surface-variant"}`}>
+              {p.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+
+    <button
+      type="button"
+      onClick={() => setCustomOpen((o) => !o)}
+      aria-expanded={customOpen}
+      className="flex items-center gap-xs text-label-sm text-on-surface-variant transition-colors hover:text-on-surface"
+    >
+      {customOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+      Custom
+    </button>
+
+    {customOpen && (
+      <div className="flex flex-col gap-sm">
+        <label className="flex flex-col gap-xs text-label-sm text-on-surface-variant">
+          <span className="flex items-center justify-between">
+            Line spacing
+            <span className="tabular">{lineSpacing.toFixed(2)}</span>
+          </span>
+          <input
+            aria-label="Line spacing"
+            type="range"
+            min={1}
+            max={1.6}
+            step={0.05}
+            value={lineSpacing}
+            onChange={(e) => setSpacing(parseFloat(e.target.value), paragraphSpacing)}
+            className="w-full accent-primary"
+          />
+        </label>
+        <label className="flex flex-col gap-xs text-label-sm text-on-surface-variant">
+          <span className="flex items-center justify-between">
+            Paragraph spacing
+            <span className="tabular">{paragraphSpacing}px</span>
+          </span>
+          <input
+            aria-label="Paragraph spacing"
+            type="range"
+            min={0}
+            max={24}
+            step={2}
+            value={paragraphSpacing}
+            onChange={(e) => setSpacing(lineSpacing, parseInt(e.target.value, 10))}
+            className="w-full accent-primary"
+          />
+        </label>
+      </div>
+    )}
+    </div>
+  );
+}
+
 export function SpacingPopover() {
   const lineSpacing = useResumeStore((s) => s.lineSpacing);
   const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);

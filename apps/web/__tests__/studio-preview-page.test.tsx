@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
-vi.mock("@/lib/api-client", () => ({
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
   apiClient: {
     renderResumeHtml: vi.fn(async () => ({
       html: '<p data-field="summary">Old summary.</p>',
@@ -221,6 +222,33 @@ describe("Studio preview page", () => {
     await waitFor(() =>
       expect(screen.queryByRole("toolbar", { name: /formatting/i })).toBeNull(),
     );
+  });
+
+  it("offers the template picker on the JD path too", async () => {
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /template/i }));
+    fireEvent.click(screen.getByRole("button", { name: /template/i }));
+    expect(screen.getByRole("radio", { name: /minimal/i })).toBeTruthy();
+  });
+
+  it("keeps the template picker available in preview as well as edit", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByRole("tab", { name: /preview/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /preview/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /template/i })).toBeTruthy());
+  });
+
+  // Picking a photo template without a photo is a 409 with a clear reason.
+  // "We couldn't render your résumé" would send the user hunting for a fault
+  // that is really a one-line fix they can make themselves.
+  it("says why when the template needs a photo the résumé has not got", async () => {
+    const { ApiError } = await import("../lib/api-client");
+    vi.mocked(apiClient.renderResumeHtml).mockRejectedValueOnce(
+      new ApiError(409, "Template 'ats_sidebar' requires a profile photo, but none was provided."),
+    );
+    await renderPage();
+    await waitFor(() => screen.getByText(/requires a profile photo/i));
   });
 });
 
