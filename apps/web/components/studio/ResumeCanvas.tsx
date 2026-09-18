@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { sanitizeInline } from "@/lib/rich-text";
 
 /**
  * Editing affordance, injected into the shadow root rather than written into
@@ -120,14 +121,25 @@ export function ResumeCanvas({
     for (const node of nodes) {
       // setAttribute, not the contentEditable property: the property is a
       // no-op under jsdom, and the attribute is what browsers read anyway.
-      node.setAttribute("contenteditable", editable ? editableValue() : "false");
+      // A rich field must be fully editable: plaintext-only would make
+      // execCommand("bold") a silent no-op, so these trade the paste
+      // protection for the formatting the toolbar offers, and lean on
+      // sanitizeInline instead.
+      const rich = node.hasAttribute("data-field-rich");
+      node.setAttribute(
+        "contenteditable",
+        editable ? (rich ? "true" : editableValue()) : "false",
+      );
       if (!editable) continue;
+
+      const read = () =>
+        rich ? sanitizeInline(node.innerHTML) : node.textContent ?? "";
 
       // Mutable, so a commit is idempotent: Enter commits and then blurs, and
       // the blur that follows must not report the same edit a second time.
-      let committed = node.textContent ?? "";
+      let committed = read();
       const commit = () => {
-        const next = node.textContent ?? "";
+        const next = read();
         if (next === committed) return;
         committed = next;
         const path = node.dataset.field;

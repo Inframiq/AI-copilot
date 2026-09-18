@@ -178,5 +178,44 @@ describe("ResumeCanvas", () => {
     fireEvent.blur(node);
     expect(onEdit).toHaveBeenCalledWith("summary", "New summary.");
   });
+
+  // Prose fields carry the toolbar's formatting, so they must round-trip
+  // markup. Reading textContent would silently throw every bold away on the
+  // next blur, which is worse than not offering the button at all.
+  it("keeps the formatting on a field marked rich", () => {
+    const onEdit = vi.fn();
+    const html = `<p data-field="summary" data-field-rich>Old.</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.innerHTML = "Owned <b>end-to-end</b> delivery.";
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("summary", "Owned <b>end-to-end</b> delivery.");
+  });
+
+  it("strips the wrapper markup contenteditable adds to a rich field", () => {
+    const onEdit = vi.fn();
+    const html = `<p data-field="summary" data-field-rich>Old.</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    const node = fields(container)[0];
+    node.innerHTML = '<div><b style="">x</b></div>';
+    fireEvent.blur(node);
+    expect(onEdit).toHaveBeenCalledWith("summary", "<b>x</b>");
+  });
+
+  it("lets a rich field accept formatting at all", () => {
+    // plaintext-only would make execCommand("bold") a no-op, so these fields
+    // opt out of the paste protection the others keep.
+    const html = `<p data-field="summary" data-field-rich>Old.</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={() => {}} />);
+    expect(fields(container)[0].getAttribute("contenteditable")).toBe("true");
+  });
+
+  it("reports nothing when a rich field's markup is unchanged", () => {
+    const onEdit = vi.fn();
+    const html = `<p data-field="summary" data-field-rich>Old <b>bold</b>.</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
+    fireEvent.blur(fields(container)[0]);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
 });
 

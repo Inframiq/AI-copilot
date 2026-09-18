@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.services.rich_text import strip_inline_tags
+
 
 @dataclass
 class DeltaResult:
@@ -58,6 +60,9 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
     for lang in resume_content.get("languages") or []:
         parts.append(str(lang.get("name") or "") if isinstance(lang, dict) else str(lang))
 
+    # Formatting the Studio applied is not part of what an ATS reads, and a
+    # tag inside a phrase would split it out of a match.
+    parts = [strip_inline_tags(p) for p in parts]
     full_text = " | ".join(p for p in parts if p.strip())
     skills_text = " | ".join(skills)
     return full_text, skills_text

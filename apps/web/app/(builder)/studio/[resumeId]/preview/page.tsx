@@ -9,6 +9,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
+import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
 
 /**
@@ -172,7 +173,15 @@ export default function StudioPreviewPage({
           Couldn&apos;t export: {exportError}
         </p>
       )}
-      <div className="flex-1 overflow-y-auto bg-surface-container-low p-xl">{body()}</div>
+      <div className="relative flex-1 overflow-y-auto bg-surface-container-low p-xl">
+        {/* In the gutter the centred page leaves. Sticky rather than fixed so
+            it travels with the document, and hidden below xl where that
+            gutter is not there to put it in. */}
+        {mode === "edit" && content && (
+          <FormatToolbar className="sticky top-0 float-left -ml-xs hidden xl:flex" />
+        )}
+        {body()}
+      </div>
     </div>
   );
 }

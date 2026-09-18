@@ -69,7 +69,7 @@
 {% macro render_summary_or_objective() %}
   {% if summary %}
   <h2>Summary</h2>
-  <p class="summary" data-field="summary">{{ summary }}</p>
+  <p class="summary" data-field="summary" data-field-rich>{{ summary | rich }}</p>
   {% elif objective %}
   <h2>Objective</h2>
   <p class="summary">{{ objective }}</p>
@@ -85,12 +85,12 @@
     <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
     {% for job in group.roles %}
     <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">&nbsp;·&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endfor %}
     {% else %}
     {% set job = group.roles[0] %}
     <div class="job-header"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> &nbsp;·&nbsp; <b class="company" data-field="experience.{{ job._index }}.company">{{ job.company }}</b> <span class="dates">&nbsp;·&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endif %}
   {% endfor %}
   {% endif %}

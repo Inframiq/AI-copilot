@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
+from app.services.rich_text import sanitize_inline
+
 from app.core.config import settings
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
@@ -24,13 +26,28 @@ class PhotoRequiredError(ValueError):
     """Raised by _render_html when a photo-required template has no photo."""
 
 
+def _sub_outside_tags(pattern: str, repl: str, html: str) -> str:
+    """Apply a substitution to the text of *html*, never inside its tags.
+
+    Once user text can carry <b>, a skill named "b" or "em" would otherwise
+    match inside the tag itself and rewrite the markup into nonsense.
+    """
+    return "".join(
+        part if part.startswith("<") else re.sub(pattern, repl, part)
+        for part in re.split(r"(<[^>]*>)", html)
+    )
+
+
 def _highlight_keywords(text: str, keywords: list) -> Markup:
     """Wrap any keyword found in *text* in a <strong class="kw"> tag.
 
     Steps:
-    1. HTML-escape the raw text so user content can never inject tags.
-    2. Apply the keyword regex on the escaped string and insert our own
-       controlled <strong> tags.
+    1. Sanitise the raw text: everything is escaped except the small set of
+       inline formatting tags the Studio can apply (see rich_text). This is
+       what keeps user content from injecting markup now that user content is
+       allowed to contain *some* markup.
+    2. Apply the keyword regex to the text between tags, never inside them,
+       and insert our own controlled <strong> tags.
     3. Return Markup so Jinja2 does not escape the result a second time.
 
     The pattern is anchored with alphanumeric lookaround (not \\b) — the same
@@ -40,9 +57,9 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
     (a bare \\b breaks on those since +/. aren't word characters).
     """
     if not keywords or not text:
-        return Markup(escape(text or ""))
+        return sanitize_inline(text)
 
-    safe_text = str(escape(text))
+    safe_text = str(sanitize_inline(text))
     # Sort longest first so "Machine learning" matches before "learning"
     sorted_kw = sorted(
         (str(k) for k in keywords if str(k).strip()),
@@ -53,7 +70,7 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
         return Markup(safe_text)
 
     pattern = "|".join(re.escape(k) for k in sorted_kw)
-    highlighted = re.sub(
+    highlighted = _sub_outside_tags(
         f"(?i)(?<![A-Za-z0-9])({pattern})(?![A-Za-z0-9])",
         r'<strong class="kw">\1</strong>',
         safe_text,
@@ -128,6 +145,9 @@ def _url_link(value: str) -> Markup:
 
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 _jinja_env.filters["highlight"] = _highlight_keywords
+# Prose the Studio can format (summary, bullets) renders through the same
+# allowlist as the highlighter, so a tag is a tag everywhere or nowhere.
+_jinja_env.filters["rich"] = sanitize_inline
 _jinja_env.filters["email_link"] = _email_link
 _jinja_env.filters["phone_link"] = _phone_link
 _jinja_env.filters["url_link"] = _url_link

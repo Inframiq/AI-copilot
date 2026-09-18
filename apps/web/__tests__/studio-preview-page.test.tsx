@@ -207,6 +207,21 @@ describe("Studio preview page", () => {
     fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /back to builder/i })));
     expect(push).toHaveBeenCalledWith("/studio/r1");
   });
+
+  it("offers formatting in the space beside the document while editing", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByRole("toolbar", { name: /formatting/i }));
+    expect(screen.getByRole("button", { name: /bold/i })).toBeTruthy();
+  });
+
+  it("hides formatting in preview, where nothing is editable", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByRole("tab", { name: /preview/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /preview/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("toolbar", { name: /formatting/i })).toBeNull(),
+    );
+  });
 });
 
 describe("Export when the file cannot be fetched", () => {
