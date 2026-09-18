@@ -99,3 +99,15 @@ export function completeCount(states: SectionState[]): {
     total: states.length,
   };
 }
+
+/** Canonical Builder order. sectionStates() already returns this order; this
+ * export exists so navigation can reason about neighbours without depending
+ * on array positions in its return value. */
+export const SECTION_ORDER: SectionId[] = [
+  "contact",
+  "summary",
+  "experience",
+  "education",
+  "skills",
+  "extras",
+];
