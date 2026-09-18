@@ -2,9 +2,10 @@
 import { use, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { StudioShell } from "@/components/studio/StudioShell";
+import { BuilderShell } from "@/components/builder/BuilderShell";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
+import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { getCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
@@ -26,6 +27,7 @@ export default function StudioPage({
   const setPreviewOpen = useResumeStore((s) => s.setPreviewOpen);
   const content = useResumeStore((s) => s.content);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
+  const jdId = useTailoringStore((s) => s.jdId);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
@@ -160,7 +162,12 @@ export default function StudioPage({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background relative">
-      <StudioShell resumeId={resumeId} resume={resume} careerProfile={careerProfile} />
+      <BuilderShell
+        title={resume?.title ?? "Resume"}
+        backLabel={jdId ? "Back to Analyzer" : "Back to Resumes"}
+        onBack={() => router.push(jdId ? `/jd/${jdId}` : "/studio")}
+        onPreview={() => router.push(`/studio/${resumeId}/preview`)}
+      />
 
       <PhotoRequirementModal
         profilePhotoUrl={careerProfile === undefined ? undefined : careerProfile?.photo_url ?? null}

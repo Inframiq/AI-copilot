@@ -8,12 +8,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush, back: vi.fn() }),
 }));
 
-// StudioShell pulls in the tailoring store, AI calls, the preview dock, etc.
+// BuilderShell pulls in the six section editors and the tailoring store.
 // — irrelevant to what this file tests (whether the page fetches and applies
 // an already-generated PDF on open), so it's stubbed to keep the render
 // cheap and this test focused on the page's own effect wiring.
-vi.mock("@/components/studio/StudioShell", () => ({
-  StudioShell: () => null,
+vi.mock("@/components/builder/BuilderShell", () => ({
+  BuilderShell: () => null,
 }));
 
 vi.mock("@/lib/api-client", () => ({
@@ -30,7 +30,8 @@ vi.mock("@/lib/career-profile-client", async (importOriginal) => {
 });
 vi.mock("@/lib/photo-upload", () => ({ uploadResumePhoto: vi.fn(), uploadProfilePhoto: vi.fn() }));
 
-import StudioResumePage from "../app/(app)/studio/[resumeId]/page";
+// Moved into the chrome-free (builder) route group; the URL is unchanged.
+import StudioResumePage from "../app/(builder)/studio/[resumeId]/page";
 import { apiClient } from "../lib/api-client";
 import { useResumeStore } from "../stores/resume-store";
 import { useTailoringStore } from "../stores/tailoring-store";
