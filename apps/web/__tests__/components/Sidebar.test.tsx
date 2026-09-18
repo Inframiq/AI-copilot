@@ -201,11 +201,42 @@ describe("Sidebar collapse", () => {
   // links styled the same way, and was invisible as a result. It is now a
   // flap on the sidebar's outer edge — off the list entirely, where an edge
   // handle is the conventional place to look for one.
-  it("mounts the collapse control on the sidebar edge, not inside the footer", () => {
+  it("keeps the flap out of the scrolling nav so it cannot be clipped", () => {
+    // The flap hangs outside the sidebar's border. The nav must scroll on
+    // short viewports, and overflow-y:auto computes overflow-x to auto too —
+    // so a flap inside the nav would be clipped or add a scrollbar. It lives
+    // in a non-scrolling wrapper that shares the nav's top edge instead.
     useSidebarStore.setState({ override: "expanded" });
     const { container } = renderSidebar();
     const flap = screen.getByRole("button", { name: /collapse sidebar/i });
-    expect(flap.parentElement).toBe(container.querySelector("aside"));
+    expect(container.querySelector("nav")!.contains(flap)).toBe(false);
+  });
+
+  it("still lets the nav scroll on a short viewport", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    const { container } = renderSidebar();
+    expect(container.querySelector("nav")!.className).toMatch(/overflow-y-auto/);
+  });
+
+  it("anchors the flap to the same box the nav starts in", () => {
+    // So it tracks the first nav row structurally rather than by a hardcoded
+    // offset that would drift if the logo block's height changed.
+    useSidebarStore.setState({ override: "expanded" });
+    const { container } = renderSidebar();
+    const flap = screen.getByRole("button", { name: /collapse sidebar/i });
+    const nav = container.querySelector("nav")!;
+    expect(flap.parentElement).toBe(nav.parentElement);
+    expect(flap.parentElement!.className).toMatch(/relative/);
+  });
+
+  it("clears the aside's own padding so it lands outside the border", () => {
+    // The nav sits inside the aside's horizontal padding, so translating by
+    // the flap's own width alone would leave it inside the sidebar.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(
+      screen.getByRole("button", { name: /collapse sidebar/i }).className,
+    ).toMatch(/--spacing-md/);
   });
 
   it("hangs the flap outside the sidebar's right border", () => {
@@ -213,12 +244,12 @@ describe("Sidebar collapse", () => {
     renderSidebar();
     const flap = screen.getByRole("button", { name: /collapse sidebar/i });
     expect(flap.className).toMatch(/absolute/);
-    expect(flap.className).toMatch(/translate-x-full/);
+    expect(flap.className).toMatch(/translate-x-/);
   });
 
-  it("centres the flap on the top bar's search pill", () => {
-    // TopNav is h-14 (56px), so the pill's centre is 28px down. The flap is
-    // h-10 (40px), so top-sm (8px) puts its centre on the same line.
+  it("centres the flap on the first nav row", () => {
+    // A nav row is 56px (py-md x2 + a 24px icon) and the flap is h-10 (40px),
+    // so top-sm (8px) inside the nav puts the two on the same centre line.
     useSidebarStore.setState({ override: "expanded" });
     renderSidebar();
     expect(
