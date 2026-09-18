@@ -69,10 +69,21 @@ describe("Studio review page", () => {
     expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
   });
 
-  it("sends a resume with no JD context to the builder instead", async () => {
+  // Supersedes an earlier redirect-to-Builder guess. This route owns the
+  // whole of tailoring, so with no JD yet it is the place you paste one --
+  // which is also what restores Path B, whose only entry point (SourcePanel)
+  // was orphaned by the same deletion that took the review.
+  it("offers the paste form when no JD has been chosen yet", async () => {
     useTailoringStore.setState({ jdId: null, jdText: "" } as never);
     await renderPage();
-    expect(replace).toHaveBeenCalledWith("/studio/r1");
+    expect(screen.getByText(/tailor to a job description/i)).toBeTruthy();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("does not spend a credit before a JD exists", async () => {
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    await renderPage();
+    expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
   });
 
   it("lists the rewritten bullets to accept or reject", async () => {

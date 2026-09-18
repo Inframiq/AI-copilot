@@ -20,11 +20,14 @@ export function BuilderShell({
   onBack,
   backLabel,
   onPreview,
+  onTailor,
 }: {
   title: string;
   onBack: () => void;
   backLabel: string;
   onPreview: () => void;
+  /** Path B's route into tailoring; omitted, the rail simply stays quiet. */
+  onTailor?: () => void;
 }) {
   const content = useResumeStore((s) => s.content);
   const [current, setCurrent] = useState<SectionId>("contact");
@@ -54,7 +57,7 @@ export function BuilderShell({
         <main key={current} className="section-enter w-full max-w-3xl">
           <SectionBody id={current} />
         </main>
-        <ContextRail />
+        <ContextRail onTailor={onTailor} />
       </div>
 
       <BuilderNav

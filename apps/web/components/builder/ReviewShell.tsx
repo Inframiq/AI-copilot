@@ -9,6 +9,7 @@ import { SummaryCard } from "@/components/studio/review/SummaryCard";
 import { TriageDeck } from "@/components/studio/review/TriageDeck";
 import { SkillsCard } from "@/components/studio/review/SkillsCard";
 import { FactLockNotice } from "@/components/studio/review/FactLockNotice";
+import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
 import { FOCUS_RING } from "@/lib/focus";
 
 /**
@@ -55,7 +56,9 @@ export function ReviewShell({
   const atsFixes = useTailoringStore((s) => s.atsFixes);
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
   const jdText = useTailoringStore((s) => s.jdText);
+  const jdId = useTailoringStore((s) => s.jdId);
   const isLoading = useTailoringStore((s) => s.isLoading);
+  const hasJd = !!jdId || !!jdText.trim();
   const error = useTailoringStore((s) => s.error);
 
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
@@ -63,6 +66,9 @@ export function ReviewShell({
   const [summaryLoading, setSummaryLoading] = useState<"rewrite" | "humanize" | "custom" | null>(null);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Subscribed, not read via getState(): SourcePanel creates the JD row and
+  // sets jdId, and this must re-render when it does.
 
   const bulletChanges = useMemo<BulletChange[]>(
     () => deriveBulletChanges(pendingContent, originalContent),
@@ -146,12 +152,18 @@ export function ReviewShell({
         </button>
         <span aria-hidden className="h-4 w-px shrink-0 bg-outline-variant/40" />
         <h1 className="truncate text-headline-md font-semibold text-on-surface">
-          Review your tailored résumé
+          {hasJd ? "Review your tailored résumé" : "Tailor this résumé"}
         </h1>
       </header>
 
       <div className="flex-1 overflow-y-auto px-lg py-xl">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-xl">
+          {/* Path B's entry, orphaned by the same deletion that took the
+              review: with no JD chosen there is nothing to review yet, and
+              this is where you paste one. SourcePanel calls runTailoring
+              itself, so the review appears here when it returns. */}
+          {!hasJd && !isLoading && <SourcePanel />}
+
           {isLoading && (
             <div className="flex flex-col items-center gap-sm rounded-2xl border border-dashed border-outline-variant/40 px-lg py-xxl text-center">
               <Sparkle size={28} className="animate-pulse text-primary" />

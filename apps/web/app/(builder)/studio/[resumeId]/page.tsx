@@ -167,6 +167,7 @@ export default function StudioPage({
         backLabel={jdId ? "Back to Analyzer" : "Back to Resumes"}
         onBack={() => router.push(jdId ? `/jd/${jdId}` : "/studio")}
         onPreview={() => router.push(`/studio/${resumeId}/preview`)}
+        onTailor={() => router.push(`/studio/${resumeId}/review`)}
       />
 
       <PhotoRequirementModal

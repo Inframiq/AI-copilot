@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("@/lib/api-client", () => ({ apiClient: {} }));
 
@@ -57,4 +57,27 @@ describe("ContextRail", () => {
     render(<ContextRail />);
     expect(screen.queryByText("Skill19")).toBeNull();
   });
+
+  // Path B lost its tailoring entry when StudioShell was deleted. The rail is
+  // where Path A shows JD context, so it is where Path B offers to get some.
+  it("offers to tailor when there is no JD yet", () => {
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    const onTailor = vi.fn();
+    render(<ContextRail onTailor={onTailor} />);
+    fireEvent.click(screen.getByRole("button", { name: /tailor to a job/i }));
+    expect(onTailor).toHaveBeenCalled();
+  });
+
+  it("shows JD context rather than the invitation once a JD is set", () => {
+    useTailoringStore.setState({ jdId: "jd1", jdText: "Senior engineer" } as never);
+    render(<ContextRail onTailor={() => {}} />);
+    expect(screen.queryByRole("button", { name: /tailor to a job/i })).toBeNull();
+  });
+
+  it("stays out of the way when the caller offers no tailoring route", () => {
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    const { container } = render(<ContextRail />);
+    expect(container.firstChild).toBeNull();
+  });
 });
+

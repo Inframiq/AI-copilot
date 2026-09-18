@@ -29,22 +29,17 @@ export default function StudioReviewPage({
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!hasJdContext) {
-      // Nothing to review; this resume was opened outside the JD path.
-      router.replace(`/studio/${resumeId}`);
-      return;
-    }
-    if (startedRef.current || pendingContent) return;
+    // No JD yet: this route is also where you paste one, so there is nothing
+    // to run and nothing to redirect away from.
+    if (!hasJdContext || startedRef.current || pendingContent) return;
     startedRef.current = true;
     useTailoringStore.getState().runTailoring(resumeId);
-  }, [hasJdContext, pendingContent, resumeId, router]);
-
-  if (!hasJdContext) return null;
+  }, [hasJdContext, pendingContent, resumeId]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
       <ReviewShell
-        onBack={() => router.push(jdId ? `/jd/${jdId}` : "/studio")}
+        onBack={() => router.push(jdId ? `/jd/${jdId}` : `/studio/${resumeId}`)}
         onApply={() => {
           // applyBulletDecisions has already written the accepted bullets into
           // resume-store; flush them now rather than waiting on the autosave
