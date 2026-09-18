@@ -1,14 +1,12 @@
 "use client";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Eye, EyeSlash, PencilSimple, Spinner, Trash, WarningCircle } from "@phosphor-icons/react";
-import { EditorPanel } from "@/components/resume/EditorPanel";
-import { PreviewPanel } from "@/components/resume/PreviewPanel";
+import { StudioShell } from "@/components/studio/StudioShell";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
-import { RESUME_TEMPLATES, templateRequiresPhoto } from "@/lib/resume-templates";
+import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { getCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
 
@@ -22,28 +20,12 @@ export default function StudioPage({
   const queryClient = useQueryClient();
   const setResume = useResumeStore((s) => s.setResume);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
-  const setPreviewUnderfilled = useResumeStore((s) => s.setPreviewUnderfilled);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const templateId = useResumeStore((s) => s.templateId);
-  const setTemplateId = useResumeStore((s) => s.setTemplateId);
-  const lineSpacing = useResumeStore((s) => s.lineSpacing);
-  const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
-  const previewOpen = useResumeStore((s) => s.previewOpen);
   const setPreviewOpen = useResumeStore((s) => s.setPreviewOpen);
   const content = useResumeStore((s) => s.content);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
-  const isDirty = useResumeStore((s) => s.isDirty);
-  const isSaving = useResumeStore((s) => s.isSaving);
-  const saveError = useResumeStore((s) => s.saveError);
-  const saveNow = useResumeStore((s) => s.saveNow);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
-  const [titleError, setTitleError] = useState<string | null>(null);
-  const [deleteArmed, setDeleteArmed] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isSwitchingTemplate, setIsSwitchingTemplate] = useState(false);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
@@ -146,82 +128,6 @@ export default function StudioPage({
     }
   }, [templateId, storeResumeId, resumeId, content, setPhotoModal]);
 
-  function startEditingTitle() {
-    setTitleDraft(resume?.title ?? "");
-    setTitleError(null);
-    setIsEditingTitle(true);
-  }
-
-  async function saveTitle() {
-    const nextTitle = titleDraft.trim();
-    setIsEditingTitle(false);
-    if (!resume || !nextTitle || nextTitle === resume.title) return;
-
-    const previousTitle = resume.title;
-    // Optimistic update — reflect the rename immediately, everywhere it's cached.
-    queryClient.setQueryData<Resume>(["resume", resumeId], (r) =>
-      r ? { ...r, title: nextTitle } : r
-    );
-    queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
-      list?.map((r) => (r.id === resumeId ? { ...r, title: nextTitle } : r))
-    );
-
-    try {
-      await apiClient.updateResume(resumeId, { title: nextTitle });
-    } catch (err) {
-      setTitleError(err instanceof Error ? err.message : "Rename failed");
-      queryClient.setQueryData<Resume>(["resume", resumeId], (r) =>
-        r ? { ...r, title: previousTitle } : r
-      );
-      queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
-        list?.map((r) => (r.id === resumeId ? { ...r, title: previousTitle } : r))
-      );
-    }
-  }
-
-  async function handleDeleteResume() {
-    if (!deleteArmed) {
-      setDeleteArmed(true);
-      return;
-    }
-    setIsDeleting(true);
-    setDeleteError(null);
-    try {
-      await apiClient.deleteResume(resumeId);
-      queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
-        list?.filter((r) => r.id !== resumeId)
-      );
-      queryClient.removeQueries({ queryKey: ["resume", resumeId] });
-      useResumeStore.getState().resetStore();
-      router.push("/studio");
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete resume");
-      setIsDeleting(false);
-      setDeleteArmed(false);
-    }
-  }
-
-  // The one place template gets switched — was previously duplicated between
-  // a full grid tab in the editor and a pill/dropdown in the preview panel.
-  // Re-renders the preview in place if one's already showing; otherwise just
-  // records the choice (rendering happens whenever the user next asks for a
-  // preview or download).
-  async function handleTemplateChange(id: string) {
-    setTemplateId(id);
-    if (!storeResumeId || !pdfSignedUrl) return;
-    setIsSwitchingTemplate(true);
-    try {
-      const { signed_url, underfilled } = await apiClient.generatePdf(storeResumeId, id, undefined, lineSpacing, paragraphSpacing);
-      setPdfSignedUrl(signed_url);
-      setPreviewUnderfilled(underfilled ?? false);
-    } catch {
-      // Best-effort re-render — the template choice itself is already saved;
-      // the next explicit preview/download retries the render.
-    } finally {
-      setIsSwitchingTemplate(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
@@ -254,126 +160,7 @@ export default function StudioPage({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background relative">
-      {/* Glassmorphic Toolbar */}
-      <header
-        className="min-h-16 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-sm px-md sm:px-lg py-sm sm:py-0 border-b border-outline-variant/20 shrink-0"
-        style={{
-          background: "rgba(255, 255, 255, 0.7)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="flex items-center gap-4 min-w-0">
-          {isEditingTitle ? (
-            <input
-              autoFocus
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setIsEditingTitle(false);
-              }}
-              maxLength={200}
-              className="text-headline-md text-primary font-semibold bg-transparent border-b-2 border-primary outline-none min-w-0"
-            />
-          ) : (
-            <button
-              onClick={startEditingTitle}
-              className="group flex items-center gap-2 text-headline-md text-primary font-semibold hover:opacity-80 transition-opacity min-w-0"
-              title="Rename resume"
-            >
-              <span className="truncate">{resume?.title || "Resume Studio"}</span>
-              <PencilSimple size={16} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
-            </button>
-          )}
-          {saveError ? (
-            <button
-              onClick={() => saveNow()}
-              title={saveError}
-              className="flex items-center gap-1 px-2 py-1 bg-error-container/30 text-error rounded text-caption font-semibold hover:bg-error-container/50 transition-colors"
-            >
-              <WarningCircle size={14} weight="fill" /> Failed to save · Retry
-            </button>
-          ) : isSaving ? (
-            <span className="flex items-center gap-1 px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
-              <Spinner size={12} className="animate-spin" /> Saving…
-            </span>
-          ) : isDirty ? (
-            <span className="px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
-              Unsaved changes
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-caption uppercase tracking-wider">
-              <CheckCircle size={12} weight="fill" /> Saved
-            </span>
-          )}
-          {titleError && <span className="text-caption text-error">{titleError}</span>}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-          <select
-            value={templateId}
-            onChange={(e) => handleTemplateChange(e.target.value)}
-            disabled={isSwitchingTemplate}
-            title="Change template"
-            className="px-2 sm:px-3 py-2 rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 cursor-pointer max-w-[120px] sm:max-w-none"
-          >
-            {RESUME_TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setPreviewOpen(!previewOpen)}
-            title={previewOpen ? "Hide Preview" : "Preview"}
-            className={`flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg text-label-md transition-all ${
-              previewOpen
-                ? "bg-secondary-container text-on-secondary-container font-semibold"
-                : "text-on-surface-variant hover:bg-surface-container-low"
-            }`}
-          >
-            {previewOpen ? <EyeSlash size={20} /> : <Eye size={20} />}
-            <span className="hidden sm:inline">{previewOpen ? "Hide Preview" : "Preview"}</span>
-          </button>
-          <div className="flex flex-col items-end gap-1">
-            <button
-              onClick={handleDeleteResume}
-              disabled={isDeleting}
-              title={deleteArmed ? "Click again to confirm" : "Delete resume"}
-              className={`flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg text-label-md transition-all disabled:opacity-50 ${
-                deleteArmed
-                  ? "bg-error text-on-primary"
-                  : "text-on-surface-variant hover:bg-error-container/50 hover:text-error"
-              }`}
-            >
-              <Trash size={20} />
-              {deleteArmed && <span className="hidden sm:inline">{isDeleting ? "Deleting…" : "Confirm delete"}</span>}
-            </button>
-            {deleteError && <span className="text-caption text-error">{deleteError}</span>}
-          </div>
-        </div>
-      </header>
-
-      {/* Workspace — full-width editor until Preview is opened, so an empty
-          "no preview yet" pane doesn't eat half the screen for a resume
-          nobody's asked to render yet. Single <PreviewPanel> instance
-          (previously mounted twice — once hidden per breakpoint — which
-          would have doubled its on-open auto-generate call). */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        <section
-          className={`w-full h-full overflow-y-auto bg-surface-container-lowest relative z-10 ${
-            previewOpen ? "lg:w-1/2 border-r border-outline-variant/20" : ""
-          }`}
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        >
-          <EditorPanel />
-        </section>
-
-        {previewOpen && (
-          <section className="w-full lg:w-1/2 h-full overflow-hidden flex flex-col bg-surface-container-high lg:bg-transparent">
-            <PreviewPanel />
-          </section>
-        )}
-      </div>
+      <StudioShell resumeId={resumeId} resume={resume} careerProfile={careerProfile} />
 
       <PhotoRequirementModal
         profilePhotoUrl={careerProfile === undefined ? undefined : careerProfile?.photo_url ?? null}

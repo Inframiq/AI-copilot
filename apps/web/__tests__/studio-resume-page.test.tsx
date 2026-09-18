@@ -8,15 +8,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush, back: vi.fn() }),
 }));
 
-// EditorPanel/PreviewPanel pull in the tailoring store, AI calls, etc. —
-// irrelevant to what this file tests (whether the page fetches and applies
-// an already-generated PDF on open), so they're stubbed to keep the render
+// StudioShell pulls in the tailoring store, AI calls, the preview dock, etc.
+// — irrelevant to what this file tests (whether the page fetches and applies
+// an already-generated PDF on open), so it's stubbed to keep the render
 // cheap and this test focused on the page's own effect wiring.
-vi.mock("@/components/resume/EditorPanel", () => ({
-  EditorPanel: () => null,
-}));
-vi.mock("@/components/resume/PreviewPanel", () => ({
-  PreviewPanel: () => null,
+vi.mock("@/components/studio/StudioShell", () => ({
+  StudioShell: () => null,
 }));
 
 vi.mock("@/lib/api-client", () => ({

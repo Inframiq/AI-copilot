@@ -73,12 +73,9 @@ export function DockToolbar({
         )}
       </div>
 
-      <div className="mx-xs h-6 w-px bg-desk-line" />
-
-      {/* Cosmetic readout — no page-count/zoom state exists yet to drive it;
-          a future task can wire real values in without changing this shape. */}
-      <span className="tabular whitespace-nowrap px-sm text-label-sm text-on-desk">Page 1 · 100%</span>
-
+      {/* No page/zoom readout: the PDF renders inside an iframe, so nothing
+          here can know the page count or zoom level. A control that states a
+          fact it cannot know is worse than no control. */}
       <div className="mx-xs h-6 w-px bg-desk-line" />
 
       <button
