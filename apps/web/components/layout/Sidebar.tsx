@@ -83,34 +83,31 @@ export function Sidebar() {
         </span>
       </Link>
 
+      {/* Collapse flap — an edge handle, the conventional place to find one.
+          It began as a footer row beneath eight identically-styled nav links
+          and was invisible there.
+
+          Level with the top bar's search pill: TopNav is h-14 (56px) so the
+          pill centres 28px down, and the aside starts at the viewport top,
+          so top-sm puts this 40px flap's centre on the same line.
+
+          It hangs on the aside rather than inside the nav because the nav
+          scrolls, and overflow-y:auto computes overflow-x to auto too, which
+          would clip it. The aside is position:fixed (already a containing
+          block) and sets no overflow. */}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="absolute top-sm right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200"
+      >
+        {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
+      </button>
+
       {/* Nav Items */}
-      <div className="relative flex-1 min-h-0 flex flex-col">
-        {/* Collapse flap — an edge handle, the conventional place to find one.
-            It began as a footer row beneath eight identically-styled nav links
-            and was invisible there.
-
-            Anchored to the nav, not the aside: a nav row is 56px (py-md twice
-            plus a 24px icon), so top-sm centres this 40px flap on the first
-            one — level with Dashboard — and it stays level if the logo block's
-            height ever changes. The nav sits inside the aside's horizontal
-            padding, so the translate has to clear that padding as well as the
-            flap's own width, or it lands inside the sidebar. */}
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`absolute top-sm right-0 z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200 ${
-            collapsed
-              ? "translate-x-[calc(100%+var(--spacing-xs))]"
-              : "translate-x-[calc(100%+var(--spacing-md))]"
-          }`}
-        >
-          {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
-        </button>
-
-        <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-sm">
-          {NAV.map(({ href, icon: Icon, label }) => {
+      <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-sm">
+        {NAV.map(({ href, icon: Icon, label }) => {
             const active = isActive(pathname, href);
             return (
               <Link
@@ -142,9 +139,8 @@ export function Sidebar() {
                 </span>
               </Link>
             );
-          })}
-        </nav>
-      </div>
+        })}
+      </nav>
 
       {/* Bottom — credit balance; the collapse flap moved to the nav edge,
           and sign-out lives on /account */}

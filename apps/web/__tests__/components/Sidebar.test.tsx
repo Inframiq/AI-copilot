@@ -218,25 +218,14 @@ describe("Sidebar collapse", () => {
     expect(container.querySelector("nav")!.className).toMatch(/overflow-y-auto/);
   });
 
-  it("anchors the flap to the same box the nav starts in", () => {
-    // So it tracks the first nav row structurally rather than by a hardcoded
-    // offset that would drift if the logo block's height changed.
+  it("anchors the flap to the aside, which never scrolls", () => {
+    // The aside is position:fixed (already a containing block) and sets no
+    // overflow, so the flap can hang past its border without being clipped —
+    // no extra wrapper needed.
     useSidebarStore.setState({ override: "expanded" });
     const { container } = renderSidebar();
     const flap = screen.getByRole("button", { name: /collapse sidebar/i });
-    const nav = container.querySelector("nav")!;
-    expect(flap.parentElement).toBe(nav.parentElement);
-    expect(flap.parentElement!.className).toMatch(/relative/);
-  });
-
-  it("clears the aside's own padding so it lands outside the border", () => {
-    // The nav sits inside the aside's horizontal padding, so translating by
-    // the flap's own width alone would leave it inside the sidebar.
-    useSidebarStore.setState({ override: "expanded" });
-    renderSidebar();
-    expect(
-      screen.getByRole("button", { name: /collapse sidebar/i }).className,
-    ).toMatch(/--spacing-md/);
+    expect(flap.parentElement).toBe(container.querySelector("aside"));
   });
 
   it("hangs the flap outside the sidebar's right border", () => {
@@ -244,12 +233,13 @@ describe("Sidebar collapse", () => {
     renderSidebar();
     const flap = screen.getByRole("button", { name: /collapse sidebar/i });
     expect(flap.className).toMatch(/absolute/);
-    expect(flap.className).toMatch(/translate-x-/);
+    expect(flap.className).toMatch(/translate-x-full/);
   });
 
-  it("centres the flap on the first nav row", () => {
-    // A nav row is 56px (py-md x2 + a 24px icon) and the flap is h-10 (40px),
-    // so top-sm (8px) inside the nav puts the two on the same centre line.
+  it("centres the flap on the top bar's search pill", () => {
+    // TopNav's bar is h-14 (56px), so the pill centres 28px down the viewport.
+    // The aside starts at the viewport top, so top-sm (8px) puts this 40px
+    // flap's centre on that same line.
     useSidebarStore.setState({ override: "expanded" });
     renderSidebar();
     expect(
