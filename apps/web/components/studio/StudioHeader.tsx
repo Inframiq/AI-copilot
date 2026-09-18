@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
+import { ArrowLeft, CircleNotch, DownloadSimple, SlidersHorizontal } from "@phosphor-icons/react";
 import { FOCUS_RING } from "@/lib/focus";
 
 export type StudioMode = "edit" | "preview";
@@ -18,6 +18,8 @@ export function StudioHeader({
   mode,
   onMode,
   onBack,
+  backLabel,
+  onEditFull,
   onExport,
   isExporting,
 }: {
@@ -25,6 +27,10 @@ export function StudioHeader({
   mode: StudioMode;
   onMode: (m: StudioMode) => void;
   onBack: () => void;
+  /** Path-specific: the JD path came through the review, not the Builder. */
+  backLabel: string;
+  /** The Builder's six sections, as an escape hatch rather than a step. */
+  onEditFull?: () => void;
   onExport: () => void;
   isExporting: boolean;
 }) {
@@ -46,13 +52,13 @@ export function StudioHeader({
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back to Builder"
+        aria-label={backLabel}
         className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
         {/* Back, title, two tabs and Export do not fit a phone; the two text
             labels collapse to their icons and keep their names via aria. */}
-        <span className="hidden sm:inline">Back to Builder</span>
+        <span className="hidden sm:inline">{backLabel}</span>
       </button>
 
       <h1 className="truncate text-label-md font-semibold text-on-surface">{title}</h1>
@@ -81,6 +87,18 @@ export function StudioHeader({
           </button>
         ))}
       </div>
+
+      {onEditFull && (
+        <button
+          type="button"
+          onClick={onEditFull}
+          aria-label="Edit full résumé"
+          className={`flex shrink-0 items-center gap-xs rounded-lg text-label-sm text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
+        >
+          <SlidersHorizontal size={16} />
+          <span className="hidden md:inline">Edit full résumé</span>
+        </button>
+      )}
 
       <button
         type="button"

@@ -8,6 +8,7 @@ const props = {
   mode: "edit" as const,
   onMode: () => {},
   onBack: () => {},
+  backLabel: "Back to Builder",
   onExport: () => {},
   isExporting: false,
 };

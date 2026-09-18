@@ -348,7 +348,9 @@ export default function JDIndexPage() {
     useTailoringStore.getState().setAnalysisResults({ atsScore, matchedSkills, missingSkills, companyKeywords });
     useTailoringStore.getState().discardPending();
     useTailoringStore.getState().setPrioritySkills(Array.from(selectedPriority));
-    router.push(`/studio/${activeResumeId}`);
+    // The JD path lands on the tailoring review, not the six-section
+    // Builder: arriving here you have already said what you want.
+    router.push(`/studio/${activeResumeId}/review`);
   }
 
   const hasResults = atsScore !== null;

@@ -70,7 +70,7 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(state.missingSkills).toEqual(["AWS"]);
     expect(state.jdId).toBe("jd-1");
     expect(state.jdText).toBe("We need a senior engineer with Python.");
-    expect(mockPush).toHaveBeenCalledWith("/studio/resume-1");
+    expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review");
   });
 
   // End-to-end human flow, driven entirely through the real UI (not by
@@ -124,7 +124,7 @@ describe("JDIndexPage — Tailor Resume", () => {
     await user.click(screen.getByText("AWS"));
 
     await user.click(screen.getByText("Tailor Resume"));
-    expect(mockPush).toHaveBeenCalledWith("/studio/resume-1");
+    expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review");
     expect(useTailoringStore.getState().prioritySkills).toEqual(["AWS"]);
 
     // Simulate navigating away to Studio and back to JD Analyzer — the

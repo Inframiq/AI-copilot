@@ -149,8 +149,9 @@ export default function JDPage({
         companyKeywords: analysis.company_keywords ?? [],
       });
     }
-    // Navigate to Resume Builder — tailoring runs there, not here.
-    router.push(`/studio/${masterResume.id}`);
+    // Straight to the tailoring review, which runs the pipeline on arrival.
+    // Not the Builder: its six sections are not part of this path.
+    router.push(`/studio/${masterResume.id}/review`);
   }
 
   async function handleOpen() {

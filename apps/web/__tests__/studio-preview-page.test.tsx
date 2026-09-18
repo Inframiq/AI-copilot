@@ -16,6 +16,7 @@ vi.mock("@/lib/api-client", () => ({
 
 import StudioPreviewPage from "../app/(builder)/studio/[resumeId]/preview/page";
 import { useResumeStore } from "../stores/resume-store";
+import { useTailoringStore } from "../stores/tailoring-store";
 import { apiClient } from "../lib/api-client";
 
 // The page reads route params with use(), which suspends. Flushing inside
@@ -37,6 +38,7 @@ describe("Studio preview page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
     useResumeStore.setState({
       resumeId: "r1",
       content: {
@@ -128,5 +130,30 @@ describe("Studio preview page", () => {
     expect(
       screen.getByRole("button", { name: /export pdf/i }).hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  // Back is path-specific: arriving from the JD Analyzer, the Builder's six
+  // sections were never part of the journey, so sending you there is a
+  // detour into work you did not ask for.
+  it("goes back to the review when the journey started at a JD", async () => {
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /back to review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to review/i }));
+    expect(push).toHaveBeenCalledWith("/studio/r1/review");
+  });
+
+  it("offers the full editor as an escape hatch on the JD path", async () => {
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    await renderPage();
+    fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /edit full/i })));
+    expect(push).toHaveBeenCalledWith("/studio/r1");
+  });
+
+  it("goes back to the builder when there is no JD", async () => {
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    await renderPage();
+    fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /back to builder/i })));
+    expect(push).toHaveBeenCalledWith("/studio/r1");
   });
 });

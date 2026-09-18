@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
+import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
@@ -50,6 +51,12 @@ export default function StudioPreviewPage({
   const content = useResumeStore((s) => s.content);
   const templateId = useResumeStore((s) => s.templateId);
   const updateContent = useResumeStore((s) => s.updateContent);
+  // The JD path reached the Studio through the review, not the Builder, so
+  // "Back" must retrace that route rather than dropping the user into six
+  // sections they deliberately skipped.
+  const jdId = useTailoringStore((s) => s.jdId);
+  const jdText = useTailoringStore((s) => s.jdText);
+  const fromJd = !!jdId || !!jdText.trim();
   const [mode, setMode] = useState<StudioMode>("edit");
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -140,7 +147,11 @@ export default function StudioPreviewPage({
         title="Resume"
         mode={mode}
         onMode={setMode}
-        onBack={() => router.push(`/studio/${resumeId}`)}
+        backLabel={fromJd ? "Back to Review" : "Back to Builder"}
+        onBack={() =>
+          router.push(fromJd ? `/studio/${resumeId}/review` : `/studio/${resumeId}`)
+        }
+        onEditFull={fromJd ? () => router.push(`/studio/${resumeId}`) : undefined}
         onExport={handleExport}
         isExporting={isExporting}
       />
