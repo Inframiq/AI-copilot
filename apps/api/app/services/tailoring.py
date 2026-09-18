@@ -1100,6 +1100,47 @@ async def _agent3_write(
     if not entries:
         return WriterOutput(rewritten_bullets=[], updated_skills=list(original_skills))
 
+    out = await _agent3_call(
+        mapping_plan, original_skills, humanize_level, provider, seniority_indicators,
+    )
+
+    # Rule 10 calls omitting a bullet the most common failure mode, and the
+    # fallback in _apply_writer_output makes it invisible: the bullet keeps its
+    # original text and the user has paid for a tailor that quietly did not
+    # happen on that line. A SKIP is deliberate and expected; anything else
+    # missing is a drop, so ask again for exactly those.
+    returned = {b.bullet_id for b in out.rewritten_bullets}
+    dropped = [e for e in entries
+               if e.transformation != "SKIP" and e.original_bullet_id not in returned]
+    if dropped:
+        logger.warning(
+            "agent3_write omitted %d/%d bullet(s) — re-requesting: %s",
+            len(dropped), len(entries), [e.original_bullet_id for e in dropped],
+        )
+        retry = await _agent3_call(
+            MappingPlan(mapping_plan=dropped,
+                        plausible_skills_to_add=mapping_plan.plausible_skills_to_add),
+            original_skills, humanize_level, provider, seniority_indicators,
+        )
+        # One retry only. A second miss means the model will not answer for
+        # these, and _apply_writer_output's fallback keeps their originals.
+        out = WriterOutput(
+            rewritten_bullets=out.rewritten_bullets + retry.rewritten_bullets,
+            updated_skills=list(original_skills),
+        )
+    return out
+
+
+async def _agent3_call(
+    mapping_plan: MappingPlan,
+    original_skills: list[str],
+    humanize_level: int,
+    provider: AIProvider,
+    seniority_indicators: list[str] | None = None,
+) -> WriterOutput:
+    """One Agent 3 request, splitting the plan if the response overruns."""
+    entries = mapping_plan.mapping_plan
+
     payload = {
         "mapping_plan": mapping_plan.model_dump()["mapping_plan"],
         "plausible_skills_to_add": _sanitize_skill_list(
@@ -1139,7 +1180,7 @@ async def _agent3_write(
         ]
         rewritten: list[RewrittenBullet] = []
         for half in halves:
-            part = await _agent3_write(
+            part = await _agent3_call(
                 half, original_skills, humanize_level, provider, seniority_indicators,
             )
             rewritten.extend(part.rewritten_bullets)
@@ -1762,22 +1803,4 @@ async def run_tailoring_pipeline(
         bullet_rationale=bullet_rationale,
         ats_score_before=analysis.ats_score,
         jd_analysis=analysis.jd_analysis,
-    )
-
-
-# ── Kept for backward-compatibility (jd router still imports this) ────────────
-class ParsedJD(BaseModel):
-    required: list[str]
-    nice_to_have: list[str]
-
-
-async def extract_jd_skills(jd_text: str, provider: AIProvider) -> ParsedJD:
-    """Legacy single-call JD skill extractor used by the /jd create endpoint."""
-    system = (
-        "You are an expert technical recruiter. Extract skills from the job description. "
-        "Return structured JSON with keys 'required' and 'nice_to_have', each a list of strings."
-    )
-    return await provider.complete_structured(
-        system, jd_text, ParsedJD, model_tier="fast",
-        max_output_tokens=_MAX_TOKENS_JD_PARSE, call_name="extract_jd_skills_legacy",
     )

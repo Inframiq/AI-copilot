@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
-    extract_jd_skills, ParsedJD,
     get_or_generate_prep_questions, PrepQuestionData,
     InterviewQuestionData, InterviewQuestionsWrapper,
     run_tailoring_pipeline, TailoringResult,
@@ -46,15 +45,6 @@ def make_jd_analysis(**overrides) -> JDAnalysis:
     )
     defaults.update(overrides)
     return JDAnalysis(**defaults)
-
-
-@pytest.mark.asyncio
-async def test_extract_jd_skills_returns_parsed_jd():
-    parsed = ParsedJD(required=["Python", "AWS"], nice_to_have=["Docker"])
-    provider = make_mock_provider(structured_return=parsed)
-    result = await extract_jd_skills("We need Python, AWS. Docker is a plus.", provider)
-    assert isinstance(result, ParsedJD)
-    assert "Python" in result.required
 
 
 @pytest.mark.asyncio
@@ -1851,3 +1841,94 @@ def test_it_does_not_drag_in_the_mapping_plan_machinery():
     p = build_single_bullet_system(50)
     assert "mapping_plan" not in p
     assert "COMPLETE COVERAGE" not in p
+
+
+# ── Agent 3 omissions get a second chance, not a silent fallback ────────────
+# Rule 10 calls omitting a bullet "the most common failure mode". The code
+# fell back to the original and logged a warning — the user paid for a tailor
+# that quietly did not happen on that line. Now that SKIP is a real enum we
+# can tell a deliberate skip from a dropped one and re-request only the drops.
+
+@pytest.mark.asyncio
+async def test_agent3_omissions_are_re_requested():
+    plan = MappingPlan(
+        mapping_plan=[
+            BulletMapping(original_bullet_id=f"exp0_b{i}", original_text=f"Did thing {i}",
+                          transformation="REINFORCE", target_jd_keywords_to_inject=[],
+                          preserved_metrics=[], strategic_instruction="x")
+            for i in range(3)
+        ],
+        plausible_skills_to_add=[],
+    )
+    calls = []
+
+    async def cs(system, user, schema, **kw):
+        entries = json.loads(user)["mapping_plan"]
+        ids = [e["original_bullet_id"] for e in entries]
+        calls.append(ids)
+        # First pass drops the last bullet; the retry answers in full.
+        answer = ids if len(calls) > 1 else ids[:-1]
+        return WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id=i, rewritten_text=f"Rewrote {i}") for i in answer],
+            updated_skills=[],
+        )
+
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=cs)
+    out = await _agent3_write(plan, [], 50, provider)
+
+    assert len(calls) == 2, "expected a retry for the dropped bullet"
+    assert calls[1] == ["exp0_b2"], "retry must ask for ONLY the dropped id"
+    assert {b.bullet_id for b in out.rewritten_bullets} == {"exp0_b0", "exp0_b1", "exp0_b2"}
+
+
+@pytest.mark.asyncio
+async def test_a_deliberate_skip_is_not_mistaken_for_an_omission():
+    """SKIP means Agent 2 found no honest JD connection. Re-requesting it would
+    spend a premium call asking for a rewrite we would then throw away."""
+    plan = MappingPlan(
+        mapping_plan=[
+            BulletMapping(original_bullet_id="exp0_b0", original_text="Did a thing",
+                          transformation="REINFORCE", target_jd_keywords_to_inject=[],
+                          preserved_metrics=[], strategic_instruction="x"),
+            BulletMapping(original_bullet_id="exp0_b1", original_text="Ran the offsite",
+                          transformation="SKIP", target_jd_keywords_to_inject=[],
+                          preserved_metrics=[], strategic_instruction="SKIP"),
+        ],
+        plausible_skills_to_add=[],
+    )
+    calls = []
+
+    async def cs(system, user, schema, **kw):
+        calls.append(1)
+        return WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Rewrote it")],
+            updated_skills=[],
+        )
+
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=cs)
+    await _agent3_write(plan, [], 50, provider)
+    assert len(calls) == 1, "a SKIP must not trigger a retry"
+
+
+@pytest.mark.asyncio
+async def test_a_second_omission_is_accepted_rather_than_looping():
+    plan = MappingPlan(
+        mapping_plan=[BulletMapping(
+            original_bullet_id="exp0_b0", original_text="Did a thing",
+            transformation="REINFORCE", target_jd_keywords_to_inject=[],
+            preserved_metrics=[], strategic_instruction="x")],
+        plausible_skills_to_add=[],
+    )
+    calls = []
+
+    async def cs(system, user, schema, **kw):
+        calls.append(1)
+        return WriterOutput(rewritten_bullets=[], updated_skills=[])
+
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=cs)
+    out = await _agent3_write(plan, [], 50, provider)
+    assert len(calls) == 2, "exactly one retry, then give up"
+    assert out.rewritten_bullets == []

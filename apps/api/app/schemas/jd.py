@@ -38,9 +38,38 @@ class JDOut(BaseModel):
     @computed_field
     @property
     def parsed_skills(self) -> list[str]:
-        """Flattened required + nice_to_have skills, for callers that just want a list."""
+        """The JD's skills as a flat chip list, from Agent 1's parse.
+
+        This used to come from a separate legacy extractor (extract_jd_skills)
+        whose output sat on the JD page beside Agent 1's matched/not-matched
+        columns and disagreed with them — a skill could appear here and in
+        neither column. One extraction now feeds both, and creating a JD no
+        longer costs an extra model call.
+
+        Only the buckets that are genuinely skill-shaped are included:
+        domain_expertise_themes, seniority_indicators, core_responsibilities
+        and target_job_titles hold sentences and would render as garbage chips.
+        """
         if not self.parsed:
             return []
+        agent1 = self.parsed.get("agent1")
+        if agent1:
+            buckets = (
+                "exact_technical_tools",
+                "methodologies_and_frameworks",
+                "ats_filter_phrases",
+                "nice_to_have_skills",
+            )
+            out: list[str] = []
+            seen: set[str] = set()
+            for bucket in buckets:
+                for skill in agent1.get(bucket) or []:
+                    key = str(skill).strip().lower()
+                    if key and key not in seen:
+                        seen.add(key)
+                        out.append(skill)
+            return out
+        # Rows created before the legacy extractor was removed.
         required = self.parsed.get("required") or []
         nice_to_have = self.parsed.get("nice_to_have") or []
         return [*required, *nice_to_have]

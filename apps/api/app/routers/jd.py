@@ -8,8 +8,6 @@ from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverL
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
-from app.services.ai_engine.factory import get_ai_provider
-from app.services.tailoring import extract_jd_skills
 
 router = APIRouter(prefix="/jd", tags=["jd"])
 
@@ -62,14 +60,17 @@ async def create_jd(
         response.status_code = status.HTTP_200_OK
         return existing
 
-    provider = get_ai_provider()
-    parsed = await extract_jd_skills(raw_text, provider)
+    # No model call here any more. This used to run a legacy skill extractor
+    # whose output the JD page showed beside Agent 1's matched/not-matched
+    # columns, where the two disagreed. Agent 1 runs on Analyze and now feeds
+    # both, so creating a JD is a plain insert — instant, and one paid call
+    # cheaper. `parsed` starts empty and Analyze fills in agent1/semantic.
     title = body.title or raw_text.split("\n")[0][:120] or "Untitled JD"
     jd = JobDescription(
         user_id=uid,
         title=title,
         raw_text=raw_text,
-        parsed=parsed.model_dump(),
+        parsed={},
     )
     db.add(jd)
     await db.commit()
