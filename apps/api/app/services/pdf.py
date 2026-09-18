@@ -364,7 +364,7 @@ def _render_document(
     html = _render_html(
         resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
     )
-    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).render()
+    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).render()
 
 
 def _last_page_fill_fraction(page) -> float:
@@ -500,7 +500,7 @@ def generate_letter_pdf(contact: dict, date_str: str, body: str) -> bytes:
     import weasyprint  # deferred, same reason as generate_pdf
 
     html = _render_letter_html(contact, date_str, body)
-    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher).write_pdf()
+    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).write_pdf()
 
 
 async def upload_letter_pdf(
@@ -520,18 +520,22 @@ async def upload_letter_pdf(
     return path
 
 
-def _blocked_url_fetcher(url: str, *args, **kwargs):
+def _blocked_url_fetcher():
     """Default-deny fetcher: only data: URIs are allowed, no network/file access.
 
     Belt-and-suspenders alongside _sanitize_resume_content — even if some other
     field is ever rendered as a fetchable URL, WeasyPrint cannot reach the
-    network or local filesystem while generating a PDF.
-    """
-    if url.startswith("data:"):
-        import weasyprint.urls
+    network or local filesystem while generating a PDF. Any other scheme raises
+    ValueError, which WeasyPrint catches and skips that resource.
 
-        return weasyprint.urls.default_url_fetcher(url, *args, **kwargs)
-    raise ValueError(f"Blocked fetch of untrusted URL in PDF rendering: {url!r}")
+    WeasyPrint 70 takes a URLFetcher object, not a function: it reads
+    `_fail_on_errors` off the fetcher, and `urls.default_url_fetcher` is gone,
+    so the old function broke every photo template's render. A new instance
+    per render, because URLFetcher keeps per-request state between calls.
+    """
+    from weasyprint.urls import URLFetcher
+
+    return URLFetcher(allowed_protocols={"data"})
 
 
 async def upload_pdf(

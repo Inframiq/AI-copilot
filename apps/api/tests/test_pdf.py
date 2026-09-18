@@ -739,3 +739,34 @@ def test_cover_letter_contact_fields_render_as_real_links():
     html = _render_letter_html(contact, "January 1, 2026", "Body text.")
     assert 'href="mailto:jane@example.com"' in html
     assert 'href="tel:5550100"' in html
+
+
+# ---------------------------------------------------------------------------
+# The render-time fetcher, on WeasyPrint's URLFetcher API (v70+). A plain
+# function stopped working there: WeasyPrint reads `_fail_on_errors` off the
+# fetcher and `weasyprint.urls.default_url_fetcher` no longer exists, so every
+# photo template (whose photo is a data: URI) failed to render — Export PDF
+# broke for ats_sidebar and ats_professional.
+# ---------------------------------------------------------------------------
+
+
+def test_render_fetcher_allows_data_uris_and_blocks_everything_else():
+    pytest.importorskip("weasyprint")
+    from app.services.pdf import _blocked_url_fetcher
+
+    fetcher = _blocked_url_fetcher()
+    resource = fetcher.fetch("data:text/plain;base64,aGk=")
+    assert resource.read() == b"hi"
+    resource.close()
+    for url in ("http://169.254.169.254/secret", "https://example.com/x.png", "file:///etc/passwd"):
+        with pytest.raises(ValueError):
+            fetcher.fetch(url)
+
+
+def test_each_render_gets_its_own_fetcher():
+    """URLFetcher keeps per-request state between calls, so one instance
+    shared across concurrent renders could mix them up."""
+    pytest.importorskip("weasyprint")
+    from app.services.pdf import _blocked_url_fetcher
+
+    assert _blocked_url_fetcher() is not _blocked_url_fetcher()

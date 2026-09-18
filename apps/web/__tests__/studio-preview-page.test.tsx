@@ -235,3 +235,40 @@ describe("Export when the file cannot be fetched", () => {
     }
   });
 });
+
+describe("downloadFile with the PDF inline", () => {
+  // POST /resumes/{id}/pdf returns the PDF itself as a data: URL. Browsers
+  // refuse to open data: URLs in a new tab, so it must never rely on the
+  // network path or its new-tab fallback — it is decoded in place.
+  it("saves a data: URL without fetching it", async () => {
+    const { downloadFile } = await import("../lib/download");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const blobs: Blob[] = [];
+    const createUrl = vi.fn((b: Blob) => { blobs.push(b); return "blob:x"; });
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: createUrl, revokeObjectURL: vi.fn() }));
+    const names: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    try {
+      await downloadFile("data:application/pdf;base64,JVBERg==", "Jane Doe - Resume.pdf");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(names).toEqual(["Jane Doe - Resume.pdf"]);
+      expect(blobs[0].type).toBe("application/pdf");
+      expect(blobs[0].size).toBe(4); // "%PDF"
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("resumeFileName", () => {
+  it("drops characters a file system rejects", async () => {
+    const { resumeFileName } = await import("../lib/download");
+    expect(resumeFileName('Jane\\Doe/: "QA"')).toBe("JaneDoe QA - Resume.pdf");
+    expect(resumeFileName("  ")).toBe("Resume.pdf");
+    expect(resumeFileName(undefined)).toBe("Resume.pdf");
+  });
+});
