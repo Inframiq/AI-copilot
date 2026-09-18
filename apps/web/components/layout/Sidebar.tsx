@@ -56,7 +56,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs py-md" : "p-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300`}
+      className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs pt-0 pb-md" : "px-md pt-0 pb-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300`}
     >
       {/* Collapse flap — an edge handle, the conventional place to find this.
           It lived in the footer under eight identically-styled nav links and
@@ -71,7 +71,7 @@ export function Sidebar() {
         onClick={toggle}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="absolute top-lg right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:w-6 hover:text-primary hover:border-primary/40 transition-all duration-200"
+        className="absolute top-sm right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200"
       >
         {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
       </button>
@@ -80,18 +80,26 @@ export function Sidebar() {
           the square mark instead. Same alt text either way. */}
       <Link
         href="/dashboard"
-        className={`shrink-0 flex flex-col gap-xs mb-md ${collapsed ? "items-center px-0 py-md" : "px-md py-lg"}`}
+        className={`shrink-0 flex flex-col mb-md overflow-hidden ${collapsed ? "items-center px-0" : "px-md"}`}
       >
-        {collapsed ? (
-          <Image src="/brand/logo-mark-light.png" alt="KripaX" width={32} height={32} priority />
-        ) : (
-          <>
-            <Image src="/brand/logo-wordmark.png" alt="KripaX" width={154} height={34} priority />
-            <span className="text-caption text-secondary uppercase tracking-wider">
-              Build | Tailor | Score | Prepare
-            </span>
-          </>
-        )}
+        {/* h-14 matches TopNav's bar height, so the mark's centre lands on the
+            same 28px line as the search pill and the collapse flap. */}
+        <span className="flex items-center h-14 shrink-0">
+          <Image
+            src={collapsed ? "/brand/logo-mark-light.png" : "/brand/logo-wordmark.png"}
+            alt="KripaX"
+            width={collapsed ? 32 : 154}
+            height={collapsed ? 32 : 34}
+            priority
+          />
+        </span>
+        <span
+          className={`text-caption text-secondary uppercase tracking-wider whitespace-nowrap transition-[max-height,opacity] duration-300 ${
+            collapsed ? "max-h-0 opacity-0" : "max-h-8 opacity-100"
+          }`}
+        >
+          Build | Tailor | Score | Prepare
+        </span>
       </Link>
 
       {/* Nav Items */}
@@ -108,16 +116,24 @@ export function Sidebar() {
               // label or the collapsed sidebar is unusable.
               aria-label={label}
               title={collapsed ? label : undefined}
-              className={`flex items-center gap-md py-md rounded-xl text-label-md transition-all duration-300 ${
-                collapsed ? "justify-center px-0" : "px-md"
+              className={`flex items-center py-md rounded-xl text-label-md overflow-hidden whitespace-nowrap transition-colors duration-200 ${
+                collapsed ? "justify-center gap-0 px-0" : "gap-md px-md"
               } ${
                 active
-                  ? "bg-secondary-container text-on-secondary-container font-bold shadow-sm hover:shadow-md hover:scale-[0.98]"
+                  ? "bg-secondary-container text-on-secondary-container font-bold shadow-sm hover:shadow-md"
                   : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/40"
               }`}
             >
               <Icon size={24} weight={active ? "fill" : "regular"} className="shrink-0" />
-              {!collapsed && <span>{label}</span>}
+              {/* Mounted in both states: unmounting made the text vanish
+                  instantly while the sidebar took 300ms to narrow. */}
+              <span
+                className={`overflow-hidden transition-[max-width,opacity] duration-300 ${
+                  collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100"
+                }`}
+              >
+                {label}
+              </span>
             </Link>
           );
         })}

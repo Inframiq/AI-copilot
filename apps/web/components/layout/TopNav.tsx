@@ -31,7 +31,7 @@ export function TopNav() {
 
       {/* Desktop Top Bar — search + actions */}
       <header className="hidden md:flex justify-between items-center w-full px-lg h-14 bg-surface/80 backdrop-blur-md sticky top-0 z-30 border-b border-outline-variant/20 shrink-0">
-        <div className="flex items-center bg-surface-container-low rounded-full px-md py-sm border border-outline-variant/30 w-80">
+        <div className="flex items-center bg-surface-container-low rounded-full px-md py-sm ml-sm border border-outline-variant/30 w-80">
           <MagnifyingGlass size={20} className="text-on-surface-variant shrink-0" />
           <input
             className="bg-transparent border-none focus:ring-0 text-body-sm text-on-surface w-full ml-sm outline-none placeholder:text-on-surface-variant/60"

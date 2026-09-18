@@ -100,10 +100,37 @@ describe("Sidebar collapse", () => {
     expect(screen.getByText("JD Analyzer")).toBeTruthy();
   });
 
-  it("hides nav labels when collapsed", () => {
+  it("collapses nav labels to zero width rather than unmounting them", () => {
+    // Unmounting made the text vanish instantly while the container took
+    // 300ms to narrow — the "pop" behind the reported flicker. Keeping the
+    // label mounted lets width and opacity animate with the sidebar.
     useSidebarStore.setState({ override: "collapsed" });
     renderSidebar();
-    expect(screen.queryByText("JD Analyzer")).toBeNull();
+    const label = screen.getByText("JD Analyzer");
+    expect(label.className).toMatch(/max-w-0/);
+    expect(label.className).toMatch(/opacity-0/);
+  });
+
+  it("shows nav labels at full width when expanded", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(screen.getByText("JD Analyzer").className).toMatch(/opacity-100/);
+  });
+
+  it("never scales nav links, which made the icons appear to resize", () => {
+    // The scale was only ever on the ACTIVE link, so this has to check that
+    // one — usePathname is mocked to /dashboard.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(screen.getByLabelText("Dashboard").className).not.toMatch(/scale-/);
+  });
+
+  it("animates only specific properties, not transition-all", () => {
+    // transition-all animated the padding and gap swap too, dragging the icon
+    // across the row on every toggle.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(screen.getByLabelText("JD Analyzer").className).not.toMatch(/transition-all/);
   });
 
   it("keeps every nav item reachable by name when collapsed", () => {
@@ -187,6 +214,16 @@ describe("Sidebar collapse", () => {
     const flap = screen.getByRole("button", { name: /collapse sidebar/i });
     expect(flap.className).toMatch(/absolute/);
     expect(flap.className).toMatch(/translate-x-full/);
+  });
+
+  it("centres the flap on the top bar's search pill", () => {
+    // TopNav is h-14 (56px), so the pill's centre is 28px down. The flap is
+    // h-10 (40px), so top-sm (8px) puts its centre on the same line.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(
+      screen.getByRole("button", { name: /collapse sidebar/i }).className,
+    ).toMatch(/\btop-sm\b/);
   });
 
   it("sits near the top rather than centred on the edge", () => {
