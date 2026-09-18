@@ -1932,3 +1932,43 @@ async def test_a_second_omission_is_accepted_rather_than_looping():
     out = await _agent3_write(plan, [], 50, provider)
     assert len(calls) == 2, "exactly one retry, then give up"
     assert out.rewritten_bullets == []
+
+
+# ── Honest additions start switched on ───────────────────────────────────────
+# Every fix used to start off, so the "after" score measured rewording alone
+# and sat below 50 on most JDs. Skills Agent 2 judged plausible from the
+# résumé, and skills the user picked on the analyzer, are claims the user has
+# already vouched for (or the evidence supports) — they now start on. A bare
+# missing skill and every invented bullet still wait for an explicit yes.
+
+@pytest.mark.asyncio
+async def test_pipeline_defaults_plausible_and_priority_skills_on():
+    from app.services.tailoring import GapFillerOutput, GapFillBullet
+
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(
+            exact_technical_tools=["Docker", "Terraform", "Kubernetes", "Rust"],
+            importance={"docker": "high", "terraform": "high",
+                        "kubernetes": "high", "rust": "high"},
+        ),
+        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=["Docker"]),
+        WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
+        GapFillerOutput: GapFillerOutput(bullets=[GapFillBullet(
+            gap="Kubernetes", grounded=False, experience_index=None,
+            bullet_text="Operated Kubernetes clusters in production.")]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "E", "bullets": ["Wrote docs"]}], "skills": []}
+    db = make_mock_db_with_rows([])
+
+    result = await run_tailoring_pipeline(
+        resume, "need Docker, Terraform, Kubernetes, Rust", 50, provider, db,
+        priority_skills=["terraform"],
+    )
+
+    skill = {f.text.lower(): f for f in result.ats_fixes if f.type == "skill"}
+    assert skill["docker"].default_accept is True       # plausible from the résumé
+    assert skill["terraform"].default_accept is True    # the user asked for it
+    assert skill["rust"].default_accept is False        # merely missing
+    assert all(not f.default_accept for f in result.ats_fixes if f.type == "bullet")

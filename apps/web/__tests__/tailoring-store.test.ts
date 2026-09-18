@@ -751,7 +751,7 @@ describe("useTailoringStore", () => {
     );
   });
 
-  it("runTailoring auto-accepts skill_add decisions for priority skills present in the result", async () => {
+  it("runTailoring auto-accepts every suggested skill — the user's picks and the AI's plausible ones", async () => {
     useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
     useTailoringStore.getState().setJd("jd-001", "raw text");
     useTailoringStore.getState().setPrioritySkills(["Kubernetes"]);
@@ -763,10 +763,31 @@ describe("useTailoringStore", () => {
     await useTailoringStore.getState().runTailoring("resume-abc");
 
     const decisions = useTailoringStore.getState().bulletDecisions;
-    // The user's pick is pre-accepted...
     expect(decisions["skill_add:Kubernetes"]).toBe("accept");
-    // ...but an AI-only suggestion the user didn't ask for is not auto-decided.
-    expect(decisions["skill_add:Docker"]).toBeUndefined();
+    // suggested_skills is Agent 2's plausible-from-the-résumé set; starting it
+    // off left the "after" score measuring rewording alone.
+    expect(decisions["skill_add:Docker"]).toBe("accept");
+  });
+
+  it("runTailoring re-scores with the default selections applied", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+        ...mockCompletedSession,
+        suggested_skills: ["Docker"],
+      });
+      vi.mocked(apiClient.projectScore).mockResolvedValueOnce({ projected_score: 83 } as never);
+
+      await useTailoringStore.getState().runTailoring("resume-abc");
+      await vi.runAllTimersAsync();
+
+      expect(apiClient.projectScore).toHaveBeenCalled();
+      expect(useTailoringStore.getState().projectedAtsScore).toBe(83);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resetStore clears prioritySkills", () => {

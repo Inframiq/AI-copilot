@@ -1721,10 +1721,13 @@ async def run_tailoring_pipeline(
     )
 
     fixes: list[AtsFix] = []
-    # skill fixes: every missing skill + Agent 2's plausible-to-add set
-    skill_names: list[str] = list(post.missing_skills) + _sanitize_skill_list(
-        mapping_plan.plausible_skills_to_add
-    )
+    # skill fixes: every missing skill + Agent 2's plausible-to-add set.
+    # Plausible skills (evidenced by the résumé) and the user's own priority
+    # picks start accepted — with everything off, the "after" score measured
+    # rewording alone. A skill that is merely missing still waits for a yes.
+    plausible = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
+    vouched = {s.strip().lower() for s in plausible + _sanitize_skill_list(priority_skills or [])}
+    skill_names: list[str] = list(post.missing_skills) + plausible
     seen_skill = set()
     for name in skill_names:
         k = name.strip().lower()
@@ -1733,7 +1736,8 @@ async def run_tailoring_pipeline(
         seen_skill.add(k)
         fixes.append(AtsFix(
             id=fix_slug("skill", name), type="skill", gap=name,
-            importance=_imp(name), grounded=True, text=name, default_accept=False,
+            importance=_imp(name), grounded=True, text=name,
+            default_accept=k in vouched,
         ))
     # bullet fixes from the gap filler. These are always speculative (new
     # content the résumé lacks) — never a reword of an existing bullet, so

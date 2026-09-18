@@ -131,12 +131,27 @@ export function ReviewShell({
   }
 
   function handleApply() {
-    applyBulletDecisions(bulletDecisions as Record<string, "accept" | "reject">);
+    // Recording the decisions is not enough: the Studio renders resume-store,
+    // so the merged résumé has to be written there or it shows the original.
+    if (!useTailoringStore.getState().commitReview()) return;
     onApply();
   }
 
   const before = atsScoreBefore ?? atsScore;
   const after = projectedAtsScore ?? atsScore;
+
+  // What is still switched off, best first — the honest route to 80. Each
+  // delta is that fix alone against the tailored résumé, so they are
+  // estimates, not strictly additive.
+  const TARGET = 80;
+  const reachFixes = useMemo(
+    () =>
+      atsFixes
+        .filter((f) => f.score_delta > 0 && bulletDecisions[`fix:${f.id}`] !== "accept")
+        .sort((a, b) => b.score_delta - a.score_delta)
+        .slice(0, 5),
+    [atsFixes, bulletDecisions],
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -202,6 +217,47 @@ export function ReviewShell({
                       With your choices
                     </span>
                   </div>
+                </section>
+              )}
+
+              {after !== null && after < TARGET && reachFixes.length > 0 && (
+                <section
+                  aria-label={`Reach ${TARGET}`}
+                  className="flex flex-col gap-sm rounded-2xl border border-outline-variant/30 bg-surface p-lg"
+                >
+                  <div>
+                    <h2 className="text-label-md font-semibold text-on-surface">
+                      Reach {TARGET}
+                    </h2>
+                    <p className="text-caption text-on-surface-variant">
+                      Add only what is true for you — you will be asked about it in the interview.
+                      {" "}Points are estimates for each change on its own.
+                    </p>
+                  </div>
+                  <ul className="flex flex-col gap-xs">
+                    {reachFixes.map((f) => (
+                      <li key={f.id} className="flex items-center gap-sm">
+                        <span className="w-12 shrink-0 tabular text-label-md font-semibold text-primary">
+                          +{f.score_delta}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-body-sm text-on-surface">
+                          {f.type === "skill" ? `Add skill: ${f.text}`
+                            : f.type === "headline" ? `Headline: ${f.text}`
+                            : `New bullet: ${f.text}`}
+                          {!f.grounded && (
+                            <span className="ml-xs text-caption text-on-surface-variant">(not in your résumé yet)</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setFixDecision(f.id, "accept")}
+                          className={`shrink-0 rounded-lg border border-outline-variant/50 px-sm py-xs text-label-sm text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
+                        >
+                          Add
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </section>
               )}
 

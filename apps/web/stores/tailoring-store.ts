@@ -358,6 +358,10 @@ interface TailoringState {
    * resume store or persist anything — the original resume is untouched
    * until saveTailoredResume is explicitly called. */
   generatePreview: (resumeId: string) => Promise<void>;
+  /** The review's "Apply": folds every accepted rewrite, skill and fix into
+   * the résumé in resume-store (which autosaves it). Returns false when there
+   * is no review or no résumé loaded to apply it to. */
+  commitReview: () => boolean;
   /** Re-scores the resume exactly as currently shown in review (accepted/
    * rejected/humanized bullets, still unsaved) against the JD. Updates
    * atsScore/matchedSkills/missingSkills/companyKeywords in place; persists
@@ -735,11 +739,12 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           }
         }
 
-        const prioritySet = new Set(prioritySkills.map((s) => s.toLowerCase()));
+        // suggested_skills is the user's priority picks plus the skills Agent 2
+        // judged plausible from the résumé itself. Both start accepted: with
+        // them off, the "after" score measured rewording alone. The user can
+        // still untick any of them.
         for (const s of session.suggested_skills || []) {
-          if (prioritySet.has(s.toLowerCase())) {
-            initialDecisions[`skill_add:${s}`] = "accept";
-          }
+          initialDecisions[`skill_add:${s}`] = "accept";
         }
 
         // Seed each gap → fix decision from the backend's default_accept
@@ -770,6 +775,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           bulletDecisions: initialDecisions,
           isLoading: false,
         });
+        // session.ats_score scores the rewrites alone; re-score so the
+        // number on screen includes the skills and fixes that start accepted.
+        get().refreshProjectedScore();
         return;
       }
 
@@ -790,6 +798,18 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         isLoading: false,
       });
     }
+  },
+
+  commitReview: () => {
+    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex } = get();
+    const originalContent = useResumeStore.getState().content;
+    if (!pendingContent || !originalContent) return false;
+    const mergedContent = buildMergedContent(
+      pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
+    );
+    set({ mergedContent });
+    useResumeStore.getState().updateContent(mergedContent);
+    return true;
   },
 
   // Merge accepted bullet decisions into the original content and render a

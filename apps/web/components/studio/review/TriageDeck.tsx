@@ -92,7 +92,8 @@ export function TriageDeck({
     return (
       <div className="rounded-2xl border border-dashed border-outline-variant/50 p-xl text-center">
         <p className="text-body-md text-on-surface-variant">
-          No changes to review — your resume is already well-aligned with this job description.
+          No bullets were rewritten. That is not a verdict on fit — the score above
+          says how well you match; the skill and gap fixes below are how to raise it.
         </p>
       </div>
     );
