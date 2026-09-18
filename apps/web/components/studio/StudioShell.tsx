@@ -7,6 +7,8 @@ import { motion } from "motion/react";
 import { X } from "@phosphor-icons/react";
 import {
   useTailoringStore,
+  deriveBulletChanges,
+  parseBulletKey,
   type BulletChange,
 } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
@@ -24,6 +26,7 @@ import { SourcePanel } from "./canvas/SourcePanel";
 import { SummaryCard } from "./review/SummaryCard";
 import { SkillsCard } from "./review/SkillsCard";
 import { TriageDeck } from "./review/TriageDeck";
+import { FactLockNotice } from "./review/FactLockNotice";
 import { PreviewDock } from "./preview/PreviewDock";
 
 // The workbench: one shell holding the command bar, the step spine, the
@@ -66,6 +69,13 @@ export function StudioShell({
   const bulletImportance = useTailoringStore((s) => s.bulletImportance);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
   const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
+  // Landed upstream while the redesign was in flight: the pre-tailoring score
+  // and the stale flag feed the ring, the reverted bullets and the per-bullet
+  // rationale feed the review surface.
+  const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
+  const projectedScoreStale = useTailoringStore((s) => s.projectedScoreStale);
+  const revertedBullets = useTailoringStore((s) => s.revertedBullets);
+  const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const setFixDecision = useTailoringStore((s) => s.setFixDecision);
   const refreshProjectedScore = useTailoringStore((s) => s.refreshProjectedScore);
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
@@ -110,6 +120,7 @@ export function StudioShell({
   const [hasHumanized, setHasHumanized] = useState(false);
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
+  const [rewriteReverted, setRewriteReverted] = useState<Record<string, string[]>>({});
   const [summaryLoading, setSummaryLoading] = useState<"rewrite" | "humanize" | "custom" | null>(null);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -132,30 +143,13 @@ export function StudioShell({
   const [railOpen, setRailOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(false);
 
-  // ── Bullet changes (experience only) ─────────────────────────────────────
-  // Copied verbatim from BulletReviewPanel.
-  const bulletChanges = useMemo<BulletChange[]>(() => {
-    if (!pendingContent || !originalContent) return [];
-    const out: BulletChange[] = [];
-    pendingContent.experience.forEach((job, jobIdx) => {
-      const origJob = originalContent.experience[jobIdx];
-      job.bullets.forEach((bullet, bulletIdx) => {
-        const origBullet = origJob?.bullets[bulletIdx] ?? "";
-        if (bullet.trim() !== origBullet.trim()) {
-          out.push({
-            key: `exp${jobIdx}_b${bulletIdx}`,
-            jobIdx,
-            bulletIdx,
-            jobTitle: job.title || origJob?.title || "Unknown Role",
-            company: job.company || origJob?.company || "",
-            original: origBullet,
-            tailored: bullet,
-          });
-        }
-      });
-    });
-    return out;
-  }, [pendingContent, originalContent]);
+  // ── Bullet changes ───────────────────────────────────────────────
+  // The store owns this derivation (it also covers project bullets, which the
+  // pipeline rewrites too); the shell had a copy of an older version of it.
+  const bulletChanges = useMemo<BulletChange[]>(
+    () => deriveBulletChanges(pendingContent, originalContent),
+    [pendingContent, originalContent],
+  );
 
   // JD-gap skills come through as `type:"skill"` fixes. They render inside the
   // single SkillsCard (as chips carrying their own importance + "+N%"), so
@@ -188,13 +182,17 @@ export function StudioShell({
   ) {
     setBulletLoading((prev) => ({ ...prev, [change.key]: mode }));
     try {
-      const { rewritten_text } = await apiClient.rewriteBullet({
+      const { rewritten_text, reverted_reasons } = await apiClient.rewriteBullet({
         bullet_text: change.tailored,
         mode,
         jd_context: mode === "rewrite" ? jdText : undefined,
         humanize_level: humanizeLevel,
       });
-      updatePendingBullet(change.jobIdx, change.bulletIdx, rewritten_text);
+      // The server's fact-lock hands back the ORIGINAL when it rejects a
+      // rewrite. Say so — otherwise the button looks broken: you click it and
+      // nothing on screen moves.
+      setRewriteReverted((prev) => ({ ...prev, [change.key]: reverted_reasons ?? [] }));
+      updatePendingBullet(change.key, rewritten_text);
       // Auto-accept the updated version
       setBulletDecision(change.key, "accept");
       if (mode === "humanize") setHasHumanized(true);
@@ -448,10 +446,14 @@ export function StudioShell({
   const railCollapsed = railPinned ?? (openSection !== null || activeStep === "review");
 
   const pendingBySection = useMemo<Partial<Record<SectionId, number>>>(() => {
-    // Every bullet change belongs to an experience entry — that is what
-    // bulletChanges is built from — so the count lands on one section.
-    if (bulletChanges.length === 0) return {};
-    return { experience: bulletChanges.length };
+    // The store's derivation covers project bullets as well as experience
+    // ones, and the rail has no projects row — counting those under
+    // "experience" would point the badge at the wrong entries, so only
+    // experience changes are counted here.
+    const n = bulletChanges.filter(
+      (c) => parseBulletKey(c.key)?.section === "experience",
+    ).length;
+    return n === 0 ? {} : { experience: n };
   }, [bulletChanges]);
 
   const isReviewing = activeStep === "review" && pendingContent !== null;
@@ -470,15 +472,21 @@ export function StudioShell({
         onRewrite={handleRewriteSummary}
       />
 
+      {/* Above the deck: a fact-locked bullet never enters the queue, so this
+          is the only place it can be reported. */}
+      <FactLockNotice reverted={revertedBullets} />
+
       <TriageDeck
         changes={bulletChanges}
         decisions={bulletDecisions as Record<string, "accept" | "reject">}
         importance={bulletImportance}
+        rationale={bulletRationale}
+        revertedReasons={rewriteReverted}
         busy={bulletLoading}
         onDecide={setBulletDecision}
         onRewrite={handleRewriteBullet}
         onEdit={(change, text) =>
-          updatePendingBullet(change.jobIdx, change.bulletIdx, text)
+          updatePendingBullet(change.key, text)
         }
         onTakeAllRemaining={() => setAllBulletDecisions(bulletChanges, "accept")}
       />
@@ -646,6 +654,8 @@ export function StudioShell({
         onSelect={setActiveStep}
         score={atsScore}
         projected={projectedAtsScore}
+        scoreBefore={atsScoreBefore}
+        scoreStale={projectedScoreStale}
       />
 
       {/* Flex, not grid: the rail animates its own width, and a fixed grid

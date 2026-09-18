@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUUpLeft, ListBullets, CheckCircle } from "@phosphor-icons/react";
 import type { BulletChange } from "@/stores/tailoring-store";
+import type { BulletRationale } from "@/lib/api-client";
 import { ChangeCard } from "./ChangeCard";
 import { DeckList } from "./DeckList";
 
@@ -12,6 +13,8 @@ export function TriageDeck({
   changes,
   decisions,
   importance,
+  rationale,
+  revertedReasons,
   busy,
   onDecide,
   onRewrite,
@@ -22,6 +25,10 @@ export function TriageDeck({
   changes: BulletChange[];
   decisions: Record<string, Decision>;
   importance?: Record<string, string>;
+  /** Agent 2's per-bullet responsibility + keywords, keyed by change key. */
+  rationale?: Record<string, BulletRationale>;
+  /** Fact-lock reasons from an inline Rewrite/Humanize, keyed by change key. */
+  revertedReasons?: Record<string, string[]>;
   busy?: Record<string, "rewrite" | "humanize" | null>;
   onDecide: (key: string, d: Decision) => void;
   onRewrite: (change: BulletChange, mode: "rewrite" | "humanize") => void;
@@ -162,6 +169,8 @@ export function TriageDeck({
                 change={changes[index]}
                 importance={importance?.[changes[index].key]}
                 decision={decisions[changes[index].key]}
+                rationale={rationale?.[changes[index].key]}
+                revertedReasons={revertedReasons?.[changes[index].key]}
                 busy={busy?.[changes[index].key] ?? null}
                 onDecide={decide}
                 onRewrite={(mode) => onRewrite(changes[index], mode)}

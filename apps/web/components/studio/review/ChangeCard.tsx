@@ -8,6 +8,9 @@ import {
   ArrowUUpLeft,
 } from "@phosphor-icons/react";
 import type { BulletChange } from "@/stores/tailoring-store";
+import type { BulletRationale } from "@/lib/api-client";
+import { BulletDiff } from "./BulletDiff";
+import { BulletRationaleLine } from "./BulletRationaleLine";
 
 // Importance was a small corner badge; as a colored left rail it reads at
 // a glance while the eye is on the text, which is the point of a queue.
@@ -23,6 +26,8 @@ export function ChangeCard({
   decision,
   landedKeywords,
   atsDelta,
+  rationale,
+  revertedReasons,
   busy,
   onDecide,
   onRewrite,
@@ -33,6 +38,8 @@ export function ChangeCard({
   decision?: "accept" | "reject";
   landedKeywords?: string[];
   atsDelta?: number;
+  rationale?: BulletRationale;
+  revertedReasons?: string[];
   busy?: "rewrite" | "humanize" | null;
   onDecide: (d: "accept" | "reject") => void;
   onRewrite: (mode: "rewrite" | "humanize") => void;
@@ -73,8 +80,19 @@ export function ChangeCard({
 
         <div className="flex flex-col gap-xs">
           <span className="text-label-caps text-on-surface-variant">Was</span>
+          {/* Only the words the rewrite dropped are struck, so what survived
+              reads normally instead of the whole line being crossed out. */}
           <p className="text-body-md leading-relaxed text-on-surface-variant">
-            {change.original || <em className="not-italic opacity-50">— empty —</em>}
+            {change.original ? (
+              <BulletDiff
+                original={change.original}
+                tailored={change.tailored}
+                side="removed"
+                testId={`bullet-diff-removed-${change.key}`}
+              />
+            ) : (
+              <em className="not-italic opacity-50">— empty —</em>
+            )}
           </p>
         </div>
 
@@ -112,9 +130,34 @@ export function ChangeCard({
               className="w-full px-md py-sm rounded-xl border border-primary/50 bg-surface text-body-md leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           ) : (
-            <p className="text-body-md leading-relaxed text-on-surface">{change.tailored}</p>
+            <p className="text-body-md leading-relaxed text-on-surface">
+              <BulletDiff
+                original={change.original}
+                tailored={change.tailored}
+                side="added"
+                testId={`bullet-diff-added-${change.key}`}
+              />
+            </p>
           )}
         </div>
+
+        {/* The server's fact-lock hands back the ORIGINAL when it rejects an
+            inline rewrite. Say so — otherwise the button looks broken: you
+            click it and nothing on screen moves. */}
+        {(revertedReasons?.length ?? 0) > 0 && (
+          <p
+            data-testid={`rewrite-reverted-${change.key}`}
+            className="text-body-md leading-relaxed text-tertiary"
+          >
+            Kept your version — the rewrite {revertedReasons!.join("; ")}.
+          </p>
+        )}
+
+        {/* Why it changed — Agent 2's own rationale. */}
+        <BulletRationaleLine
+          rationale={rationale}
+          testId={`bullet-rationale-${change.key}`}
+        />
 
         {(landedKeywords?.length || atsDelta) ? (
           <div className="flex items-center gap-xs flex-wrap">

@@ -10,12 +10,18 @@ export function StepSpine({
   onSelect,
   score,
   projected,
+  scoreBefore,
+  scoreStale,
 }: {
   steps: Step[];
   activeStep: StepId;
   onSelect: (id: StepId) => void;
   score: number | null;
   projected: number | null;
+  /** Pre-tailoring score, so the ring can state the before → now gain. */
+  scoreBefore?: number | null;
+  /** A re-score that failed, so the figure may lag the user's selections. */
+  scoreStale?: boolean;
 }) {
   return (
     <div className="flex items-center gap-md px-lg h-16 border-b border-outline-variant/20 bg-surface-container-lowest/80 backdrop-blur-md">
@@ -45,7 +51,7 @@ export function StepSpine({
           </div>
         ))}
       </nav>
-      <AtsRing score={score} projected={projected} />
+      <AtsRing score={score} projected={projected} before={scoreBefore} stale={scoreStale} />
     </div>
   );
 }
