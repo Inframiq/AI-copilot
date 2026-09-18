@@ -13,7 +13,6 @@ import {
   WarningCircle,
   ArrowLeft,
   Sparkle,
-  ArrowCounterClockwise,
   FolderOpen,
   Target,
   FileText,
@@ -345,26 +344,17 @@ export default function JDPage({
                 </p>
               </div>
 
-              {/* Two action buttons */}
-              <div className="flex gap-sm mt-xs">
+              {/* Tailor is this card's single action. The "Open" that used to
+                  sit beside it called the same handleOpen as the one in
+                  "Generated for This JD" below — and that one sits next to the
+                  resume it opens, which this one did not. */}
+              <div className="flex mt-xs">
                 <button
                   onClick={handleTailor}
                   className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-primary bg-primary shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all"
                 >
                   <Sparkle size={14} />
                   Tailor
-                </button>
-                <button
-                  onClick={handleOpen}
-                  disabled={isOpening}
-                  className="flex-1 flex items-center justify-center gap-xs py-sm rounded-xl text-label-sm text-on-surface border border-outline-variant/40 hover:bg-surface-container hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isOpening ? (
-                    <ArrowCounterClockwise size={14} className="animate-spin" />
-                  ) : (
-                    <FolderOpen size={14} />
-                  )}
-                  Open
                 </button>
               </div>
             </div>

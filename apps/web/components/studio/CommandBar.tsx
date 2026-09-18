@@ -3,6 +3,8 @@ import { useState } from "react";
 import {
   CheckCircle,
   DownloadSimple,
+  FilePdf,
+  ListBullets,
   PencilSimple,
   Spinner,
   Trash,
@@ -36,6 +38,8 @@ export function CommandBar({
   onDelete,
   isDeleting,
   deleteError,
+  onOpenRail,
+  onOpenPreview,
 }: {
   title: string;
   isDirty: boolean;
@@ -53,6 +57,10 @@ export function CommandBar({
   onDelete: () => void;
   isDeleting: boolean;
   deleteError?: string | null;
+  /** Below xl the rail is a sheet — this opens it. Omit to hide the button. */
+  onOpenRail?: () => void;
+  /** Below xl the preview dock is a sheet — this opens it. */
+  onOpenPreview?: () => void;
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -75,6 +83,19 @@ export function CommandBar({
   return (
     <header className="flex shrink-0 items-center justify-between gap-md border-b border-outline-variant/20 bg-surface-container-lowest/80 px-lg h-16 backdrop-blur-md">
       <div className="flex min-w-0 items-center gap-md">
+        {/* Below xl the rail is not on screen — this is the only way to it. */}
+        {onOpenRail && (
+          <button
+            type="button"
+            onClick={onOpenRail}
+            aria-label="Open sections"
+            title="Sections"
+            className="shrink-0 rounded-xl p-xs text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface xl:hidden"
+          >
+            <ListBullets size={20} />
+          </button>
+        )}
+
         {isEditingTitle ? (
           <input
             autoFocus
@@ -131,6 +152,19 @@ export function CommandBar({
       </div>
 
       <div className="flex items-center gap-sm">
+        {/* The dock keeps its column down to lg; below that it is a sheet. */}
+        {onOpenPreview && (
+          <button
+            type="button"
+            onClick={onOpenPreview}
+            aria-label="Open preview"
+            title="Preview"
+            className="shrink-0 rounded-xl p-xs text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface lg:hidden"
+          >
+            <FilePdf size={20} />
+          </button>
+        )}
+
         <div className="flex flex-col items-end gap-xs">
           <button
             type="button"

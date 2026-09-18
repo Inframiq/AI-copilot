@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import { X } from "@phosphor-icons/react";
 import {
   useTailoringStore,
   type BulletChange,
@@ -122,6 +124,13 @@ export function StudioShell({
 
   // ── Preview-dock state ───────────────────────────────────────────────────
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // ── Responsive sheets ────────────────────────────────────────────────────
+  // Below xl the rail has no column, and below lg neither does the dock.
+  // Rather than drop either one, each gets a sheet opened from the command
+  // bar — same component, same props, a different container.
+  const [railOpen, setRailOpen] = useState(false);
+  const [dockOpen, setDockOpen] = useState(false);
 
   // ── Bullet changes (experience only) ─────────────────────────────────────
   // Copied verbatim from BulletReviewPanel.
@@ -627,6 +636,8 @@ export function StudioShell({
         onDelete={handleDeleteResume}
         isDeleting={isDeleting}
         deleteError={deleteError}
+        onOpenRail={() => setRailOpen(true)}
+        onOpenPreview={() => setDockOpen(true)}
       />
 
       <StepSpine
@@ -670,7 +681,9 @@ export function StudioShell({
           </motion.div>
         </main>
 
-        <div className="hidden w-[44%] shrink-0 overflow-hidden xl:block">
+        {/* The dock holds its column down to lg — only below that does it
+            become a sheet. */}
+        <div className="hidden w-[44%] shrink-0 overflow-hidden lg:block">
           <PreviewDock
             url={previewUrl}
             isRefreshing={isRefreshing || isGenerating}
@@ -679,6 +692,70 @@ export function StudioShell({
           />
         </div>
       </div>
+
+      {/* ── Rail sheet (below xl) ──────────────────────────────────────── */}
+      <Dialog.Root open={railOpen} onOpenChange={setRailOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm xl:hidden" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/20 bg-surface-container-low pb-sm shadow-2xl xl:hidden"
+          >
+            <Dialog.Title className="px-lg pt-md text-label-caps text-on-surface-variant">
+              Sections
+            </Dialog.Title>
+            <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
+              <SectionRail
+                content={originalContent}
+                activeSection={openSection ?? "contact"}
+                collapsed={false}
+                onSelect={(id) => {
+                  setOpenSection(id);
+                  setRailOpen(false);
+                }}
+                onSelectEntry={(id, index) => {
+                  setOpenSection(id);
+                  setFocusEntry({ section: id, index });
+                  setRailOpen(false);
+                }}
+                pendingBySection={pendingBySection}
+                footer={isReviewing ? <BoostPanel /> : null}
+              />
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* ── Preview sheet (below lg) ───────────────────────────────────── */}
+      <Dialog.Root open={dockOpen} onOpenChange={setDockOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-desk lg:hidden"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-md border-b border-outline-variant/20 px-lg py-sm">
+              <Dialog.Title className="text-label-caps text-on-surface-variant">
+                Preview
+              </Dialog.Title>
+              <Dialog.Close
+                aria-label="Close preview"
+                className="rounded-xl p-xs text-on-surface-variant transition-colors hover:text-on-surface"
+              >
+                <X size={20} />
+              </Dialog.Close>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <PreviewDock
+                url={previewUrl}
+                isRefreshing={isRefreshing || isGenerating}
+                isStale={!!previewUrl && isDirty}
+                onRefresh={handleDockRefresh}
+              />
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

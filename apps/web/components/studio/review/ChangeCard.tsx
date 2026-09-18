@@ -47,8 +47,11 @@ export function ChangeCard({
     if (next && next !== change.tailored) onEdit(next);
   }
 
+  // overflow-clip, not overflow-hidden: it still clips the importance rail to
+  // the rounded corner, but does not make the card a scroll container — which
+  // would leave the sticky action row below with nothing to stick to.
   return (
-    <article className="relative flex overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-lg">
+    <article className="relative flex overflow-clip rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-lg">
       {importance && (
         <span
           aria-label={`${importance} impact`}
@@ -131,7 +134,9 @@ export function ChangeCard({
           </div>
         ) : null}
 
-        <div className="flex items-center gap-sm pt-xs">
+        {/* Below lg the card is taller than the viewport, so the verdict
+            follows the text down instead of sitting off-screen under it. */}
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-sm bg-surface-container-lowest/95 py-sm backdrop-blur-sm lg:static lg:bg-transparent lg:pb-0 lg:pt-xs lg:backdrop-blur-none">
           <button
             type="button"
             onClick={() => onDecide("reject")}

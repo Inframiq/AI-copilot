@@ -103,9 +103,9 @@ describe("JDPage — Open (handleOpen)", () => {
 
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
 
-    // Two "Open" buttons render once a tailored resume exists for this JD
-    // (the always-shown Master Resume card, and the "Generated for This JD"
-    // row) — both call the same handler, so either works.
+    // Exactly one "Open" renders now — the one in the "Generated for This
+    // JD" row, beside the resume it opens. The Resume Builder card's
+    // duplicate (same handler, no adjacent resume) was removed.
     const [openButton] = await screen.findAllByText("Open");
     await userEvent.click(openButton);
 
@@ -115,8 +115,11 @@ describe("JDPage — Open (handleOpen)", () => {
     expect(useTailoringStore.getState().jdId).toBeNull();
   });
 
+  // A tailor run happened for this JD (so the "Generated for This JD" row,
+  // which owns the only Open button, renders) but no resume was ever saved
+  // against it — handleOpen falls back to the master resume.
   it("falls back to opening the base resume when no tailored resume is linked to this JD", async () => {
-    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ session_id: null, resume_id: null } as any);
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ session_id: "session-1", resume_id: null } as any);
 
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
 
