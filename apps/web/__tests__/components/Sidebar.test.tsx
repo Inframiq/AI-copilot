@@ -13,7 +13,18 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: { getSubscription: vi.fn(() => new Promise(() => {})) },
 }));
 
+const SUB = {
+  plan: "free",
+  status: "active",
+  credits_remaining: 34,
+  credits_allotment: 50,
+  current_period_end: null,
+  renews: false,
+  costs: { tailor: 10, cover_letter: 3, rewrite_bullet: 1, analyze: 0 },
+};
+
 import { Sidebar } from "../../components/layout/Sidebar";
+import { apiClient } from "../../lib/api-client";
 
 // CreditMeter calls useQuery(), which needs a provider in the tree.
 function renderSidebar() {
@@ -80,6 +91,7 @@ describe("Sidebar collapse", () => {
     localStorage.clear();
     useSidebarStore.setState({ override: null });
     delete document.documentElement.dataset.sidebar;
+    vi.mocked(apiClient.getSubscription).mockImplementation(() => new Promise(() => {}));
   });
 
   it("shows nav labels when expanded", () => {
@@ -137,6 +149,36 @@ describe("Sidebar collapse", () => {
   // --sidebar-w must resolve for BOTH the aside and <main>, which are
   // siblings — so the override lives on the document element, the one
   // ancestor both share, not inline on the aside.
+  // The suite's api-client mock keeps getSubscription pending so the meter
+  // renders nothing and the nav assertions stay clean. These two resolve it
+  // on purpose — asserting "no allotment shown" against an empty meter would
+  // pass no matter what variant the sidebar picked.
+  it("uses the rail credit meter when collapsed, which is the one that fits", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    useSidebarStore.setState({ override: "collapsed" });
+    renderSidebar();
+    await screen.findByText(String(SUB.credits_remaining));
+    // The rail form drops the "/ allotment"; compact keeps it and overflows.
+    expect(screen.queryByText(/\/\s*50/)).toBeNull();
+  });
+
+  it("uses the full credit meter when expanded", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    // Only the full variant names the plan.
+    expect(await screen.findByText(/free/i)).toBeTruthy();
+  });
+
+  it("gives the collapse control a visible border so it reads as a button", () => {
+    // It was styled as a bare ghost row and got lost against the nav links.
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(
+      screen.getByRole("button", { name: /collapse sidebar/i }).className,
+    ).toMatch(/border/);
+  });
+
   it("publishes the override on the document element so <main> can offset by it", () => {
     useSidebarStore.setState({ override: "collapsed" });
     renderSidebar();

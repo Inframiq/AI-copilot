@@ -10,7 +10,14 @@ import type { Subscription } from "@career-copilot/types";
  * `full` is the card in the sidebar. Both link to /account. Renders nothing
  * until the balance has loaded, so it never flashes a placeholder number.
  */
-export function CreditMeter({ variant = "compact" }: { variant?: "compact" | "full" }) {
+export function CreditMeter({
+  variant = "compact",
+}: {
+  /** "rail" is the collapsed-sidebar form: the rail is 72px and the aside's
+   * own padding leaves ~40px of usable width, where "compact" (px-md + icon +
+   * count + "/ allotment") needs roughly 100px and spills out. */
+  variant?: "compact" | "full" | "rail";
+}) {
   const { data } = useQuery<Subscription>({
     queryKey: ["subscription"],
     queryFn: () => apiClient.getSubscription(),
@@ -26,6 +33,26 @@ export function CreditMeter({ variant = "compact" }: { variant?: "compact" | "fu
     credits_allotment > 0
       ? Math.max(0, Math.min(100, (credits_remaining / credits_allotment) * 100))
       : 0;
+
+  if (variant === "rail") {
+    return (
+      <Link
+        href="/account"
+        title={`${credits_remaining} of ${credits_allotment} credits`}
+        aria-label={`${credits_remaining} credits remaining`}
+        className={`flex flex-col items-center justify-center gap-0.5 px-0 py-xs rounded-lg border text-label-sm font-semibold transition-colors ${
+          low
+            ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
+            : "border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/50"
+        }`}
+      >
+        <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
+        {/* Remaining only — the "/ allotment" is what made this too wide.
+            Both numbers stay in the tooltip and the accessible name. */}
+        {credits_remaining}
+      </Link>
+    );
+  }
 
   if (variant === "compact") {
     return (

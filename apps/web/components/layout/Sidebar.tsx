@@ -56,7 +56,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col p-md gap-sm bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300"
+      className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs py-md" : "p-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300`}
     >
       {/* Logo — the 154px wordmark cannot fit a 72px rail, so the rail wears
           the square mark instead. Same alt text either way. */}
@@ -106,20 +106,20 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom — collapse control, then credit balance; sign-out lives on /account */}
-      <div className="shrink-0 mt-auto pb-md flex flex-col gap-sm">
+      <div className="shrink-0 mt-auto pt-sm pb-md flex flex-col gap-sm border-t border-outline-variant/20">
         <button
           type="button"
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`flex items-center gap-xs py-sm rounded-lg text-label-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/40 transition-colors ${
-            collapsed ? "justify-center px-0" : "px-md"
+          className={`flex items-center gap-xs py-sm rounded-lg border border-outline-variant/40 bg-surface-container-low/60 text-label-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high hover:border-outline-variant transition-colors ${
+            collapsed ? "justify-center px-0" : "justify-center px-md"
           }`}
         >
-          {collapsed ? <CaretDoubleRight size={18} /> : <CaretDoubleLeft size={18} />}
+          {collapsed ? <CaretDoubleRight size={18} weight="bold" /> : <CaretDoubleLeft size={18} weight="bold" />}
           {!collapsed && <span>Collapse</span>}
         </button>
-        <CreditMeter variant={collapsed ? "compact" : "full"} />
+        <CreditMeter variant={collapsed ? "rail" : "full"} />
       </div>
     </aside>
   );
