@@ -2,11 +2,37 @@
 import { use, useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
 import { writeField } from "@/lib/field-path";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
+
+/**
+ * The quiet states, held to the same width as the document so the page does
+ * not jump when the résumé arrives.
+ */
+function CanvasNotice({
+  icon,
+  title,
+  detail,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto flex w-full max-w-[8.5in] flex-col items-center gap-sm rounded-2xl border border-dashed border-outline-variant/40 px-lg py-xxl text-center">
+      <span className="text-on-surface-variant/70">{icon}</span>
+      <p className="text-label-md font-semibold text-on-surface">{title}</p>
+      <p className="max-w-sm text-caption text-on-surface-variant">{detail}</p>
+      {action}
+    </div>
+  );
+}
 
 /**
  * The Resume Studio: the document is the interface.
@@ -26,11 +52,12 @@ export default function StudioPreviewPage({
   const updateContent = useResumeStore((s) => s.updateContent);
   const [mode, setMode] = useState<StudioMode>("edit");
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Keyed on the content so an inline edit re-renders the document it was
   // made on. The server render is the only source — rendering client-side
   // would reintroduce the template drift this whole design avoids.
-  const { data } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["resumeHtml", resumeId, templateId, content],
     queryFn: () => apiClient.renderResumeHtml(resumeId, { content: content ?? undefined }),
     enabled: !!content,
@@ -49,11 +76,62 @@ export default function StudioPreviewPage({
 
   async function handleExport() {
     setIsExporting(true);
+    setExportError(null);
     try {
       await apiClient.generatePdf(resumeId, templateId);
+    } catch (err) {
+      // Previously a bare finally: a failed export reset the button and said
+      // nothing, so it read as a click that simply did not work.
+      setExportError(err instanceof Error ? err.message : "Export failed. Please try again.");
     } finally {
       setIsExporting(false);
     }
+  }
+
+  function body() {
+    if (!content) {
+      return (
+        <CanvasNotice
+          icon={<FileDashed size={28} />}
+          title="Nothing to preview yet"
+          detail="Add your details in the Builder and your résumé will appear here."
+        />
+      );
+    }
+    if (isError) {
+      return (
+        <CanvasNotice
+          icon={<WarningCircle size={28} />}
+          title="We couldn't render your résumé"
+          detail="Your work is saved. This is usually temporary."
+          action={
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              Try again
+            </button>
+          }
+        />
+      );
+    }
+    if (isPending) {
+      return (
+        <CanvasNotice
+          icon={<CircleNotch size={28} className="animate-spin" />}
+          title="Laying out your résumé"
+          detail="Rendering the same document your PDF will contain."
+        />
+      );
+    }
+    return (
+      <ResumeCanvas
+        html={data?.html ?? ""}
+        editable={mode === "edit"}
+        onEdit={handleEdit}
+      />
+    );
   }
 
   return (
@@ -66,13 +144,16 @@ export default function StudioPreviewPage({
         onExport={handleExport}
         isExporting={isExporting}
       />
-      <div className="flex-1 overflow-y-auto bg-surface-container-low p-xl">
-        <ResumeCanvas
-          html={data?.html ?? ""}
-          editable={mode === "edit"}
-          onEdit={handleEdit}
-        />
-      </div>
+      {exportError && (
+        <p
+          role="alert"
+          className="flex shrink-0 items-center gap-xs border-b border-error/20 bg-error-container px-lg py-sm text-caption text-on-error-container"
+        >
+          <WarningCircle size={14} weight="fill" />
+          Couldn&apos;t export: {exportError}
+        </p>
+      )}
+      <div className="flex-1 overflow-y-auto bg-surface-container-low p-xl">{body()}</div>
     </div>
   );
 }

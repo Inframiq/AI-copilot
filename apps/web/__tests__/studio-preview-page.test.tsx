@@ -86,4 +86,47 @@ describe("Studio preview page", () => {
       expect(screen.getByRole("tab", { name: /edit/i }).getAttribute("aria-selected")).toBe("true"),
     );
   });
+
+  it("shows a loading state while the document renders", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    await renderPage();
+    expect(screen.getByText(/laying out your résumé/i)).toBeTruthy();
+  });
+
+  it("surfaces a render failure instead of a blank page", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockRejectedValueOnce(new Error("boom"));
+    await renderPage();
+    await waitFor(() => screen.getByText(/couldn.t render/i));
+    expect(screen.getByRole("button", { name: /try again/i })).toBeTruthy();
+  });
+
+  it("recovers when the retry succeeds", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockRejectedValueOnce(new Error("boom"));
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /try again/i }));
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    await waitFor(() => expect(screen.queryByText(/couldn.t render/i)).toBeNull());
+  });
+
+  it("says so when there is no résumé to preview", async () => {
+    useResumeStore.setState({ content: null } as never);
+    await renderPage();
+    expect(screen.getByText(/nothing to preview/i)).toBeTruthy();
+    expect(apiClient.renderResumeHtml).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an export failure rather than swallowing it", async () => {
+    vi.mocked(apiClient.generatePdf).mockRejectedValueOnce(new Error("no credits"));
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
+    fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert").textContent).toMatch(/no credits/i);
+    // and the button comes back, so the export is retryable
+    expect(
+      screen.getByRole("button", { name: /export pdf/i }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
 });
