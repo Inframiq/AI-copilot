@@ -98,4 +98,17 @@ describe("StudioHeader", () => {
     );
     expect(unringed.map((b) => b.textContent)).toEqual([]);
   });
+
+  // Back label + title + two tabs + Export does not fit a phone. The two
+  // text labels collapse to their icons and carry their names explicitly.
+  it.each([
+    ["Back to Builder"],
+    ["Export PDF"],
+  ])("keeps %s named when its label is collapsed", (name) => {
+    render(<StudioHeader {...props} />);
+    const button = screen.getByRole("button", { name });
+    expect(button.getAttribute("aria-label")).toBe(name);
+    expect(button.querySelector("span.hidden")?.className).toContain("sm:inline");
+  });
 });
+

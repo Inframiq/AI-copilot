@@ -52,4 +52,19 @@ describe("BuilderHeader", () => {
     );
     expect(unringed.map((b) => b.textContent)).toEqual([]);
   });
+
+  // On a phone the row is back-label + title + save status, which does not
+  // fit. The label collapses to its arrow, so the accessible name has to be
+  // carried explicitly or the button becomes unnamed for screen readers.
+  it("names the back control even when its label is collapsed", () => {
+    const { container } = render(
+      <BuilderHeader title="R" onBack={() => {}} backLabel="Back to Analyzer" />,
+    );
+    const button = container.querySelector("button") as HTMLElement;
+    expect(button.getAttribute("aria-label")).toBe("Back to Analyzer");
+    const label = button.querySelector("span.hidden");
+    expect(label?.className).toContain("sm:inline");
+    expect(label?.textContent).toBe("Back to Analyzer");
+  });
 });
+

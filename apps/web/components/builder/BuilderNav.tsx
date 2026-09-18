@@ -38,7 +38,10 @@ export function BuilderNav({
         className={`flex items-center gap-xs rounded-xl px-md py-sm text-label-md text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
-        {prev ? `Previous: ${LABEL[prev]}` : "Previous"}
+        Previous
+        {/* The section name is what overflows a phone, so it goes; the verb
+            stays, because ": Education" alone would be nonsense. */}
+        {prev && <span className="hidden sm:inline">: {LABEL[prev]}</span>}
       </button>
 
       {next ? (
@@ -47,7 +50,8 @@ export function BuilderNav({
           onClick={onNext}
           className={`flex items-center gap-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 ${FOCUS_RING}`}
         >
-          {`Continue to ${LABEL[next]}`}
+          Continue
+          <span className="hidden sm:inline">{" "}to {LABEL[next]}</span>
           <ArrowRight size={16} />
         </button>
       ) : (

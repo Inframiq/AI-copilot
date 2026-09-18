@@ -46,10 +46,13 @@ export function StudioHeader({
       <button
         type="button"
         onClick={onBack}
+        aria-label="Back to Builder"
         className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
-        Back to Builder
+        {/* Back, title, two tabs and Export do not fit a phone; the two text
+            labels collapse to their icons and keep their names via aria. */}
+        <span className="hidden sm:inline">Back to Builder</span>
       </button>
 
       <h1 className="truncate text-label-md font-semibold text-on-surface">{title}</h1>
@@ -83,6 +86,7 @@ export function StudioHeader({
         type="button"
         onClick={onExport}
         disabled={isExporting}
+        aria-label="Export PDF"
         className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
       >
         {isExporting ? (
@@ -90,7 +94,7 @@ export function StudioHeader({
         ) : (
           <DownloadSimple size={16} />
         )}
-        Export PDF
+        <span className="hidden sm:inline">Export PDF</span>
       </button>
     </header>
   );

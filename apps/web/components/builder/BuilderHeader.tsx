@@ -44,10 +44,14 @@ export function BuilderHeader({
       <button
         type="button"
         onClick={onBack}
+        aria-label={backLabel}
         className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
-        {backLabel}
+        {/* Collapses to the arrow on a phone, where the row cannot hold the
+            label, the title and the save status at once. aria-label carries
+            the name so the button is never announced as unlabelled. */}
+        <span className="hidden sm:inline">{backLabel}</span>
       </button>
       <span aria-hidden className="h-4 w-px shrink-0 bg-outline-variant/40" />
       <h1 className="truncate text-headline-md font-semibold text-on-surface">{title}</h1>

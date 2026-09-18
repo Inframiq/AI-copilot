@@ -54,4 +54,32 @@ describe("BuilderNav", () => {
     );
     expect(unringed.map((b) => b.textContent)).toEqual([]);
   });
+
+  // The section names push both buttons past a 360px viewport, so they drop
+  // out below `sm`. What must never drop out is the verb — a button reading
+  // only ": Education" would be nonsense.
+  it("keeps the bare verb visible at every width", () => {
+    const { container } = render(
+      <BuilderNav current="summary" onPrevious={noop} onNext={noop} onPreview={noop} />,
+    );
+    for (const button of container.querySelectorAll("button")) {
+      const alwaysVisible = [...button.childNodes]
+        .filter((n) => n.nodeType === Node.TEXT_NODE || !(n as HTMLElement).className?.includes?.("hidden"))
+        .map((n) => n.textContent)
+        .join("")
+        .trim();
+      expect(alwaysVisible).toMatch(/previous|continue/i);
+    }
+  });
+
+  it("hides only the section name on narrow screens", () => {
+    const { container } = render(
+      <BuilderNav current="summary" onPrevious={noop} onNext={noop} onPreview={noop} />,
+    );
+    const hidden = [...container.querySelectorAll("span.hidden")];
+    expect(hidden.length).toBe(2);
+    expect(hidden.every((s) => s.className.includes("sm:inline"))).toBe(true);
+    expect(hidden.map((s) => s.textContent?.trim())).toEqual([": Contact", "to Experience"]);
+  });
 });
+
