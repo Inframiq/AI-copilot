@@ -1182,6 +1182,14 @@ async def test_rewrite_bullet_summary_field_truncates_to_word_cap():
 
 @pytest.mark.asyncio
 async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
+    """The summary's 80-word cap must never be applied to a bullet.
+
+    This used to assert an over-long bullet came back verbatim — which was
+    really the absence of ANY length enforcement on this endpoint. Bullets now
+    carry the pipeline's own 35-word cap through the fact-lock, so an over-long
+    rewrite is REVERTED to the original rather than silently truncated to 80
+    words. Either way the summary cap is not what governs a bullet.
+    """
     from app.services.resume_spec import HARD_LIMITS
 
     max_words = HARD_LIMITS["summary"]["max_words"]
@@ -1200,7 +1208,11 @@ async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
                     headers=make_auth_header(),
                 )
         assert r.status_code == 200
-        assert len(r.json()["rewritten_text"].split()) == max_words + 30
+        body = r.json()
+        # Reverted whole, not chopped at the summary's 80-word boundary.
+        assert body["rewritten_text"] == "Original bullet."
+        assert len(body["rewritten_text"].split()) != max_words
+        assert any("word" in reason for reason in body["reverted_reasons"])
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -1691,3 +1703,67 @@ async def test_get_session_leaves_the_pre_tailoring_score_null_for_older_session
         assert r.json()["ats_score_before"] is None
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# ── The inline Rewrite button uses the pipeline's rules and fact-lock ────────
+
+async def _post_rewrite(body, completion):
+    override, mock_session = make_mock_db()
+    from app.db.models import Resume
+    import uuid as _uuid
+    res = MagicMock(); res.scalar_one_or_none.return_value = Resume(
+        id=_uuid.uuid4(), user_id=_uuid.UUID(TEST_USER_ID), title="R",
+        content={"experience": []}, template_id="ats_clean")
+    mock_session.execute = AsyncMock(return_value=res)
+    provider = MagicMock()
+    provider.complete = AsyncMock(return_value=completion)
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=provider), \
+             patch("app.routers.ai.spend_credits", new=AsyncMock()), \
+             patch("app.routers.ai.refund_credits", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post("/ai/rewrite-bullet", json=body, headers=make_auth_header())
+        return r, provider
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_sends_the_pipeline_rule_set():
+    body = {"bullet_text": "Built the checkout flow", "mode": "rewrite",
+            "humanize_level": 50, "field": "bullet", "jd_context": "Need Python."}
+    _, provider = await _post_rewrite(body, "Engineered the checkout flow")
+    system = provider.complete.call_args.args[0]
+    assert "FACT LOCK" in system
+    assert "PRESERVE SPECIFICS" in system
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_reverts_a_rewrite_that_invents_a_metric():
+    """Same fact-lock the pipeline applies. Without it this endpoint was the
+    one way to get a fabricated number into a resume."""
+    body = {"bullet_text": "Built the checkout flow", "mode": "rewrite",
+            "humanize_level": 50, "field": "bullet"}
+    r, _ = await _post_rewrite(body, "Built a checkout flow serving 2M users")
+    assert r.json()["rewritten_text"] == "Built the checkout flow"
+    assert r.json()["reverted_reasons"]
+
+
+@pytest.mark.asyncio
+async def test_rewrite_bullet_returns_a_clean_rewrite_untouched():
+    body = {"bullet_text": "Built the checkout flow", "mode": "rewrite",
+            "humanize_level": 50, "field": "bullet"}
+    r, _ = await _post_rewrite(body, "Engineered the checkout flow")
+    assert r.json()["rewritten_text"] == "Engineered the checkout flow"
+    assert r.json()["reverted_reasons"] == []
+
+
+@pytest.mark.asyncio
+async def test_the_summary_field_does_not_get_bullet_rules():
+    """A summary is an 80-word paragraph, not a bullet — the bullet word cap
+    and action-verb rule would be wrong instructions for it."""
+    body = {"bullet_text": "Engineer with six years experience.", "mode": "rewrite",
+            "humanize_level": 50, "field": "summary"}
+    _, provider = await _post_rewrite(body, "Backend engineer with six years experience.")
+    assert "PRESERVE SPECIFICS" not in provider.complete.call_args.args[0]

@@ -318,8 +318,12 @@ export const apiClient = {
     custom_instruction?: string;
     /** Changes prompt framing: single-line bullet vs. an 80-word-cap paragraph. Defaults to "bullet". */
     field?: "bullet" | "summary";
-  }): Promise<{ rewritten_text: string }> =>
-    request<{ rewritten_text: string }>("POST", "/ai/rewrite-bullet", payload),
+    /** Non-empty when the server's fact-lock rejected the model's rewrite, in
+     * which case rewritten_text is the ORIGINAL, unchanged. */
+  }): Promise<{ rewritten_text: string; reverted_reasons?: string[] }> =>
+    request<{ rewritten_text: string; reverted_reasons?: string[] }>(
+      "POST", "/ai/rewrite-bullet", payload,
+    ),
 
   getSession: (sessionId: string): Promise<{
     session_id: string;

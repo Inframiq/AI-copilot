@@ -876,23 +876,68 @@ async def _agent2_semantic_map(
 
 # ── Agent 3: Precision Writer ─────────────────────────────────────────────────
 
-def _build_agent3_system(humanize_level: int, seniority_indicators: list[str] | None = None) -> str:
+def _humanize_tone(humanize_level: int) -> str:
+    """Shared by Agent 3 and the single-bullet rewrite so the two cannot drift."""
     if humanize_level < 30:
-        tone = (
+        return (
             "Write in fluent, natural-sounding prose. ATS keywords must appear "
             "organically — a human reader should not notice they were inserted."
         )
-    elif humanize_level > 70:
-        tone = (
+    if humanize_level > 70:
+        return (
             "Optimise aggressively for ATS density. Front-load the single most "
             "important JD keyword in the first 4 words of each bullet. Pack in "
             "all target keywords while keeping grammar correct."
         )
-    else:
-        tone = (
-            "Balance ATS density and human readability. Weave keywords naturally "
-            "into strong action-verb bullets without making them feel keyword-stuffed."
-        )
+    return (
+        "Balance ATS density and human readability. Weave keywords naturally "
+        "into strong action-verb bullets without making them feel keyword-stuffed."
+    )
+
+
+def build_single_bullet_system(humanize_level: int) -> str:
+    """Rules for rewriting ONE bullet on its own — the Studio's inline
+    "Rewrite" button (routers/ai.py rewrite_bullet).
+
+    That endpoint used to carry a two-sentence prompt while Agent 3 carried
+    ~1300 words and a deterministic fact-lock, so the same user clicking
+    "Rewrite" on a pipeline-written bullet reliably got a worse one back. This
+    is Agent 3's rule set minus everything that only makes sense for a batch:
+    no mapping plan, no bullet_ids, no coverage rule — instructions a
+    single-bullet call could not follow.
+    """
+    bw = HARD_LIMITS["bullet_words"]
+    banned = ", ".join(f'"{p}"' for p in BANNED_GENERIC_PHRASES)
+    return f"""\
+<system_role>
+You are an elite technical resume writer rewriting a single resume bullet.
+</system_role>
+
+<rules>
+1. FACT LOCK — NEVER FABRICATE: every number, percentage, dollar figure, date,
+company name, job title and named project in the original must survive
+unchanged. Do not add a metric, tool, technology, responsibility or outcome
+that is not already in the original. Language and framing are yours to change
+freely; facts are not.
+2. PRESERVE SPECIFICS: the original's concrete details (the actual tool,
+system, team, scale or named project) must survive. A bullet so generic it
+could belong to any candidate is a worse outcome than one that is slightly
+less keyword-dense but still reads as this person's real work.
+3. STRUCTURE: open with a strong past-tense action verb. Quantify only where
+the original already supports it — never invent a number, and never pad with
+vague filler to sound quantified.
+4. LENGTH: {bw["max"]} words is the hard maximum. Do not lengthen the bullet
+unless you are adding real information from the original; if you have nothing
+to add, the rewrite should be no longer than what you started with.
+5. BANNED WORDING: never use these unless the original already does:
+{banned}.
+6. TONE: {_humanize_tone(humanize_level)}
+7. Return ONLY the rewritten bullet — no quotes, no preamble, no explanation.
+</rules>"""
+
+
+def _build_agent3_system(humanize_level: int, seniority_indicators: list[str] | None = None) -> str:
+    tone = _humanize_tone(humanize_level)
 
     bullet_words = HARD_LIMITS["bullet_words"]
     banned = ", ".join(f'"{p}"' for p in BANNED_GENERIC_PHRASES)

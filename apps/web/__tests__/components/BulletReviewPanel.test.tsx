@@ -24,6 +24,7 @@ vi.mock("@/lib/career-profile-client", async (importOriginal) => {
 import { BulletReviewPanel } from "../../components/resume/BulletReviewPanel";
 import { useResumeStore } from "../../stores/resume-store";
 import { useTailoringStore } from "../../stores/tailoring-store";
+import { apiClient } from "../../lib/api-client";
 
 function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -423,5 +424,58 @@ describe("BulletReviewPanel stale score", () => {
   it("shows no warning while the score is current", () => {
     const { queryByTestId } = setup({ atsScore: 81, atsScoreBefore: 62, projectedScoreStale: false });
     expect(queryByTestId("score-stale")).toBeNull();
+  });
+});
+
+describe("BulletReviewPanel rewrite fact-lock", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+  });
+  afterEach(() => cleanup());
+
+  const original = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+    education: [],
+    skills: [],
+  };
+  const pending = {
+    ...original,
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Engineered checkout."] }],
+  };
+
+  function setup() {
+    useResumeStore.getState().setResume("resume-1", original as never, "ats_clean");
+    useTailoringStore.setState({ pendingContent: pending } as never);
+    return renderPanel();
+  }
+
+  it("explains when a rewrite was rejected instead of appearing to do nothing", async () => {
+    // The server returns the ORIGINAL when its fact-lock fires. Without a
+    // message the button looks broken — you click Rewrite and nothing moves.
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValue({
+      rewritten_text: "Engineered checkout.",
+      reverted_reasons: ["invented metric(s) not in the original bullet: 2"],
+    } as never);
+
+    const { getByText, findByTestId } = setup();
+    getByText("Rewrite").click();
+    const note = await findByTestId("rewrite-reverted-exp0_b0");
+    expect(note.textContent).toContain("invented metric");
+  });
+
+  it("shows no message when the rewrite is accepted", async () => {
+    vi.mocked(apiClient.rewriteBullet).mockResolvedValue({
+      rewritten_text: "Rebuilt checkout.",
+      reverted_reasons: [],
+    } as never);
+
+    const { getByText, queryByTestId } = setup();
+    getByText("Rewrite").click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(queryByTestId("rewrite-reverted-exp0_b0")).toBeNull();
   });
 });

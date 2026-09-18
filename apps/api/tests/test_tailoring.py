@@ -1812,3 +1812,42 @@ def test_a_non_skipped_bullet_still_takes_the_rewrite():
     )
     out = _apply_wo(indexed, writer, plan)
     assert out["experience"][0]["bullets"] == ["Engineered the checkout flow."]
+
+
+# ── The inline Rewrite button gets the pipeline's rules ─────────────────────
+# POST /ai/rewrite-bullet used a two-sentence prompt while Agent 3 used 1300
+# words of rules plus a deterministic fact-lock. Same button, same user, much
+# worse output — click "Rewrite" on a pipeline-written bullet and it got worse.
+
+from app.services.tailoring import build_single_bullet_system
+
+
+def test_the_single_bullet_prompt_carries_the_fact_lock_rule():
+    p = build_single_bullet_system(50)
+    assert "FACT LOCK" in p
+
+
+def test_it_carries_the_preserve_specifics_rule():
+    assert "PRESERVE SPECIFICS" in build_single_bullet_system(50)
+
+
+def test_it_carries_the_same_hard_word_cap_as_the_pipeline():
+    assert str(HARD_LIMITS["bullet_words"]["max"]) in build_single_bullet_system(50)
+
+
+def test_it_carries_the_same_banned_phrase_list():
+    p = build_single_bullet_system(50)
+    for phrase in ("spearheaded", "leveraged", "results-driven"):
+        assert phrase in p
+
+
+def test_it_respects_the_humanize_level_like_agent3_does():
+    assert build_single_bullet_system(10) != build_single_bullet_system(90)
+
+
+def test_it_does_not_drag_in_the_mapping_plan_machinery():
+    """A single bullet has no plan, no bullet_ids and no coverage rule — those
+    would be instructions the model cannot follow."""
+    p = build_single_bullet_system(50)
+    assert "mapping_plan" not in p
+    assert "COMPLETE COVERAGE" not in p

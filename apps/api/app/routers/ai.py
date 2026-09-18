@@ -20,7 +20,9 @@ from app.schemas.ai import (
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import (
     run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
+    build_single_bullet_system,
 )
+from app.services.bullet_guard import guard_rewrite
 from app.services.ats import (
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
 )
@@ -350,14 +352,23 @@ async def rewrite_bullet(
             "Return ONLY the rewritten text — no quotes, no preamble, no explanation."
         )
         user_msg = f"{label.capitalize()}:\n{body.bullet_text}"
-    else:  # rewrite — re-optimize for the JD
+    elif is_summary:
+        # A summary is an 80-word paragraph, so the bullet rule set (action-verb
+        # opening, 35-word cap) would be the wrong instructions for it.
         system = (
-            f"You are an elite ATS resume writer. Rewrite the {label} to better match the job "
-            "description below. Inject relevant keywords naturally and keep all metrics verbatim. "
-            f"{format_rule} Return ONLY the rewritten text — no quotes, no preamble."
+            "You are an elite ATS resume writer. Rewrite the professional summary to better "
+            "match the job description below. Inject relevant keywords naturally and keep all "
+            f"metrics verbatim. {format_rule} Return ONLY the rewritten text — no quotes, no preamble."
         )
         jd_block = f"\nJob Description context:\n{body.jd_context}" if body.jd_context else ""
-        user_msg = f"{label.capitalize()}:\n{body.bullet_text}{jd_block}"
+        user_msg = f"Professional summary:\n{body.bullet_text}{jd_block}"
+    else:  # rewrite a bullet — same rule set the pipeline's Agent 3 uses
+        # This endpoint used to carry a two-sentence prompt while Agent 3 carried
+        # ~1300 words plus a fact-lock, so clicking "Rewrite" on a
+        # pipeline-written bullet reliably made it worse.
+        system = build_single_bullet_system(body.humanize_level)
+        jd_block = f"\n\n<job_description>\n{body.jd_context}\n</job_description>" if body.jd_context else ""
+        user_msg = f"<original_bullet>\n{body.bullet_text}\n</original_bullet>{jd_block}"
 
     # Small, fixed-shape output (one bullet or an 80-word-cap summary) — a
     # tight ceiling avoids giving the reasoning model unneeded headroom to
@@ -376,13 +387,20 @@ async def rewrite_bullet(
         raise
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
+    # Same deterministic fact-lock the pipeline applies to Agent 3. Without it
+    # this endpoint was the one remaining way for a fabricated metric to reach
+    # a resume. A rejected rewrite returns the original plus the reasons, so
+    # the UI can explain why nothing changed.
+    reverted_reasons: list[str] = []
+    if not is_summary:
+        rewritten, reverted_reasons = guard_rewrite(body.bullet_text, rewritten)
     if is_summary:
         # Backstop — the prompt asks for the cap, but never trust it alone.
         words = rewritten.split()
         max_words = HARD_LIMITS["summary"]["max_words"]
         if len(words) > max_words:
             rewritten = " ".join(words[:max_words]).rstrip(",;:") + "."
-    return RewriteBulletOut(rewritten_text=rewritten)
+    return RewriteBulletOut(rewritten_text=rewritten, reverted_reasons=reverted_reasons)
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)

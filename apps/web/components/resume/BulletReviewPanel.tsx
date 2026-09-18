@@ -272,6 +272,8 @@ export function BulletReviewPanel() {
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   // Per-bullet loading: key → "rewrite" | "humanize" | null
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
+  // Per-bullet fact-lock rejections from the last Rewrite/Humanize.
+  const [rewriteReverted, setRewriteReverted] = useState<Record<string, string[]>>({});
   const [summaryLoading, setSummaryLoading] = useState<"rewrite" | "humanize" | "custom" | null>(null);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -322,12 +324,16 @@ export function BulletReviewPanel() {
   ) {
     setBulletLoading((prev) => ({ ...prev, [change.key]: mode }));
     try {
-      const { rewritten_text } = await apiClient.rewriteBullet({
+      const { rewritten_text, reverted_reasons } = await apiClient.rewriteBullet({
         bullet_text: change.tailored,
         mode,
         jd_context: mode === "rewrite" ? jdText : undefined,
         humanize_level: humanizeLevel,
       });
+      // The server's fact-lock hands back the ORIGINAL when it rejects a
+      // rewrite. Say so — otherwise the button looks broken: you click it and
+      // nothing on screen moves.
+      setRewriteReverted((prev) => ({ ...prev, [change.key]: reverted_reasons ?? [] }));
       updatePendingBullet(change.key, rewritten_text);
       // Auto-accept the updated version
       setBulletDecision(change.key, "accept");
@@ -668,6 +674,15 @@ export function BulletReviewPanel() {
                     />
                   </p>
                 </div>
+
+                {(rewriteReverted[change.key]?.length ?? 0) > 0 && (
+                  <p
+                    data-testid={`rewrite-reverted-${change.key}`}
+                    className="text-caption text-tertiary"
+                  >
+                    Kept your version — the rewrite {rewriteReverted[change.key].join("; ")}.
+                  </p>
+                )}
 
                 {/* Why it changed — Agent 2's own rationale. Without this the
                     review is "trust me"; with it the reader can judge whether

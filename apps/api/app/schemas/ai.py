@@ -103,6 +103,10 @@ class RewriteBulletRequest(BaseModel):
 
 class RewriteBulletOut(BaseModel):
     rewritten_text: str
+    # Non-empty when the deterministic fact-lock rejected the model's rewrite
+    # and rewritten_text is therefore the ORIGINAL, unchanged. The UI needs to
+    # say so — otherwise clicking Rewrite appears to do nothing.
+    reverted_reasons: list[str] = []
 
 
 class TailorStartOut(BaseModel):
