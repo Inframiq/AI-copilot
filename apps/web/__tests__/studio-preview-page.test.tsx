@@ -82,6 +82,57 @@ describe("Studio preview page", () => {
     await waitFor(() => expect(apiClient.generatePdf).toHaveBeenCalled());
   });
 
+  // Regression: Export generated the PDF and threw the link away — the
+  // button spun, then nothing downloaded. The deleted workbench used to
+  // fetch the file and save it; that step never made it to this page.
+  it("downloads the PDF, named after the candidate", async () => {
+    useResumeStore.setState({
+      content: { contact: { name: "Jane Doe" }, summary: "", experience: [], education: [], skills: [] },
+    } as never);
+    const fetchMock = vi.fn(async () => new Response("%PDF", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const createUrl = vi.fn(() => "blob:resume");
+    const revokeUrl = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: createUrl, revokeObjectURL: revokeUrl }));
+    const downloads: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    try {
+      await renderPage();
+      await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
+      fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
+      await waitFor(() => expect(click).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith("u");
+      expect(downloads).toEqual(["Jane Doe - Resume.pdf"]);
+      expect(revokeUrl).toHaveBeenCalledWith("blob:resume");
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("saves pending edits before exporting, so the PDF matches the page", async () => {
+    const order: string[] = [];
+    const saveNow = vi.fn(async () => { order.push("save"); });
+    useResumeStore.setState({ saveNow, isDirty: true } as never);
+    vi.mocked(apiClient.generatePdf).mockImplementationOnce(async () => {
+      order.push("pdf");
+      return { signed_url: "u", underfilled: false };
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("%PDF")));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    try {
+      await renderPage();
+      await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
+      fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
+      await waitFor(() => expect(order).toEqual(["save", "pdf"]));
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("starts in edit mode so the document is immediately editable", async () => {
     await renderPage();
     await waitFor(() =>
@@ -155,5 +206,32 @@ describe("Studio preview page", () => {
     await renderPage();
     fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /back to builder/i })));
     expect(push).toHaveBeenCalledWith("/studio/r1");
+  });
+});
+
+describe("Export when the file cannot be fetched", () => {
+  it("opens the PDF in a new tab instead of failing", async () => {
+    const { downloadFile } = await import("../lib/download");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    try {
+      await downloadFile("https://storage/x.pdf", "Resume.pdf");
+      expect(open).toHaveBeenCalledWith("https://storage/x.pdf", "_blank", "noopener");
+    } finally {
+      open.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("says so when the browser blocks the new tab too", async () => {
+    const { downloadFile } = await import("../lib/download");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      await expect(downloadFile("https://storage/x.pdf", "Resume.pdf")).rejects.toThrow(/allow pop-ups/);
+    } finally {
+      open.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

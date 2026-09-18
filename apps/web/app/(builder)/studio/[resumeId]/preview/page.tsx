@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
+import { downloadFile, resumeFileName } from "@/lib/download";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
 
@@ -85,7 +86,14 @@ export default function StudioPreviewPage({
     setIsExporting(true);
     setExportError(null);
     try {
-      await apiClient.generatePdf(resumeId, templateId);
+      // The page shows the store's content, which autosave writes only after
+      // a pause; the PDF is rendered from what is saved. Flush first, or an
+      // export right after an edit would miss it.
+      if (useResumeStore.getState().isDirty) await useResumeStore.getState().saveNow();
+      const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
+      // Generating is not downloading: this step was lost when the old
+      // workbench was removed, so the button spun and then did nothing.
+      await downloadFile(signed_url, resumeFileName(content?.contact?.name));
     } catch (err) {
       // Previously a bare finally: a failed export reset the button and said
       // nothing, so it read as a click that simply did not work.
