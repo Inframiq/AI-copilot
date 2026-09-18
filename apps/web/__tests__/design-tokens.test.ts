@@ -50,3 +50,20 @@ describe("design tokens", () => {
     expect([...new Set(unknown)]).toEqual([]);
   });
 });
+
+/**
+ * The same silent-failure shape as a missing spacing token: a component can
+ * name a global class that globals.css never defines, and nothing errors.
+ */
+describe("global classes", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  it.each(["section-enter"])("defines .%s", (name) => {
+    expect(css).toContain(`.${name}`);
+  });
+
+  it("exempts .section-enter from motion for reduced-motion users", () => {
+    const reduced = css.slice(css.indexOf(".section-enter"));
+    expect(reduced).toMatch(/prefers-reduced-motion[\s\S]{0,300}\.section-enter/);
+  });
+});

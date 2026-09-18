@@ -256,6 +256,20 @@ html, body {
   }
 }
 
+/* ── Builder section swap ────────────────────────────────────────────────────
+   One section replaces another in place, so without this the change reads as
+   a flash of different content rather than a move. Reuses page-fade; no
+   travel, because the stepper above already shows where you went. */
+.section-enter {
+  animation: page-fade 0.15s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-enter {
+    animation: none;
+  }
+}
+
 /* ── Premium ambient backdrop ────────────────────────────────────────────────
    A luminous sapphire "aurora" filling the whole viewport: five saturated,
    heavily-blurred colour bodies spread top → bottom that sweep across the

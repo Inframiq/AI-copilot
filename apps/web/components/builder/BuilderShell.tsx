@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useResumeStore } from "@/stores/resume-store";
 import { SECTION_ORDER, type SectionId } from "@/lib/section-completeness";
 import { BuilderHeader } from "./BuilderHeader";
@@ -29,6 +29,14 @@ export function BuilderShell({
   const content = useResumeStore((s) => s.content);
   const [current, setCurrent] = useState<SectionId>("contact");
   const i = SECTION_ORDER.indexOf(current);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sections replace each other inside one scroll container, so without this
+  // you arrive at a new section already scrolled into its middle, heading
+  // off-screen above.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [current]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -37,8 +45,13 @@ export function BuilderShell({
 
       {/* The section is the focus; the rail sits beside it on wide screens and
           stacks underneath on narrow ones rather than competing for width. */}
-      <div className="flex flex-1 flex-col gap-xl overflow-y-auto px-lg py-xl lg:flex-row lg:justify-center">
-        <main className="w-full max-w-3xl">
+      <div
+        ref={scrollRef}
+        data-section-scroll
+        className="flex flex-1 flex-col gap-xl overflow-y-auto px-lg py-xl lg:flex-row lg:justify-center"
+      >
+        {/* Keyed so the fade replays on every change, not just the first. */}
+        <main key={current} className="section-enter w-full max-w-3xl">
           <SectionBody id={current} />
         </main>
         <ContextRail />

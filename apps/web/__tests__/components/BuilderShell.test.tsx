@@ -83,4 +83,27 @@ describe("BuilderShell", () => {
     renderShell();
     expect(screen.getByText(/target jd match/i)).toBeTruthy();
   });
+
+  // Scrolled halfway down Experience, jumping to Contact left you looking at
+  // the middle of a short section with its heading off-screen above.
+  it("returns to the top of the page when the section changes", () => {
+    const { container } = renderShell();
+    const scroller = container.querySelector("[data-section-scroll]") as HTMLElement;
+    // jsdom has no layout, so scrollTop is permanently 0 unless it is given
+    // real storage. Without this the assertion would pass against any code.
+    let scrollTop = 400;
+    Object.defineProperty(scroller, "scrollTop", {
+      get: () => scrollTop,
+      set: (v: number) => { scrollTop = v; },
+      configurable: true,
+    });
+    fireEvent.click(screen.getByTestId("step-education"));
+    expect(scrollTop).toBe(0);
+  });
+
+  it("fades the incoming section rather than swapping it instantly", () => {
+    const { container } = renderShell();
+    expect(container.querySelector("main")?.className).toContain("section-enter");
+  });
 });
+
