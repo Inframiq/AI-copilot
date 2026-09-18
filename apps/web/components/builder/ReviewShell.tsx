@@ -1,12 +1,12 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Sparkle, WarningCircle } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, ArrowsClockwise, Sparkle, WarningCircle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore, deriveBulletChanges, type BulletChange } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { SummaryCard } from "@/components/studio/review/SummaryCard";
-import { TriageDeck } from "@/components/studio/review/TriageDeck";
+import { PointsLedger } from "@/components/studio/review/PointsLedger";
 import { SkillsCard } from "@/components/studio/review/SkillsCard";
 import { FactLockNotice } from "@/components/studio/review/FactLockNotice";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
@@ -16,10 +16,9 @@ import { FOCUS_RING } from "@/lib/focus";
  * The tailoring review: the whole of the JD path between "Tailor Resume" and
  * the Studio.
  *
- * Its handlers are ported from the deleted StudioShell, which was the only
- * thing that rendered TriageDeck and SkillsCard — removing it left the
- * review orphaned and the JD path with nothing to review. The components
- * themselves are unchanged; this is the wiring they lost.
+ * The points themselves are reviewed in PointsLedger, grouped by where each
+ * came from — reworded, adds a JD term, or written by AI — because whether a
+ * point is safe to accept depends on exactly that.
  *
  * Deliberately not the Builder's six sections: arriving from the JD Analyzer
  * you have already said what you want, and being walked through Contact and
@@ -28,20 +27,25 @@ import { FOCUS_RING } from "@/lib/focus";
 export function ReviewShell({
   onBack,
   onApply,
+  onTryAnother,
 }: {
   onBack: () => void;
   onApply: () => void;
+  /** Re-run tailoring for new wording, skipping reuse of the identical run. */
+  onTryAnother: () => void;
 }) {
   const originalContent = useResumeStore((s) => s.content);
 
   const pendingContent = useTailoringStore((s) => s.pendingContent);
   const bulletDecisions = useTailoringStore((s) => s.bulletDecisions);
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
-  const setAllBulletDecisions = useTailoringStore((s) => s.setAllBulletDecisions);
   const applyBulletDecisions = useTailoringStore((s) => s.applyBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
   const updatePendingSummary = useTailoringStore((s) => s.updatePendingSummary);
   const setFixDecision = useTailoringStore((s) => s.setFixDecision);
+  const setFixExperienceIndex = useTailoringStore((s) => s.setFixExperienceIndex);
+  const fixExperienceIndex = useTailoringStore((s) => s.fixExperienceIndex);
+  const reusedRun = useTailoringStore((s) => s.reusedRun);
   const refreshProjectedScore = useTailoringStore((s) => s.refreshProjectedScore);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
@@ -79,6 +83,16 @@ export function ReviewShell({
   // single SkillsCard, so drop any plain suggestion with the same name —
   // each skill is chosen once.
   const skillFixes = useMemo(() => atsFixes.filter((f) => f.type === "skill"), [atsFixes]);
+  // New bullets and the headline are text the AI wrote from nothing — they
+  // are reviewed as points, not as skills.
+  const aiFixes = useMemo(() => atsFixes.filter((f) => f.type !== "skill"), [atsFixes]);
+  const roles = useMemo(
+    () =>
+      (pendingContent?.experience ?? []).map((e) =>
+        [e.title, e.company].filter(Boolean).join(" · ") || "Untitled role",
+      ),
+    [pendingContent],
+  );
   const dedupedSuggestedSkills = useMemo(() => {
     const taken = new Set(skillFixes.map((f) => f.text.toLowerCase()));
     return suggestedSkills.filter((s) => !taken.has(s.toLowerCase()));
@@ -140,18 +154,6 @@ export function ReviewShell({
   const before = atsScoreBefore ?? atsScore;
   const after = projectedAtsScore ?? atsScore;
 
-  // What is still switched off, best first — the honest route to 80. Each
-  // delta is that fix alone against the tailored résumé, so they are
-  // estimates, not strictly additive.
-  const TARGET = 80;
-  const reachFixes = useMemo(
-    () =>
-      atsFixes
-        .filter((f) => f.score_delta > 0 && bulletDecisions[`fix:${f.id}`] !== "accept")
-        .sort((a, b) => b.score_delta - a.score_delta)
-        .slice(0, 5),
-    [atsFixes, bulletDecisions],
-  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -220,46 +222,23 @@ export function ReviewShell({
                 </section>
               )}
 
-              {after !== null && after < TARGET && reachFixes.length > 0 && (
-                <section
-                  aria-label={`Reach ${TARGET}`}
-                  className="flex flex-col gap-sm rounded-2xl border border-outline-variant/30 bg-surface p-lg"
+
+              <div className="flex flex-wrap items-center justify-between gap-sm">
+                <p className="text-caption text-on-surface-variant">
+                  {reusedRun
+                    ? "Same résumé, job and settings as your last run — showing that result, no credit used."
+                    : "Tailoring the same résumé to the same job again returns this result."}
+                </p>
+                <button
+                  type="button"
+                  onClick={onTryAnother}
+                  className={`flex items-center gap-xs rounded-lg border border-outline-variant/50 px-sm py-xs text-label-sm text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
                 >
-                  <div>
-                    <h2 className="text-label-md font-semibold text-on-surface">
-                      Reach {TARGET}
-                    </h2>
-                    <p className="text-caption text-on-surface-variant">
-                      Add only what is true for you — you will be asked about it in the interview.
-                      {" "}Points are estimates for each change on its own.
-                    </p>
-                  </div>
-                  <ul className="flex flex-col gap-xs">
-                    {reachFixes.map((f) => (
-                      <li key={f.id} className="flex items-center gap-sm">
-                        <span className="w-12 shrink-0 tabular text-label-md font-semibold text-primary">
-                          +{f.score_delta}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-body-sm text-on-surface">
-                          {f.type === "skill" ? `Add skill: ${f.text}`
-                            : f.type === "headline" ? `Headline: ${f.text}`
-                            : `New bullet: ${f.text}`}
-                          {!f.grounded && (
-                            <span className="ml-xs text-caption text-on-surface-variant">(not in your résumé yet)</span>
-                          )}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setFixDecision(f.id, "accept")}
-                          className={`shrink-0 rounded-lg border border-outline-variant/50 px-sm py-xs text-label-sm text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
-                        >
-                          Add
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+                  <ArrowsClockwise size={14} />
+                  Try another version
+                  <span className="text-caption text-on-surface-variant">· uses a credit</span>
+                </button>
+              </div>
 
               {/* A fact-locked bullet never enters the queue, so this is the
                   only place it can be reported. */}
@@ -277,18 +256,24 @@ export function ReviewShell({
                 onRewrite={handleRewriteSummary}
               />
 
-              <TriageDeck
-                changes={bulletChanges}
-                decisions={bulletDecisions as Record<string, "accept" | "reject">}
-                importance={bulletImportance}
-                rationale={bulletRationale}
-                revertedReasons={rewriteReverted}
-                busy={bulletLoading}
-                onDecide={setBulletDecision}
-                onRewrite={handleRewriteBullet}
-                onEdit={(change, text) => updatePendingBullet(change.key, text)}
-                onTakeAllRemaining={() => setAllBulletDecisions(bulletChanges, "accept")}
-              />
+              {originalContent && (
+                <PointsLedger
+                  changes={bulletChanges}
+                  decisions={bulletDecisions as Record<string, "accept" | "reject">}
+                  rationale={bulletRationale}
+                  original={originalContent}
+                  aiFixes={aiFixes}
+                  roles={roles}
+                  fixExperienceIndex={fixExperienceIndex}
+                  busy={bulletLoading}
+                  revertedReasons={rewriteReverted}
+                  onDecide={setBulletDecision}
+                  onFixDecide={setFixDecision}
+                  onFixRole={setFixExperienceIndex}
+                  onRewrite={handleRewriteBullet}
+                  onEdit={(change, text) => updatePendingBullet(change.key, text)}
+                />
+              )}
 
               <SkillsCard
                 originalSkills={originalContent?.skills ?? []}

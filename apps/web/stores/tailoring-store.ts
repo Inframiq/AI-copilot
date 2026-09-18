@@ -4,6 +4,7 @@ import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent } from "@career-copilot/types";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
+import { classifyChange } from "@/lib/point-kind";
 
 // Bullet-per-role ceiling — mirrors HARD_LIMITS["experience_bullets_per_role"]
 // ["max"] on the backend (resume_spec.py). A gap-filler bullet fix past this
@@ -353,7 +354,12 @@ interface TailoringState {
   updatePendingBullet: (key: string, text: string) => void;
   updatePendingSummary: (text: string) => void;
   runAnalysis: (resumeId: string) => Promise<void>;
-  runTailoring: (resumeId: string) => Promise<void>;
+  /** fresh skips the server's reuse of an identical earlier run and
+   * spends a credit on new wording — "Try another version". */
+  runTailoring: (resumeId: string, opts?: { fresh?: boolean }) => Promise<void>;
+  /** True when the last run was an identical earlier one handed back by the
+   * server (same résumé, JD and settings): no credit spent, same wording. */
+  reusedRun: boolean;
   /** Renders a PDF preview of the accepted changes. Does NOT touch the
    * resume store or persist anything — the original resume is untouched
    * until saveTailoredResume is explicitly called. */
@@ -380,6 +386,7 @@ interface TailoringState {
 }
 
 export const useTailoringStore = create<TailoringState>((set, get) => ({
+  reusedRun: false,
   jdId: null,
   jdText: "",
   companyName: "",
@@ -623,7 +630,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     }
   },
 
-  runTailoring: async (resumeId: string) => {
+  runTailoring: async (resumeId: string, opts?: { fresh?: boolean }) => {
     let { jdId } = get();
     const { jdText, humanizeLevel, companyName, prioritySkills } = get();
 
@@ -662,12 +669,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       fixExperienceIndex: {},
       sessionId: null,
       pendingContent: null,
+      reusedRun: false,
       bulletDecisions: {},
       mergedContent: null,
       previewPdfUrl: null,
     });
 
-    let started: { session_id: string; status: string };
+    let started: { session_id: string; status: string; reused?: boolean };
     try {
       started = await apiClient.tailorResume(
         resumeId,
@@ -675,6 +683,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         humanizeLevel,
         companyName || undefined,
         prioritySkills,
+        opts?.fresh ?? false,
       );
     } catch (e: unknown) {
       set({ error: e instanceof Error ? e.message : "Tailoring failed", isLoading: false });
@@ -725,8 +734,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           if (originalContent && Array.isArray(originalContent.experience)) {
             // Every section the pipeline rewrites — see deriveBulletChanges,
             // which decides what the review screen lists off the same keys.
+            // A rewrite that only rewords starts accepted; one that puts a JD
+            // term into the text the résumé never mentions is a new claim,
+            // and starts unticked until the user vouches for it.
+            const rationale = (session.bullet_rationale ?? {}) as Record<string, BulletRationale>;
             for (const change of deriveBulletChanges(session.tailored_content, originalContent)) {
-              initialDecisions[change.key] = "accept";
+              const { kind } = classifyChange(change, rationale[change.key], originalContent);
+              initialDecisions[change.key] = kind === "reworded" ? "accept" : "reject";
             }
             const originalSkillsSet = new Set(originalContent.skills || []);
             const tailoredSkillsSet = new Set(session.tailored_content.skills || []);
@@ -773,6 +787,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           projectedAtsScore: session.ats_score ?? null,
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
+          reusedRun: started.reused ?? false,
           isLoading: false,
         });
         // session.ats_score scores the rewrites alone; re-score so the
@@ -958,6 +973,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   discardPending: () => {
     set({
       pendingContent: null,
+      reusedRun: false,
       bulletDecisions: {},
       suggestedSkills: [],
       atsFixes: [],
@@ -1005,6 +1021,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       isApplying: false,
       error: null,
       pendingContent: null,
+      reusedRun: false,
       bulletDecisions: {},
       mergedContent: null,
       previewPdfUrl: null,

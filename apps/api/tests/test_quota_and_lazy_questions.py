@@ -11,6 +11,7 @@ from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, Subscription
+from tests.test_jd_and_tailor_endpoints import no_previous_run
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -80,7 +81,7 @@ async def test_tailor_402_when_out_of_credits():
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=4)  # < 10
-    db.execute = AsyncMock(side_effect=[rr, jr, sr])
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -103,7 +104,7 @@ async def test_tailor_deducts_credits_and_proceeds_when_balance_ok():
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
-    db.execute = AsyncMock(side_effect=[rr, jr, sr])
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
     db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4())
                        if isinstance(o, TailoringSession) and o.id is None else None)
 
@@ -128,7 +129,7 @@ async def test_tailor_creates_a_free_subscription_on_first_use():
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     sr = MagicMock(); sr.scalar_one_or_none.return_value = None  # no subscription yet
-    db.execute = AsyncMock(side_effect=[rr, jr, sr])
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
     added = []
     db.add = MagicMock(side_effect=lambda o: (added.append(o),
         setattr(o, "id", uuid.uuid4()) if isinstance(o, TailoringSession) and o.id is None else None))

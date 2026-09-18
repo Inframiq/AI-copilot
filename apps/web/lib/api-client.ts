@@ -318,13 +318,16 @@ export const apiClient = {
     humanizeLevel: number,
     companyName?: string,
     prioritySkills?: string[],
-  ): Promise<{ session_id: string; status: string }> =>
+    /** Skip reusing an identical earlier run — "Try another version". */
+    fresh = false,
+  ): Promise<{ session_id: string; status: string; reused?: boolean }> =>
     request("POST", "/ai/tailor", {
       resume_id: resumeId,
       jd_id: jdId,
       humanize_level: humanizeLevel,
       ...(companyName?.trim() ? { company_name: companyName.trim() } : {}),
       ...(prioritySkills && prioritySkills.length > 0 ? { priority_skills: prioritySkills } : {}),
+      ...(fresh ? { fresh: true } : {}),
     }),
 
   rewriteBullet: (payload: {

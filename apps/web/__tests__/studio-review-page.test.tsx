@@ -174,26 +174,12 @@ describe("Studio review page", () => {
     expect(screen.queryByText(/well-aligned/i)).toBeNull();
   });
 
-  it("lists the fixes still off, best first, when the score is under 80", async () => {
-    const fix = (id: string, text: string, score_delta: number) => ({
-      id, type: "skill", gap: text, importance: "high", grounded: true, text,
-      experience_index: null, score_delta, default_accept: false,
-    });
-    useTailoringStore.setState({
-      pendingContent: TAILORED,
-      sessionId: "s1",
-      projectedAtsScore: 55,
-      atsFixes: [fix("skill:rust", "Rust", 4), fix("skill:go", "Go", 9), fix("skill:k8s", "Kubernetes", 6)],
-      bulletDecisions: { "fix:skill:k8s": "accept" },
-    } as never);
+  it("tries another version on request, skipping the reused run", async () => {
+    useTailoringStore.setState({ pendingContent: TAILORED, reusedRun: true } as never);
     await renderPage();
-    const reach = await waitFor(() => screen.getByRole("region", { name: /reach 80/i }));
-    const items = Array.from(reach.querySelectorAll("li")).map((li) => li.textContent);
-    expect(items[0]).toMatch(/\+9.*Go/);
-    expect(items[1]).toMatch(/\+4.*Rust/);
-    expect(items.some((t) => /Kubernetes/.test(t ?? ""))).toBe(false);
-    fireEvent.click(reach.querySelectorAll("button")[0]);
-    expect(useTailoringStore.getState().bulletDecisions["fix:skill:go"]).toBe("accept");
+    expect(screen.getByText(/showing that result, no credit used/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /try another version/i }));
+    expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1", { fresh: true });
   });
 
   it("goes back to the analyzer, not to the resume list", async () => {

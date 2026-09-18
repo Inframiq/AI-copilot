@@ -17,6 +17,8 @@ class TailorRequest(BaseModel):
     # these take precedence over the AI's own plausible_skills_to_add logic.
     # Empty by default: the AI decides on its own, same as before this field existed.
     priority_skills: list[str] = Field(default_factory=list)
+    # True skips reuse of an identical earlier run — "Try another version".
+    fresh: bool = False
 
     @field_validator("priority_skills")
     @classmethod
@@ -112,6 +114,8 @@ class RewriteBulletOut(BaseModel):
 class TailorStartOut(BaseModel):
     session_id: uuid.UUID
     status: str
+    # True when an identical earlier run was handed back: no credit spent.
+    reused: bool = False
 
 
 class TailorOut(BaseModel):

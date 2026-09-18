@@ -24,6 +24,14 @@ def credit_sub_result(credits=9999):
     return r
 
 
+def no_previous_run():
+    """The execute-result for POST /ai/tailor's reuse lookup: no completed
+    session with the same input fingerprint, so the run goes ahead."""
+    r = MagicMock()
+    r.scalar_one_or_none.return_value = None
+    return r
+
+
 def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,
@@ -482,7 +490,7 @@ async def test_analyze_uses_saved_resume_content_by_default():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -532,7 +540,7 @@ async def test_analyze_uses_content_override_when_provided():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -709,7 +717,7 @@ async def test_tailor_resume_returns_202_and_creates_pending_session():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
 
     from app.db.models import TailoringSession
 
@@ -783,7 +791,7 @@ async def test_tailor_resume_background_task_persists_result_and_forwards_priori
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
@@ -862,7 +870,7 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"

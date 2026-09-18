@@ -134,6 +134,11 @@ class TailoringSession(Base):
     # account of why each bullet was transformed, shown on the review screen.
     # NULL for sessions tailored before this was persisted.
     bullet_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # services/tailoring.tailor_fingerprint of this run's inputs. POST
+    # /ai/tailor hands back a completed session with a matching fingerprint
+    # instead of re-running — the model has no seed, so a re-run rewords.
+    # NULL for sessions from before reuse existed; they are never reused.
+    input_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     resume: Mapped["Resume | None"] = relationship(back_populates="sessions")

@@ -12,6 +12,7 @@ Agent 3 — Precision Writer  : Rewrites each bullet exactly per the mapping pla
 
 prep_questions runs in parallel with Agent 3 once the mapping plan is ready.
 """
+import hashlib
 import re
 import json
 import logging
@@ -1580,6 +1581,33 @@ async def analyze_jd_match(
         semantic_verdicts=semantic_verdicts,
         title_match=blended.title_match,
     )
+
+
+# Bump when a prompt or pipeline change should stop old results being reused.
+TAILOR_PIPELINE_VERSION = "1"
+
+
+def tailor_fingerprint(
+    resume_content: dict,
+    jd_text: str,
+    humanize_level: int,
+    priority_skills: list[str] | None,
+    company_name: str | None,
+) -> str:
+    """Identity of a tailoring run's inputs. The model takes no temperature
+    or seed, so re-running identical inputs rewords every time; routers/ai.py
+    reuses a completed session with the same fingerprint instead. Key order,
+    priority-skill order/case and surrounding whitespace are not inputs."""
+    payload = {
+        "v": TAILOR_PIPELINE_VERSION,
+        "resume": resume_content,
+        "jd": (jd_text or "").strip(),
+        "humanize": humanize_level,
+        "priority": sorted({s.strip().lower() for s in (priority_skills or []) if s.strip()}),
+        "company": (company_name or "").strip().lower(),
+    }
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 async def run_tailoring_pipeline(

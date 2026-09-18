@@ -261,7 +261,8 @@ describe("useTailoringStore", () => {
       "jd-001",
       50,
       undefined,
-      []
+      [],
+      false,
     );
 
     const state = useTailoringStore.getState();
@@ -300,7 +301,8 @@ describe("useTailoringStore", () => {
       "jd-created-001",
       50,
       undefined,
-      []
+      [],
+      false,
     );
     const state = useTailoringStore.getState();
     expect(state.jdId).toBe("jd-created-001");
@@ -747,7 +749,8 @@ describe("useTailoringStore", () => {
       "jd-001",
       50,
       undefined,
-      ["Kubernetes"]
+      ["Kubernetes"],
+      false,
     );
   });
 
@@ -767,6 +770,57 @@ describe("useTailoringStore", () => {
     // suggested_skills is Agent 2's plausible-from-the-résumé set; starting it
     // off left the "after" score measuring rewording alone.
     expect(decisions["skill_add:Docker"]).toBe("accept");
+  });
+
+  it("runTailoring asks for a fresh run only when told to", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(vi.mocked(apiClient.tailorResume).mock.calls[0][5]).toBe(false);
+
+    await useTailoringStore.getState().runTailoring("resume-abc", { fresh: true });
+    expect(vi.mocked(apiClient.tailorResume).mock.calls[1][5]).toBe(true);
+  });
+
+  it("runTailoring remembers when the server handed back an identical earlier run", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.tailorResume).mockResolvedValueOnce({
+      session_id: "session-xyz", status: "completed", reused: true,
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    expect(useTailoringStore.getState().reusedRun).toBe(true);
+
+    await useTailoringStore.getState().runTailoring("resume-abc", { fresh: true });
+    expect(useTailoringStore.getState().reusedRun).toBe(false);
+  });
+
+  it("runTailoring starts a rewrite that adds an unevidenced JD term unticked", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ title: "Eng", company: "Acme", bullets: ["Managed deploys.", "Wrote Python."] }],
+    } as ResumeContent;
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...original,
+        experience: [{ title: "Eng", company: "Acme", start: "2020",
+          bullets: ["Managed Kubernetes deploys.", "Wrote Python services."] }],
+      },
+      bullet_rationale: {
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"] },
+        exp0_b1: { responsibility: "", keywords: ["Python"] },
+      },
+    });
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const d = useTailoringStore.getState().bulletDecisions;
+    expect(d.exp0_b0).toBe("reject"); // adds Kubernetes, never in the résumé
+    expect(d.exp0_b1).toBe("accept"); // Python was already there
   });
 
   it("runTailoring re-scores with the default selections applied", async () => {

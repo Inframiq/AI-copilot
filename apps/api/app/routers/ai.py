@@ -20,7 +20,7 @@ from app.schemas.ai import (
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import (
     run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
-    build_single_bullet_system,
+    build_single_bullet_system, tailor_fingerprint,
 )
 from app.services.bullet_guard import guard_rewrite
 from app.services.ats import (
@@ -136,6 +136,7 @@ async def _run_tailoring_background(
     priority_skills: list[str],
     cached_jd_analysis: JDAnalysis | None,
     user_email: str | None = None,
+    cached_semantic_verdicts: dict[str, str] | None = None,
 ) -> None:
     """Runs the AI tailoring pipeline off the request path.
 
@@ -161,6 +162,7 @@ async def _run_tailoring_background(
                     company_name=company_name,
                     priority_skills=priority_skills,
                     cached_jd_analysis=cached_jd_analysis,
+                    cached_semantic_verdicts=cached_semantic_verdicts,
                 )
         except Exception:
             logger.exception("Tailoring pipeline failed for session %s", session_id)
@@ -252,6 +254,33 @@ async def tailor_resume(
     if not resume_row or not jd_row:
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
+    # Reproducibility: the model takes no temperature or seed, so re-running
+    # identical inputs rewords every time. Hand back the last completed run
+    # with the same inputs instead — before the credit gate, so it is free.
+    # "Try another version" sends fresh=True to skip this on purpose.
+    fingerprint = tailor_fingerprint(
+        resume_content=resume_row.content,
+        jd_text=jd_row.raw_text,
+        humanize_level=body.humanize_level,
+        priority_skills=body.priority_skills,
+        company_name=body.company_name,
+    )
+    if not body.fresh:
+        previous = (
+            await db.execute(
+                select(TailoringSession)
+                .where(
+                    TailoringSession.user_id == uid,
+                    TailoringSession.input_fingerprint == fingerprint,
+                    TailoringSession.status == "completed",
+                )
+                .order_by(TailoringSession.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if previous is not None:
+            return TailorStartOut(session_id=previous.id, status="completed", reused=True)
+
     # Credit gate — the cost guardrail behind a paid plan. Tailoring is by
     # far the most expensive action; spend_credits deducts CREDIT_COSTS
     # ["tailor"] here (flushed, committed together with the session row
@@ -262,7 +291,11 @@ async def tailor_resume(
 
     # Reuse cached Agent 1 output (same logic as /analyze) so tailoring uses
     # the same skill list as a prior analysis — consistent ATS score throughout.
+    # The analyzer's semantic verdicts too, when they were computed for this
+    # exact résumé text: without them the "before" score re-ran that model
+    # call and could land ~10 points from what the analyzer just showed.
     cached_for_tailor: JDAnalysis | None = None
+    semantic_for_tailor: dict[str, str] | None = None
     if not body.company_name:
         raw_cached = (jd_row.parsed or {}).get("agent1")
         if raw_cached:
@@ -270,6 +303,13 @@ async def tailor_resume(
                 cached_for_tailor = JDAnalysis(**raw_cached)
             except Exception:
                 cached_for_tailor = None
+        sem_cache = (jd_row.parsed or {}).get("semantic")
+        if isinstance(resume_row.content, dict) and sem_cache:
+            resume_fp = hashlib.sha1(
+                build_resume_text(resume_row.content)[0].encode("utf-8")
+            ).hexdigest()
+            if sem_cache.get("fingerprint") == resume_fp:
+                semantic_for_tailor = sem_cache.get("verdicts") or {}
 
     session = TailoringSession(
         user_id=uid,
@@ -277,6 +317,7 @@ async def tailor_resume(
         jd_id=body.jd_id,
         humanize_level=body.humanize_level,
         status="pending",
+        input_fingerprint=fingerprint,
     )
     db.add(session)
     await db.commit()
@@ -294,6 +335,7 @@ async def tailor_resume(
         body.priority_skills,
         cached_for_tailor,
         user.get("email"),
+        cached_semantic_verdicts=semantic_for_tailor,
     )
 
     return TailorStartOut(session_id=session.id, status="pending")
