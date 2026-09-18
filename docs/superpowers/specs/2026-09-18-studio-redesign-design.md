@@ -32,7 +32,7 @@ Uses the existing "Cobalt & Ink" tokens. No new palette.
 |---|---|---|---|
 | Desk (preview background) | `surface-container` `#f0f1f4` | Ink graphite (`inverse-surface` family) | A white page on near-white has no separation. On graphite the page floats. |
 | Workspace (canvas) | `surface` `#fcfcfd` | `surface-container-lowest` (pure white) | The active work surface; brightest plane. |
-| Rail | `surface` | `surface-container-low` + inset edge | Navigation recedes behind content. |
+| Rail | `surface` | `surface-container-low` + inset edge | Navigation recedes behind content, and collapses to 64px while a section band is open. |
 
 ### 1.2 Accent discipline
 
@@ -84,9 +84,22 @@ Replaces the seven-trigger Radix `Tabs.List` in `EditorPanel`.
 - Footer shows `N of M complete`.
 - **BoostPanel** (the relocated `AtsGapFixPanel`) renders at the rail bottom during Review — unclaimed ATS points as an ambient checklist rather than another block in a long scroll.
 
-### 2.3 Canvas
+**Collapsed state.** The rail has two widths. Expanded (260px) it shows labels; collapsed (64px) it shows only completeness rings with the label as a tooltip. **Opening a section band collapses the rail automatically**, handing that width to the editing surface; closing every band restores it. The user can pin either width manually, and a manual pin survives band open/close for the rest of the session.
 
-One section at a time at reading width, replacing the stacked wall of inputs. Contact is a two-column form; Experience is an entry stack with bullets as a real list; Skills uses a chip editor rather than a joined textarea. During Review the canvas hosts the TriageDeck.
+### 2.3 Canvas — the section chain
+
+The canvas is a vertical chain of full-width **section bands**, not a single section swapped in and out.
+
+- **Collapsed band:** a slim full-width bar — completeness ring, section name, and a one-line digest of its contents (`Stripe · Meta · 2 more`, `14 skills`, `No summary yet`). Tall enough to read at a glance, quiet enough to scan past.
+- **Expanded band:** the bar stays as the band's header and the editing surface unfolds beneath it at full canvas width with generous padding. The bands above and below remain visible as slim links, so the chain — and the user's position in it — is never lost.
+- **One band open at a time.** Opening a band closes the previous one; the outgoing band's height animates down as the incoming one animates up, so the chain reads as a single continuous movement rather than two independent collapses.
+- The rail collapses on open (§2.2), so an expanded band gets the rail's 260px in addition to the canvas width.
+
+This is the "spacious, not cramped" requirement made structural: at any moment exactly one section owns nearly the full workspace, and everything else is one click away in the chain rather than hidden behind a tab.
+
+Within an expanded band: Contact is a two-column form; Experience is an entry stack with bullets as a real list; Skills uses a chip editor rather than a joined textarea.
+
+During Review the chain is replaced by the TriageDeck — the deck is the only thing in the canvas, at full width.
 
 ### 2.4 PreviewDock
 
@@ -144,7 +157,8 @@ components/studio/
   CommandBar.tsx
   spine/    StepSpine.tsx  StepNode.tsx  AtsRing.tsx
   rail/     SectionRail.tsx  SectionRow.tsx  CompletenessRing.tsx  BoostPanel.tsx
-  canvas/   ContactSection.tsx  SummarySection.tsx  ExperienceSection.tsx
+  canvas/   SectionChain.tsx  SectionBand.tsx
+            ContactSection.tsx  SummarySection.tsx  ExperienceSection.tsx
             EducationSection.tsx  SkillsSection.tsx  ExtrasSection.tsx
   review/   TriageDeck.tsx  ChangeCard.tsx  SummaryCard.tsx
             SkillsCard.tsx  DeckList.tsx

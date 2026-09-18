@@ -19,6 +19,7 @@
 - **Accent discipline:** `text-primary` / `bg-primary` indicate *interactive or current state only*. Headings use `text-on-surface` or `text-on-surface-variant`.
 - Bullet and summary body text renders at `text-body-md` with `leading-relaxed`. Panel/section titles render at `text-label-caps` in `text-on-surface-variant`.
 - Any element displaying a numeric score uses the `tabular` utility class added in Task 1.
+- **Spacious, not cramped.** An expanded section band pads at `xl` (32px) and stacks its fields at `gap-lg`; it is never squeezed to look compact. Collapsed bands are the quiet state, expanded bands are the generous one.
 - All animation goes through `motion/react`. The app provider wraps children in `<MotionConfig reducedMotion="user">` (Task 1), so no component needs its own reduced-motion branch.
 - Run tests from `apps/web`: `npm test`. Single file: `npx vitest run __tests__/<file>`.
 - Commit after every task. Commit directly to `main` — no feature branches, no PRs.
@@ -40,8 +41,10 @@
 | `apps/web/components/studio/spine/StepSpine.tsx` | Lays out nodes + spring-filled connectors + `AtsRing`. |
 | `apps/web/components/studio/rail/CompletenessRing.tsx` | Small `pathLength`-animated ratio ring. |
 | `apps/web/components/studio/rail/SectionRow.tsx` | One rail row (+ optional sub-entries, change badge). |
-| `apps/web/components/studio/rail/SectionRail.tsx` | Rail container, footer count, hosts `BoostPanel`. |
+| `apps/web/components/studio/rail/SectionRail.tsx` | Rail container at two widths, footer count, hosts `BoostPanel`. |
 | `apps/web/components/studio/rail/BoostPanel.tsx` | Relocated ATS gap→fix list. |
+| `apps/web/components/studio/canvas/SectionChain.tsx` | The chain: owns which band is open, reports it so the rail can collapse. |
+| `apps/web/components/studio/canvas/SectionBand.tsx` | One chain link — slim bar collapsed, spacious editor expanded. |
 | `apps/web/components/studio/canvas/ContactSection.tsx` | Contact fields + photo control. |
 | `apps/web/components/studio/canvas/SummarySection.tsx` | Summary textarea + word cap. |
 | `apps/web/components/studio/canvas/ExperienceSection.tsx` | Experience entry stack + merge affordance. |
@@ -1119,7 +1122,9 @@ EOF
 - Produces:
   - `CompletenessRing({ ratio, size }: { ratio: number; size?: number })`
   - `SectionRow({ state, isActive, entries, pendingChanges, onSelect, onSelectEntry }: { state: SectionState; isActive: boolean; entries?: string[]; pendingChanges?: number; onSelect: (id: SectionId) => void; onSelectEntry?: (id: SectionId, index: number) => void })`
-  - `SectionRail({ content, activeSection, onSelect, onSelectEntry, pendingBySection, footer }: { content: ResumeContent | null; activeSection: SectionId; onSelect: (id: SectionId) => void; onSelectEntry?: (id: SectionId, index: number) => void; pendingBySection?: Partial<Record<SectionId, number>>; footer?: React.ReactNode })`
+  - `SectionRail({ content, activeSection, collapsed, onToggleCollapsed, onSelect, onSelectEntry, pendingBySection, footer }: { content: ResumeContent | null; activeSection: SectionId; collapsed?: boolean; onToggleCollapsed?: () => void; onSelect: (id: SectionId) => void; onSelectEntry?: (id: SectionId, index: number) => void; pendingBySection?: Partial<Record<SectionId, number>>; footer?: React.ReactNode })`
+
+  When `collapsed` is true the rail renders at 64px: completeness rings only, labels moved into each row's `title` and `aria-label`, sub-entries and the footer hidden. `onToggleCollapsed` drives the pin control.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1202,6 +1207,33 @@ describe("SectionRail", () => {
       "aria-current",
       "true"
     );
+  });
+
+  it("collapsed, keeps every section reachable by its accessible name", () => {
+    render(<SectionRail content={content} activeSection="contact" collapsed onSelect={() => {}} />);
+    for (const label of ["Contact", "Summary", "Experience", "Skills"]) {
+      expect(screen.getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
+    }
+  });
+
+  it("collapsed, hides the sub-entries and the footer count", () => {
+    render(<SectionRail content={content} activeSection="experience" collapsed onSelect={() => {}} />);
+    expect(screen.queryByRole("button", { name: /Stripe/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/of 6 complete/)).not.toBeInTheDocument();
+  });
+
+  it("reports a manual collapse toggle", async () => {
+    const onToggleCollapsed = vi.fn();
+    render(
+      <SectionRail
+        content={content}
+        activeSection="contact"
+        onSelect={() => {}}
+        onToggleCollapsed={onToggleCollapsed}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /collapse sidebar/i }));
+    expect(onToggleCollapsed).toHaveBeenCalled();
   });
 });
 ```
@@ -1319,6 +1351,10 @@ export function SectionRow({
 }
 ```
 
+- [ ] **Step 4b: Make SectionRow collapsible**
+
+Add `collapsed?: boolean` to `SectionRow`'s props. When true: render only the `CompletenessRing`, drop the label span and the sub-entry list, set `title={state.label}` and `aria-label={state.label}` on the button, centre it, and render the pending-change badge as a small dot in the row's top-right corner rather than a counted pill.
+
 - [ ] **Step 5: Implement SectionRail**
 
 Create `apps/web/components/studio/rail/SectionRail.tsx`:
@@ -1326,6 +1362,8 @@ Create `apps/web/components/studio/rail/SectionRail.tsx`:
 ```tsx
 "use client";
 import type React from "react";
+import { motion } from "motion/react";
+import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 import {
   sectionStates,
@@ -1337,6 +1375,8 @@ import { SectionRow } from "./SectionRow";
 export function SectionRail({
   content,
   activeSection,
+  collapsed = false,
+  onToggleCollapsed,
   onSelect,
   onSelectEntry,
   pendingBySection,
@@ -1344,6 +1384,8 @@ export function SectionRail({
 }: {
   content: ResumeContent | null;
   activeSection: SectionId;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   onSelect: (id: SectionId) => void;
   onSelectEntry?: (id: SectionId, index: number) => void;
   pendingBySection?: Partial<Record<SectionId, number>>;
@@ -1364,14 +1406,25 @@ export function SectionRail({
   };
 
   return (
-    <aside className="flex flex-col h-full bg-surface-container-low border-r border-outline-variant/20 overflow-y-auto">
-      <nav aria-label="Resume sections" className="flex flex-col gap-xs p-sm flex-1">
+    <motion.aside
+      // Width is animated, not toggled, so collapsing while a section band
+      // opens reads as one movement handing space to the editor.
+      initial={false}
+      animate={{ width: collapsed ? 64 : 260 }}
+      transition={{ type: "spring", stiffness: 220, damping: 30 }}
+      className="flex flex-col h-full shrink-0 bg-surface-container-low border-r border-outline-variant/20 overflow-hidden"
+    >
+      <nav
+        aria-label="Resume sections"
+        className="flex flex-col gap-xs p-sm flex-1 overflow-y-auto"
+      >
         {states.map((state) => (
           <SectionRow
             key={state.id}
             state={state}
+            collapsed={collapsed}
             isActive={state.id === activeSection}
-            entries={entriesFor(state.id)}
+            entries={collapsed ? undefined : entriesFor(state.id)}
             pendingChanges={pendingBySection?.[state.id]}
             onSelect={onSelect}
             onSelectEntry={onSelectEntry}
@@ -1379,14 +1432,27 @@ export function SectionRail({
         ))}
       </nav>
 
-      <div className="px-md py-sm border-t border-outline-variant/20">
-        <p className="tabular text-caption text-on-surface-variant">
-          {complete} of {total} complete
-        </p>
-      </div>
+      {onToggleCollapsed && (
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="flex items-center justify-center py-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+        >
+          {collapsed ? <CaretRight size={14} /> : <CaretLeft size={14} />}
+        </button>
+      )}
 
-      {footer}
-    </aside>
+      {!collapsed && (
+        <div className="px-md py-sm border-t border-outline-variant/20">
+          <p className="tabular text-caption text-on-surface-variant">
+            {complete} of {total} complete
+          </p>
+        </div>
+      )}
+
+      {!collapsed && footer}
+    </motion.aside>
   );
 }
 ```
@@ -1397,7 +1463,7 @@ export function SectionRail({
 cd apps/web && npx vitest run __tests__/components/section-rail.test.tsx
 ```
 
-Expected: PASS, 7 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 7: Commit**
 
@@ -1421,6 +1487,8 @@ EOF
 ### Task 6: Canvas sections — port the editor forms
 
 **Files:**
+- Create: `apps/web/components/studio/canvas/SectionBand.tsx`
+- Create: `apps/web/components/studio/canvas/SectionChain.tsx`
 - Create: `apps/web/components/studio/canvas/ContactSection.tsx`
 - Create: `apps/web/components/studio/canvas/SummarySection.tsx`
 - Create: `apps/web/components/studio/canvas/ExperienceSection.tsx`
@@ -1432,9 +1500,13 @@ EOF
 
 **Interfaces:**
 - Consumes: `useResumeStore` (`content`, `updateContent`, `templateId`, `setPhotoModal`); `templateRequiresPhoto` from `@/lib/resume-templates`; `sameCompany` from `@/lib/career-profile-client`.
-- Produces: six components, each taking no props and reading the store directly:
+- Produces: six section components, each taking no props and reading the store directly:
   `ContactSection()`, `SummarySection()`, `ExperienceSection({ focusIndex }: { focusIndex?: number })`, `EducationSection({ focusIndex }: { focusIndex?: number })`, `SkillsSection()`, `ExtrasSection()`.
   Also exported from `SummarySection.tsx`: `const SUMMARY_MAX_WORDS = 80`.
+  Plus the chain:
+  - `SectionBand({ state, digest, open, children, onToggle }: { state: SectionState; digest: string; open: boolean; children: React.ReactNode; onToggle: () => void })`
+  - `SectionChain({ content, openSection, onOpenChange, focusEntry }: { content: ResumeContent | null; openSection: SectionId | null; onOpenChange: (id: SectionId | null) => void; focusEntry?: { section: SectionId; index: number } })`
+  - `function sectionDigest(content: ResumeContent | null, id: SectionId): string` — exported from `SectionChain.tsx`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1668,6 +1740,290 @@ Port these from `components/resume/EditorPanel.tsx` verbatim in behavior, changi
 - `EducationSection.tsx` — port the `Education Tab` block. Same `focusIndex` behavior.
 - `ExtrasSection.tsx` — port the languages, certifications and awards blocks into one section with three sub-headings.
 
+- [ ] **Step 5b: Write the failing test for the chain**
+
+Create `apps/web/__tests__/components/section-chain.test.tsx`:
+
+```tsx
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useResumeStore } from "../../stores/resume-store";
+import { SectionChain, sectionDigest } from "../../components/studio/canvas/SectionChain";
+import type { ResumeContent } from "@career-copilot/types";
+
+const content: ResumeContent = {
+  contact: { name: "Jordan", email: "j@example.test" },
+  summary: "",
+  experience: [
+    { company: "Stripe", title: "SWE", start: "2021", bullets: ["Shipped"] },
+    { company: "Meta", title: "SWE", start: "2019", bullets: ["Built"] },
+  ],
+  education: [],
+  skills: ["TypeScript", "Go"],
+};
+
+beforeEach(() => {
+  useResumeStore.getState().resetStore();
+  useResumeStore.getState().setResume("r1", structuredClone(content), "ats_clean");
+});
+
+describe("sectionDigest", () => {
+  it("summarises experience by company", () => {
+    expect(sectionDigest(content, "experience")).toContain("Stripe");
+  });
+
+  it("counts skills", () => {
+    expect(sectionDigest(content, "skills")).toBe("2 skills");
+  });
+
+  it("names the empty state rather than returning a blank string", () => {
+    expect(sectionDigest(content, "summary")).toMatch(/no summary/i);
+    expect(sectionDigest(content, "education")).toMatch(/nothing added/i);
+  });
+});
+
+describe("SectionChain", () => {
+  it("renders every section as a band, collapsed by default", () => {
+    render(<SectionChain content={content} openSection={null} onOpenChange={() => {}} />);
+    expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(6);
+  });
+
+  it("shows each band's digest while collapsed", () => {
+    render(<SectionChain content={content} openSection={null} onOpenChange={() => {}} />);
+    expect(screen.getByText("2 skills")).toBeInTheDocument();
+  });
+
+  it("reports the section when a band is opened", async () => {
+    const onOpenChange = vi.fn();
+    render(<SectionChain content={content} openSection={null} onOpenChange={onOpenChange} />);
+    await userEvent.click(screen.getByRole("button", { name: /Skills/ }));
+    expect(onOpenChange).toHaveBeenCalledWith("skills");
+  });
+
+  it("reports null when the open band is clicked again", async () => {
+    const onOpenChange = vi.fn();
+    render(<SectionChain content={content} openSection="skills" onOpenChange={onOpenChange} />);
+    await userEvent.click(screen.getByRole("button", { name: /Skills/ }));
+    expect(onOpenChange).toHaveBeenCalledWith(null);
+  });
+
+  it("renders the editor only for the open band", () => {
+    render(<SectionChain content={content} openSection="skills" onOpenChange={() => {}} />);
+    expect(screen.getByPlaceholderText(/Add a skill/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/professional summary/i)).not.toBeInTheDocument();
+  });
+
+  it("marks exactly one band expanded", () => {
+    render(<SectionChain content={content} openSection="skills" onOpenChange={() => {}} />);
+    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(1);
+  });
+});
+```
+
+- [ ] **Step 5c: Run it to verify it fails**
+
+```bash
+cd apps/web && npx vitest run __tests__/components/section-chain.test.tsx
+```
+
+Expected: FAIL — cannot resolve `SectionChain`.
+
+- [ ] **Step 5d: Implement SectionBand**
+
+Create `apps/web/components/studio/canvas/SectionBand.tsx`:
+
+```tsx
+"use client";
+import type React from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { CaretDown } from "@phosphor-icons/react";
+import type { SectionState } from "@/lib/section-completeness";
+import { CompletenessRing } from "@/components/studio/rail/CompletenessRing";
+
+// One link in the chain. Collapsed it is a quiet full-width bar; expanded
+// it unfolds in place at full width with generous padding, while its
+// neighbours stay visible as slim links so the chain is never lost.
+export function SectionBand({
+  state,
+  digest,
+  open,
+  children,
+  onToggle,
+}: {
+  state: SectionState;
+  digest: string;
+  open: boolean;
+  children: React.ReactNode;
+  onToggle: () => void;
+}) {
+  return (
+    <motion.section
+      layout
+      transition={{ type: "spring", stiffness: 260, damping: 32 }}
+      className={`overflow-hidden rounded-2xl border transition-colors ${
+        open
+          ? "border-primary/30 bg-surface-container-lowest shadow-lg"
+          : "border-outline-variant/30 bg-surface-container-lowest hover:border-primary/30"
+      }`}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="w-full flex items-center gap-md px-lg py-md text-left"
+      >
+        <CompletenessRing ratio={state.ratio} size={18} />
+        <span className="flex-1 min-w-0 flex items-baseline gap-md">
+          <span
+            className={`text-label-caps shrink-0 ${
+              open ? "text-on-surface" : "text-on-surface-variant"
+            }`}
+          >
+            {state.label}
+          </span>
+          {!open && (
+            <span className="text-body-sm text-on-surface-variant truncate">{digest}</span>
+          )}
+        </span>
+        <motion.span
+          aria-hidden
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 26 }}
+          className="shrink-0 text-on-surface-variant"
+        >
+          <CaretDown size={16} />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 240, damping: 32 }}
+          >
+            {/* Generous, not compact — an open band is the spacious state. */}
+            <div className="px-xl pb-xl pt-sm flex flex-col gap-lg">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
+  );
+}
+```
+
+- [ ] **Step 5e: Implement SectionChain**
+
+Create `apps/web/components/studio/canvas/SectionChain.tsx`:
+
+```tsx
+"use client";
+import { sectionStates, type SectionId } from "@/lib/section-completeness";
+import type { ResumeContent } from "@career-copilot/types";
+import { SectionBand } from "./SectionBand";
+import { ContactSection } from "./ContactSection";
+import { SummarySection } from "./SummarySection";
+import { ExperienceSection } from "./ExperienceSection";
+import { EducationSection } from "./EducationSection";
+import { SkillsSection } from "./SkillsSection";
+import { ExtrasSection } from "./ExtrasSection";
+
+// A collapsed band still has to say what is inside it, or the chain is
+// just six labels. Every branch returns real text — never an empty string,
+// which would read as a rendering bug.
+export function sectionDigest(content: ResumeContent | null, id: SectionId): string {
+  if (!content) return "Nothing added yet";
+  const list = (names: string[]) =>
+    names.length === 0
+      ? "Nothing added yet"
+      : names.length <= 2
+      ? names.join(" \u00b7 ")
+      : `${names.slice(0, 2).join(" \u00b7 ")} \u00b7 ${names.length - 2} more`;
+
+  switch (id) {
+    case "contact":
+      return content.contact.name?.trim() || "No name yet";
+    case "summary":
+      return content.summary?.trim() ? content.summary.trim() : "No summary yet";
+    case "experience":
+      return list(content.experience.map((j) => j.company || j.title || "Untitled role"));
+    case "education":
+      return list(content.education.map((e) => e.institution || e.degree || "Untitled"));
+    case "skills":
+      return content.skills.length === 0
+        ? "Nothing added yet"
+        : `${content.skills.length} skill${content.skills.length === 1 ? "" : "s"}`;
+    case "extras": {
+      const parts = [
+        (content.languages ?? []).length > 0 ? "Languages" : null,
+        (content.certifications ?? []).length > 0 ? "Certifications" : null,
+        (content.awards ?? []).length > 0 ? "Awards" : null,
+      ].filter(Boolean) as string[];
+      return parts.length > 0 ? parts.join(" \u00b7 ") : "Nothing added yet";
+    }
+  }
+}
+
+export function SectionChain({
+  content,
+  openSection,
+  onOpenChange,
+  focusEntry,
+}: {
+  content: ResumeContent | null;
+  openSection: SectionId | null;
+  onOpenChange: (id: SectionId | null) => void;
+  focusEntry?: { section: SectionId; index: number };
+}) {
+  const states = sectionStates(content);
+
+  function bodyFor(id: SectionId) {
+    const focusIndex = focusEntry?.section === id ? focusEntry.index : undefined;
+    switch (id) {
+      case "contact": return <ContactSection />;
+      case "summary": return <SummarySection />;
+      case "experience": return <ExperienceSection focusIndex={focusIndex} />;
+      case "education": return <EducationSection focusIndex={focusIndex} />;
+      case "skills": return <SkillsSection />;
+      case "extras": return <ExtrasSection />;
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-sm">
+      {states.map((state) => {
+        const open = state.id === openSection;
+        return (
+          <SectionBand
+            key={state.id}
+            state={state}
+            digest={sectionDigest(content, state.id)}
+            open={open}
+            onToggle={() => onOpenChange(open ? null : state.id)}
+          >
+            {/* Mounted only while open, so a closed band costs nothing and
+                cannot be found by a query for another section's fields. */}
+            {open ? bodyFor(state.id) : null}
+          </SectionBand>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 5f: Run the chain tests**
+
+```bash
+cd apps/web && npx vitest run __tests__/components/section-chain.test.tsx
+```
+
+Expected: PASS, 10 tests.
+
 - [ ] **Step 6: Run tests to verify they pass**
 
 ```bash
@@ -1687,12 +2043,14 @@ Expected: no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/web/components/studio/canvas apps/web/__tests__/components/canvas-sections.test.tsx
+git add apps/web/components/studio/canvas apps/web/__tests__/components/canvas-sections.test.tsx apps/web/__tests__/components/section-chain.test.tsx
 git commit -m "$(cat <<'EOF'
-feat(studio): split the editor into focused canvas sections
+feat(studio): build the canvas as a chain of section bands
 
-Ports EditorPanel's seven tab panels into six section components sized for
-the workbench canvas, one visible at a time at reading width. Skills moves
+Ports EditorPanel's seven tab panels into six section components and hangs
+them off a chain: each band is a slim full-width bar carrying a digest of
+its contents, and opening one unfolds it in place at full width with
+generous padding while its neighbours stay visible as links. Skills moves
 from a newline-joined textarea to a chip editor. Store calls are unchanged.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
@@ -3153,6 +3511,25 @@ Add to `apps/web/__tests__/studio-resume-page.test.tsx` a `describe("studio work
     const downloads = await screen.findAllByRole("button", { name: /download|export/i });
     expect(downloads).toHaveLength(1);
   });
+
+  it("renders the section chain with every band closed to start", async () => {
+    expect(await screen.findAllByRole("button", { expanded: false })).toHaveLength(6);
+  });
+
+  it("collapses the rail when a section band is opened", async () => {
+    const experience = await screen.findByRole("button", { name: /Experience/ });
+    await userEvent.click(experience);
+    // Collapsed rail drops the footer count; the band is now expanded.
+    expect(screen.queryByText(/of 6 complete/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(1);
+  });
+
+  it("restores the rail when the open band is closed again", async () => {
+    const experience = await screen.findByRole("button", { name: /Experience/ });
+    await userEvent.click(experience);
+    await userEvent.click(experience);
+    expect(await screen.findByText(/of 6 complete/)).toBeInTheDocument();
+  });
 ```
 
 - [ ] **Step 3: Run it to verify the new assertions fail**
@@ -3161,7 +3538,7 @@ Add to `apps/web/__tests__/studio-resume-page.test.tsx` a `describe("studio work
 cd apps/web && npx vitest run __tests__/studio-resume-page.test.tsx
 ```
 
-Expected: the three new tests FAIL; the pre-existing ones still pass.
+Expected: the six new tests FAIL; the pre-existing ones still pass.
 
 - [ ] **Step 4: Implement CommandBar**
 
@@ -3180,7 +3557,25 @@ Create `apps/web/components/studio/StudioShell.tsx`. It owns two pieces of local
 ```
 
 - `activeStep` initialises from `currentStepId(steps)` and follows it whenever the derived current step changes and the user has not manually overridden it this render cycle.
-- When `activeStep === "review"`, the canvas renders `SummaryCard`, `TriageDeck` and `SkillsCard`; otherwise it renders the canvas section matching `activeSection`.
+- When `activeStep === "review"`, the canvas renders `SummaryCard`, `TriageDeck` and `SkillsCard`; otherwise it renders `<SectionChain>`.
+
+**The chain and the rail collapse together.** `StudioShell` owns three more pieces of state:
+
+```tsx
+  const [openSection, setOpenSection] = useState<SectionId | null>(null);
+  const [railPinned, setRailPinned] = useState<boolean | null>(null); // null = automatic
+  const [focusEntry, setFocusEntry] = useState<{ section: SectionId; index: number } | undefined>();
+
+  // A band taking the floor hands it the rail's 260px too. A manual pin
+  // wins for the rest of the session — the automatic behaviour is a
+  // convenience, not a cage.
+  const railCollapsed = railPinned ?? (openSection !== null || activeStep === "review");
+```
+
+- `SectionRail`'s `onSelect` sets `openSection` (opening that band), and `onSelectEntry` sets both `openSection` and `focusEntry` so clicking "Meta" in the rail opens the Experience band scrolled to that role.
+- `SectionRail` receives `collapsed={railCollapsed}` and `onToggleCollapsed={() => setRailPinned(!railCollapsed)}`.
+- `SectionChain` receives `openSection`, `onOpenChange={setOpenSection}` and `focusEntry`.
+- `activeSection` passed to the rail is `openSection ?? "contact"`, so the rail's highlight tracks the open band.
 - `pendingBySection` is computed by counting `bulletChanges` per section — reuse the `bulletChanges` derivation from `BulletReviewPanel.tsx` (the `useMemo` comparing `pendingContent.experience[i].bullets[j]` against `originalContent.experience[i].bullets[j]`), copied verbatim into `StudioShell`.
 - All the tailoring handlers (`handleRewriteBullet`, `handleRewriteSummary`, `handleRetailor`, `handleGeneratePreview`, `handleSave`, `handleDownload`, `handleReanalyze`) move here from `BulletReviewPanel.tsx` **unchanged** — same `apiClient` calls, same arguments, same error state.
 
@@ -3190,14 +3585,31 @@ Layout:
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       <CommandBar … />
       <StepSpine steps={steps} activeStep={activeStep} onSelect={setActiveStep} score={atsScore} projected={projectedAtsScore} />
-      <div className="flex-1 grid overflow-hidden grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,44%)]">
-        <div className="hidden xl:block overflow-hidden">
-          <SectionRail … footer={activeStep === "review" ? <BoostPanel /> : null} />
+      {/* Flex, not grid: the rail animates its own width (Task 5), and a
+          fixed grid track would fight that animation. */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="hidden xl:flex">
+          <SectionRail
+            collapsed={railCollapsed}
+            onToggleCollapsed={() => setRailPinned(!railCollapsed)}
+            footer={activeStep === "review" ? <BoostPanel /> : null}
+            …
+          />
         </div>
-        <main className="overflow-y-auto px-lg py-xl">
-          <div className="mx-auto w-full max-w-[720px] flex flex-col gap-xl">{canvas}</div>
+        <main className="flex-1 min-w-0 overflow-y-auto px-lg py-xl">
+          {/* The canvas widens when the rail folds away — that reclaimed
+              space is the whole point of collapsing it. */}
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 220, damping: 30 }}
+            className={`mx-auto w-full flex flex-col gap-xl ${
+              railCollapsed ? "max-w-[900px]" : "max-w-[720px]"
+            }`}
+          >
+            {canvas}
+          </motion.div>
         </main>
-        <div className="hidden xl:block overflow-hidden">
+        <div className="hidden xl:block shrink-0 w-[44%] overflow-hidden">
           <PreviewDock … />
         </div>
       </div>
@@ -3365,8 +3777,8 @@ EOF
 | 1.2 Accent discipline | Global Constraints; enforced in 4–11 |
 | 1.3 Type scale correction | Global Constraints; 4 (ATS ring), 6, 7, 9 |
 | 2.1 StepSpine | 2, 4 |
-| 2.2 SectionRail | 3, 5; BoostPanel in 9 |
-| 2.3 Canvas | 6 |
+| 2.2 SectionRail (incl. collapsed state) | 3, 5; BoostPanel in 9 |
+| 2.3 Canvas — the section chain | 6 (`SectionChain`, `SectionBand`, digests); rail auto-collapse wired in 11 |
 | 2.4 PreviewDock | 10 |
 | 3 TriageDeck | 7, 8; summary/skills cards in 9 |
 | 3 "Accept All" removal | 8 (`DeckList` take-all-remaining) |
