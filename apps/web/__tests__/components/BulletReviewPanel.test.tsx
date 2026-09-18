@@ -392,3 +392,36 @@ describe("BulletReviewPanel score lift", () => {
     expect(getByTestId("score-current").textContent).toContain("88");
   });
 });
+
+describe("BulletReviewPanel stale score", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCareerProfile.mockResolvedValue(null);
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+  });
+  afterEach(() => cleanup());
+
+  const content = {
+    contact: { name: "Jane", email: "jane@example.com" },
+    experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Built checkout."] }],
+    education: [],
+    skills: [],
+  };
+
+  function setup(extra: Record<string, unknown>) {
+    useResumeStore.getState().setResume("resume-1", content as never, "ats_clean");
+    useTailoringStore.setState({ pendingContent: content, ...extra } as never);
+    return renderPanel();
+  }
+
+  it("warns when the score could not be recalculated", () => {
+    const { getByTestId } = setup({ atsScore: 81, atsScoreBefore: 62, projectedScoreStale: true });
+    expect(getByTestId("score-stale")).toBeTruthy();
+  });
+
+  it("shows no warning while the score is current", () => {
+    const { queryByTestId } = setup({ atsScore: 81, atsScoreBefore: 62, projectedScoreStale: false });
+    expect(queryByTestId("score-stale")).toBeNull();
+  });
+});

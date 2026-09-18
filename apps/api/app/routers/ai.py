@@ -193,6 +193,26 @@ async def _run_tailoring_background(
         row.reverted_bullets = result.reverted_bullets
         row.bullet_rationale = result.bullet_rationale
         row.status = "completed"
+
+        # Cache Agent 1's parse onto the JD, exactly as /ai/analyze does.
+        # Tailoring used to only READ this cache, so a JD tailored without
+        # being analyzed first never got one — and POST /ai/project-score
+        # 409s without it, which silently froze the review screen's live
+        # score (the client's refresh swallows the error). Never overwrite an
+        # existing cache: it is what the user's displayed score was computed
+        # from, and replacing it would make the number jump for no reason.
+        if result.jd_analysis is not None and not company_name:
+            jd_row = (
+                await session_db.execute(
+                    select(JobDescription).where(JobDescription.id == row.jd_id)
+                )
+            ).scalar_one_or_none()
+            if jd_row is not None and not (jd_row.parsed or {}).get("agent1"):
+                parsed = dict(jd_row.parsed) if jd_row.parsed else {}
+                parsed["agent1"] = result.jd_analysis.model_dump()
+                jd_row.parsed = parsed
+                attributes.flag_modified(jd_row, "parsed")
+
         session_db.add_all(
             [
                 PrepQuestion(

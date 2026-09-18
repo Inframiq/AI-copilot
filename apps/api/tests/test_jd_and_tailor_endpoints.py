@@ -735,9 +735,17 @@ async def test_tailor_resume_returns_202_and_creates_pending_session():
     # opens its own AsyncSessionLocal() — fake it out the same way the
     # neighboring background-task tests do, or it'll hit a real DB.
     bg_session = MagicMock()
-    bg_result = MagicMock()
-    bg_result.scalar_one_or_none.side_effect = lambda: created_session
-    bg_session.execute = AsyncMock(return_value=bg_result)
+    # The background task now makes TWO queries: the session row, then the JD
+    # row it caches Agent 1's parse onto (see _run_tailoring_background). One
+    # always-the-same result would hand it a TailoringSession where it expects
+    # a JobDescription.
+    def bg_execute(stmt):
+        r = MagicMock()
+        r.scalar_one_or_none.return_value = created_session if bg_execute.n == 0 else jd
+        bg_execute.n += 1
+        return r
+    bg_execute.n = 0
+    bg_session.execute = AsyncMock(side_effect=bg_execute)
     bg_session.commit = AsyncMock()
     bg_session.add_all = MagicMock()
 

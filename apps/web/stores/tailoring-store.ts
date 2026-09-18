@@ -273,6 +273,10 @@ interface TailoringState {
   /** The score before tailoring ran. Paired with atsScore this is the
    * lift — the product's core claim, and previously never returned. */
   atsScoreBefore: number | null;
+  /** True when the last re-score attempt failed, so the projected number
+   * on screen no longer describes the current selections. Any failure
+   * used to be swallowed, leaving a stale figure looking authoritative. */
+  projectedScoreStale: boolean;
   matchedSkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
@@ -387,6 +391,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   revertedBullets: [],
   bulletRationale: {},
   atsScoreBefore: null,
+  projectedScoreStale: false,
   projectedAtsScore: null,
   fixExperienceIndex: {},
   prioritySkills: [],
@@ -482,9 +487,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     _projectScoreTimer = setTimeout(async () => {
       try {
         const { projected_score } = await apiClient.projectScore(sessionId, acceptedIds, merged);
-        set({ projectedAtsScore: projected_score });
-      } catch {
-        /* transient failure — keep the last projected score on screen */
+        set({ projectedAtsScore: projected_score, projectedScoreStale: false });
+      } catch (e) {
+        // Keep the last number (better than blanking the UI) but mark it stale
+        // so the screen can say so. Swallowing this is what made a failing
+        // re-score look like a score that simply never moves.
+        console.warn("projected score refresh failed", e);
+        set({ projectedScoreStale: true });
       }
     }, 400);
   },
@@ -508,6 +517,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     for (const c of changes) decisions[c.key] = decision;
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions }, previewPdfUrl: null }));
     useResumeStore.getState().setPdfSignedUrl(null);
+    get().refreshProjectedScore();
   },
   // Merges an arbitrary key→decision map in one update — for bulk actions
   // that set a MIX of accept/reject in a single click (e.g. "auto-select
@@ -517,6 +527,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   applyBulletDecisions: (decisions) => {
     set((s) => ({ bulletDecisions: { ...s.bulletDecisions, ...decisions }, previewPdfUrl: null }));
     useResumeStore.getState().setPdfSignedUrl(null);
+    get().refreshProjectedScore();
   },
 
   updatePendingBullet: (key, text) => {
@@ -537,6 +548,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       previewPdfUrl: null,
     });
     useResumeStore.getState().setPdfSignedUrl(null);
+    get().refreshProjectedScore();
   },
 
   updatePendingSummary: (text) => {
@@ -544,6 +556,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     if (!pendingContent) return;
     set({ pendingContent: { ...pendingContent, summary: text }, previewPdfUrl: null });
     useResumeStore.getState().setPdfSignedUrl(null);
+    get().refreshProjectedScore();
   },
 
   // Helper to ensure job description is saved to backend if not already persisted
@@ -640,6 +653,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   revertedBullets: [],
   bulletRationale: {},
   atsScoreBefore: null,
+  projectedScoreStale: false,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       sessionId: null,
@@ -931,6 +945,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   revertedBullets: [],
   bulletRationale: {},
   atsScoreBefore: null,
+  projectedScoreStale: false,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       mergedContent: null,
@@ -960,6 +975,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   revertedBullets: [],
   bulletRationale: {},
   atsScoreBefore: null,
+  projectedScoreStale: false,
       projectedAtsScore: null,
       fixExperienceIndex: {},
       prioritySkills: [],

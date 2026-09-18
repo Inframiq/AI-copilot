@@ -1710,3 +1710,34 @@ async def test_the_after_analysis_is_never_served_from_the_cached_verdicts():
     # served from the cache.
     assert len(verify_calls) == 1
     assert "Terraform" in verify_calls[0]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_returns_the_jd_analysis_it_used():
+    """The caller has to persist this. /ai/analyze caches Agent 1 on
+    jd_row.parsed; /ai/tailor only ever READ that cache and never wrote it, so
+    a JD tailored without being analyzed first had no cached analysis — and
+    POST /ai/project-score 409s without one, which froze the review screen's
+    live score for 35% of real sessions."""
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Built services",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REINFORCE",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built Python services")],
+            updated_skills=[],
+        ),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
+
+    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+
+    assert result.jd_analysis is not None
+    assert result.jd_analysis.exact_technical_tools == ["Python"]

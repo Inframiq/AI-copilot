@@ -1413,6 +1413,11 @@ class TailoringResult:
     # The pipeline always computed both (it logs "ats %d -> %d"); returning
     # the pair makes the lift measurable instead of only greppable.
     ats_score_before: int = 0
+    # The JD analysis this run used. Returned so the caller can persist it the
+    # way /ai/analyze does — POST /ai/project-score needs a cached Agent 1
+    # parse and 409s without one, which silently froze the review screen's
+    # live score for every JD that was tailored but never analyzed.
+    jd_analysis: "JDAnalysis | None" = None
 
 
 _IMPORTANCE_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -1732,6 +1737,7 @@ async def run_tailoring_pipeline(
         reverted_bullets=reverted_bullets,
         bullet_rationale=bullet_rationale,
         ats_score_before=analysis.ats_score,
+        jd_analysis=analysis.jd_analysis,
     )
 
 

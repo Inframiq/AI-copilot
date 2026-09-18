@@ -237,3 +237,103 @@ async def test_questions_empty_when_jd_has_no_cached_analysis():
         gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# ── Tailoring caches its JD analysis, like analyze does ──────────────────────
+# Without it, POST /ai/project-score 409s ("Session JD has no cached analysis")
+# and the review screen's live before->now score silently stops responding to
+# the user's selections. 14 of 40 real completed sessions were in this state.
+
+@pytest.mark.asyncio
+async def test_tailoring_persists_the_jd_analysis_when_the_jd_has_none():
+    from app.services.tailoring import TailoringResult, JDAnalysis
+
+    jd = make_jd()
+    jd.parsed = {}
+    session = TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
+                               jd_id=jd.id, status="pending")
+    analysis = JDAnalysis(
+        exact_technical_tools=["Python"], methodologies_and_frameworks=[],
+        domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+        core_responsibilities=[], target_job_titles=[], nice_to_have_skills=[],
+    )
+    result = TailoringResult(
+        tailored_content={"experience": []}, matched_skills=[], missing_skills=[],
+        ats_score=70, prep_questions=[], company_keywords=[], suggested_skills=[],
+        jd_analysis=analysis,
+    )
+
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.add_all = MagicMock()
+
+    async def execute(stmt):
+        r = MagicMock()
+        # first lookup is the session, second is the JD row
+        r.scalar_one_or_none.return_value = session if execute.n == 0 else jd
+        execute.n += 1
+        return r
+    execute.n = 0
+    db.execute = AsyncMock(side_effect=execute)
+
+    from app.routers import ai as ai_router
+    with patch.object(ai_router, "AsyncSessionLocal") as sl, \
+         patch.object(ai_router, "run_tailoring_pipeline", new=AsyncMock(return_value=result)), \
+         patch.object(ai_router, "record_ai_usage"):
+        sl.return_value.__aenter__ = AsyncMock(return_value=db)
+        sl.return_value.__aexit__ = AsyncMock(return_value=False)
+        await ai_router._run_tailoring_background(
+            session.id, uuid.UUID(TEST_USER_ID), {"experience": []}, "jd text",
+            50, MagicMock(), None, [], None,
+        )
+
+    assert jd.parsed.get("agent1"), "Agent 1 analysis was not cached onto the JD"
+    assert jd.parsed["agent1"]["exact_technical_tools"] == ["Python"]
+
+
+@pytest.mark.asyncio
+async def test_tailoring_does_not_overwrite_an_existing_jd_analysis_cache():
+    """An analysis already cached by /ai/analyze is what the user's displayed
+    score was computed from — replacing it would make the score jump for no
+    visible reason."""
+    from app.services.tailoring import TailoringResult, JDAnalysis
+
+    jd = make_jd()
+    jd.parsed = {"agent1": {"exact_technical_tools": ["Original"],
+                            "methodologies_and_frameworks": [], "domain_expertise_themes": [],
+                            "seniority_indicators": [], "ats_filter_phrases": [],
+                            "core_responsibilities": [], "target_job_titles": [],
+                            "nice_to_have_skills": [], "importance": {}}}
+    session = TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
+                               jd_id=jd.id, status="pending")
+    result = TailoringResult(
+        tailored_content={"experience": []}, matched_skills=[], missing_skills=[],
+        ats_score=70, prep_questions=[], company_keywords=[], suggested_skills=[],
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Replacement"], methodologies_and_frameworks=[],
+            domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+            core_responsibilities=[], target_job_titles=[], nice_to_have_skills=[]),
+    )
+
+    db = MagicMock(); db.commit = AsyncMock(); db.add_all = MagicMock()
+
+    async def execute(stmt):
+        r = MagicMock()
+        r.scalar_one_or_none.return_value = session if execute.n == 0 else jd
+        execute.n += 1
+        return r
+    execute.n = 0
+    db.execute = AsyncMock(side_effect=execute)
+
+    from app.routers import ai as ai_router
+    with patch.object(ai_router, "AsyncSessionLocal") as sl, \
+         patch.object(ai_router, "run_tailoring_pipeline", new=AsyncMock(return_value=result)), \
+         patch.object(ai_router, "record_ai_usage"):
+        sl.return_value.__aenter__ = AsyncMock(return_value=db)
+        sl.return_value.__aexit__ = AsyncMock(return_value=False)
+        await ai_router._run_tailoring_background(
+            session.id, uuid.UUID(TEST_USER_ID), {"experience": []}, "jd text",
+            50, MagicMock(), None, [], None,
+        )
+
+    assert jd.parsed["agent1"]["exact_technical_tools"] == ["Original"]

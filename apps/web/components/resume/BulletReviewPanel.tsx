@@ -143,11 +143,12 @@ function BulletRationaleLine({
 // `current` prefers the projected score once fixes are chosen, so the figure
 // always describes the résumé actually on screen.
 function ScoreLift({
-  before, after, projected,
+  before, after, projected, stale,
 }: {
   before: number | null;
   after: number | null;
   projected: number | null;
+  stale: boolean;
 }) {
   const current = projected ?? after;
   if (current === null) return null;
@@ -179,11 +180,20 @@ function ScoreLift({
           </span>
         </div>
       )}
-      <p className="text-caption text-on-surface-variant flex-1">
-        {before === null
-          ? "How much of this job description your résumé currently covers."
-          : "How much of this job description your résumé covers, before and after tailoring."}
-      </p>
+      <div className="flex-1 flex flex-col gap-xs">
+        <p className="text-caption text-on-surface-variant">
+          {before === null
+            ? "How much of this job description your résumé currently covers."
+            : "How much of this job description your résumé covers, before and after tailoring."}
+        </p>
+        {/* A failed re-score used to be swallowed, leaving a number that looked
+            current but no longer matched the user's selections. */}
+        {stale && (
+          <p data-testid="score-stale" className="text-caption text-tertiary">
+            Couldn&rsquo;t recalculate just now — this figure may not reflect your latest choices.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -214,6 +224,7 @@ export function BulletReviewPanel() {
   const atsFixes = useTailoringStore((s) => s.atsFixes);
   const revertedBullets = useTailoringStore((s) => s.revertedBullets);
   const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
+  const projectedScoreStale = useTailoringStore((s) => s.projectedScoreStale);
   const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
   const setFixDecision = useTailoringStore((s) => s.setFixDecision);
@@ -454,7 +465,7 @@ export function BulletReviewPanel() {
             No changes to review — your resume is already well-aligned with this JD.
           </p>
         </div>
-        <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} />
+        <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} stale={projectedScoreStale} />
         <FactLockNotice reverted={revertedBullets} />
         {/* Summary + Skills + generate still shown */}
         <SummaryBlock
@@ -577,7 +588,7 @@ export function BulletReviewPanel() {
         </div>
       )}
 
-      <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} />
+      <ScoreLift before={atsScoreBefore} after={atsScore} projected={projectedAtsScore} stale={projectedScoreStale} />
       <FactLockNotice reverted={revertedBullets} />
 
       {/* ── Summary ── */}

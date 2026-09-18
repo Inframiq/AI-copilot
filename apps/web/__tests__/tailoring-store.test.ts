@@ -1247,6 +1247,100 @@ describe("useTailoringStore", () => {
     expect(useTailoringStore.getState().atsScoreBefore).toBeNull();
   });
 
+  describe("every decision that changes the resume re-scores it", () => {
+    // The review screen shows a live "before -> now" score. Any mutator that
+    // changes what the merged resume contains must refresh it, or the number
+    // silently goes stale and the feature reads as broken.
+    async function tailored() {
+      const original: ResumeContent = {
+        ...SAMPLE_CONTENT,
+        skills: ["React"],
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+      };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.getState().setJd("jd-001", "raw text");
+      vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+        ...mockCompletedSession,
+        suggested_skills: ["Kubernetes", "Docker"],
+        tailored_content: {
+          ...mockCompletedSession.tailored_content,
+          experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+        },
+      });
+      await useTailoringStore.getState().runTailoring("resume-abc");
+      vi.mocked(apiClient.projectScore).mockClear();
+      vi.mocked(apiClient.projectScore).mockResolvedValue({ projected_score: 77 });
+    }
+
+    it("re-scores when every bullet is accepted at once", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        const changes = [{ key: "exp0_b0", jobIdx: 0, bulletIdx: 0, jobTitle: "Engineer",
+                           company: "Acme", original: "Did stuff", tailored: "Did stuff, tailored" }];
+        useTailoringStore.getState().setAllBulletDecisions(changes, "reject");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(apiClient.projectScore).toHaveBeenCalled();
+      } finally { vi.useRealTimers(); }
+    });
+
+    it("re-scores when skills are chosen in bulk", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        useTailoringStore.getState().applyBulletDecisions({ "skill_add:Kubernetes": "accept" });
+        await vi.advanceTimersByTimeAsync(500);
+        expect(apiClient.projectScore).toHaveBeenCalled();
+      } finally { vi.useRealTimers(); }
+    });
+
+    it("re-scores when a bullet is rewritten in place", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        useTailoringStore.getState().updatePendingBullet("exp0_b0", "Engineered Kubernetes pipelines");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(apiClient.projectScore).toHaveBeenCalled();
+      } finally { vi.useRealTimers(); }
+    });
+
+    it("re-scores when the summary is rewritten", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        useTailoringStore.getState().updatePendingSummary("Kubernetes platform engineer");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(apiClient.projectScore).toHaveBeenCalled();
+      } finally { vi.useRealTimers(); }
+    });
+
+    it("surfaces a re-score failure instead of leaving a stale number", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        vi.mocked(apiClient.projectScore).mockRejectedValue(new Error("409 no cached analysis"));
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "reject");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(useTailoringStore.getState().projectedScoreStale).toBe(true);
+      } finally { vi.useRealTimers(); }
+    });
+
+    it("clears the stale flag once a re-score succeeds again", async () => {
+      vi.useFakeTimers();
+      try {
+        await tailored();
+        vi.mocked(apiClient.projectScore).mockRejectedValueOnce(new Error("boom"));
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "reject");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(useTailoringStore.getState().projectedScoreStale).toBe(true);
+
+        useTailoringStore.getState().setBulletDecision("exp0_b0", "accept");
+        await vi.advanceTimersByTimeAsync(500);
+        expect(useTailoringStore.getState().projectedScoreStale).toBe(false);
+      } finally { vi.useRealTimers(); }
+    });
+  });
+
   describe("project bullets in the review merge", () => {
     // The pipeline now rewrites project bullets too (bullet_id "proj{i}_b{j}").
     // buildMergedContent must honour accept/reject on them — otherwise a
