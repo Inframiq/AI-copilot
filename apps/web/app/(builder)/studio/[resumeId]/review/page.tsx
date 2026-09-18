@@ -69,6 +69,7 @@ export default function StudioReviewPage({
       <ReviewShell
         onBack={() => router.push(jdId ? `/jd/${jdId}` : `/studio/${resumeId}`)}
         onTryAnother={() => useTailoringStore.getState().runTailoring(resumeId, { fresh: true })}
+        onRetry={() => useTailoringStore.getState().runTailoring(resumeId)}
         onApply={() => {
           // commitReview has just written the merged résumé into resume-store;
           // flush it now rather than waiting on the autosave debounce, so a

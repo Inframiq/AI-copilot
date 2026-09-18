@@ -27,14 +27,25 @@ function resumeText(content: ResumeContent): string {
   return parts.join("\n");
 }
 
+/**
+ * `jdTerms` — every phrase the JD is scored on (the session's matched and
+ * missing lists). Checking only the keywords the rewrite said it targeted
+ * missed a JD term it slipped in anyway, which then read as a mere rewording.
+ */
 export function classifyChange(
   change: BulletChange,
   rationale: BulletRationale | undefined,
   original: ResumeContent,
+  jdTerms: string[] = [],
 ): { kind: PointKind; newTerms: string[] } {
   const text = resumeText(original);
-  const newTerms = (rationale?.keywords ?? []).filter(
-    (k) => k.trim() && hasTerm(change.tailored, k) && !hasTerm(text, k),
-  );
+  const seen = new Set<string>();
+  const newTerms: string[] = [];
+  for (const k of [...(rationale?.keywords ?? []), ...jdTerms]) {
+    const key = k.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    if (hasTerm(change.tailored, k) && !hasTerm(text, k)) newTerms.push(k.trim());
+  }
   return { kind: newTerms.length > 0 ? "adds_terms" : "reworded", newTerms };
 }

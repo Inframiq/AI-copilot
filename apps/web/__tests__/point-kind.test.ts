@@ -46,6 +46,26 @@ describe("classifyChange", () => {
     expect(r).toEqual({ kind: "reworded", newTerms: [] });
   });
 
+  it("catches a JD term the rewrite slipped in without targeting it", () => {
+    const r = classifyChange(
+      change("Managed deploys with Terraform."),
+      { responsibility: "", keywords: [] },
+      ORIGINAL,
+      ["Terraform", "Python", "Kubernetes"],
+    );
+    expect(r).toEqual({ kind: "adds_terms", newTerms: ["Terraform"] });
+  });
+
+  it("names each new term once, however it was sourced", () => {
+    const r = classifyChange(
+      change("Ran Kubernetes deploys."),
+      { responsibility: "", keywords: ["Kubernetes"] },
+      ORIGINAL,
+      ["kubernetes"],
+    );
+    expect(r.newTerms).toEqual(["Kubernetes"]);
+  });
+
   it("is a rewording when there is no rationale to check", () => {
     expect(classifyChange(change("Ran deploys."), undefined, ORIGINAL).kind).toBe("reworded");
   });

@@ -850,6 +850,72 @@ describe("useTailoringStore", () => {
     }
   });
 
+  // Regression: a skill that was both an AI suggestion and a JD-gap fix was
+  // seeded twice (skill_add:X and fix:skill:x). The chip controls only the
+  // fix, so deselecting it left skill_add accepted and the skill was added
+  // anyway — the chip looked unresponsive.
+  it("lets the fix decision alone decide a skill that is also a suggestion", () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.setState({
+      pendingContent: SAMPLE_CONTENT,
+      suggestedSkills: ["Docker"],
+      atsFixes: [{
+        id: "skill:docker", type: "skill", gap: "Docker", importance: "high", grounded: true,
+        text: "Docker", experience_index: null, score_delta: 3, default_accept: true,
+      }],
+      bulletDecisions: { "skill_add:Docker": "accept", "fix:skill:docker": "reject" },
+    } as never);
+
+    useTailoringStore.getState().commitReview();
+
+    expect(useResumeStore.getState().content?.skills).not.toContain("Docker");
+  });
+
+  it("flags the projected score as updating until the re-score lands", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.setState({ sessionId: "s1", pendingContent: SAMPLE_CONTENT } as never);
+      vi.mocked(apiClient.projectScore).mockResolvedValueOnce({ projected_score: 70 });
+
+      useTailoringStore.getState().refreshProjectedScore();
+      expect(useTailoringStore.getState().isProjecting).toBe(true);
+      await vi.runAllTimersAsync();
+      expect(useTailoringStore.getState().isProjecting).toBe(false);
+      expect(useTailoringStore.getState().projectedAtsScore).toBe(70);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never lets an older re-score overwrite a newer one", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.setState({ sessionId: "s1", pendingContent: SAMPLE_CONTENT } as never);
+      let first!: (v: { projected_score: number }) => void;
+      let second!: (v: { projected_score: number }) => void;
+      vi.mocked(apiClient.projectScore)
+        .mockReturnValueOnce(new Promise((r) => { first = r; }))
+        .mockReturnValueOnce(new Promise((r) => { second = r; }));
+
+      useTailoringStore.getState().refreshProjectedScore();
+      await vi.advanceTimersByTimeAsync(500);   // request 1 in flight
+      useTailoringStore.getState().refreshProjectedScore();
+      await vi.advanceTimersByTimeAsync(500);   // request 2 in flight
+
+      second({ projected_score: 81 });
+      await vi.runAllTimersAsync();
+      first({ projected_score: 52 });           // the stale one lands last
+      await vi.runAllTimersAsync();
+
+      expect(useTailoringStore.getState().projectedAtsScore).toBe(81);
+      expect(useTailoringStore.getState().isProjecting).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("runTailoring re-scores with the default selections applied", async () => {
     vi.useFakeTimers();
     try {

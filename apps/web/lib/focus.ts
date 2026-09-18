@@ -8,3 +8,11 @@
  */
 export const FOCUS_RING =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+
+/**
+ * Press feedback for Builder and Studio buttons: a quick shrink on click and
+ * eased colour changes, so every press visibly lands. Off under reduced
+ * motion; the colour change alone still confirms the press.
+ */
+export const PRESS =
+  "transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 ease-out active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100";

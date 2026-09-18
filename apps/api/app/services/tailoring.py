@@ -1612,7 +1612,9 @@ async def analyze_jd_match(
 
 
 # Bump when a prompt or pipeline change should stop old results being reused.
-TAILOR_PIPELINE_VERSION = "1"
+# 2: sessions now store score_verdicts and per-rewrite score_delta; version-1
+#    results lack both, so reusing them froze the review's live score.
+TAILOR_PIPELINE_VERSION = "2"
 
 
 def tailor_fingerprint(

@@ -34,7 +34,7 @@ export function BulletDiff({
               data-testid={testId}
               className={
                 side === "added"
-                  ? "bg-primary/15 text-on-surface rounded-sm px-0.5"
+                  ? "bg-primary/10 text-on-surface rounded-sm px-0.5 box-decoration-clone"
                   : "bg-error/10 text-on-surface-variant line-through rounded-sm px-0.5"
               }
             >

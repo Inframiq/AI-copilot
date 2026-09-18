@@ -69,14 +69,68 @@ describe("PointsLedger", () => {
     expect(p.onDecide).toHaveBeenCalledWith("exp0_b0", "accept");
   });
 
-  it("will not add an AI-written point until the user confirms having done it", () => {
+  it("locks an AI-written point until confirmed, and confirming adds it in one click", () => {
     const p = setup();
     const add = screen.getByRole("switch", { name: /add this new bullet/i }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox", { name: /i have actually done this/i }));
     expect(add.disabled).toBe(false);
-    fireEvent.click(add);
     expect(p.onFixDecide).toHaveBeenCalledWith("bullet:terraform", "accept");
+  });
+
+  it("remembers a confirmation when the AI group is filtered away and back", () => {
+    setup();
+    fireEvent.click(screen.getByRole("checkbox", { name: /i have actually done this/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^reworded/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^all/i }));
+    const vouch = screen.getByRole("checkbox", { name: /i have actually done this/i }) as HTMLInputElement;
+    expect(vouch.checked).toBe(true);
+  });
+
+  it("puts the points that move the score most first", () => {
+    const second: BulletChange = { ...reworded, key: "exp0_b2", bulletIdx: 2, original: "Fixed bugs.", tailored: "Fixed 40 production bugs." };
+    setup({
+      changes: [reworded, second],
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: [], score_delta: 2 },
+        exp0_b2: { responsibility: "", keywords: [], score_delta: 9 },
+      },
+    });
+    const group = screen.getByRole("region", { name: /reworded from your résumé/i });
+    const switches = within(group).getAllByRole("switch");
+    expect(switches[0].getAttribute("aria-label")).toMatch(/Fixed 40 production bugs/);
+  });
+
+  it("marks a wording-only point as not moving the score", () => {
+    setup({
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: ["Python"], score_delta: 0 },
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"] },
+      },
+    });
+    expect(screen.getByTitle(/wording only/i).textContent).toBe("±0");
+  });
+
+  it("flags a JD term the rewrite added without targeting it", () => {
+    setup({
+      changes: [{ ...reworded, tailored: "Built Python services on Terraform." }],
+      rationale: { exp0_b1: { responsibility: "", keywords: [] } },
+      jdTerms: ["Terraform"],
+    });
+    expect(screen.getByText("adds: Terraform")).toBeTruthy();
+  });
+
+  it("shows why a point's rewrite failed", () => {
+    setup({ rewriteErrors: { exp0_b1: "Couldn't rewrite this point — Out of credits." } });
+    expect(screen.getByRole("alert").textContent).toMatch(/out of credits/i);
+  });
+
+  it("lists bullets the fact-lock kept as written", () => {
+    setup({
+      reverted: [{ bullet_id: "exp0_b2", original_text: "Mentored two interns.", rejected_text: "Mentored 5 interns.", reasons: ["added a metric"] }],
+    });
+    expect(screen.getByText(/1 bullet kept as you wrote it/i)).toBeTruthy();
+    expect(screen.getByText(/added a metric/)).toBeTruthy();
   });
 
   it("withdraws an accepted AI point when the confirmation is withdrawn", () => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const push = vi.fn();
@@ -110,7 +110,7 @@ describe("Studio review page", () => {
   it("goes straight to the studio when the review is applied", async () => {
     useTailoringStore.setState({ pendingContent: TAILORED } as never);
     await renderPage();
-    const apply = await waitFor(() => screen.getByRole("button", { name: /apply & preview/i }));
+    const apply = await waitFor(() => screen.getAllByRole("button", { name: /apply & preview/i })[0]);
     fireEvent.click(apply);
     await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1/preview"));
   });
@@ -144,7 +144,7 @@ describe("Studio review page", () => {
   it("writes the accepted rewrites into the résumé before opening the studio", async () => {
     useTailoringStore.setState({ pendingContent: TAILORED, bulletDecisions: {} } as never);
     await renderPage();
-    const apply = await waitFor(() => screen.getByRole("button", { name: /apply & preview/i }));
+    const apply = await waitFor(() => screen.getAllByRole("button", { name: /apply & preview/i })[0]);
     fireEvent.click(apply);
     await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1/preview"));
     expect(useResumeStore.getState().content?.experience[0].bullets).toEqual([
@@ -158,7 +158,7 @@ describe("Studio review page", () => {
       bulletDecisions: { exp0_b0: "reject" },
     } as never);
     await renderPage();
-    const apply = await waitFor(() => screen.getByRole("button", { name: /apply & preview/i }));
+    const apply = await waitFor(() => screen.getAllByRole("button", { name: /apply & preview/i })[0]);
     fireEvent.click(apply);
     await waitFor(() => expect(push).toHaveBeenCalled());
     expect(useResumeStore.getState().content?.experience[0].bullets).toEqual([
@@ -174,12 +174,40 @@ describe("Studio review page", () => {
     expect(screen.queryByText(/well-aligned/i)).toBeNull();
   });
 
-  it("tries another version on request, skipping the reused run", async () => {
+  it("tries another version only after a confirming second click, since it spends a credit", async () => {
     useTailoringStore.setState({ pendingContent: TAILORED, reusedRun: true } as never);
     await renderPage();
-    expect(screen.getByText(/showing that result, no credit used/i)).toBeTruthy();
+    expect(screen.getByText(/this is that result, no credit used/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /try another version/i }));
+    expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /uses a credit — click to confirm/i }));
     expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1", { fresh: true });
+  });
+
+  it("offers a retry when tailoring fails", async () => {
+    useTailoringStore.setState({ error: "Tailoring failed — please try again." } as never);
+    await renderPage();
+    vi.mocked(useTailoringStore.getState().runTailoring).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1");
+  });
+
+  it("keeps the live score in view with a before and after", async () => {
+    useTailoringStore.setState({
+      pendingContent: TAILORED, atsScoreBefore: 42, projectedAtsScore: 71,
+    } as never);
+    await renderPage();
+    expect(screen.getByRole("img", { name: /ATS match 71 with your choices, 42 before tailoring/i })).toBeTruthy();
+    expect(screen.getByText(/\+29 from tailoring/)).toBeTruthy();
+  });
+
+  it("shows an error on the point when its rewrite fails, instead of doing nothing", async () => {
+    vi.mocked(apiClient.rewriteBullet).mockRejectedValueOnce(new Error("Out of credits"));
+    useTailoringStore.setState({ pendingContent: TAILORED, bulletDecisions: { exp0_b0: "accept" } } as never);
+    await renderPage();
+    const points = screen.getByRole("region", { name: /tailored points/i });
+    fireEvent.click(within(points).getByRole("button", { name: /^rewrite$/i }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/couldn't rewrite this point — out of credits/i));
   });
 
   it("goes back to the analyzer, not to the resume list", async () => {

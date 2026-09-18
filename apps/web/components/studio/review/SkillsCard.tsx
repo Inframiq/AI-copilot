@@ -1,5 +1,6 @@
 "use client";
-import { Check, X, Target } from "@phosphor-icons/react";
+import { Check, Plus, Target, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { FOCUS_RING, PRESS } from "@/lib/focus";
 import type { AtsFix } from "@/lib/api-client";
 import { MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
@@ -40,7 +41,6 @@ export function SkillsCard({
   decisions,
   onDecide,
   onFixDecision,
-  onRefreshProjected,
   onApply,
 }: {
   originalSkills: string[];
@@ -52,7 +52,7 @@ export function SkillsCard({
   decisions: Record<string, string>;
   onDecide: (key: string, d: "accept" | "reject") => void;
   onFixDecision: (id: string, d: "accept" | "reject") => void;
-  onRefreshProjected: () => void;
+  /** Many decisions at once — re-scores once. */
   onApply: (decisions: Record<string, "accept" | "reject">) => void;
 }) {
   if (originalSkills.length === 0 && suggestedSkills.length === 0 && skillFixes.length === 0) {
@@ -128,8 +128,6 @@ export function SkillsCard({
     for (const skill of originalSkills) nextDecisions[`skill_keep:${skill}`] = top.has(skill) ? "accept" : "reject";
     for (const skill of addCandidates) nextDecisions[addKey(skill)] = top.has(skill) ? "accept" : "reject";
     onApply(nextDecisions);
-    // onApply doesn't re-score on its own — kick the projected total.
-    onRefreshProjected();
   }
 
   function renderKeepChip(skill: string) {
@@ -141,18 +139,28 @@ export function SkillsCard({
     return (
       <button
         key={skill}
+        type="button"
+        aria-pressed={kept}
         disabled={disabled}
-        title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — remove another to bring this back` : undefined}
+        title={
+          disabled
+            ? `Skills limit reached (${MAX_MERGED_SKILLS}) — remove another to bring this back`
+            : kept ? "On your résumé — tap to leave it off" : "Left off — tap to keep it"
+        }
         onClick={() => onDecide(key, kept ? "reject" : "accept")}
-        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+        className={`group flex items-center gap-xs rounded-full border px-sm py-xs text-label-sm ${PRESS} ${FOCUS_RING} ${
           kept
-            ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+            ? "border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:border-error/50 hover:text-error"
             : disabled
-            ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
-            : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
+              ? "cursor-not-allowed border-dashed border-outline-variant/40 text-on-surface-variant/50"
+              : "border-dashed border-outline-variant text-on-surface-variant line-through hover:border-primary/50 hover:text-primary hover:no-underline"
         }`}
       >
-        {kept ? <Check size={11} weight="bold" /> : <X size={11} weight="bold" />}
+        {kept ? (
+          <Check size={11} weight="bold" className="text-success" />
+        ) : (
+          <ArrowCounterClockwise size={11} weight="bold" />
+        )}
         {skill}
       </button>
     );
@@ -172,23 +180,25 @@ export function SkillsCard({
     return (
       <button
         key={skill}
+        type="button"
+        aria-pressed={selected}
         disabled={disabled}
-        title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority`}
+        title={disabled ? `Skills limit reached (${MAX_MERGED_SKILLS}) — deselect another to add this one` : `${tier} priority for this job`}
         onClick={toggle}
-        className={`flex items-center gap-xs px-sm py-xs rounded-full text-label-sm border transition-all ${
+        className={`flex items-center gap-xs rounded-full border px-sm py-xs text-label-sm ${PRESS} ${FOCUS_RING} ${
           selected
-            ? "bg-[#e6f4ea] text-[#1e7e34] border-[#1e7e34]/30 font-medium"
+            ? "border-primary bg-primary text-on-primary shadow-sm hover:bg-primary/90"
             : disabled
-            ? "bg-surface-container text-on-surface-variant/50 border-outline-variant/20 cursor-not-allowed"
-            : "bg-error-container/25 text-on-error-container border-error/30 hover:border-error/60"
+              ? "cursor-not-allowed border-dashed border-outline-variant/40 text-on-surface-variant/50"
+              : "border-outline-variant/70 bg-surface-container-lowest text-on-surface hover:border-primary hover:text-primary active:bg-primary/10"
         }`}
       >
-        {selected ? <Check size={11} weight="bold" /> : <X size={11} weight="bold" />}
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TIER_DOT_CLASS[tier]}`} />
+        {selected ? <Check size={11} weight="bold" /> : <Plus size={11} weight="bold" />}
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-on-primary/80" : TIER_DOT_CLASS[tier]}`} />
         {isPriority && <span aria-label="You picked this keyword">★</span>}
         {skill}
         {fix && fix.score_delta > 0 && (
-          <span className="text-primary font-semibold">+{fix.score_delta}%</span>
+          <span className={`tabular font-semibold ${selected ? "text-on-primary/90" : "text-primary"}`}>+{fix.score_delta} pts</span>
         )}
       </button>
     );
@@ -200,18 +210,18 @@ export function SkillsCard({
   const suggestedSoft = addCandidates.filter((s) => SOFT_SKILL_PATTERN.test(s));
 
   return (
-    <article className="flex flex-col gap-md rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm">
-      <div>
-        <div className="flex items-start justify-between gap-sm">
-          <h3 className="text-label-caps text-on-surface-variant">Skills</h3>
+    <article aria-label="Skills" className="flex flex-col gap-md rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm">
+      <div className="flex flex-col gap-xs">
+        <div className="flex flex-wrap items-start justify-between gap-sm">
+          <h3 className="text-body-lg font-semibold text-on-surface">Skills</h3>
           <button
             type="button"
             onClick={handleAutoSelectTop}
             title="Ranks every current + suggested skill by fit for this JD and selects the top ones — you can still adjust any pick afterward"
-            className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-full text-caption text-primary border border-primary/30 hover:bg-primary/5 transition-colors"
+            className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary/10 px-md py-xs text-label-sm font-semibold text-primary hover:bg-primary/15 active:bg-primary/25 ${PRESS} ${FOCUS_RING}`}
           >
-            <Target size={13} />
-            Auto-select Top {MAX_MERGED_SKILLS} for this JD
+            <Target size={14} />
+            Best {MAX_MERGED_SKILLS} for this job
           </button>
         </div>
         <p className="text-caption text-on-surface-variant">
@@ -221,7 +231,7 @@ export function SkillsCard({
               version. None are kept automatically; select which ones matter most for this JD below.
             </>
           ) : (
-            "Click a suggested skill to add it — nothing is added automatically."
+            "Skills your experience supports, and any you picked on the analyzer, start on. Tap any skill to add or remove it."
           )}
         </p>
         <p className="text-caption text-on-surface-variant flex items-center gap-sm flex-wrap">

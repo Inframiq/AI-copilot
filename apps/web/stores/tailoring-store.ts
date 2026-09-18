@@ -14,6 +14,9 @@ const MAX_BULLETS_PER_ROLE = 7;
 // Debounce for the running "Projected ATS" re-score — every accept/reject on a
 // fix would otherwise fire a /ai/project-score call per click.
 let _projectScoreTimer: ReturnType<typeof setTimeout> | null = null;
+// Increments per re-score request; only the newest may write its result, so
+// a slow earlier response can never overwrite the number for later clicks.
+let _projectScoreSeq = 0;
 
 const _bulletTokens = (t: string) =>
   new Set(
@@ -213,8 +216,17 @@ function buildMergedContent(
     (s) => (bulletDecisions[`skill_keep:${s}`] ?? keepDefault) === "accept",
   );
   const keptOriginalSet = new Set(keptOriginalSkills);
+  // A suggestion that is also a skill fix is decided by the fix alone — the
+  // review shows one chip for it, wired to `fix:${id}`. Counting its
+  // `skill_add:` seed too meant deselecting the chip changed nothing.
+  const fixSkillNames = new Set(
+    atsFixes.filter((f) => f.type === "skill").map((f) => f.text.toLowerCase()),
+  );
   const userSelectedSkills = suggestedSkills.filter(
-    (s) => bulletDecisions[`skill_add:${s}`] === "accept" && !keptOriginalSet.has(s),
+    (s) =>
+      bulletDecisions[`skill_add:${s}`] === "accept" &&
+      !keptOriginalSet.has(s) &&
+      !fixSkillNames.has(s.toLowerCase()),
   );
   const mergedSkills = [...keptOriginalSkills, ...userSelectedSkills].slice(0, MAX_MERGED_SKILLS);
 
@@ -278,6 +290,9 @@ interface TailoringState {
    * on screen no longer describes the current selections. Any failure
    * used to be swallowed, leaving a stale figure looking authoritative. */
   projectedScoreStale: boolean;
+  /** True from the moment a re-score is scheduled until it lands or fails —
+   * the review shows the number as updating rather than settled. */
+  isProjecting: boolean;
   matchedSkills: string[];
   missingSkills: string[];
   companyKeywords: string[];
@@ -387,6 +402,7 @@ interface TailoringState {
 
 export const useTailoringStore = create<TailoringState>((set, get) => ({
   reusedRun: false,
+  isProjecting: false,
   jdId: null,
   jdText: "",
   companyName: "",
@@ -495,7 +511,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           )
         : undefined;
     if (_projectScoreTimer) clearTimeout(_projectScoreTimer);
+    set({ isProjecting: true });
     _projectScoreTimer = setTimeout(async () => {
+      const seq = ++_projectScoreSeq;
       try {
         const acceptedBulletIds =
           pendingContent && originalContent
@@ -506,13 +524,15 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         const { projected_score } = await apiClient.projectScore(
           sessionId, acceptedIds, merged, acceptedBulletIds,
         );
-        set({ projectedAtsScore: projected_score, projectedScoreStale: false });
+        if (seq !== _projectScoreSeq) return;
+        set({ projectedAtsScore: projected_score, projectedScoreStale: false, isProjecting: false });
       } catch (e) {
         // Keep the last number (better than blanking the UI) but mark it stale
         // so the screen can say so. Swallowing this is what made a failing
         // re-score look like a score that simply never moves.
         console.warn("projected score refresh failed", e);
-        set({ projectedScoreStale: true });
+        if (seq !== _projectScoreSeq) return;
+        set({ projectedScoreStale: true, isProjecting: false });
       }
     }, 400);
   },
@@ -746,8 +766,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
             // term into the text the résumé never mentions is a new claim,
             // and starts unticked until the user vouches for it.
             const rationale = (session.bullet_rationale ?? {}) as Record<string, BulletRationale>;
+            const jdTerms = [...(session.matched_skills ?? []), ...(session.missing_skills ?? [])];
             for (const change of deriveBulletChanges(session.tailored_content, originalContent)) {
-              const { kind } = classifyChange(change, rationale[change.key], originalContent);
+              const { kind } = classifyChange(change, rationale[change.key], originalContent, jdTerms);
               initialDecisions[change.key] = kind === "reworded" ? "accept" : "reject";
             }
             const originalSkillsSet = new Set(originalContent.skills || []);

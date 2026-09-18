@@ -142,3 +142,13 @@ def test_migration_024_adds_input_fingerprint():
     assert m.revision == "024" and m.down_revision == "023"
     assert "input_fingerprint" in TailoringSession.__table__.columns
     assert TailoringSession.__table__.columns["input_fingerprint"].nullable
+
+
+def test_results_from_before_per_rewrite_scoring_are_never_reused(monkeypatch):
+    """Sessions saved before score_verdicts existed have no per-point values
+    and a frozen live score; the version in the fingerprint retires them."""
+    import app.services.tailoring as t
+    assert t.TAILOR_PIPELINE_VERSION == "2"
+    now = _fp()
+    monkeypatch.setattr(t, "TAILOR_PIPELINE_VERSION", "1")
+    assert _fp() != now
