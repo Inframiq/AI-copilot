@@ -49,6 +49,7 @@ export function SkillsCard({
   originalSkills,
   suggestedSkills,
   skillFixes,
+  liveDeltas,
   matchedSkills,
   decisions,
   onDecide,
@@ -60,6 +61,11 @@ export function SkillsCard({
   suggestedSkills: string[];
   /** JD-gap skills, each with its own ATS gain (score_delta). */
   skillFixes: AtsFix[];
+  /** What each skill fix is worth GIVEN everything currently selected, by fix
+   * id. score_delta is measured once at pipeline time against one fixed
+   * hypothetical, so a skill whose gap another selection already closed still
+   * advertised its full value. Absent until the first live score lands. */
+  liveDeltas?: Record<string, number>;
   /** JD phrases the résumé already covers. */
   matchedSkills: string[];
   decisions: Record<string, string>;
@@ -74,19 +80,19 @@ export function SkillsCard({
 
   // Every candidate to add, best ATS gain first. A fix carries its own
   // estimate; a plain suggestion has none and goes last.
+  const liveDelta = (f: AtsFix) => liveDeltas?.[f.id] ?? f.score_delta;
   const toAdd = [
     ...[...skillFixes]
       .sort(
         (a, b) =>
-          b.score_delta - a.score_delta ||
+          liveDelta(b) - liveDelta(a) ||
           IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance] ||
           Number(b.default_accept) - Number(a.default_accept) ||
           a.text.localeCompare(b.text),
       )
-      .map((f) => ({ name: f.text, key: `fix:${f.id}`, fix: f as AtsFix | null, delta: f.score_delta })),
+      .map((f) => ({ name: f.text, key: `fix:${f.id}`, fix: f as AtsFix | null, delta: liveDelta(f) })),
     ...suggestedSkills.map((s) => ({ name: s, key: `skill_add:${s}`, fix: null as AtsFix | null, delta: 0 })),
   ];
-  const maxDelta = Math.max(1, ...toAdd.map((c) => c.delta));
 
   const isMatched = new Set(matchedSkills.map((m) => m.toLowerCase()));
   const current = [
@@ -131,112 +137,9 @@ export function SkillsCard({
               Ranked by how much each raises your ATS score. Tap to add or remove.
             </p>
           </div>
-          {toAdd.length > 0 && (
-            <button
-              type="button"
-              onClick={addInAtsOrder}
-              title={`Keeps the skills you have that the job asks for, then adds the biggest gains first, up to ${MAX_MERGED_SKILLS}`}
-              className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-xs text-label-sm font-semibold text-on-primary active:brightness-90 ${PRESS} ${FOCUS_RING}`}
-            >
-              <ListNumbers size={14} weight="bold" /> Add in ATS order
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-sm">
-          <div
-            className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-container-high"
-            role="meter"
-            aria-label="Skills on your résumé"
-            aria-valuemin={0}
-            aria-valuemax={MAX_MERGED_SKILLS}
-            aria-valuenow={totalSelected}
-          >
-            <div
-              className={`h-full rounded-full transition-[width] duration-300 ${atCap ? "bg-tertiary" : "bg-primary"}`}
-              style={{ width: `${Math.min(100, (totalSelected / MAX_MERGED_SKILLS) * 100)}%` }}
-            />
-          </div>
-          <span className="tabular shrink-0 text-caption text-on-surface-variant">
-            {totalSelected} / {MAX_MERGED_SKILLS} on your résumé{atCap && " — full"}
-          </span>
-        </div>
-        {originalSkills.length > MAX_MERGED_SKILLS && (
-          <p className="rounded-xl bg-tertiary-container/50 px-sm py-xs text-caption text-on-tertiary-container">
-            Your résumé lists {originalSkills.length} skills; only {MAX_MERGED_SKILLS} fit. Use “Add in ATS order”, or
-            pick the ones that matter most for this job.
-          </p>
-        )}
-      </header>
-
-      {toAdd.length > 0 && (
+          {current.length > 0 && (
         <section className="flex flex-col gap-sm">
-          <h4 className="text-label-caps text-on-surface-variant">Skills to add — biggest gain first</h4>
-          <ol aria-label="Skills to add" className="flex flex-col gap-xs">
-            {toAdd.map((c, i) => {
-              const on = isAdded(c.key);
-              const blocked = !on && atCap;
-              return (
-                <li
-                  key={c.key}
-                  className={`flex items-center gap-sm rounded-2xl border px-sm py-xs transition-colors duration-200 ${
-                    on ? "border-primary/30 bg-primary/5" : "border-outline-variant/30 bg-surface"
-                  }`}
-                >
-                  <span className="tabular w-5 shrink-0 text-center text-label-sm text-on-surface-variant">{i + 1}</span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <div className="flex flex-wrap items-baseline gap-x-sm">
-                      <span className="text-label-md font-semibold text-on-surface">{c.name}</span>
-                      {c.fix ? (
-                        c.fix.default_accept ? (
-                          <span className="text-caption text-success">in your experience</span>
-                        ) : (
-                          <span className="text-caption text-on-surface-variant">only if you have it</span>
-                        )
-                      ) : null}
-                    </div>
-                    {c.delta > 0 && (
-                      <div className="flex items-center gap-sm">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-container-high">
-                          <div
-                            className={`h-full rounded-full ${on ? "bg-primary" : "bg-outline"}`}
-                            style={{ width: `${(c.delta / maxDelta) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <span className={`tabular w-14 shrink-0 text-right text-label-sm font-semibold ${c.delta > 0 ? "text-primary" : "text-on-surface-variant"}`}>
-                    {c.delta > 0 ? `+${c.delta} pts` : "±0"}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={`Add ${c.name}${c.delta > 0 ? ` (+${c.delta} pts)` : ""}`}
-                    disabled={blocked}
-                    title={blocked ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first` : undefined}
-                    onClick={() => toggleAdd(c)}
-                    className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${FOCUS_RING} ${
-                      on ? "bg-primary hover:bg-primary/90" : "bg-outline-variant hover:bg-outline"
-                    }`}
-                  >
-                    <span
-                      aria-hidden
-                      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface-container-lowest shadow transition-transform duration-200 motion-reduce:transition-none ${
-                        on ? "translate-x-4" : ""
-                      }`}
-                    />
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      )}
-
-      {current.length > 0 && (
-        <section className="flex flex-col gap-sm">
-          <h4 className="text-label-caps text-on-surface-variant">Already on your résumé</h4>
+          <h4 className="text-label-caps text-on-surface-variant">On your résumé now ({current.length})</h4>
           <ul aria-label="Already on your résumé" className="flex flex-wrap gap-xs">
             {current.map((skill) => {
               const kept = isKept(skill);
@@ -282,6 +185,101 @@ export function SkillsCard({
           </ul>
         </section>
       )}
+      {toAdd.length > 0 && (
+            <button
+              type="button"
+              onClick={addInAtsOrder}
+              title={`Keeps the skills you have that the job asks for, then adds the biggest gains first, up to ${MAX_MERGED_SKILLS}`}
+              className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-xs text-label-sm font-semibold text-on-primary active:brightness-90 ${PRESS} ${FOCUS_RING}`}
+            >
+              <ListNumbers size={14} weight="bold" /> Add in ATS order
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-sm">
+          <div
+            className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-container-high"
+            role="meter"
+            aria-label="Skills on your résumé"
+            aria-valuemin={0}
+            aria-valuemax={MAX_MERGED_SKILLS}
+            aria-valuenow={totalSelected}
+          >
+            <div
+              className={`h-full rounded-full transition-[width] duration-300 ${atCap ? "bg-tertiary" : "bg-primary"}`}
+              style={{ width: `${Math.min(100, (totalSelected / MAX_MERGED_SKILLS) * 100)}%` }}
+            />
+          </div>
+          <span className="tabular shrink-0 text-caption text-on-surface-variant">
+            {totalSelected} / {MAX_MERGED_SKILLS} on your résumé{atCap && " — full"}
+          </span>
+        </div>
+        {originalSkills.length > MAX_MERGED_SKILLS && (
+          <p className="rounded-xl bg-tertiary-container/50 px-sm py-xs text-caption text-on-tertiary-container">
+            Your résumé lists {originalSkills.length} skills; only {MAX_MERGED_SKILLS} fit. Use “Add in ATS order”, or
+            pick the ones that matter most for this job.
+          </p>
+        )}
+      </header>
+
+      {toAdd.length > 0 && (
+        <section className="flex flex-col gap-sm">
+          <h4 className="text-label-caps text-on-surface-variant">
+            Suggested additions ({toAdd.length}) — biggest gain first
+          </h4>
+          <ol aria-label="Skills to add" className="flex flex-col gap-xs">
+            {toAdd.map((c, i) => {
+              const on = isAdded(c.key);
+              const blocked = !on && atCap;
+              return (
+                <li
+                  key={c.key}
+                  className={`flex items-center gap-sm rounded-2xl border px-sm py-xs transition-colors duration-200 ${
+                    on ? "border-primary/30 bg-primary/5" : "border-outline-variant/30 bg-surface"
+                  }`}
+                >
+                  <span className="tabular w-5 shrink-0 text-center text-label-sm text-on-surface-variant">{i + 1}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-baseline gap-x-sm">
+                      <span className="text-label-md font-semibold text-on-surface">{c.name}</span>
+                      {c.fix ? (
+                        c.fix.default_accept ? (
+                          <span className="text-caption text-success">in your experience</span>
+                        ) : (
+                          <span className="text-caption text-on-surface-variant">only if you have it</span>
+                        )
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className={`tabular w-14 shrink-0 text-right text-label-sm font-semibold ${c.delta > 0 ? "text-primary" : "text-on-surface-variant"}`}>
+                    {c.delta > 0 ? `+${c.delta} pts` : "±0"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={`Add ${c.name}${c.delta > 0 ? ` (+${c.delta} pts)` : ""}`}
+                    disabled={blocked}
+                    title={blocked ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first` : undefined}
+                    onClick={() => toggleAdd(c)}
+                    className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${FOCUS_RING} ${
+                      on ? "bg-primary hover:bg-primary/90" : "bg-outline-variant hover:bg-outline"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface-container-lowest shadow transition-transform duration-200 motion-reduce:transition-none ${
+                        on ? "translate-x-4" : ""
+                      }`}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
     </article>
   );
 }

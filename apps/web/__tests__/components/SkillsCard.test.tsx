@@ -65,6 +65,54 @@ describe("SkillsCard", () => {
       "fix:skill:go": "accept",
     });
   });
+  // Same fault as the points ledger: score_delta is measured once at pipeline
+  // time, so a skill whose gap another selection already closed still
+  // advertised its full value and delivered none of it.
+  it("shows what a skill is worth now, not what it was worth at pipeline time", () => {
+    setup({ liveDeltas: { "skill:kubernetes": 2 } });
+    expect(screen.getByText("+2 pts")).toBeTruthy();
+  });
+
+  it("orders the additions by their live value", () => {
+    setup({
+      skillFixes: [fix("Kubernetes", 9, "high"), fix("Go", 1, "high")],
+      liveDeltas: { "skill:kubernetes": 1, "skill:go": 9 },
+    });
+    const list = screen.getByRole("list", { name: /skills to add/i });
+    const names = within(list).getAllByRole("switch").map((s) => s.getAttribute("aria-label"));
+    expect(names[0]).toMatch(/^Add Go/);
+  });
+
+  it("falls back to the pipeline value before a live score lands", () => {
+    setup({ liveDeltas: {} });
+    expect(screen.getByText("+7 pts")).toBeTruthy();
+  });
+  // The card read as two unrelated widgets: switches in a list for additions,
+  // chips for what you already have, with the shared 20-slot budget metered
+  // at the top, far from either.
+  it("shows your own skills before the suggestions", () => {
+    setup();
+    const headings = screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+    expect(headings[0]).toMatch(/on your résumé/i);
+    expect(headings[1]).toMatch(/suggested/i);
+  });
+
+  it("counts each group in its heading, so the budget is legible", () => {
+    setup();
+    const headings = screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+    expect(headings[0]).toMatch(/\b2\b/);   // Git, Python
+    expect(headings[1]).toMatch(/\b3\b/);   // Go, Kubernetes, Terraform
+  });
+
+  it("drops the per-skill bars, which said nothing the number did not", () => {
+    // The top row's bar was always full width — relative to the biggest gain,
+    // not to anything absolute — so it read as "complete" rather than "worth
+    // the most", directly beside a number that already said so.
+    const { container } = render(<div />);
+    container.remove();
+    setup();
+    expect(screen.queryByTestId("skill-gain-bar")).toBeNull();
+  });
 });
 
 describe("rankForAts", () => {

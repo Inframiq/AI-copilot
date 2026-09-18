@@ -297,6 +297,7 @@ export function ReviewShell({
                   originalSkills={originalContent?.skills ?? []}
                   suggestedSkills={dedupedSuggestedSkills}
                   skillFixes={skillFixes}
+                  liveDeltas={fixDeltas}
                   matchedSkills={matchedSkills}
                   decisions={bulletDecisions}
                   onDecide={setBulletDecision}
