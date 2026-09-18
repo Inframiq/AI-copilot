@@ -141,6 +141,24 @@ export const apiClient = {
   deleteResume: (id: string): Promise<void> =>
     request<void>("DELETE", `/resumes/${id}`),
 
+  /** The rendered document the Studio edits in place.
+   *
+   * Same template path as generatePdf — the server returns the exact HTML it
+   * would hand to WeasyPrint — so what the user edits is what exports. Pure
+   * render: it persists and uploads nothing. */
+  renderResumeHtml: (
+    resumeId: string,
+    opts?: {
+      content?: ResumeContent;
+      template_id?: string;
+      line_spacing?: number;
+      paragraph_spacing?: number;
+      font_choice?: string;
+      accent_color?: string | null;
+    },
+  ): Promise<{ html: string }> =>
+    request<{ html: string }>("POST", `/resumes/${resumeId}/html`, opts ?? {}),
+
   generatePdf: (
     id: string,
     templateId: string,

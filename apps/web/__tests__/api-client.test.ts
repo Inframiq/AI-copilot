@@ -213,3 +213,42 @@ describe("apiClient", () => {
     });
   });
 });
+
+describe("renderResumeHtml", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  function stub() {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({ html: "<html></html>" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("posts to the resume's own html route", async () => {
+    const fetchMock = stub();
+    await apiClient.renderResumeHtml("r1");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/resumes/r1/html");
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("returns the rendered document", async () => {
+    stub();
+    expect((await apiClient.renderResumeHtml("r1")).html).toBe("<html></html>");
+  });
+
+  it("forwards a content override so unsaved edits render", async () => {
+    const fetchMock = stub();
+    await apiClient.renderResumeHtml("r1", { content: { skills: ["Go"] } as never });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).content.skills).toEqual(["Go"]);
+  });
+
+  it("sends an empty body when given no options", async () => {
+    const fetchMock = stub();
+    await apiClient.renderResumeHtml("r1");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({});
+  });
+});
