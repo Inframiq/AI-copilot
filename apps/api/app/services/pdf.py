@@ -254,12 +254,18 @@ def _group_experience_by_company(experience: list) -> list[dict]:
     existed; a group of 2+ is what triggers the nested rendering.
     """
     groups: list[dict] = []
-    for entry in experience or []:
+    for index, entry in enumerate(experience or []):
+        # Carry the original position. Templates iterate groups, so a role's
+        # position inside one says nothing about its index in resume_content —
+        # and the Studio addresses bullets by that index. Copied rather than
+        # stamped in place: these are resume_content's own dicts, and a render
+        # detail must not leak into stored résumé data.
+        role = {**entry, "_index": index}
         company = (entry.get("company") or "").strip()
         if groups and company and groups[-1]["company"].strip().lower() == company.lower():
-            groups[-1]["roles"].append(entry)
+            groups[-1]["roles"].append(role)
         else:
-            groups.append({"company": entry.get("company", ""), "roles": [entry]})
+            groups.append({"company": entry.get("company", ""), "roles": [role]})
     return groups
 
 
