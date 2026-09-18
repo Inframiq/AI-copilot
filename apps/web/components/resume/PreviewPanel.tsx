@@ -7,9 +7,15 @@ import { useRouter } from "next/navigation";
 import { ArrowSquareOut, ArrowsClockwise, FileText, SpinnerGap } from "@phosphor-icons/react";
 import { UnderfillWarning } from "./UnderfillWarning";
 
-// Hides the embedded PDF viewer's own toolbar (its download/print bar) so
-// the header's "Download PDF" stays the one place to actually download —
-// works on both signed https URLs and the data: URIs generatePdf() returns.
+// Hides the embedded PDF viewer's own toolbar (its download/print bar) so the
+// preview reads as part of the app rather than a browser PDF frame — works on
+// both signed https URLs and the data: URIs generatePdf() returns.
+//
+// NOTE: this previously deferred to the studio header's "Download PDF", which
+// has since been removed. With that gone, the only download left in the studio
+// is BulletReviewPanel's "Download", which renders only during tailoring
+// review — so this toolbar suppression is what stops a user exporting a saved
+// résumé from the preview. Drop the #toolbar=0 to give that path back.
 function withHiddenToolbar(url: string): string {
   return url.includes("#") ? url : `${url}#toolbar=0`;
 }
@@ -260,11 +266,11 @@ export function PreviewPanel() {
           {genError && (
             <span className="text-label-sm text-error">{genError}</span>
           )}
-          {/* This button only ever refreshes the live preview render — the
-              actual PDF download lives in the header's single "Download PDF"
-              button, so this never wears a download icon/label (that read as
-              a second, redundant download action). Hidden in tailoring mode
-              — the BulletReviewPanel owns that flow. */}
+          {/* This button only ever refreshes the live preview render, so it
+              never wears a download icon/label — it does not produce a file.
+              (It used to defer to the studio header's "Download PDF"; that
+              button has since been removed.) Hidden in tailoring mode — the
+              BulletReviewPanel owns that flow. */}
           {!isTailoringMode && (
             <button
               onClick={handleGeneratePdf}
@@ -331,9 +337,10 @@ export function PreviewPanel() {
                 </div>
               )}
               <iframe
-                // #toolbar=0 hides the browser's own embedded PDF
-                // viewer chrome (its download/print bar) — the header's
-                // "Download PDF" is the one place to actually download.
+                // #toolbar=0 hides the browser's own embedded PDF viewer
+                // chrome (its download/print bar) so the preview reads as part
+                // of the app. See withHiddenToolbar for why this now also
+                // removes the last download affordance in the studio.
                 src={withHiddenToolbar(pdfSignedUrl)}
                 onLoad={() => setIframeLoaded(true)}
                 className="absolute inset-0 w-full h-full rounded-xl border border-outline-variant/20 shadow-xl bg-white"

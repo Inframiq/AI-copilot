@@ -2,7 +2,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, DownloadSimple, Eye, EyeSlash, PencilSimple, Spinner, Trash, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, Eye, EyeSlash, PencilSimple, Spinner, Trash, WarningCircle } from "@phosphor-icons/react";
 import { EditorPanel } from "@/components/resume/EditorPanel";
 import { PreviewPanel } from "@/components/resume/PreviewPanel";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
@@ -37,9 +37,6 @@ export default function StudioPage({
   const isSaving = useResumeStore((s) => s.isSaving);
   const saveError = useResumeStore((s) => s.saveError);
   const saveNow = useResumeStore((s) => s.saveNow);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const [pdfDownloaded, setPdfDownloaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -225,35 +222,6 @@ export default function StudioPage({
     }
   }
 
-  async function handleExportPdf() {
-    if (!storeResumeId) return;
-    setIsGeneratingPdf(true);
-    setPdfError(null);
-    try {
-      const { signed_url, underfilled } = await apiClient.generatePdf(storeResumeId, templateId);
-      // Update the in-app preview too
-      setPdfSignedUrl(signed_url);
-      setPreviewUnderfilled(underfilled ?? false);
-      // Fetch as a blob so we can force a real file download regardless of CORS
-      const response = await fetch(signed_url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `${resume?.title ?? "resume"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      setPdfDownloaded(true);
-      setTimeout(() => setPdfDownloaded(false), 2500);
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "PDF generation failed");
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
@@ -381,23 +349,6 @@ export default function StudioPage({
               {deleteArmed && <span className="hidden sm:inline">{isDeleting ? "Deleting…" : "Confirm delete"}</span>}
             </button>
             {deleteError && <span className="text-caption text-error">{deleteError}</span>}
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <button
-              onClick={handleExportPdf}
-              disabled={isGeneratingPdf || !storeResumeId}
-              title="Download PDF"
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary text-on-primary rounded-xl shadow-md hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 text-label-md disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-            >
-              <DownloadSimple size={20} />
-              <span className="hidden sm:inline">{isGeneratingPdf ? "Generating…" : "Download PDF"}</span>
-            </button>
-            {pdfError && (
-              <span className="text-caption text-error">{pdfError}</span>
-            )}
-            {pdfDownloaded && !pdfError && (
-              <span className="text-caption text-success">Downloaded ✓</span>
-            )}
           </div>
         </div>
       </header>
