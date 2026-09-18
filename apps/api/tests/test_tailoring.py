@@ -1972,3 +1972,51 @@ async def test_pipeline_defaults_plausible_and_priority_skills_on():
     assert skill["terraform"].default_accept is True    # the user asked for it
     assert skill["rust"].default_accept is False        # merely missing
     assert all(not f.default_accept for f in result.ats_fixes if f.type == "bullet")
+
+
+# ── Each rewrite carries its own score contribution ──────────────────────────
+
+@pytest.mark.asyncio
+async def test_pipeline_records_before_after_verdicts_and_per_rewrite_deltas():
+    from app.services.tailoring import GapFillerOutput, SemanticMatchResult, SemanticVerdict
+
+    responses = {
+        _JDAnalysisWire: make_jd_analysis(
+            exact_technical_tools=["Python"],
+            core_responsibilities=["own the deploy pipeline"],
+            importance={},
+        ),
+        MappingPlan: MappingPlan(
+            mapping_plan=[BulletMapping(
+                original_bullet_id="exp0_b0", original_text="Ran releases",
+                target_jd_keywords_to_inject=[], preserved_metrics=[],
+                strategic_instruction="REFRAME",
+                jd_responsibility_addressed="own the deploy pipeline",
+            )],
+            plausible_skills_to_add=[],
+        ),
+        WriterOutput: WriterOutput(
+            rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
+                               rewritten_text="Owned releases end to end")],
+            updated_skills=[],
+        ),
+        GapFillerOutput: GapFillerOutput(bullets=[]),
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+        # the post-tailor re-verification: the rewrite now covers it
+        SemanticMatchResult: SemanticMatchResult(verdicts=[
+            SemanticVerdict(phrase="own the deploy pipeline", verdict="matched")]),
+    }
+    provider = make_provider_dispatching_by_schema(responses)
+    resume = {"experience": [{"title": "E", "bullets": ["Ran releases"]}], "skills": ["Python"]}
+
+    result = await run_tailoring_pipeline(
+        resume, "jd", 50, provider, make_mock_db_with_rows([]),
+        cached_semantic_verdicts={"own the deploy pipeline": "missing"},
+    )
+    assert result.score_verdicts["before"]["own the deploy pipeline"] == "missing"
+    assert result.score_verdicts["after"]["own the deploy pipeline"] == "matched"
+    # The only rewrite: its points are the whole lift, so unticking it lands
+    # exactly on the before-score and ticking it on the after-score.
+    delta = result.bullet_rationale["exp0_b0"]["score_delta"]
+    assert delta > 0
+    assert delta == result.ats_score - result.ats_score_before

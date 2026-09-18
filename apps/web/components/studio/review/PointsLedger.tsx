@@ -1,6 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ArrowsClockwise, CaretRight, PencilSimple, Sparkle } from "@phosphor-icons/react";
+import {
+  ArrowsClockwise,
+  CaretRight,
+  Checks,
+  PencilSimple,
+  Sparkle,
+  X,
+} from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
 import type { AtsFix, BulletRationale } from "@/lib/api-client";
 import type { BulletChange } from "@/stores/tailoring-store";
@@ -10,20 +17,21 @@ import { BulletDiff } from "./BulletDiff";
 
 type Decision = "accept" | "reject";
 type Filter = "all" | "reworded" | "adds_terms" | "ai";
+type Provenance = "reworded" | "adds_terms" | "ai";
 
 /**
  * Every point tailoring produced, sorted by where it came from — the review's
  * one real question is "is this still true of me?", and the answer differs by
  * provenance:
  *
- *   Reworded       your facts, new words              → start ticked
- *   Adds a JD term your bullet + a term you never used → start unticked
+ *   Reworded       your facts, new words              → start on
+ *   Adds a JD term your bullet + a term you never used → start off
  *   Written by AI  not in your résumé at all          → locked until you
  *                                                       confirm you did it
  *
- * The edge of each row is its provenance mark: solid for your own words,
- * dotted where a term was added, a dashed draft outline for AI-written text
- * that turns solid once you vouch for it.
+ * Each point is a card with its own switch and its own "+N pts". A card that
+ * is on lifts off the page; one that is off sits flat and faded, so the
+ * résumé you are about to apply reads straight off the list.
  */
 export function PointsLedger({
   changes,
@@ -36,6 +44,7 @@ export function PointsLedger({
   busy,
   revertedReasons,
   onDecide,
+  onBulk,
   onFixDecide,
   onFixRole,
   onRewrite,
@@ -54,6 +63,8 @@ export function PointsLedger({
   busy?: Record<string, "rewrite" | "humanize" | null>;
   revertedReasons?: Record<string, string[]>;
   onDecide: (key: string, d: Decision) => void;
+  /** Many decisions in one update (and one re-score). */
+  onBulk: (decisions: Record<string, Decision>) => void;
   onFixDecide: (id: string, d: Decision) => void;
   onFixRole: (id: string, experienceIndex: number) => void;
   onRewrite: (change: BulletChange, mode: "rewrite" | "humanize") => void;
@@ -91,11 +102,27 @@ export function PointsLedger({
     { id: "ai", label: "Written by AI", count: aiFixes.length },
   ];
   const show = (f: Filter) => filter === "all" || filter === f;
-  const untickedReworded = reworded.filter((c) => decisions[c.key] === "reject");
+  const onCount =
+    changes.filter((c) => decisions[c.key] !== "reject").length +
+    aiFixes.filter((f) => decisions[`fix:${f.id}`] === "accept").length;
+
+  // Auto-select: every point built on the user's own bullets. AI-written
+  // points are left as they are — they need the user's word, not a click.
+  function autoSelect() {
+    const next: Record<string, Decision> = {};
+    for (const c of changes) next[c.key] = "accept";
+    onBulk(next);
+  }
+  function clearAll() {
+    const next: Record<string, Decision> = {};
+    for (const c of changes) next[c.key] = "reject";
+    for (const f of aiFixes) next[`fix:${f.id}`] = "reject";
+    onBulk(next);
+  }
 
   return (
     <section aria-label="Tailored points" className="flex flex-col gap-lg">
-      <div className="flex flex-wrap items-center justify-between gap-sm">
+      <div className="flex flex-col gap-sm rounded-2xl bg-surface-container-low p-sm sm:flex-row sm:items-center sm:justify-between">
         <div role="group" aria-label="Show" className="flex flex-wrap gap-xs">
           {tabs.map((t) => (
             <button
@@ -105,33 +132,45 @@ export function PointsLedger({
               onClick={() => setFilter(t.id)}
               className={`rounded-full px-md py-xs text-label-sm transition-colors ${FOCUS_RING} ${
                 filter === t.id
-                  ? "bg-inverse-surface text-inverse-on-surface"
-                  : "bg-surface-container text-on-surface-variant hover:text-on-surface"
+                  ? "bg-inverse-surface text-inverse-on-surface shadow-sm"
+                  : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
               }`}
             >
               {t.label} <span className="tabular opacity-70">{t.count}</span>
             </button>
           ))}
         </div>
-        {untickedReworded.length > 0 && (
+        <div className="flex items-center gap-xs">
+          <span className="tabular px-xs text-caption text-on-surface-variant">
+            {onCount} of {total} on
+          </span>
           <button
             type="button"
-            onClick={() => untickedReworded.forEach((c) => onDecide(c.key, "accept"))}
-            className={`rounded-lg px-sm py-xs text-label-sm text-primary hover:bg-primary/10 ${FOCUS_RING}`}
+            onClick={autoSelect}
+            title="Turns on every point built on your own bullets. AI-written points stay as they are."
+            className={`flex items-center gap-1 rounded-full bg-primary px-md py-xs text-label-sm text-on-primary shadow-sm transition-opacity hover:opacity-90 ${FOCUS_RING}`}
           >
-            Accept all reworded
+            <Checks size={14} weight="bold" /> Auto-select
           </button>
-        )}
+          <button
+            type="button"
+            onClick={clearAll}
+            className={`flex items-center gap-1 rounded-full px-md py-xs text-label-sm text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface ${FOCUS_RING}`}
+          >
+            <X size={14} /> Clear all
+          </button>
+        </div>
       </div>
 
       {show("reworded") && reworded.length > 0 && (
         <Group title="Reworded from your résumé" hint="Same facts, new words — safe to accept">
           {reworded.map((change) => (
-            <ChangeRow
+            <ChangeCard
               key={change.key}
               change={change}
-              edge="solid"
-              checked={decisions[change.key] !== "reject"}
+              provenance="reworded"
+              points={rationale[change.key]?.score_delta}
+              on={decisions[change.key] !== "reject"}
               busy={busy?.[change.key] ?? null}
               reverted={revertedReasons?.[change.key]}
               onToggle={(on) => onDecide(change.key, on ? "accept" : "reject")}
@@ -145,15 +184,16 @@ export function PointsLedger({
       {show("adds_terms") && addsTerms.length > 0 && (
         <Group
           title="Adds a job-description term"
-          hint="Your work, plus a term your résumé never uses — tick only if it is true"
+          hint="Your work, plus a term your résumé never uses — turn on only if it is true"
         >
           {addsTerms.map(({ change, newTerms }) => (
-            <ChangeRow
+            <ChangeCard
               key={change.key}
               change={change}
-              edge="dotted"
+              provenance="adds_terms"
               newTerms={newTerms}
-              checked={decisions[change.key] === "accept"}
+              points={rationale[change.key]?.score_delta}
+              on={decisions[change.key] === "accept"}
               busy={busy?.[change.key] ?? null}
               reverted={revertedReasons?.[change.key]}
               onToggle={(on) => onDecide(change.key, on ? "accept" : "reject")}
@@ -170,12 +210,12 @@ export function PointsLedger({
           hint="Add only what you have actually done; you will be asked about it"
         >
           {aiFixes.map((fix) => (
-            <AiRow
+            <AiCard
               key={fix.id}
               fix={fix}
               roles={roles}
               role={fixExperienceIndex[fix.id] ?? fix.experience_index ?? 0}
-              checked={decisions[`fix:${fix.id}`] === "accept"}
+              on={decisions[`fix:${fix.id}`] === "accept"}
               onToggle={(on) => onFixDecide(fix.id, on ? "accept" : "reject")}
               onRole={(i) => onFixRole(fix.id, i)}
             />
@@ -188,26 +228,132 @@ export function PointsLedger({
 
 function Group({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="flex flex-col gap-sm">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-md gap-y-xs border-b border-outline-variant/30 pb-xs">
+    <section aria-label={title} className="flex flex-col gap-md">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-md gap-y-xs px-xs">
         <h3 className="text-label-md font-semibold text-on-surface">{title}</h3>
         <p className="text-caption text-on-surface-variant">{hint}</p>
       </header>
-      <ul className="flex flex-col gap-sm">{children}</ul>
+      <ul className="flex flex-col gap-md">{children}</ul>
     </section>
   );
 }
 
-const EDGE = {
-  solid: "border-l-[3px] border-l-success",
-  dotted: "border-l-[3px] border-dotted border-l-tertiary",
+const PROVENANCE: Record<Provenance, { label: string; dot: string; bar: string }> = {
+  reworded: { label: "Reworded", dot: "bg-success", bar: "bg-success" },
+  adds_terms: {
+    label: "Adds JD term",
+    dot: "bg-tertiary",
+    // Dotted: a solid line broken where something new was put in.
+    bar: "bg-[repeating-linear-gradient(to_bottom,var(--color-tertiary)_0_4px,transparent_4px_8px)]",
+  },
+  ai: { label: "Written by AI", dot: "bg-outline", bar: "" },
 };
 
-function ChangeRow({
+/** The card shell: lifted with a primary ring when on, flat and faded when
+ * off. `draft` gives the dashed outline of an unconfirmed AI point. */
+function Card({
+  on,
+  provenance,
+  draft = false,
+  children,
+}: {
+  on: boolean;
+  provenance: Provenance;
+  draft?: boolean;
+  children: React.ReactNode;
+}) {
+  const bar = PROVENANCE[provenance].bar;
+  return (
+    <li
+      data-on={on}
+      className={`relative overflow-hidden rounded-2xl transition-all duration-200 motion-reduce:transition-none ${
+        draft
+          ? "border-2 border-dashed border-outline-variant bg-transparent"
+          : on
+            ? "-translate-y-0.5 border border-primary/30 bg-surface-container-lowest shadow-[0_6px_20px_-8px_rgba(27,58,143,0.35)] ring-1 ring-primary/20 motion-reduce:translate-y-0"
+            : "border border-outline-variant/40 bg-surface-container-low/60 shadow-none"
+      }`}
+    >
+      {bar && <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${bar} ${on ? "" : "opacity-50"}`} />}
+      <div className={`flex flex-col gap-sm p-md pl-lg transition-opacity ${on || draft ? "" : "opacity-60"}`}>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+function CardHeader({
+  provenance,
+  where,
+  points,
+  children,
+}: {
+  provenance: Provenance;
+  where?: string;
+  points?: number;
+  children: React.ReactNode;
+}) {
+  const p = PROVENANCE[provenance];
+  return (
+    <div className="flex items-start justify-between gap-sm">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-sm gap-y-xs">
+        <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-container px-sm py-0.5 text-caption font-medium text-on-surface">
+          <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${p.dot}`} />
+          {p.label}
+        </span>
+        {where && <span className="truncate text-caption text-on-surface-variant">{where}</span>}
+      </div>
+      <div className="flex shrink-0 items-center gap-sm">
+        {points !== undefined && points > 0 && (
+          <span className="tabular rounded-full bg-primary/10 px-sm py-0.5 text-label-sm font-semibold text-primary">
+            +{points} pts
+          </span>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Switch({
+  on,
+  disabled,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING} ${
+        on ? "bg-primary" : "bg-outline-variant"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-surface-container-lowest shadow transition-transform duration-200 motion-reduce:transition-none ${
+          on ? "translate-x-5" : ""
+        }`}
+      />
+    </button>
+  );
+}
+
+function ChangeCard({
   change,
-  edge,
+  provenance,
   newTerms = [],
-  checked,
+  points,
+  on,
   busy,
   reverted,
   onToggle,
@@ -215,9 +361,10 @@ function ChangeRow({
   onEdit,
 }: {
   change: BulletChange;
-  edge: keyof typeof EDGE;
+  provenance: Provenance;
   newTerms?: string[];
-  checked: boolean;
+  points?: number;
+  on: boolean;
   busy: "rewrite" | "humanize" | null;
   reverted?: string[];
   onToggle: (on: boolean) => void;
@@ -228,7 +375,6 @@ function ChangeRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.tailored);
   const where = [change.company, change.jobTitle].filter(Boolean).join(" · ");
-  const id = `point-${change.key}`;
 
   function commit() {
     setEditing(false);
@@ -237,90 +383,81 @@ function ChangeRow({
   }
 
   return (
-    <li
-      className={`flex gap-md rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-md transition-opacity ${EDGE[edge]} ${
-        checked ? "" : "opacity-70"
-      }`}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onToggle(e.target.checked)}
-        aria-label={`Use this rewrite: ${change.tailored}`}
-        className={`mt-1 h-4 w-4 shrink-0 accent-primary ${FOCUS_RING}`}
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-xs">
-        <div className="flex flex-wrap items-center gap-x-sm gap-y-xs">
-          <span className="truncate text-label-caps text-on-surface-variant">{where}</span>
+    <Card on={on} provenance={provenance}>
+      <CardHeader provenance={provenance} where={where} points={points}>
+        <Switch on={on} label={`Use this rewrite: ${change.tailored}`} onChange={onToggle} />
+      </CardHeader>
+
+      {newTerms.length > 0 && (
+        <div className="flex flex-wrap gap-xs">
           {newTerms.map((t) => (
             <span
               key={t}
-              className="rounded-full bg-tertiary-container px-sm text-caption text-on-tertiary-container"
+              className="rounded-md bg-tertiary-container px-sm py-0.5 text-caption font-medium text-on-tertiary-container"
             >
               adds: {t}
             </span>
           ))}
         </div>
+      )}
 
-        {editing ? (
-          <textarea
-            autoFocus
-            aria-label="Edit rewrite"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setEditing(false);
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.blur();
-            }}
-            rows={3}
-            className="w-full resize-none rounded-lg border border-primary/50 bg-surface px-sm py-xs text-body-md leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/30"
+      {editing ? (
+        <textarea
+          autoFocus
+          aria-label="Edit rewrite"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditing(false);
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.blur();
+          }}
+          rows={3}
+          className="w-full resize-none rounded-xl border border-primary/50 bg-surface px-sm py-xs text-body-md leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      ) : (
+        <p className="text-body-md leading-relaxed text-on-surface">
+          <NewTermMarks text={change.tailored} original={change.original} terms={newTerms} changeKey={change.key} />
+        </p>
+      )}
+
+      {showWas && (
+        <p className="rounded-xl bg-surface-container px-sm py-xs text-body-sm leading-relaxed text-on-surface-variant">
+          <span className="mr-xs text-label-caps">Original</span>
+          <BulletDiff
+            original={change.original}
+            tailored={change.tailored}
+            side="removed"
+            testId={`bullet-diff-removed-${change.key}`}
           />
-        ) : (
-          <label htmlFor={id} className="cursor-pointer text-body-md leading-relaxed text-on-surface">
-            <NewTermMarks text={change.tailored} original={change.original} terms={newTerms} changeKey={change.key} />
-          </label>
-        )}
+        </p>
+      )}
 
-        {showWas && (
-          <p className="text-body-sm leading-relaxed text-on-surface-variant">
-            <span className="mr-xs text-label-caps">Was</span>
-            <BulletDiff
-              original={change.original}
-              tailored={change.tailored}
-              side="removed"
-              testId={`bullet-diff-removed-${change.key}`}
-            />
-          </p>
-        )}
+      {(reverted?.length ?? 0) > 0 && (
+        <p className="text-caption text-tertiary">Kept your version — the rewrite {reverted!.join("; ")}.</p>
+      )}
 
-        {(reverted?.length ?? 0) > 0 && (
-          <p className="text-caption text-tertiary">Kept your version — the rewrite {reverted!.join("; ")}.</p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-xs">
-          <RowAction onClick={() => setShowWas((v) => !v)} pressed={showWas}>
-            <CaretRight size={12} className={`transition-transform ${showWas ? "rotate-90" : ""}`} />
-            {showWas ? "Hide original" : "Show original"}
-          </RowAction>
-          <RowAction
-            onClick={() => {
-              setDraft(change.tailored);
-              setEditing(true);
-            }}
-          >
-            <PencilSimple size={12} /> Edit
-          </RowAction>
-          <RowAction onClick={() => onRewrite("rewrite")} disabled={!!busy}>
-            <ArrowsClockwise size={12} className={busy === "rewrite" ? "animate-spin" : ""} /> Rewrite
-          </RowAction>
-          <RowAction onClick={() => onRewrite("humanize")} disabled={!!busy}>
-            <Sparkle size={12} className={busy === "humanize" ? "animate-pulse" : ""} /> Humanize
-          </RowAction>
-        </div>
+      <div className="-ml-xs flex flex-wrap items-center gap-xs border-t border-outline-variant/20 pt-xs">
+        <CardAction onClick={() => setShowWas((v) => !v)} pressed={showWas}>
+          <CaretRight size={12} className={`transition-transform ${showWas ? "rotate-90" : ""}`} />
+          {showWas ? "Hide original" : "Show original"}
+        </CardAction>
+        <CardAction
+          onClick={() => {
+            setDraft(change.tailored);
+            setEditing(true);
+          }}
+        >
+          <PencilSimple size={12} /> Edit
+        </CardAction>
+        <CardAction onClick={() => onRewrite("rewrite")} disabled={!!busy}>
+          <ArrowsClockwise size={12} className={busy === "rewrite" ? "animate-spin" : ""} /> Rewrite
+        </CardAction>
+        <CardAction onClick={() => onRewrite("humanize")} disabled={!!busy}>
+          <Sparkle size={12} className={busy === "humanize" ? "animate-pulse" : ""} /> Humanize
+        </CardAction>
       </div>
-    </li>
+    </Card>
   );
 }
 
@@ -361,87 +498,72 @@ function NewTermMarks({
   );
 }
 
-function AiRow({
+function AiCard({
   fix,
   roles,
   role,
-  checked,
+  on,
   onToggle,
   onRole,
 }: {
   fix: AtsFix;
   roles: string[];
   role: number;
-  checked: boolean;
+  on: boolean;
   onToggle: (on: boolean) => void;
   onRole: (i: number) => void;
 }) {
-  // Already accepted (e.g. restored from an earlier choice) counts as vouched.
-  const [vouched, setVouched] = useState(checked);
-  const id = `ai-${fix.id}`;
+  // Already on (e.g. restored from an earlier choice) counts as vouched.
+  const [vouched, setVouched] = useState(on);
   const label = fix.type === "headline" ? "New headline" : "New bullet";
 
   return (
-    <li
-      className={`flex gap-md rounded-xl border-2 p-md transition-colors ${
-        vouched
-          ? "border-solid border-outline-variant/60 bg-surface-container-lowest"
-          : "border-dashed border-outline-variant bg-transparent"
-      }`}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={!vouched}
-        onChange={(e) => onToggle(e.target.checked)}
-        aria-label={`Add this ${label.toLowerCase()}: ${fix.text}`}
-        className={`mt-1 h-4 w-4 shrink-0 accent-primary disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-xs">
-        <div className="flex flex-wrap items-center gap-x-sm gap-y-xs">
-          <span className="text-label-caps text-on-surface-variant">{label}</span>
-          {fix.type === "bullet" && roles.length > 0 && (
-            <select
-              aria-label="Add to role"
-              value={role}
-              onChange={(e) => onRole(Number(e.target.value))}
-              className={`max-w-[16rem] truncate rounded-md border border-outline-variant/50 bg-surface px-xs py-0.5 text-caption text-on-surface ${FOCUS_RING}`}
-            >
-              {roles.map((r, i) => (
-                <option key={i} value={i}>
-                  → {r}
-                </option>
-              ))}
-            </select>
-          )}
-          {fix.score_delta > 0 && (
-            <span className="tabular text-label-sm font-semibold text-primary">+{fix.score_delta} pts</span>
-          )}
-          <span className="text-caption text-on-surface-variant">for “{fix.gap}”</span>
-        </div>
-        <label htmlFor={id} className={`text-body-md leading-relaxed ${vouched ? "text-on-surface" : "text-on-surface-variant italic"}`}>
-          {fix.text}
-        </label>
-        <label className="flex w-fit cursor-pointer items-center gap-xs text-caption text-on-surface-variant">
+    <Card on={on} provenance="ai" draft={!vouched}>
+      <CardHeader provenance="ai" where={`${label} for “${fix.gap}”`} points={fix.score_delta}>
+        <Switch
+          on={on}
+          disabled={!vouched}
+          label={`Add this ${label.toLowerCase()}: ${fix.text}`}
+          onChange={onToggle}
+        />
+      </CardHeader>
+      <p className={`text-body-md leading-relaxed ${vouched ? "text-on-surface" : "italic text-on-surface-variant"}`}>
+        {fix.text}
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-sm border-t border-outline-variant/20 pt-xs">
+        <label className="flex cursor-pointer items-center gap-xs text-label-sm text-on-surface">
           <input
             type="checkbox"
             checked={vouched}
             onChange={(e) => {
               setVouched(e.target.checked);
               // Withdrawing the confirmation withdraws the claim.
-              if (!e.target.checked && checked) onToggle(false);
+              if (!e.target.checked && on) onToggle(false);
             }}
-            className={`h-3.5 w-3.5 accent-primary ${FOCUS_RING}`}
+            className={`h-4 w-4 accent-primary ${FOCUS_RING}`}
           />
           I have actually done this
         </label>
+        {fix.type === "bullet" && roles.length > 0 && (
+          <select
+            aria-label="Add to role"
+            value={role}
+            onChange={(e) => onRole(Number(e.target.value))}
+            className={`max-w-[16rem] truncate rounded-lg border border-outline-variant/50 bg-surface px-sm py-xs text-caption text-on-surface ${FOCUS_RING}`}
+          >
+            {roles.map((r, i) => (
+              <option key={i} value={i}>
+                Add to: {r}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
-    </li>
+    </Card>
   );
 }
 
-function RowAction({
+function CardAction({
   children,
   onClick,
   disabled,
@@ -458,7 +580,7 @@ function RowAction({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={pressed}
-      className={`flex items-center gap-1 rounded-md px-xs py-0.5 text-caption text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-40 ${FOCUS_RING}`}
+      className={`flex items-center gap-1 rounded-md px-xs py-1 text-caption text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-40 ${FOCUS_RING}`}
     >
       {children}
     </button>

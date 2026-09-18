@@ -76,6 +76,8 @@ async function request<T>(
 export interface BulletRationale {
   responsibility: string;
   keywords: string[];
+  /** Points this rewrite adds on its own. Absent on older sessions. */
+  score_delta?: number;
 }
 
 /** One rewrite the server's fact-lock refused, with the reason(s) why. The
@@ -387,12 +389,16 @@ export const apiClient = {
     // The résumé exactly as the review screen currently shows it. When given,
     // the server scores this instead of the session's stored (all-accepted)
     // tailored_content, so rejected bullet rewrites actually move the number.
-    content?: ResumeContent
+    content?: ResumeContent,
+    // Review keys ("exp0_b2") of the rewrites being kept. The server credits
+    // each with what it covered, so every tick moves the projected score.
+    acceptedBulletIds?: string[],
   ): Promise<{ projected_score: number }> =>
     request<{ projected_score: number }>("POST", "/ai/project-score", {
       session_id: sessionId,
       accepted_fix_ids: acceptedFixIds,
       ...(content ? { content } : {}),
+      ...(acceptedBulletIds ? { accepted_bullet_ids: acceptedBulletIds } : {}),
     }),
 
   // Most recent completed session across every JD — resolves Interview

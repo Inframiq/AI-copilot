@@ -139,6 +139,12 @@ class TailoringSession(Base):
     # instead of re-running — the model has no seed, so a re-run rewords.
     # NULL for sessions from before reuse existed; they are never reused.
     input_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # {"before": {phrase: verdict}, "after": {...}} — the semantic verdicts for
+    # the original and the fully tailored résumé. POST /ai/project-score
+    # credits each accepted rewrite with its after-verdicts
+    # (ats.verdicts_with_rewrites). NULL for older sessions, which fall back
+    # to the JD's cached verdicts.
+    score_verdicts: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
     resume: Mapped["Resume | None"] = relationship(back_populates="sessions")

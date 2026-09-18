@@ -497,7 +497,15 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     if (_projectScoreTimer) clearTimeout(_projectScoreTimer);
     _projectScoreTimer = setTimeout(async () => {
       try {
-        const { projected_score } = await apiClient.projectScore(sessionId, acceptedIds, merged);
+        const acceptedBulletIds =
+          pendingContent && originalContent
+            ? deriveBulletChanges(pendingContent, originalContent)
+                .filter((c) => (bulletDecisions[c.key] ?? "accept") !== "reject")
+                .map((c) => c.key)
+            : undefined;
+        const { projected_score } = await apiClient.projectScore(
+          sessionId, acceptedIds, merged, acceptedBulletIds,
+        );
         set({ projectedAtsScore: projected_score, projectedScoreStale: false });
       } catch (e) {
         // Keep the last number (better than blanking the UI) but mark it stale

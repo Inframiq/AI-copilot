@@ -174,6 +174,9 @@ class ProjectScoreRequest(BaseModel):
     # stored tailored_content with accepted_fix_ids applied server-side —
     # which silently ignored every bullet the user rejected.
     content: dict | None = None
+    # Bullet ids ("exp0_b2") whose rewrite the user is keeping. Given, each
+    # earns its after-tailoring verdicts; omitted, the old scoring applies.
+    accepted_bullet_ids: list[str] | None = Field(default=None, max_length=500)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

@@ -25,6 +25,7 @@ from app.services.tailoring import (
 from app.services.bullet_guard import guard_rewrite
 from app.services.ats import (
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
+    verdicts_with_rewrites,
 )
 from app.services.resume_spec import HARD_LIMITS
 
@@ -196,6 +197,7 @@ async def _run_tailoring_background(
         row.bullet_importance = result.bullet_importance
         row.reverted_bullets = result.reverted_bullets
         row.bullet_rationale = result.bullet_rationale
+        row.score_verdicts = result.score_verdicts or None
         row.status = "completed"
 
         # Cache Agent 1's parse onto the JD, exactly as /ai/analyze does.
@@ -480,6 +482,16 @@ async def project_score(
         raise HTTPException(status_code=409, detail="Session JD has no cached analysis")
     jd_analysis = JDAnalysis(**agent1)
     verdicts = (jd_row.parsed or {}).get("semantic", {}).get("verdicts", {}) or {}
+
+    # With the session's before/after verdicts and the list of kept
+    # rewrites, credit each kept rewrite for what it targeted. Without them
+    # (older sessions, older clients) fall back to the JD's cached verdicts.
+    stored = session.score_verdicts or {}
+    if body.accepted_bullet_ids is not None and stored.get("before") is not None:
+        verdicts = verdicts_with_rewrites(
+            stored.get("before") or {}, stored.get("after") or {},
+            session.bullet_rationale or {}, body.accepted_bullet_ids,
+        )
 
     accepted = set(body.accepted_fix_ids)
     fixes = [AtsFix(**f) for f in (session.ats_fixes or []) if f.get("id") in accepted]

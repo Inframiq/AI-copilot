@@ -484,6 +484,36 @@ def verdicts_with_fixes(
     return out
 
 
+_VERDICT_RANK = {"missing": 0, "partial": 1, "matched": 2}
+
+
+def verdicts_with_rewrites(
+    before: dict[str, str],
+    after: dict[str, str],
+    rationale: dict[str, dict],
+    accepted_bullet_ids: "list[str] | set[str]",
+) -> dict[str, str]:
+    """Semantic verdicts for a review where only *accepted_bullet_ids* kept
+    their rewrite. Pure.
+
+    `before` scores the original résumé, `after` the fully tailored one. Each
+    accepted rewrite earns the after-verdict for exactly the terms it targeted
+    (its rationale's responsibility and keywords) — so ticking one moves the
+    score by what it covers and unticking gives it back. Scoring the review
+    against `before` alone froze the number: a rewrite's semantic credit
+    never counted. A verdict is only ever upgraded, never lowered.
+    """
+    out = dict(before)
+    for bid in accepted_bullet_ids:
+        r = rationale.get(bid) or {}
+        for term in [r.get("responsibility") or ""] + list(r.get("keywords") or []):
+            k = term.strip().lower()
+            verdict = after.get(k)
+            if k and verdict and _VERDICT_RANK.get(verdict, 0) > _VERDICT_RANK.get(out.get(k, "missing"), 0):
+                out[k] = verdict
+    return out
+
+
 def estimate_fix_delta(
     content: dict,
     jd_analysis,

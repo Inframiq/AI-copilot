@@ -823,6 +823,33 @@ describe("useTailoringStore", () => {
     expect(d.exp0_b1).toBe("accept"); // Python was already there
   });
 
+  it("re-scores with the list of rewrites being kept, so each tick moves the number", async () => {
+    vi.useFakeTimers();
+    try {
+      const original = {
+        ...SAMPLE_CONTENT,
+        experience: [{ title: "Eng", company: "Acme", start: "2020", bullets: ["A.", "B."] }],
+      } as ResumeContent;
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.setState({
+        sessionId: "s1",
+        pendingContent: {
+          ...original,
+          experience: [{ title: "Eng", company: "Acme", start: "2020", bullets: ["A2.", "B2."] }],
+        },
+        bulletDecisions: { exp0_b0: "accept", exp0_b1: "accept" },
+      } as never);
+
+      useTailoringStore.getState().setBulletDecision("exp0_b1", "reject");
+      await vi.runAllTimersAsync();
+
+      const call = vi.mocked(apiClient.projectScore).mock.calls.at(-1)!;
+      expect(call[3]).toEqual(["exp0_b0"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("runTailoring re-scores with the default selections applied", async () => {
     vi.useFakeTimers();
     try {
@@ -1062,7 +1089,7 @@ describe("useTailoringStore", () => {
 
         // No pendingContent in this setup, so no merged content to send —
         // the server falls back to scoring tailored_content + these ids.
-        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"], undefined);
+        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"], undefined, undefined);
         expect(useTailoringStore.getState().projectedAtsScore).toBe(88);
       } finally {
         vi.useRealTimers();
@@ -1143,7 +1170,7 @@ describe("useTailoringStore", () => {
         await vi.advanceTimersByTimeAsync(400);
 
         expect(apiClient.projectScore).toHaveBeenCalledWith(
-          "sess-9", ["skill:k8s", "bullet:kubernetes"], undefined,
+          "sess-9", ["skill:k8s", "bullet:kubernetes"], undefined, undefined,
         );
         expect(useTailoringStore.getState().projectedAtsScore).toBe(91);
       } finally {

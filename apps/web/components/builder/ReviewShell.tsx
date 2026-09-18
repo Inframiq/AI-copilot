@@ -50,6 +50,7 @@ export function ReviewShell({
   const atsScore = useTailoringStore((s) => s.atsScore);
   const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
   const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
+  const projectedScoreStale = useTailoringStore((s) => s.projectedScoreStale);
   const suggestedSkills = useTailoringStore((s) => s.suggestedSkills);
   const prioritySkills = useTailoringStore((s) => s.prioritySkills);
   const missingSkills = useTailoringStore((s) => s.missingSkills);
@@ -218,6 +219,15 @@ export function ReviewShell({
                     <span className="text-caption text-on-surface-variant">
                       With your choices
                     </span>
+                    {projectedScoreStale && (
+                      <button
+                        type="button"
+                        onClick={refreshProjectedScore}
+                        className={`rounded text-caption text-error underline ${FOCUS_RING}`}
+                      >
+                        Score didn’t update — retry
+                      </button>
+                    )}
                   </div>
                 </section>
               )}
@@ -268,6 +278,7 @@ export function ReviewShell({
                   busy={bulletLoading}
                   revertedReasons={rewriteReverted}
                   onDecide={setBulletDecision}
+                  onBulk={applyBulletDecisions}
                   onFixDecide={setFixDecision}
                   onFixRole={setFixExperienceIndex}
                   onRewrite={handleRewriteBullet}

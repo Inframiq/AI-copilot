@@ -31,7 +31,7 @@ function setup(overrides: Partial<Parameters<typeof PointsLedger>[0]> = {}) {
     changes: [reworded, addsTerm],
     decisions: { exp0_b1: "accept", exp0_b0: "reject" } as Record<string, "accept" | "reject">,
     rationale: {
-      exp0_b1: { responsibility: "", keywords: ["Python"] },
+      exp0_b1: { responsibility: "", keywords: ["Python"], score_delta: 4 },
       exp0_b0: { responsibility: "", keywords: ["Kubernetes"] },
     },
     original: ORIGINAL,
@@ -39,6 +39,7 @@ function setup(overrides: Partial<Parameters<typeof PointsLedger>[0]> = {}) {
     roles: ["Engineer · Acme"],
     fixExperienceIndex: {},
     onDecide: vi.fn(),
+    onBulk: vi.fn(),
     onFixDecide: vi.fn(),
     onFixRole: vi.fn(),
     onRewrite: vi.fn(),
@@ -59,17 +60,18 @@ describe("PointsLedger", () => {
     const ai = screen.getByRole("region", { name: /written by ai/i });
     expect(within(ai).getByText(/Provisioned staging with Terraform/)).toBeTruthy();
     expect(within(ai).getByText("+6 pts")).toBeTruthy();
+    expect(within(reworded).getByText("+4 pts")).toBeTruthy();
   });
 
-  it("toggles a rewrite with its checkbox", () => {
+  it("toggles a rewrite with its switch", () => {
     const p = setup();
-    fireEvent.click(screen.getByRole("checkbox", { name: /use this rewrite: Managed Kubernetes/i }));
+    fireEvent.click(screen.getByRole("switch", { name: /use this rewrite: Managed Kubernetes/i }));
     expect(p.onDecide).toHaveBeenCalledWith("exp0_b0", "accept");
   });
 
   it("will not add an AI-written point until the user confirms having done it", () => {
     const p = setup();
-    const add = screen.getByRole("checkbox", { name: /add this new bullet/i }) as HTMLInputElement;
+    const add = screen.getByRole("switch", { name: /add this new bullet/i }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox", { name: /i have actually done this/i }));
     expect(add.disabled).toBe(false);
@@ -90,11 +92,23 @@ describe("PointsLedger", () => {
     expect(screen.getByRole("region", { name: /written by ai/i })).toBeTruthy();
   });
 
-  it("accepts every unticked rewording at once", () => {
+  it("auto-selects every point built on the user's bullets, leaving AI-written ones", () => {
     const p = setup({ decisions: { exp0_b1: "reject", exp0_b0: "reject" } });
-    fireEvent.click(screen.getByRole("button", { name: /accept all reworded/i }));
-    expect(p.onDecide).toHaveBeenCalledWith("exp0_b1", "accept");
-    expect(p.onDecide).not.toHaveBeenCalledWith("exp0_b0", "accept");
+    fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({ exp0_b1: "accept", exp0_b0: "accept" });
+  });
+
+  it("clears every point, AI-written included", () => {
+    const p = setup({ decisions: { exp0_b1: "accept", "fix:bullet:terraform": "accept" } });
+    fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({
+      exp0_b1: "reject", exp0_b0: "reject", "fix:bullet:terraform": "reject",
+    });
+  });
+
+  it("counts how many points are on", () => {
+    setup();
+    expect(screen.getByText("1 of 3 on")).toBeTruthy();
   });
 
   it("moves an AI bullet to another role", () => {

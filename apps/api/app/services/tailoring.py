@@ -25,7 +25,7 @@ from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
-    bullet_already_present,
+    bullet_already_present, verdicts_with_rewrites,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
@@ -267,6 +267,31 @@ def _sanitize_skill_list(skills: list[str]) -> list[str]:
 # technical evidence lives there — indexing only "experience" meant Agent 2
 # and Agent 3 never saw those bullets and a fresher's tailor run was a no-op.
 _BULLET_SECTIONS: list[tuple[str, str]] = [("experience", "exp"), ("projects", "proj")]
+_BULLET_ID_RE = re.compile(r"^(exp|proj)(\d+)_b(\d+)$")
+
+
+def _bullet_text(content: dict, bullet_id: str) -> str | None:
+    """The text of *bullet_id* ("exp0_b2") in plain résumé content."""
+    m = _BULLET_ID_RE.match(bullet_id)
+    if not m:
+        return None
+    section = dict((p, s) for s, p in _BULLET_SECTIONS)[m.group(1)]
+    entries = content.get(section) or []
+    e, b = int(m.group(2)), int(m.group(3))
+    if e >= len(entries) or b >= len(entries[e].get("bullets") or []):
+        return None
+    return entries[e]["bullets"][b]
+
+
+def _with_bullet(content: dict, bullet_id: str, text: str) -> dict:
+    """A copy of *content* with *bullet_id* set to *text*."""
+    m = _BULLET_ID_RE.match(bullet_id)
+    out = deepcopy(content)
+    if not m:
+        return out
+    section = dict((p, s) for s, p in _BULLET_SECTIONS)[m.group(1)]
+    out[section][int(m.group(2))]["bullets"][int(m.group(3))] = text
+    return out
 
 
 def _collect_all_bullets(content: dict) -> list[str]:
@@ -1484,6 +1509,9 @@ class TailoringResult:
     # parse and 409s without one, which silently froze the review screen's
     # live score for every JD that was tailored but never analyzed.
     jd_analysis: "JDAnalysis | None" = None
+    # {"before": ..., "after": ...} semantic verdicts — persisted so the
+    # review's live score can credit each kept rewrite (see project-score).
+    score_verdicts: dict = field(default_factory=dict)
 
 
 _IMPORTANCE_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -1791,13 +1819,6 @@ async def run_tailoring_pipeline(
             text=gap_out.headline.strip(), default_accept=False,
         ))
 
-    for f in fixes:
-        f.score_delta = estimate_fix_delta(
-            tailored_content, analysis.jd_analysis, post.semantic_verdicts,
-            post.ats_score, f,
-        )
-    fixes.sort(key=lambda f: (_IMPORTANCE_RANK[f.importance], -f.score_delta))
-
     bullet_importance: dict[str, str] = {}
     bullet_rationale: dict[str, dict] = {}
     for m in mapping_plan.mapping_plan:
@@ -1810,6 +1831,37 @@ async def run_tailoring_pipeline(
                 "responsibility": responsibility,
                 "keywords": keywords,
             }
+
+    # ── one scoring model for the whole review ──────────────────────────────
+    # The review re-scores the user's picks with verdicts_with_rewrites: the
+    # before-verdicts, upgraded for each kept rewrite on exactly the terms it
+    # targeted. The score returned here and every "+N pts" use that same
+    # model, so ticking everything lands on this number and unticking all
+    # rewrites lands on the before-score.
+    before_verdicts = dict(analysis.semantic_verdicts)
+    after_verdicts = dict(post.semantic_verdicts)
+    rewritten_ids = [
+        bid for bid in bullet_rationale
+        if _bullet_text(tailored_content, bid) not in (None, _bullet_text(resume_content, bid))
+    ]
+    full_verdicts = verdicts_with_rewrites(before_verdicts, after_verdicts, bullet_rationale, rewritten_ids)
+    full_score = score_content(tailored_content, analysis.jd_analysis, full_verdicts).ats_score
+    for bid in rewritten_ids:
+        without = score_content(
+            _with_bullet(tailored_content, bid, _bullet_text(resume_content, bid) or ""),
+            analysis.jd_analysis,
+            verdicts_with_rewrites(
+                before_verdicts, after_verdicts, bullet_rationale,
+                [b for b in rewritten_ids if b != bid],
+            ),
+        ).ats_score
+        bullet_rationale[bid]["score_delta"] = max(0, full_score - without)
+
+    for f in fixes:
+        f.score_delta = estimate_fix_delta(
+            tailored_content, analysis.jd_analysis, full_verdicts, full_score, f,
+        )
+    fixes.sort(key=lambda f: (_IMPORTANCE_RANK[f.importance], -f.score_delta))
 
     # ── merge in the user's priority skills — a code-level guarantee, not
     #    just a prompt instruction, that they show up for review ─────────────
@@ -1825,7 +1877,7 @@ async def run_tailoring_pipeline(
         tailored_content=tailored_content,
         matched_skills=post.matched_skills,
         missing_skills=post.missing_skills,
-        ats_score=post.ats_score,
+        ats_score=full_score,
         prep_questions=questions,
         company_keywords=post.company_keywords,
         suggested_skills=suggested,
@@ -1835,4 +1887,5 @@ async def run_tailoring_pipeline(
         bullet_rationale=bullet_rationale,
         ats_score_before=analysis.ats_score,
         jd_analysis=analysis.jd_analysis,
+        score_verdicts={"before": before_verdicts, "after": after_verdicts},
     )
