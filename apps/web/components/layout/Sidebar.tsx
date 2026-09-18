@@ -58,6 +58,20 @@ export function Sidebar() {
     <aside
       className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs py-md" : "p-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300`}
     >
+      {/* Collapse flap — an edge handle, the conventional place to find this.
+          It lived in the footer under eight identically-styled nav links and
+          was invisible there. Carries no text, so the 72px rail never
+          constrains it. */}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="absolute top-1/2 right-0 translate-x-full -translate-y-1/2 z-10 flex items-center justify-center w-5 h-16 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:w-6 hover:text-primary hover:border-primary/40 transition-all duration-200"
+      >
+        {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
+      </button>
+
       {/* Logo — the 154px wordmark cannot fit a 72px rail, so the rail wears
           the square mark instead. Same alt text either way. */}
       <Link
@@ -106,19 +120,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom — collapse control, then credit balance; sign-out lives on /account */}
-      <div className="shrink-0 mt-auto pt-sm pb-md flex flex-col gap-sm border-t border-outline-variant/20">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`flex items-center gap-xs py-sm rounded-lg border border-outline-variant/40 bg-surface-container-low/60 text-label-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high hover:border-outline-variant transition-colors ${
-            collapsed ? "justify-center px-0" : "justify-center px-md"
-          }`}
-        >
-          {collapsed ? <CaretDoubleRight size={18} weight="bold" /> : <CaretDoubleLeft size={18} weight="bold" />}
-          {!collapsed && <span>Collapse</span>}
-        </button>
+      <div className="shrink-0 mt-auto pt-sm pb-md border-t border-outline-variant/20">
         <CreditMeter variant={collapsed ? "rail" : "full"} />
       </div>
     </aside>

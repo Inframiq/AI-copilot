@@ -170,13 +170,37 @@ describe("Sidebar collapse", () => {
     expect(await screen.findByText(/free/i)).toBeTruthy();
   });
 
-  it("gives the collapse control a visible border so it reads as a button", () => {
-    // It was styled as a bare ghost row and got lost against the nav links.
+  // The control began as a row in the footer, directly beneath eight nav
+  // links styled the same way, and was invisible as a result. It is now a
+  // flap on the sidebar's outer edge — off the list entirely, where an edge
+  // handle is the conventional place to look for one.
+  it("mounts the collapse control on the sidebar edge, not inside the footer", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    const { container } = renderSidebar();
+    const flap = screen.getByRole("button", { name: /collapse sidebar/i });
+    expect(flap.parentElement).toBe(container.querySelector("aside"));
+  });
+
+  it("hangs the flap outside the sidebar's right border", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    const flap = screen.getByRole("button", { name: /collapse sidebar/i });
+    expect(flap.className).toMatch(/absolute/);
+    expect(flap.className).toMatch(/translate-x-full/);
+  });
+
+  it("keeps the flap reachable when collapsed", () => {
+    useSidebarStore.setState({ override: "collapsed" });
+    renderSidebar();
+    expect(screen.getByRole("button", { name: /expand sidebar/i }).className).toMatch(/absolute/);
+  });
+
+  it("carries no text label, so the rail width never constrains it", () => {
     useSidebarStore.setState({ override: "expanded" });
     renderSidebar();
     expect(
-      screen.getByRole("button", { name: /collapse sidebar/i }).className,
-    ).toMatch(/border/);
+      screen.getByRole("button", { name: /collapse sidebar/i }).textContent,
+    ).toBe("");
   });
 
   it("publishes the override on the document element so <main> can offset by it", () => {
