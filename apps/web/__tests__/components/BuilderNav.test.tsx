@@ -44,4 +44,14 @@ describe("BuilderNav", () => {
     render(<BuilderNav current="education" onPrevious={noop} onNext={noop} onPreview={noop} />);
     expect(screen.getByRole("button", { name: /previous/i }).textContent).toMatch(/experience/i);
   });
+
+  it("gives every control a keyboard focus ring", () => {
+    const { container } = render(
+      <BuilderNav current="contact" onPrevious={noop} onNext={noop} onPreview={noop} />,
+    );
+    const unringed = [...container.querySelectorAll("button")].filter(
+      (b) => !b.className.includes("focus-visible:"),
+    );
+    expect(unringed.map((b) => b.textContent)).toEqual([]);
+  });
 });

@@ -1,6 +1,7 @@
 "use client";
 import { ArrowLeft, ArrowRight, Eye } from "@phosphor-icons/react";
 import { SECTION_ORDER, sectionStates, type SectionId } from "@/lib/section-completeness";
+import { FOCUS_RING } from "@/lib/focus";
 
 // Labels live in section-completeness; read them once rather than keeping a
 // second copy that could drift from the stepper's.
@@ -34,7 +35,7 @@ export function BuilderNav({
         type="button"
         onClick={onPrevious}
         disabled={!prev}
-        className="flex items-center gap-xs rounded-xl px-md py-sm text-label-md text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+        className={`flex items-center gap-xs rounded-xl px-md py-sm text-label-md text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
         {prev ? `Previous: ${LABEL[prev]}` : "Previous"}
@@ -44,7 +45,7 @@ export function BuilderNav({
         <button
           type="button"
           onClick={onNext}
-          className="flex items-center gap-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary shadow-md transition-shadow hover:shadow-lg"
+          className={`flex items-center gap-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 ${FOCUS_RING}`}
         >
           {`Continue to ${LABEL[next]}`}
           <ArrowRight size={16} />
@@ -53,7 +54,7 @@ export function BuilderNav({
         <button
           type="button"
           onClick={onPreview}
-          className="flex items-center gap-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary shadow-md transition-shadow hover:shadow-lg"
+          className={`flex items-center gap-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 ${FOCUS_RING}`}
         >
           <Eye size={16} />
           Preview Resume

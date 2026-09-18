@@ -2,6 +2,7 @@
 import { Check } from "@phosphor-icons/react";
 import { sectionStates, type SectionId } from "@/lib/section-completeness";
 import type { ResumeContent } from "@career-copilot/types";
+import { FOCUS_RING } from "@/lib/focus";
 
 /**
  * Contact → Summary → … → Extras.
@@ -39,7 +40,7 @@ export function SectionStepper({
               data-state={status}
               aria-current={status === "current" ? "step" : undefined}
               onClick={() => onSelect(state.id)}
-              className={`flex items-center gap-xs rounded-full px-sm py-xs text-label-md whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-xs rounded-full px-sm py-xs text-label-md whitespace-nowrap transition-colors ${FOCUS_RING} ${
                 status === "current"
                   ? "font-semibold text-primary"
                   : status === "complete"

@@ -1,6 +1,7 @@
 "use client";
 import { ArrowLeft, CheckCircle, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
+import { FOCUS_RING } from "@/lib/focus";
 
 /**
  * Back, title and autosave status. The status reads straight off
@@ -43,7 +44,7 @@ export function BuilderHeader({
       <button
         type="button"
         onClick={onBack}
-        className="flex shrink-0 items-center gap-xs text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+        className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
         {backLabel}

@@ -58,4 +58,44 @@ describe("StudioHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: /back to builder/i }));
     expect(onBack).toHaveBeenCalled();
   });
+
+  // Having opted into role="tablist"/role="tab", the ARIA pattern's keyboard
+  // contract comes with it: a screen-reader user is told this is a tablist
+  // and will reach for the arrow keys.
+  it("moves to the next tab on ArrowRight", () => {
+    const onMode = vi.fn();
+    render(<StudioHeader {...props} onMode={onMode} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: /edit/i }), { key: "ArrowRight" });
+    expect(onMode).toHaveBeenCalledWith("preview");
+  });
+
+  it("wraps to the last tab on ArrowLeft from the first", () => {
+    const onMode = vi.fn();
+    render(<StudioHeader {...props} onMode={onMode} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: /edit/i }), { key: "ArrowLeft" });
+    expect(onMode).toHaveBeenCalledWith("preview");
+  });
+
+  it("ignores other keys", () => {
+    const onMode = vi.fn();
+    render(<StudioHeader {...props} onMode={onMode} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: /edit/i }), { key: "a" });
+    expect(onMode).not.toHaveBeenCalled();
+  });
+
+  // Roving tabindex: Tab reaches the tablist once and lands on the active
+  // tab, rather than stepping through every tab in turn.
+  it("keeps only the active tab in the tab order", () => {
+    render(<StudioHeader {...props} mode="preview" />);
+    expect(screen.getByRole("tab", { name: /preview/i }).getAttribute("tabindex")).toBe("0");
+    expect(screen.getByRole("tab", { name: /edit/i }).getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("gives every control a keyboard focus ring", () => {
+    const { container } = render(<StudioHeader {...props} />);
+    const unringed = [...container.querySelectorAll("button")].filter(
+      (b) => !b.className.includes("focus-visible:"),
+    );
+    expect(unringed.map((b) => b.textContent)).toEqual([]);
+  });
 });

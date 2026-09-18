@@ -1,7 +1,10 @@
 "use client";
 import { ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
+import { FOCUS_RING } from "@/lib/focus";
 
 export type StudioMode = "edit" | "preview";
+
+const MODES = ["edit", "preview"] as const;
 
 /**
  * Minimal chrome for the Studio: back, the two modes, export.
@@ -25,12 +28,25 @@ export function StudioHeader({
   onExport: () => void;
   isExporting: boolean;
 }) {
+  // The ARIA tablist pattern: arrows move between tabs and wrap, and only the
+  // active tab sits in the tab order. Declaring role="tab" without this tells
+  // a screen-reader user to reach for keys that do nothing.
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const next = (index + step + MODES.length) % MODES.length;
+    onMode(MODES[next]);
+    const sibling = event.currentTarget.parentElement?.children[next];
+    if (sibling instanceof HTMLElement) sibling.focus();
+  }
+
   return (
     <header className="flex shrink-0 items-center gap-lg border-b border-outline-variant/30 bg-surface px-lg py-sm">
       <button
         type="button"
         onClick={onBack}
-        className="flex shrink-0 items-center gap-xs text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+        className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
         Back to Builder
@@ -43,14 +59,16 @@ export function StudioHeader({
         aria-label="Studio mode"
         className="ml-auto flex shrink-0 items-center gap-xs rounded-full bg-surface-container-low p-0.5"
       >
-        {(["edit", "preview"] as const).map((m) => (
+        {MODES.map((m, index) => (
           <button
             key={m}
             type="button"
             role="tab"
             aria-selected={mode === m}
+            tabIndex={mode === m ? 0 : -1}
             onClick={() => onMode(m)}
-            className={`rounded-full px-md py-xs text-label-sm capitalize transition-colors ${
+            onKeyDown={(event) => handleKeyDown(event, index)}
+            className={`rounded-full px-md py-xs text-label-sm capitalize transition-colors ${FOCUS_RING} ${
               mode === m
                 ? "bg-surface text-on-surface shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface"
@@ -65,7 +83,7 @@ export function StudioHeader({
         type="button"
         onClick={onExport}
         disabled={isExporting}
-        className="flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-sm text-label-md text-on-primary shadow-md transition-shadow hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+        className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
       >
         {isExporting ? (
           <CircleNotch size={16} className="animate-spin" />

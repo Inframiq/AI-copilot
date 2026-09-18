@@ -67,4 +67,14 @@ describe("SectionStepper", () => {
     render(<SectionStepper content={FILLED} current="experience" onSelect={() => {}} />);
     expect(screen.getByTestId("step-experience").getAttribute("aria-current")).toBe("step");
   });
+
+  it("gives every step a keyboard focus ring", () => {
+    const { container } = render(
+      <SectionStepper content={FILLED} current="contact" onSelect={() => {}} />,
+    );
+    const unringed = [...container.querySelectorAll("button")].filter(
+      (b) => !b.className.includes("focus-visible:"),
+    );
+    expect(unringed.map((b) => b.textContent)).toEqual([]);
+  });
 });

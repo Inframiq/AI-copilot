@@ -44,4 +44,12 @@ describe("BuilderHeader", () => {
     screen.getByRole("button", { name: /back to analyzer/i }).click();
     expect(onBack).toHaveBeenCalled();
   });
+
+  it("gives the back control a keyboard focus ring", () => {
+    const { container } = render(<BuilderHeader title="R" onBack={() => {}} backLabel="Back" />);
+    const unringed = [...container.querySelectorAll("button")].filter(
+      (b) => !b.className.includes("focus-visible:"),
+    );
+    expect(unringed.map((b) => b.textContent)).toEqual([]);
+  });
 });
