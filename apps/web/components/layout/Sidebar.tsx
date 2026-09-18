@@ -62,7 +62,7 @@ export function Sidebar() {
           the square mark instead. Same alt text either way. */}
       <Link
         href="/dashboard"
-        className={`flex flex-col gap-xs mb-md ${collapsed ? "items-center px-0 py-md" : "px-md py-lg"}`}
+        className={`shrink-0 flex flex-col gap-xs mb-md ${collapsed ? "items-center px-0 py-md" : "px-md py-lg"}`}
       >
         {collapsed ? (
           <Image src="/brand/logo-mark-light.png" alt="KripaX" width={32} height={32} priority />
@@ -77,7 +77,7 @@ export function Sidebar() {
       </Link>
 
       {/* Nav Items */}
-      <nav className="flex-1 flex flex-col gap-sm">
+      <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-sm">
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = isActive(pathname, href);
           return (
@@ -106,7 +106,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom — collapse control, then credit balance; sign-out lives on /account */}
-      <div className="mt-auto pb-md flex flex-col gap-sm">
+      <div className="shrink-0 mt-auto pb-md flex flex-col gap-sm">
         <button
           type="button"
           onClick={toggle}
