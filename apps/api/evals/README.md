@@ -162,3 +162,43 @@ alarm, not a quality score.
 Still open from the runs so far: `management_seniority_signals` shows JD phrases
 pasted mid-bullet — "delivering platform or infrastructure work" — which no
 current metric catches. Padding moved rather than disappeared there.
+
+
+## Prompt cleanup run (`results/prompt-cleanup.json`)
+
+Three changes, made because they are correctness or cost wins independent of
+output quality:
+
+1. `transformation` became a real enum (`REINFORCE|REFRAME|INJECT|SKIP`) on
+   `BulletMapping`. Agent 3's rule 9 exact-matches `"SKIP"`, and nothing
+   validated it — a free-text "Skip — no JD fit" missed that branch silently.
+   `_apply_writer_output` now drops rewrites for skipped ids in code.
+2. Agent 2 gained worked examples. It is the premium-tier call that decides
+   whether the tailoring makes sense at all and it had none, while Agent 3 —
+   which only executes its plan — had two.
+3. The prose `<output_schema>` blocks were deleted from all eight prompts
+   (~2.4k chars). OpenAI enforces the Pydantic model through structured
+   outputs and GeminiProvider injects the real JSON schema itself, so the copy
+   was token cost that could only drift from the truth.
+
+Measured against `ab-new-prompt`:
+
+| metric | before | after | |
+|---|---|---|---|
+| word_growth | 1.498 | 1.350 | −0.148 |
+| max_bullet_words | 20.6 | 17.8 | −2.8 |
+| contentless trailing clauses | 5/22 (23%) | 2/22 (9%) | |
+| specificity_retention | 1.00 | 1.00 | held |
+| verb_diversity | 1.00 | 1.00 | held |
+| revert_rate | 0.00 | 0.00 | held |
+
+**Read this cautiously.** `ats_before` moved +5.2 between the two runs because
+the pins were regenerated in between, so the `ats_*` columns are not
+comparable and `ats_delta` −3.4 is not evidence of a regression. `word_growth`
+−0.148 sits right at the measured same-prompt noise floor (~±0.12), and the
+filler drop is 5 bullets to 2 out of 22. Nothing regressed on the guarded
+metrics; the improvement is suggestive, not established.
+
+This run wrote the first pins that carry semantic verdicts as well as the
+Agent 1 parse, so from here both halves of the scoring denominator are frozen
+and A/B comparisons are finally controlled.

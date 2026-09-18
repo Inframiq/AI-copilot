@@ -17,6 +17,7 @@ import json
 import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
+from typing import Literal
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.ai_engine.base import AIProvider
@@ -133,6 +134,12 @@ class BulletMapping(BaseModel):
     jd_responsibility_addressed: str = ""
     original_bullet_id: str
     original_text: str
+    # The four types rule 4 defines, as a real enum rather than prose buried in
+    # strategic_instruction. Agent 3's rule 9 exact-matches "SKIP" to decide
+    # whether to pass the original through, and _apply_writer_output now
+    # enforces that in code — a free-text "Skip — no JD fit" silently missed
+    # both. Structured outputs reject anything off this list.
+    transformation: Literal["REINFORCE", "REFRAME", "INJECT", "SKIP"] = "REINFORCE"
     target_jd_keywords_to_inject: list[str]
     preserved_metrics: list[str]
     strategic_instruction: str
@@ -369,9 +376,20 @@ def _apply_writer_output(
 
     # Build a secondary fallback from the mapping plan's original_text
     plan_originals: dict[str, str] = {}
+    skipped: set[str] = set()
     if mapping_plan:
         for entry in mapping_plan.mapping_plan:
             plan_originals[entry.original_bullet_id] = entry.original_text
+            if entry.transformation == "SKIP":
+                skipped.add(entry.original_bullet_id)
+
+    # A SKIP means Agent 2 found no honest connection between this bullet and
+    # the JD. Agent 3 is told to copy it through untouched (its rule 9), but
+    # that was a prompt promise with nothing behind it — and a rewrite of a
+    # bullet nobody could tie to a requirement is exactly the kind that
+    # invents one. Drop any rewrite for a skipped id.
+    for bid in skipped:
+        rewrite_map.pop(bid, None)
 
     missing_ids: list[str] = []
     for section, _prefix in _BULLET_SECTIONS:
@@ -433,18 +451,7 @@ Apple calls PMs "Product Marketing Managers"; Shopify calls teams "Pods").
 6. If the company is genuinely too obscure or too new for reliable intel, \
 set known_not_found=true and return empty lists — do not hallucinate.
 7. Output ONLY valid JSON matching the schema. No markdown, no preamble.
-</rules>
-
-<output_schema>
-{
-  "company_name": "string",
-  "culture_keywords": ["string"],
-  "tech_stack_preferences": ["string"],
-  "ats_filter_phrases": ["string"],
-  "terminology_preferences": ["string"],
-  "known_not_found": false
-}
-</output_schema>"""
+</rules>"""
 
 
 async def _agent0_company_intel(company_name: str, provider: AIProvider) -> CompanyIntel:
@@ -505,21 +512,7 @@ repeated/emphasised; medium = a normal requirement or day-to-day duty; \
 low = "nice to have", peripheral, or generic. Keys are the term verbatim \
 (lowercased); "job title" rates how much the posting hinges on title match.
 10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
-</rules>
-
-<output_schema>
-{
-  "exact_technical_tools": ["string"],
-  "methodologies_and_frameworks": ["string"],
-  "domain_expertise_themes": ["string"],
-  "seniority_indicators": ["string"],
-  "ats_filter_phrases": ["string"],
-  "core_responsibilities": ["string"],
-  "target_job_titles": ["string"],
-  "nice_to_have_skills": ["string"],
-  "importance": [{"term": "string", "level": "high|medium|low"}]
-}
-</output_schema>"""
+</rules>"""
 
 
 async def _agent1_parse_jd(
@@ -623,11 +616,7 @@ demonstrate it (adjacent tooling, a one-off mention, a related but weaker claim)
 "matched"/"partial" verdict, or "" for "missing".
 5. Return exactly one verdict per input phrase, using the phrase text verbatim.
 6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
-</rules>
-
-<output_schema>
-{"verdicts": [{"phrase": "string", "verdict": "matched|partial|missing", "evidence": "string"}]}
-</output_schema>"""
+</rules>"""
 
 
 async def _verify_semantic_presence(
@@ -702,11 +691,7 @@ a concise professional headline aligning the candidate to the target title \
 (e.g. "Senior Data Analyst | Analytics Engineering"). Otherwise headline "".
 5. At most one bullet per gap, in the same order; gaps the résumé already \
 covers produce no bullet at all. Output ONLY valid JSON matching the schema.
-</rules>
-
-<output_schema>
-{"bullets": [{"gap": "string", "grounded": false, "experience_index": null, "bullet_text": "string"}], "headline": "string"}
-</output_schema>"""
+</rules>"""
 
 
 async def _agent_gap_filler(
@@ -767,9 +752,11 @@ applies — do not force one). A transformation exists to make the bullet \
 demonstrate that responsibility; it is not a search-and-replace for keywords. \
 If you can't articulate which responsibility a bullet serves, that is a signal \
 to REINFORCE lightly or SKIP, not to INJECT keywords onto it anyway.
-4. TRANSFORMATION TYPES — choose based on rule 3's responsibility analysis, \
-always the most aggressive option available that's still honest about what the \
-bullet demonstrates:
+4. TRANSFORMATION TYPES — put your choice in the `transformation` field \
+(one of REINFORCE / REFRAME / INJECT / SKIP; it is validated, so no other \
+value is accepted) and explain the specifics in strategic_instruction. Choose \
+based on rule 3's responsibility analysis, always the most aggressive option \
+available that's still honest about what the bullet demonstrates:
    - REINFORCE: rephrase the bullet using JD-exact terminology and keywords \
 while keeping the underlying facts.
    - REFRAME: shift the angle of the bullet to highlight a different JD \
@@ -794,7 +781,8 @@ still sounds like a specific person's real work. When the two goals conflict, \
 specificity wins.
 6. COMPLETE COVERAGE — MANDATORY: mapping_plan MUST contain exactly one entry \
 per bullet_id present in original_resume — do not omit any bullet, even \
-ones assigned SKIP. A mapping_plan that covers only some bullets is incorrect.
+ones assigned transformation SKIP. A mapping_plan that covers only some \
+bullets is incorrect.
 7. plausible_skills_to_add: list ONLY skills that are (a) explicitly mentioned \
 in the JD AND (b) directly evidenced by the candidate's existing stack \
 (e.g., if they use AWS Lambda and the JD says "serverless", add "Serverless \
@@ -821,25 +809,49 @@ bullet whose work could plausibly demonstrate a priority skill, prefer INJECT to
 weave it in naturally — but never fabricate metrics or experience just to force \
 the connection; it's fine for a priority skill to surface only in \
 plausible_skills_to_add if no bullet fits.
-9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+9. Output ONLY valid JSON. No markdown, no preamble.
 </rules>
 
-<output_schema>
-{
-  "mapping_plan": [
-    {
-      "reasoning": "string — brief: which core_responsibility (if any) this bullet evidences, and why this transformation type follows from that",
-      "jd_responsibility_addressed": "string — the specific core_responsibility this bullet demonstrates, verbatim from jd_analysis.core_responsibilities, or empty string if none plausibly applies",
-      "original_bullet_id": "string",
-      "original_text": "string",
-      "target_jd_keywords_to_inject": ["string"],
-      "preserved_metrics": ["string"],
-      "strategic_instruction": "string"
-    }
-  ],
-  "plausible_skills_to_add": ["string"]
-}
-</output_schema>"""
+<examples>
+JD core_responsibility: "own end-to-end delivery of the payments platform"
+JD exact_technical_tools: ["Python", "Kubernetes"]
+
+ORIGINAL BULLET: "Built the order fulfilment API in Python, cutting average
+order processing time from 800ms to 240ms"
+
+GOOD entry:
+  reasoning: "End-to-end ownership of a transactional service — the same shape
+    as owning payments delivery. The work is already in Python so the JD's
+    language fits without stretching. Kubernetes is NOT evidenced anywhere in
+    this bullet, so it stays out."
+  jd_responsibility_addressed: "own end-to-end delivery of the payments platform"
+  transformation: "REINFORCE"
+  target_jd_keywords_to_inject: ["Python"]
+  preserved_metrics: ["800ms", "240ms"]
+  strategic_instruction: "Frame the API as owned end-to-end; keep the fulfilment
+    domain, the Python stack and both latency figures."
+
+BAD entry for the same bullet:
+  transformation: "INJECT"
+  target_jd_keywords_to_inject: ["Python", "Kubernetes", "payments platform"]
+  strategic_instruction: "Present this as owning the payments platform on
+    Kubernetes."
+— claims a tool the bullet does not evidence, and trades a real, specific
+system (order fulfilment) for the JD's words. Rule 5: when matching the JD
+costs specificity, specificity wins.
+
+ORIGINAL BULLET: "Organised the team's annual offsite"
+
+GOOD entry:
+  reasoning: "Nothing in the JD's responsibilities or tooling connects to event
+    organisation. Forcing a keyword here would make the bullet dishonest
+    without making it relevant."
+  jd_responsibility_addressed: ""
+  transformation: "SKIP"
+  target_jd_keywords_to_inject: []
+  preserved_metrics: []
+  strategic_instruction: "SKIP — no plausible connection to this JD."
+</examples>"""
 
 
 async def _agent2_semantic_map(
@@ -1016,20 +1028,7 @@ GOOD (same fact, stops when it runs out of things to say):
 "Remediated WCAG accessibility issues flagged across client audits."
 — shorter than the original rewrite and strictly more informative: the \
 standard is named, and nothing is restated.
-</examples>
-
-<output_schema>
-{{
-  "rewritten_bullets": [
-    {{
-      "reasoning": "string — brief: how this rewrite executes strategic_instruction and jd_responsibility_addressed while keeping rule 3's specifics intact",
-      "bullet_id": "string",
-      "rewritten_text": "string"
-    }}
-  ],
-  "updated_skills": ["string"]
-}}
-</output_schema>"""
+</examples>"""
 
 
 async def _agent3_write(
@@ -1135,13 +1134,7 @@ by the candidate's real name from resume_content.contact.name.
 3. LENGTH: 250-400 words total, excluding the salutation and signoff lines.
 4. TONE: {tone}
 5. Output ONLY valid JSON matching the schema. No markdown, no preamble.
-</rules>
-
-<output_schema>
-{{
-  "body": "string — the full letter text, salutation through signoff, separated by blank lines between paragraphs"
-}}
-</output_schema>"""
+</rules>"""
 
 
 async def write_cover_letter(
@@ -1272,21 +1265,7 @@ question.
 short structural cue for how to organize an answer, not a full model answer \
 or a restatement of the question.
 8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
-</rules>
-
-<output_schema>
-{{
-  "questions": [
-    {{
-      "source": "requirement | overlap | gap",
-      "basis": "string — the specific responsibility/skill/resume detail this question is grounded in",
-      "topic": "string",
-      "question": "string",
-      "answer_framework": "string"
-    }}
-  ]
-}}
-</output_schema>"""
+</rules>"""
 
 
 async def _agent4_generate_interview_questions(

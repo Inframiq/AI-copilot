@@ -3,3 +3,4 @@
 *.json
 !baseline.json
 !rule7-tightened.json
+!prompt-cleanup.json

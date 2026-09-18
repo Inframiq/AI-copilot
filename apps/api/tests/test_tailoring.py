@@ -1741,3 +1741,74 @@ async def test_pipeline_returns_the_jd_analysis_it_used():
 
     assert result.jd_analysis is not None
     assert result.jd_analysis.exact_technical_tools == ["Python"]
+
+
+# ── strategic_instruction's transformation type is a real enum ───────────────
+# Agent 2's rule 4 defines four transformation types and Agent 3's rule 9
+# exact-matches the string "SKIP" to decide whether to copy the original
+# through. But the field was a free-text str: "Skip — no JD connection" would
+# silently miss that branch, and nothing in code ever checked it either.
+
+from app.services.tailoring import _apply_writer_output as _apply_wo
+
+
+def test_transformation_is_a_constrained_field():
+    schema = MappingPlan.model_json_schema()["$defs"]["BulletMapping"]["properties"]
+    assert "transformation" in schema
+
+
+def test_transformation_only_accepts_the_four_documented_types():
+    for t in ("REINFORCE", "REFRAME", "INJECT", "SKIP"):
+        BulletMapping(
+            original_bullet_id="exp0_b0", original_text="x", transformation=t,
+            target_jd_keywords_to_inject=[], preserved_metrics=[],
+            strategic_instruction="...",
+        )
+    with pytest.raises(Exception):
+        BulletMapping(
+            original_bullet_id="exp0_b0", original_text="x", transformation="Skip it",
+            target_jd_keywords_to_inject=[], preserved_metrics=[],
+            strategic_instruction="...",
+        )
+
+
+def test_a_skipped_bullet_keeps_its_original_text_even_if_agent3_rewrote_it():
+    """Rule 9 is a prompt promise. A SKIP means Agent 2 found no honest JD
+    connection, so a rewrite of it is not something to trust."""
+    content = {"experience": [{"company": "A", "bullets": ["Built the checkout flow."]}]}
+    indexed, _ = _index_bullets(content)
+    plan = MappingPlan(
+        mapping_plan=[BulletMapping(
+            original_bullet_id="exp0_b0", original_text="Built the checkout flow.",
+            transformation="SKIP", target_jd_keywords_to_inject=[],
+            preserved_metrics=[], strategic_instruction="SKIP",
+        )],
+        plausible_skills_to_add=[],
+    )
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(
+            bullet_id="exp0_b0", rewritten_text="Engineered a Python checkout platform.")],
+        updated_skills=[],
+    )
+    out = _apply_wo(indexed, writer, plan)
+    assert out["experience"][0]["bullets"] == ["Built the checkout flow."]
+
+
+def test_a_non_skipped_bullet_still_takes_the_rewrite():
+    content = {"experience": [{"company": "A", "bullets": ["Built the checkout flow."]}]}
+    indexed, _ = _index_bullets(content)
+    plan = MappingPlan(
+        mapping_plan=[BulletMapping(
+            original_bullet_id="exp0_b0", original_text="Built the checkout flow.",
+            transformation="REINFORCE", target_jd_keywords_to_inject=[],
+            preserved_metrics=[], strategic_instruction="Use JD wording",
+        )],
+        plausible_skills_to_add=[],
+    )
+    writer = WriterOutput(
+        rewritten_bullets=[RewrittenBullet(
+            bullet_id="exp0_b0", rewritten_text="Engineered the checkout flow.")],
+        updated_skills=[],
+    )
+    out = _apply_wo(indexed, writer, plan)
+    assert out["experience"][0]["bullets"] == ["Engineered the checkout flow."]
