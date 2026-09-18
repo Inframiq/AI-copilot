@@ -13,7 +13,6 @@ import {
   EnvelopeSimple,
   CreditCard,
   CaretDoubleLeft,
-  CaretDoubleRight,
 } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
 import { useSidebarStore } from "@/stores/sidebar-store";
@@ -56,24 +55,45 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs py-md" : "p-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width] duration-300`}
+      className={`hidden md:flex flex-col gap-sm ${collapsed ? "px-xs py-md" : "p-md"} bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-[var(--sidebar-w)] left-0 fixed border-r border-outline-variant/20 shadow-sm z-50 transition-[width,padding] duration-300`}
     >
 
       {/* Logo — the 154px wordmark cannot fit a 72px rail, so the rail wears
           the square mark instead. Same alt text either way. */}
       <Link
         href="/dashboard"
-        className={`shrink-0 flex flex-col gap-xs mb-md overflow-hidden ${
-          collapsed ? "items-center px-0 py-md" : "px-md py-lg"
+        className={`shrink-0 flex flex-col gap-xs mb-md overflow-hidden px-md transition-[padding] duration-300 ${
+          collapsed ? "py-md" : "py-lg"
         }`}
       >
-        <Image
-          src={collapsed ? "/brand/logo-mark-light.png" : "/brand/logo-wordmark.png"}
-          alt="KripaX"
-          width={collapsed ? 32 : 154}
-          height={collapsed ? 32 : 34}
-          priority
-        />
+        {/* Both marks stay mounted and cross-fade. Swapping one <Image>'s
+            src meant fetching the other file mid-animation — a blank flash —
+            and its intrinsic size changed instantly, jerking the row. The box
+            is a fixed 34px tall so neither state reflows the column; the
+            wordmark keeps the alt text, the square mark is decorative. */}
+        <span className={`relative shrink-0 h-[34px] ${collapsed ? "w-8" : "w-[154px]"} transition-[width] duration-300`}>
+          <Image
+            src="/brand/logo-wordmark.png"
+            alt="KripaX"
+            width={154}
+            height={34}
+            priority
+            className={`absolute left-0 top-0 max-w-none transition-opacity duration-300 ${
+              collapsed ? "opacity-0" : "opacity-100"
+            }`}
+          />
+          <Image
+            src="/brand/logo-mark-light.png"
+            alt=""
+            aria-hidden
+            width={32}
+            height={32}
+            priority
+            className={`absolute left-0 top-px transition-opacity duration-300 ${
+              collapsed ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        </span>
         <span
           className={`text-caption text-secondary uppercase tracking-wider whitespace-nowrap transition-[max-height,opacity] duration-300 ${
             collapsed ? "max-h-0 opacity-0" : "max-h-8 opacity-100"
@@ -102,7 +122,11 @@ export function Sidebar() {
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         className="absolute top-sm right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200"
       >
-        {collapsed ? <CaretDoubleRight size={14} weight="bold" /> : <CaretDoubleLeft size={14} weight="bold" />}
+        <CaretDoubleLeft
+          size={14}
+          weight="bold"
+          className={`transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}
+        />
       </button>
 
       {/* Nav Items */}
@@ -119,8 +143,8 @@ export function Sidebar() {
                 // label or the collapsed sidebar is unusable.
                 aria-label={label}
                 title={collapsed ? label : undefined}
-                className={`flex items-center py-md rounded-xl text-label-md overflow-hidden whitespace-nowrap transition-colors duration-200 ${
-                  collapsed ? "justify-center gap-0 px-0" : "gap-md px-md"
+                className={`flex items-center py-md rounded-xl text-label-md overflow-hidden whitespace-nowrap transition-[padding,gap,background-color,color] duration-300 ${
+                  collapsed ? "gap-0 px-5" : "gap-md px-md"
                 } ${
                   active
                     ? "bg-secondary-container text-on-secondary-container font-bold shadow-sm hover:shadow-md"

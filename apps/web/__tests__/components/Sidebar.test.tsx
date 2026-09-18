@@ -141,10 +141,51 @@ describe("Sidebar collapse", () => {
     expect(screen.getByLabelText("JD Analyzer")).toBeTruthy();
   });
 
-  it("swaps the wordmark for the compact mark when collapsed", () => {
+  // The logo used to swap one <Image>'s src and intrinsic size. That meant a
+  // network fetch for the new file mid-animation (a blank flash) plus an
+  // instant 154x34 -> 32x32 reflow. Both marks are mounted now and cross-fade.
+  it("mounts both logo marks so neither has to be fetched mid-animation", () => {
+    useSidebarStore.setState({ override: "collapsed" });
+    const { container } = renderSidebar();
+    const srcs = [...container.querySelectorAll("img")].map((i) => i.getAttribute("src") ?? "");
+    expect(srcs.some((src) => src.includes("logo-wordmark"))).toBe(true);
+    expect(srcs.some((src) => src.includes("logo-mark"))).toBe(true);
+  });
+
+  it("fades the wordmark out when collapsed", () => {
     useSidebarStore.setState({ override: "collapsed" });
     renderSidebar();
-    expect(screen.getByAltText("KripaX").getAttribute("src")).toContain("logo-mark");
+    expect(screen.getByAltText("KripaX").className).toMatch(/opacity-0/);
+  });
+
+  it("fades the wordmark in when expanded", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(screen.getByAltText("KripaX").className).toMatch(/opacity-100/);
+  });
+
+  it("animates the aside's padding alongside its width", () => {
+    // Padding snapped while width took 300ms, so content lurched before the
+    // sidebar finished moving.
+    useSidebarStore.setState({ override: "expanded" });
+    const { container } = renderSidebar();
+    expect(container.querySelector("aside")!.className).toMatch(/transition-\[width,padding\]/);
+  });
+
+  it("animates each nav row's padding and gap, not just its colours", () => {
+    useSidebarStore.setState({ override: "expanded" });
+    renderSidebar();
+    expect(screen.getByLabelText("Dashboard").className).toMatch(/transition-\[padding,gap,background-color,color\]/);
+  });
+
+  it("rotates one chevron rather than swapping two icons", () => {
+    // Swapping components remounts a different SVG mid-animation; rotating a
+    // single one is a transform the browser can actually tween.
+    useSidebarStore.setState({ override: "collapsed" });
+    renderSidebar();
+    const flap = screen.getByRole("button", { name: /expand sidebar/i });
+    expect(flap.querySelectorAll("svg")).toHaveLength(1);
+    expect(flap.querySelector("svg")!.getAttribute("class")).toMatch(/rotate-180/);
   });
 
   it("offers a control to collapse the sidebar", () => {
