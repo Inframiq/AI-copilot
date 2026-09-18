@@ -24,6 +24,7 @@ from app.services.tailoring import (
 )
 from app.services.bullet_guard import guard_rewrite
 from app.services.ats import (
+    credited_fixes, fix_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
     verdicts_with_rewrites,
 )
@@ -504,8 +505,9 @@ async def project_score(
             session.bullet_rationale or {}, body.accepted_bullet_ids,
         )
 
+    all_fixes = [AtsFix(**f) for f in (session.ats_fixes or [])]
     accepted = set(body.accepted_fix_ids)
-    fixes = [AtsFix(**f) for f in (session.ats_fixes or []) if f.get("id") in accepted]
+    fixes = [f for f in all_fixes if f.id in accepted]
     if body.content is not None:
         # The client already applied the fixes into the content it sent, but
         # accepted_fix_ids still names WHICH gaps those fixes close — which is
@@ -518,10 +520,15 @@ async def project_score(
     # naturally-worded gap bullet moved the projected score by nothing while a
     # bullet that parroted the JD phrase moved it — the number argued for
     # keyword stuffing. See ats.verdicts_with_fixes.
+    # Only fixes whose text actually reached the merged résumé close their
+    # gap. The cap can silently drop one, and crediting it anyway scored the
+    # résumé for a keyword it does not contain.
     return ProjectScoreOut(
         projected_score=score_content(
-            merged, jd_analysis, verdicts_with_fixes(verdicts, fixes),
-        ).ats_score
+            merged, jd_analysis,
+            verdicts_with_fixes(verdicts, credited_fixes(merged, fixes)),
+        ).ats_score,
+        fix_deltas=fix_deltas(merged, jd_analysis, verdicts, all_fixes, fixes),
     )
 
 

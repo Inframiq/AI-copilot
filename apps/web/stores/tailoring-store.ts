@@ -290,6 +290,16 @@ interface TailoringState {
    * on screen no longer describes the current selections. Any failure
    * used to be swallowed, leaving a stale figure looking authoritative. */
   projectedScoreStale: boolean;
+  /** What each fix is worth GIVEN everything currently selected, keyed by
+   * fix id — the points ticking it would add, or (if already on) the points
+   * unticking it would cost. Recomputed on every tick.
+   *
+   * AtsFix.score_delta is the pipeline-time value, measured once against one
+   * fixed hypothetical: every rewrite accepted and no fixes applied. It stops
+   * being true the moment the user changes anything, which is why two fixes
+   * closing the same gap each advertised the full points and only the first
+   * delivered. Empty until the first re-score lands. */
+  fixDeltas: Record<string, number>;
   /** True from the moment a re-score is scheduled until it lands or fails —
    * the review shows the number as updating rather than settled. */
   isProjecting: boolean;
@@ -416,6 +426,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   bulletRationale: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
+  fixDeltas: {},
   projectedAtsScore: null,
   fixExperienceIndex: {},
   humanizeLevel: 50,
@@ -505,11 +516,18 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
                 .filter((c) => (bulletDecisions[c.key] ?? "accept") !== "reject")
                 .map((c) => c.key)
             : undefined;
-        const { projected_score } = await apiClient.projectScore(
+        const { projected_score, fix_deltas } = await apiClient.projectScore(
           sessionId, acceptedIds, merged, acceptedBulletIds,
         );
         if (seq !== _projectScoreSeq) return;
-        set({ projectedAtsScore: projected_score, projectedScoreStale: false, isProjecting: false });
+        set({
+          projectedAtsScore: projected_score,
+          projectedScoreStale: false,
+          isProjecting: false,
+          // Kept as they were if the server sent none (an older deploy), so
+          // the badges fall back to the pipeline values rather than to zero.
+          ...(fix_deltas ? { fixDeltas: fix_deltas } : {}),
+        });
       } catch (e) {
         // Keep the last number (better than blanking the UI) but mark it stale
         // so the screen can say so. Swallowing this is what made a failing
@@ -677,6 +695,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   bulletRationale: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
+  fixDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       sessionId: null,
@@ -993,6 +1012,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   bulletRationale: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
+  fixDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       mergedContent: null,
@@ -1023,6 +1043,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   bulletRationale: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
+  fixDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       humanizeLevel: 50,

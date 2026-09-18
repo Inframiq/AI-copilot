@@ -391,7 +391,7 @@ export const apiClient = {
     // Review keys ("exp0_b2") of the rewrites being kept. The server credits
     // each with what it covered, so every tick moves the projected score.
     acceptedBulletIds?: string[],
-  ): Promise<{ projected_score: number }> =>
+  ): Promise<{ projected_score: number; fix_deltas?: Record<string, number> }> =>
     request<{ projected_score: number }>("POST", "/ai/project-score", {
       session_id: sessionId,
       accepted_fix_ids: acceptedFixIds,

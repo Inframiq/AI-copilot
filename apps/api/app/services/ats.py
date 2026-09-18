@@ -489,6 +489,93 @@ def verdicts_with_fixes(
     return out
 
 
+def credited_fixes(content: dict, fixes: "list[AtsFix]") -> "list[AtsFix]":
+    """Of *fixes*, the ones whose text actually reached *content*.
+
+    apply_fixes silently skips a fix that would breach the skills cap or a
+    role's bullet cap. verdicts_with_fixes used to credit the gap from the fix
+    alone, so a discarded skill still closed its gap and the résumé scored for
+    a keyword it did not contain. A gap is closed by text that is there.
+    """
+    skills = {str(s).strip().lower() for s in (content.get("skills") or [])}
+    bullets = {
+        str(b).strip().lower()
+        for section in ("experience", "projects")
+        for entry in (content.get(section) or [])
+        for b in (entry.get("bullets") or [])
+    }
+    headline = str(content.get("headline") or "").strip().lower()
+
+    out: list[AtsFix] = []
+    for fix in fixes:
+        text = fix.text.strip().lower()
+        if fix.type == "skill" and text in skills:
+            out.append(fix)
+        elif fix.type == "bullet" and text in bullets:
+            out.append(fix)
+        elif fix.type == "headline" and text == headline:
+            out.append(fix)
+    return out
+
+
+def _without_fix(content: dict, fix: "AtsFix") -> dict:
+    """*content* with this one fix's text taken back out.
+
+    Fixes are additive, so subtracting one from an already-merged résumé is
+    exact — which is what lets a delta be measured against the user's real
+    current selection rather than a fixed hypothetical.
+    """
+    out = deepcopy(content)
+    text = fix.text.strip().lower()
+    if fix.type == "skill":
+        out["skills"] = [s for s in (out.get("skills") or []) if str(s).strip().lower() != text]
+    elif fix.type == "headline":
+        out["headline"] = None
+    elif fix.type == "bullet":
+        for section in ("experience", "projects"):
+            for entry in out.get(section) or []:
+                entry["bullets"] = [
+                    b for b in (entry.get("bullets") or []) if str(b).strip().lower() != text
+                ]
+    return out
+
+
+def fix_deltas(
+    merged: dict,
+    jd_analysis,
+    semantic_verdicts: dict[str, str],
+    fixes: "list[AtsFix]",
+    accepted: "list[AtsFix]",
+) -> dict[str, int]:
+    """What each fix is worth **given what is already selected**. Pure.
+
+    For a fix that is on, the points removing it would cost; for one that is
+    off, the points adding it would give. Both answer the question the user is
+    actually asking of that control, and both are recomputed on every tick —
+    a value measured once against a state the user has since left is how two
+    fixes closing the same gap both promised the same points and only the
+    first delivered.
+    """
+    accepted_ids = {f.id for f in accepted}
+
+    def score_of(content: dict, applied: "list[AtsFix]") -> int:
+        return score_content(
+            content, jd_analysis,
+            verdicts_with_fixes(semantic_verdicts, credited_fixes(content, applied)),
+        ).ats_score
+
+    base = score_of(merged, accepted)
+    out: dict[str, int] = {}
+    for fix in fixes:
+        if fix.id in accepted_ids:
+            without = [f for f in accepted if f.id != fix.id]
+            out[fix.id] = max(0, base - score_of(_without_fix(merged, fix), without))
+        else:
+            withit = accepted + [fix]
+            out[fix.id] = max(0, score_of(apply_fix(merged, fix), withit) - base)
+    return out
+
+
 _VERDICT_RANK = {"missing": 0, "partial": 1, "matched": 2}
 
 

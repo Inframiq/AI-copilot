@@ -70,6 +70,7 @@ export function ReviewShell({
   const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const revertedBullets = useTailoringStore((s) => s.revertedBullets);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
+  const fixDeltas = useTailoringStore((s) => s.fixDeltas);
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
   // Subscribed, not read via getState(): SourcePanel creates the JD row and
   // sets jdId, and this must re-render when it does.
@@ -277,6 +278,7 @@ export function ReviewShell({
                     aiFixes={aiFixes}
                     roles={roles}
                     fixExperienceIndex={fixExperienceIndex}
+                    liveDeltas={fixDeltas}
                     reverted={revertedBullets}
                     busy={bulletLoading}
                     rewriteErrors={rewriteErrors}

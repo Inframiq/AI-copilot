@@ -183,3 +183,8 @@ class ProjectScoreRequest(BaseModel):
 
 class ProjectScoreOut(BaseModel):
     projected_score: int
+    # What each fix is worth GIVEN the current selection, keyed by fix id: the
+    # points adding it would give, or (if it is already on) the points removing
+    # it would cost. Recomputed every tick, because a value measured once
+    # against a state the user has left is not a value.
+    fix_deltas: dict[str, int] = {}

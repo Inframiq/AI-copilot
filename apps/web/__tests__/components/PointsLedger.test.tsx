@@ -170,4 +170,41 @@ describe("PointsLedger", () => {
     fireEvent.change(screen.getByRole("combobox", { name: /add to role/i }), { target: { value: "1" } });
     expect(p.onFixRole).toHaveBeenCalledWith("bullet:terraform", 1);
   });
+
+  // The pipeline value is measured once, against one hypothetical: every
+  // rewrite accepted and no fixes applied. It stops being true the moment the
+  // user changes anything, which is why two fixes closing the same gap each
+  // advertised the full points and only the first delivered.
+  it("shows what a fix is worth now, not what it was worth at pipeline time", () => {
+    setup({ liveDeltas: { "bullet:terraform": 3 } });
+    expect(screen.getByText("+3 pts")).toBeTruthy();
+    expect(screen.queryByText("+6 pts")).toBeNull();
+  });
+
+  it("falls back to the pipeline value before the first live score lands", () => {
+    setup({ liveDeltas: {} });
+    expect(screen.getByText("+6 pts")).toBeTruthy();
+  });
+
+  it("says a fix is already covered rather than showing a bare zero", () => {
+    setup({ liveDeltas: { "bullet:terraform": 0 } });
+    const zero = screen.getByText("±0");
+    expect(zero.getAttribute("title")).toMatch(/already covered/i);
+  });
+
+  it("still calls a zero-scoring rewrite a wording change", () => {
+    // Same badge, different reason: a rewrite that scores nothing really is
+    // wording only, while a fix that scores nothing is redundant.
+    setup({ rationale: { exp0_b1: { responsibility: "", keywords: [], score_delta: 0 } } });
+    const zeros = screen.getAllByText("±0");
+    expect(zeros.some((z) => /wording only/i.test(z.getAttribute("title") ?? ""))).toBe(true);
+  });
+
+  it("orders the AI fixes by what they are worth now", () => {
+    const second: AtsFix = { ...aiBullet, id: "bullet:go", gap: "Go", text: "Wrote Go services.", score_delta: 1 };
+    setup({ aiFixes: [aiBullet, second], liveDeltas: { "bullet:terraform": 1, "bullet:go": 9 } });
+    const shown = screen.getAllByText(/pts$/).map((n) => n.textContent);
+    expect(shown.indexOf("+9 pts")).toBeLessThan(shown.indexOf("+1 pts"));
+  });
 });
+

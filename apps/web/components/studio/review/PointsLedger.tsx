@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowsClockwise,
   CaretRight,
@@ -69,6 +69,7 @@ export function PointsLedger({
   aiFixes,
   roles,
   fixExperienceIndex,
+  liveDeltas,
   reverted = [],
   busy,
   rewriteErrors,
@@ -93,6 +94,12 @@ export function PointsLedger({
   /** "Title · Company" per experience entry, for placing a new bullet. */
   roles: string[];
   fixExperienceIndex: Record<string, number>;
+  /** What each fix is worth GIVEN what is currently selected, by fix id.
+   * AtsFix.score_delta is measured once at pipeline time against a single
+   * hypothetical — every rewrite on, no fixes — so it is wrong as soon as the
+   * user changes anything. Absent until the first live score lands, and the
+   * pipeline value stands in until then. */
+  liveDeltas?: Record<string, number>;
   /** Rewrites the fact-lock refused during tailoring; those bullets kept
    * the candidate's own text. */
   reverted?: RevertedBullet[];
@@ -130,7 +137,14 @@ export function PointsLedger({
     return { reworded, addsTerms };
   }, [changes, rationale, original, jdTerms]);
 
-  const sortedAi = useMemo(() => [...aiFixes].sort((a, b) => b.score_delta - a.score_delta), [aiFixes]);
+  const fixPoints = useCallback(
+    (f: AtsFix) => liveDeltas?.[f.id] ?? f.score_delta,
+    [liveDeltas],
+  );
+  const sortedAi = useMemo(
+    () => [...aiFixes].sort((a, b) => fixPoints(b) - fixPoints(a)),
+    [aiFixes, fixPoints],
+  );
 
   const total = reworded.length + addsTerms.length + aiFixes.length;
   if (total === 0) {
@@ -244,6 +258,7 @@ export function PointsLedger({
             <AiCard
               key={fix.id}
               fix={fix}
+              points={liveDeltas?.[fix.id]}
               roles={roles}
               role={fixExperienceIndex[fix.id] ?? fix.experience_index ?? 0}
               on={decisions[`fix:${fix.id}`] === "accept"}
@@ -373,11 +388,16 @@ function CardHeader({
   provenance,
   where,
   points,
+  zeroHint = "Wording only — this point doesn't change the score",
   children,
 }: {
   provenance: Provenance;
   where?: string;
   points?: number;
+  /** Why this is worth nothing. A rewrite scoring zero is wording; a fix
+   * scoring zero is redundant, and saying "wording only" about a whole new
+   * bullet is simply false. */
+  zeroHint?: string;
   children: React.ReactNode;
 }) {
   const p = PROVENANCE[provenance];
@@ -398,7 +418,7 @@ function CardHeader({
             </span>
           ) : (
             <span
-              title="Wording only — this point doesn't change the score"
+              title={zeroHint}
               className="tabular rounded-full bg-surface-container px-sm py-0.5 text-label-sm text-on-surface-variant"
             >
               ±0
@@ -611,6 +631,7 @@ function NewTermMarks({
 
 function AiCard({
   fix,
+  points,
   roles,
   role,
   on,
@@ -620,6 +641,8 @@ function AiCard({
   onRole,
 }: {
   fix: AtsFix;
+  /** Live value; falls back to the pipeline one when no score has landed. */
+  points?: number;
   roles: string[];
   role: number;
   on: boolean;
@@ -632,7 +655,12 @@ function AiCard({
 
   return (
     <Card on={on} provenance="ai" draft={!vouched}>
-      <CardHeader provenance="ai" where={`${label} for “${fix.gap}”`} points={fix.score_delta}>
+      <CardHeader
+        provenance="ai"
+        where={`${label} for “${fix.gap}”`}
+        points={points ?? fix.score_delta}
+        zeroHint={`Already covered — “${fix.gap}” is met by something else you have selected`}
+      >
         <Switch
           on={on}
           disabled={!vouched}
