@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { RocketLaunch, ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { useTourStore } from "@/stores/tour-store";
+import { currentSidebarWidth } from "@/lib/sidebar";
 import { TOUR_STEPS } from "./tour-steps";
 
 const MOBILE_BREAKPOINT = 768; // matches Tailwind's `md` — Sidebar is `hidden md:flex`
@@ -62,9 +63,12 @@ export function GuidedTour() {
 
   if (!active || !rect) return null;
 
-  // Bubble sits just right of the sidebar (280px wide), vertically aligned
-  // to the spotlighted item and clamped so it never runs off the bottom.
+  // Bubble sits just right of the sidebar, vertically aligned to the
+  // spotlighted item and clamped so it never runs off the bottom. The width
+  // is read live rather than hardcoded — the sidebar collapses to a 72px rail
+  // between md and xl, and the user can pin either state.
   const bubbleTop = Math.min(Math.max(rect.top - 12, 16), window.innerHeight - 260);
+  const bubbleLeft = currentSidebarWidth() + 16;
 
   return (
     <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Guided tour">
@@ -83,7 +87,8 @@ export function GuidedTour() {
 
       <div
         className="fixed w-[320px] bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-2xl p-lg animate-tour-pop-in"
-        style={{ top: bubbleTop, left: 296 }}
+        data-tour-bubble
+        style={{ top: bubbleTop, left: bubbleLeft }}
       >
         <div className="flex items-start gap-md">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 animate-tour-float">

@@ -67,6 +67,23 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        {/* Applies the user's saved sidebar choice before first paint.
+            localStorage can't be read during SSR, so without this a user who
+            pinned the sidebar collapsed would watch it jump 280px -> 72px on
+            every load. Same technique a dark-mode flash guard uses.
+
+            The markup is a compile-time constant with no interpolation, so
+            there is no injection surface here; SIDEBAR_OVERRIDE_KEY is
+            inlined literally to keep the script dependency-free. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var v=localStorage.getItem("career-copilot-sidebar");' +
+              'if(v==="collapsed"||v==="expanded")document.documentElement.dataset.sidebar=v;}catch(e){}',
+          }}
+        />
+      </head>
       <body className="bg-background text-on-background font-sans antialiased">
         {/* No background effect here — each route group (marketing, auth,
             app, legal) mounts its own via its own layout, since the root

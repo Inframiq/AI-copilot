@@ -123,3 +123,52 @@ describe("GuidedTour", () => {
     expect(localStorage.getItem(SEEN_KEY)).toBe("1");
   });
 });
+
+// ── Bubble follows the sidebar width ────────────────────────────────────────
+// The bubble used to sit at a hardcoded left:296 (the old fixed 280px sidebar
+// plus a 16px gap). The sidebar now collapses to a 72px rail, so a fixed
+// offset would leave the bubble floating 224px away from it.
+
+describe("GuidedTour bubble offset", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useTourStore.setState({ active: false, stepIndex: 0 });
+    delete document.documentElement.dataset.sidebar;
+    document.documentElement.style.removeProperty("--sidebar-w");
+    // Same setup the suite above uses: a wide viewport and a measurable
+    // spotlight target, or GuidedTour renders nothing at all.
+    Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
+    stubBoundingRect();
+    renderTargets();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = "";
+    document.documentElement.style.removeProperty("--sidebar-w");
+  });
+
+  function bubbleLeft(): number {
+    const el = screen.getByRole("dialog").querySelector<HTMLElement>("[data-tour-bubble]")!;
+    return parseInt(el.style.left, 10);
+  }
+
+  it("clears a full-width sidebar", () => {
+    document.documentElement.style.setProperty("--sidebar-w", "280px");
+    render(<GuidedTour />);
+    act(() => useTourStore.getState().start());
+    expect(bubbleLeft()).toBe(296);
+  });
+
+  it("tucks in against a collapsed rail", () => {
+    document.documentElement.style.setProperty("--sidebar-w", "72px");
+    render(<GuidedTour />);
+    act(() => useTourStore.getState().start());
+    expect(bubbleLeft()).toBe(88);
+  });
+
+  it("falls back to the expanded width when the variable is unreadable", () => {
+    render(<GuidedTour />);
+    act(() => useTourStore.getState().start());
+    expect(bubbleLeft()).toBe(296);
+  });
+});

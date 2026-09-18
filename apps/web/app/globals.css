@@ -153,6 +153,36 @@
   font-family: var(--font-inter), sans-serif;
 }
 
+/* ── Sidebar width ──────────────────────────────────────────────────────────
+   One variable drives both the fixed <aside> and the <main> offset that has
+   to clear it (see components/layout/Sidebar.tsx and app/(app)/layout.tsx).
+   They are siblings, so this lives on :root — the ancestor both share.
+   Keep the pixel values in step with SIDEBAR_WIDTH in lib/sidebar.ts.
+
+   The default is deliberately pure CSS: between md and xl the 280px sidebar
+   squeezes content (the Studio's editor+preview pane worst of all), so it
+   becomes a 72px icon rail there and only widens once there is room. Being
+   CSS means the correct rail paints before React hydrates — no flash.
+
+   An explicit user choice sets data-sidebar on <html> (applied pre-paint by
+   the inline script in app/layout.tsx) and wins at every width. */
+:root {
+  --sidebar-w: 0px;
+}
+
+@media (min-width: 768px) {
+  :root { --sidebar-w: 72px; }
+}
+
+@media (min-width: 1280px) {
+  :root { --sidebar-w: 280px; }
+}
+
+@media (min-width: 768px) {
+  html[data-sidebar="collapsed"] { --sidebar-w: 72px; }
+  html[data-sidebar="expanded"] { --sidebar-w: 280px; }
+}
+
 /* headline-xl (48px) is used unscaled as the main <h1> on nearly every page
    (dashboard, analytics, JD analysis, marketing hero, ...) — on a phone
    that reads oversized even though nothing technically overflows. Scaling

@@ -8,7 +8,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-on-background h-full flex flex-col md:flex-row overflow-hidden relative z-[1]">
       <Sidebar />
-      <main className="flex-1 md:ml-[280px] flex flex-col h-screen overflow-y-auto overflow-x-hidden w-full pb-20 md:pb-0">
+      <main className="flex-1 md:ml-[var(--sidebar-w)] flex flex-col h-screen overflow-y-auto overflow-x-hidden w-full pb-20 md:pb-0 transition-[margin] duration-300">
         <TopNav />
         <PageTransition>{children}</PageTransition>
       </main>
