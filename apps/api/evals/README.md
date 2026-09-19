@@ -245,3 +245,55 @@ the platform roadmap"). It is also noisy — two intermediate runs of the new
 prompts scored +3.2 and +3.4. Known leftovers: a tool named elsewhere in the
 résumé (React in skills, SQL in another project) can still be attached to a
 bullet that did not use it; the guard cannot tell, by design.
+
+
+## Assertive tailoring, flag-don't-revert (`results/assertive-h50.json`, `results/assertive-h85.json`)
+
+Product call after the meaning-first run: people come to raise their ATS
+score, so tailoring must be assertive, and where a claim can't be verified
+the candidate decides — the review already starts any unverified point
+unticked. Changes:
+
+1. Agent 2 is told which JD phrases the résumé lacks
+   (`jd_terms_missing_from_resume`) and to land every one the résumé
+   supports, verbatim; it may offer a JD tool the résumé lacks where the
+   bullet's work is exactly what the tool is for, as a flagged option.
+2. Keyword intensity follows the existing Humanize ↔ ATS slider
+   (`keyword_intensity`: 1 / 2 / 3 phrases per bullet).
+3. Only phrases of ≤5 words reach Agent 3 as verbatim keywords
+   (`_verbatim_keywords`); whole JD duties were being pasted in front of
+   bullets as "[duty] by [real work]".
+4. `bullet_guard` flags instead of reverting. Flagged rewrites are kept,
+   start unticked in the review with the reason on the card, and Auto-select
+   skips them.
+5. The scorer accepts a phrase's leading verb in past tense ("owned the
+   platform roadmap" matches "own the platform roadmap").
+
+| metric | meaning-first | h50 | h85 |
+|---|---|---|---|
+| ats_delta | 0.8 | 15.2 | 21.4 |
+| tokens_total | 6621 | 7364 | 7413 |
+| flagged share (`revert_rate`) | 0.00 | 0.08 | 0.16 |
+| word_growth | 1.11 | 1.45 | 1.47 |
+| specificity_retention | 1.00 | 0.99 | 0.99 |
+
+`ats_after` here counts every rewrite as accepted, including flagged ones and
+JD tools the résumé lacks (h85's career-changer +57 is mostly SQL/Tableau/
+Looker it offers as options). In the product those start unticked, so the
+default score is lower until the candidate opts in.
+
+Still seen in the text, not caught by any metric: the "payment processing"
+domain swap persists on one bullet in both runs, and a few label stacks /
+tails get through ("platform development infrastructure service scaffolding",
+"under own platform roadmap", "for revenue stakeholders").
+
+### gpt-4.1 as the premium model (`results/assertive-h50-gpt41.json`)
+
+Same pins and prompts at h50, only `OPENAI_MODEL_PREMIUM=gpt-4.1` (Agents 2
+and 3). `ats_delta` 27.0 vs 15.2, tokens about equal (7512 vs 7364) — but at
+roughly 5x the per-token price, and the text is not better: it brought back
+the "[JD duty] by [real work]" opener the prompt forbids ("Owned end-to-end
+delivery for payment processing by migrating…"), stuffed more tools
+(Kubernetes, TypeScript) and more filler ("applying data pipeline concepts
+throughout the process"). More aggressive, not more obedient. Kept
+gpt-4.1-mini.

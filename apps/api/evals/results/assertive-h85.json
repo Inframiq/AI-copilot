@@ -1,0 +1,299 @@
+{
+  "generated_at": "2026-09-19T10:17:24.734486+00:00",
+  "aggregate": {
+    "fixtures_ok": 5,
+    "fixtures_failed": 0,
+    "ats_after": 57.6,
+    "ats_before": 36.2,
+    "ats_delta": 21.4,
+    "bullets_changed": 4.0,
+    "bullets_total": 4.8,
+    "max_bullet_words": 19.2,
+    "quantified_share": 0.4629,
+    "revert_rate": 0.1571,
+    "specificity_retention": 0.9867,
+    "tokens_input": 6252.6,
+    "tokens_output": 1160.4,
+    "tokens_reasoning": 0.0,
+    "tokens_total": 7413.0,
+    "verb_diversity": 1.0,
+    "word_growth": 1.4686
+  },
+  "fixtures": [
+    {
+      "ats_before": 4,
+      "ats_after": 61,
+      "ats_delta": 57,
+      "bullets_total": 4,
+      "bullets_changed": 3,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.0,
+      "word_growth": 1.7639,
+      "max_bullet_words": 19,
+      "keyword_overuse": {},
+      "tokens_input": 5909,
+      "tokens_output": 906,
+      "tokens_reasoning": 0,
+      "tokens_total": 6815,
+      "token_calls": {
+        "agent2_semantic_map": 2691,
+        "agent3_write": 2673,
+        "verify_semantic_presence": 635,
+        "agent_gap_filler": 816
+      },
+      "name": "career_changer_thin_overlap",
+      "description": "Marketing to analytics. Genuine overlap is thin, so this is the fixture that catches a scorer inflating matches or a writer inventing experience to close the gap.",
+      "bullets": [
+        {
+          "original": "Ran monthly reporting on campaign performance across six channels",
+          "tailored": "Built monthly SQL and Tableau dashboards reporting campaign performance across six channels for revenue stakeholders."
+        },
+        {
+          "original": "Built spreadsheet models that forecast quarterly campaign spend",
+          "tailored": "Partnered with finance on revenue forecasting by building spreadsheet models using SQL and Python to forecast quarterly campaign spend."
+        },
+        {
+          "original": "Presented results to the leadership team each quarter",
+          "tailored": "Presented quarterly business intelligence reports to leadership using Looker dashboards."
+        },
+        {
+          "original": "Coordinated with the design team on creative production schedules",
+          "tailored": "Coordinated with the design team on creative production schedules"
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 54,
+      "ats_after": 65,
+      "ats_delta": 11,
+      "bullets_total": 7,
+      "bullets_changed": 5,
+      "revert_rate": 0.2857,
+      "specificity_retention": 0.9333,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.7143,
+      "word_growth": 1.3265,
+      "max_bullet_words": 25,
+      "keyword_overuse": {},
+      "tokens_input": 7000,
+      "tokens_output": 1774,
+      "tokens_reasoning": 0,
+      "tokens_total": 8774,
+      "token_calls": {
+        "agent2_semantic_map": 3441,
+        "agent3_write": 3246,
+        "verify_semantic_presence": 892,
+        "agent_gap_filler": 1195
+      },
+      "name": "experienced_backend_ic",
+      "description": "The common case: a mid-level backend engineer with real metrics, applying to an adjacent stack. Baseline for every other fixture.",
+      "bullets": [
+        {
+          "original": "Built the order fulfilment API in Python, cutting average order processing time from 800ms to 240ms",
+          "tailored": "Owned end-to-end delivery of the payment processing order fulfilment API in Python, reducing average order processing time from 800ms to 240ms under high transaction volume."
+        },
+        {
+          "original": "Migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records",
+          "tailored": "Migrated the checkout database with 4M records to PostgreSQL with zero downtime, supporting high transaction volume operations."
+        },
+        {
+          "original": "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+          "tailored": "Automated deployment pipelines with CI/CD to support end-to-end delivery, cutting release time from 2 hours to 15 minutes."
+        },
+        {
+          "original": "Worked with the product team to plan quarterly engineering priorities",
+          "tailored": "Partnered with product on roadmap prioritisation to plan quarterly engineering priorities."
+        },
+        {
+          "original": "Helped newer engineers with code reviews and design feedback",
+          "tailored": "Mentored engineers on system design and code quality through code reviews and design feedback."
+        },
+        {
+          "original": "Developed internal reporting tools used by 40 people across three departments",
+          "tailored": "Developed internal reporting tools used by 40 people across three departments"
+        },
+        {
+          "original": "Fixed a recurring data sync bug that had caused 12 incidents in six months",
+          "tailored": "Fixed a recurring data sync bug that had caused 12 incidents in six months"
+        }
+      ],
+      "reverted": [
+        {
+          "bullet_id": "exp0_b1",
+          "reasons": [
+            "adds an ending your original doesn't say: \"supporting high transaction volume operations\""
+          ],
+          "original_text": "Migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records",
+          "rejected_text": "Migrated the checkout database with 4M records to PostgreSQL with zero downtime, supporting high transaction volume operations."
+        },
+        {
+          "bullet_id": "exp0_b2",
+          "reasons": [
+            "adds an ending your original doesn't say: \"to support end-to-end delivery, cutting release time from 2 hours to 15 minutes\""
+          ],
+          "original_text": "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+          "rejected_text": "Automated deployment pipelines with CI/CD to support end-to-end delivery, cutting release time from 2 hours to 15 minutes."
+        }
+      ]
+    },
+    {
+      "ats_before": 63,
+      "ats_after": 73,
+      "ats_delta": 10,
+      "bullets_total": 5,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.6,
+      "word_growth": 1.2522,
+      "max_bullet_words": 18,
+      "keyword_overuse": {},
+      "tokens_input": 6300,
+      "tokens_output": 1185,
+      "tokens_reasoning": 0,
+      "tokens_total": 7485,
+      "token_calls": {
+        "agent2_semantic_map": 2975,
+        "agent3_write": 2878,
+        "verify_semantic_presence": 702,
+        "agent_gap_filler": 930
+      },
+      "name": "fresher_projects_only",
+      "description": "The case that was entirely broken before projects were scored or rewritten: a new grad whose only technical evidence lives in Projects.",
+      "bullets": [
+        {
+          "original": "Built a pipeline pulling course enrolment data from three campus systems into a single warehouse",
+          "tailored": "Built an ETL pipeline pulling course enrolment data from three campus systems into cloud data warehouses."
+        },
+        {
+          "original": "Scheduled nightly refreshes with Airflow and added checks that flagged malformed records",
+          "tailored": "Scheduled nightly refreshes with Apache Airflow and automated data quality checks that flagged malformed records."
+        },
+        {
+          "original": "Created a dashboard that 200 students used to compare course workloads",
+          "tailored": "Created a dashboard that 200 students used to compare course workloads"
+        },
+        {
+          "original": "Collected live bus arrival data over 6 months and stored it in PostgreSQL",
+          "tailored": "Collected live bus arrival data over 6 months through an ETL pipeline and stored it in PostgreSQL."
+        },
+        {
+          "original": "Wrote SQL models that surfaced the 10 most delay-prone routes in the city",
+          "tailored": "Wrote SQL models to model data for reporting that surfaced the 10 most delay-prone routes in the city."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 18,
+      "ats_after": 45,
+      "ats_delta": 27,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 1.0,
+      "word_growth": 1.2425,
+      "max_bullet_words": 19,
+      "keyword_overuse": {},
+      "tokens_input": 6157,
+      "tokens_output": 1026,
+      "tokens_reasoning": 0,
+      "tokens_total": 7183,
+      "token_calls": {
+        "agent2_semantic_map": 2833,
+        "agent3_write": 2770,
+        "verify_semantic_presence": 678,
+        "agent_gap_filler": 902
+      },
+      "name": "management_seniority_signals",
+      "description": "A lead role. Exercises Agent 3 rule 12's seniority-aware emphasis \u2014 bullets should foreground team scope and outcomes through others, not hands-on depth.",
+      "bullets": [
+        {
+          "original": "Led a squad of 6 engineers delivering the internal platform used by every product team",
+          "tailored": "Led a team of 6 engineers in platform development for the internal platform used by every product team."
+        },
+        {
+          "original": "Ran the quarterly planning process and cut missed delivery commitments from 40% to 10%",
+          "tailored": "Owned the platform roadmap through running quarterly planning, cutting missed delivery commitments from 40% to 10%."
+        },
+        {
+          "original": "Coached two engineers to promotion within 18 months",
+          "tailored": "Coached two engineers through career development to achieve promotion within 18 months."
+        },
+        {
+          "original": "Rebuilt the service scaffolding so a new service took 2 days to stand up instead of 3 weeks",
+          "tailored": "Rebuilt platform development service scaffolding under own platform roadmap, cutting new service setup from 3 weeks to 2 days."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 42,
+      "ats_after": 44,
+      "ats_delta": 2,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.5,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.0,
+      "word_growth": 1.7579,
+      "max_bullet_words": 15,
+      "keyword_overuse": {},
+      "tokens_input": 5897,
+      "tokens_output": 911,
+      "tokens_reasoning": 0,
+      "tokens_total": 6808,
+      "token_calls": {
+        "agent2_semantic_map": 2631,
+        "agent3_write": 2694,
+        "verify_semantic_presence": 637,
+        "agent_gap_filler": 846
+      },
+      "name": "sparse_unquantified",
+      "description": "Almost no numbers anywhere. The fixture that catches a prompt edit making the writer invent metrics to satisfy the quantify-impact instruction.",
+      "bullets": [
+        {
+          "original": "Built marketing pages for client campaigns",
+          "tailored": "Built accessible, responsive interfaces in React for marketing pages supporting client campaigns."
+        },
+        {
+          "original": "Maintained the shared component library used across client projects",
+          "tailored": "Maintained the shared component library by collaborating with designers across client projects."
+        },
+        {
+          "original": "Fixed accessibility issues flagged in client audits",
+          "tailored": "Fixed accessibility issues flagged in client audits to enhance web accessibility and create accessible interfaces."
+        },
+        {
+          "original": "Worked with designers to turn mockups into working pages",
+          "tailored": "Collaborated with designers on the shared component library to transform mockups into working pages."
+        }
+      ],
+      "reverted": [
+        {
+          "bullet_id": "exp0_b0",
+          "reasons": [
+            "adds an ending your original doesn't say: \"supporting client campaigns\""
+          ],
+          "original_text": "Built marketing pages for client campaigns",
+          "rejected_text": "Built accessible, responsive interfaces in React for marketing pages supporting client campaigns."
+        },
+        {
+          "bullet_id": "exp0_b2",
+          "reasons": [
+            "adds an ending your original doesn't say: \"to enhance web accessibility and create accessible interfaces\""
+          ],
+          "original_text": "Fixed accessibility issues flagged in client audits",
+          "rejected_text": "Fixed accessibility issues flagged in client audits to enhance web accessibility and create accessible interfaces."
+        }
+      ]
+    }
+  ]
+}

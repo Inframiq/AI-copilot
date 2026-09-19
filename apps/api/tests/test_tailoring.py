@@ -1240,21 +1240,22 @@ def test_a_clean_rewrite_passes_through_untouched():
     assert reverted == []
 
 
-def test_a_rewrite_that_invents_a_metric_is_reverted_to_the_original():
+def test_a_rewrite_that_invents_a_metric_is_kept_and_flagged():
     indexed = _indexed("Built the checkout flow.")
     writer = WriterOutput(
         rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0",
                                            rewritten_text="Built checkout serving 2M users.")],
         updated_skills=[],
     )
-    guarded, reverted = _guard_writer_output(indexed, writer, _plan(_entry("exp0_b0", "Built the checkout flow.")))
-    assert guarded.rewritten_bullets[0].rewritten_text == "Built the checkout flow."
-    assert len(reverted) == 1
-    assert reverted[0]["bullet_id"] == "exp0_b0"
-    assert any("invented" in r for r in reverted[0]["reasons"])
+    guarded, flagged = _guard_writer_output(indexed, writer, _plan(_entry("exp0_b0", "Built the checkout flow.")))
+    # Kept for the candidate to decide; the review starts it unticked.
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built checkout serving 2M users."
+    assert len(flagged) == 1
+    assert flagged[0]["bullet_id"] == "exp0_b0"
+    assert any("adds a number" in r for r in flagged[0]["reasons"])
 
 
-def test_a_rewrite_that_drops_a_preserved_metric_is_reverted():
+def test_a_rewrite_that_drops_a_preserved_metric_is_flagged():
     indexed = _indexed("Reduced latency by 40%.")
     writer = WriterOutput(
         rewritten_bullets=[RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Improved API latency.")],
@@ -1263,11 +1264,11 @@ def test_a_rewrite_that_drops_a_preserved_metric_is_reverted():
     guarded, reverted = _guard_writer_output(
         indexed, writer, _plan(_entry("exp0_b0", "Reduced latency by 40%.", ["40%"])),
     )
-    assert guarded.rewritten_bullets[0].rewritten_text == "Reduced latency by 40%."
-    assert any("dropped preserved metric" in r for r in reverted[0]["reasons"])
+    assert guarded.rewritten_bullets[0].rewritten_text == "Improved API latency."
+    assert any("drops a number" in r for r in reverted[0]["reasons"])
 
 
-def test_one_bad_bullet_does_not_revert_its_clean_neighbours():
+def test_one_flagged_bullet_does_not_flag_its_clean_neighbours():
     indexed = _indexed("Built the checkout flow.", "Led the payments team.")
     writer = WriterOutput(rewritten_bullets=[
         RewrittenBullet(bullet_id="exp0_b0", rewritten_text="Built checkout serving 2M users."),
@@ -1278,7 +1279,7 @@ def test_one_bad_bullet_does_not_revert_its_clean_neighbours():
         _entry("exp0_b1", "Led the payments team."),
     ))
     texts = {b.bullet_id: b.rewritten_text for b in guarded.rewritten_bullets}
-    assert texts["exp0_b0"] == "Built the checkout flow."
+    assert texts["exp0_b0"] == "Built checkout serving 2M users."
     assert texts["exp0_b1"] == "Directed the payments team."
     assert [r["bullet_id"] for r in reverted] == ["exp0_b0"]
 
@@ -1292,7 +1293,7 @@ def test_it_guards_project_bullets_too():
         updated_skills=[],
     )
     guarded, reverted = _guard_writer_output(indexed, writer, _plan(_entry("proj0_b0", "Built a parser.")))
-    assert guarded.rewritten_bullets[0].rewritten_text == "Built a parser."
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built a parser handling 500 files/sec."
     assert reverted[0]["bullet_id"] == "proj0_b0"
 
 
@@ -1306,12 +1307,12 @@ def test_it_falls_back_to_the_indexed_text_when_the_plan_lacks_the_bullet():
         updated_skills=[],
     )
     guarded, reverted = _guard_writer_output(indexed, writer, _plan())
-    assert guarded.rewritten_bullets[0].rewritten_text == "Built the checkout flow."
+    assert guarded.rewritten_bullets[0].rewritten_text == "Built checkout serving 2M users."
     assert reverted
 
 
 @pytest.mark.asyncio
-async def test_pipeline_reverts_a_fabricated_metric_and_reports_it():
+async def test_pipeline_flags_a_fabricated_metric_and_reports_it():
     responses = {
         _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python"]),
         MappingPlan: MappingPlan(
@@ -1335,10 +1336,12 @@ async def test_pipeline_reverts_a_fabricated_metric_and_reports_it():
 
     result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
 
-    assert result.tailored_content["experience"][0]["bullets"] == ["Built the checkout flow"]
+    # The rewrite reaches the review; reverted_bullets (the stored name for
+    # the flag list) tells the review to start it unticked, with the reason.
+    assert result.tailored_content["experience"][0]["bullets"] == ["Built a Python checkout flow serving 2M users"]
     assert len(result.reverted_bullets) == 1
     assert result.reverted_bullets[0]["bullet_id"] == "exp0_b0"
-    assert any("invented" in r for r in result.reverted_bullets[0]["reasons"])
+    assert any("adds a number" in r for r in result.reverted_bullets[0]["reasons"])
 
 
 @pytest.mark.asyncio

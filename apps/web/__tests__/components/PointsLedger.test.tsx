@@ -125,12 +125,30 @@ describe("PointsLedger", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/out of credits/i);
   });
 
-  it("lists bullets the fact-lock kept as written", () => {
-    setup({
-      reverted: [{ bullet_id: "exp0_b2", original_text: "Mentored two interns.", rejected_text: "Mentored 5 interns.", reasons: ["added a metric"] }],
-    });
-    expect(screen.getByText(/1 bullet kept as you wrote it/i)).toBeTruthy();
-    expect(screen.getByText(/added a metric/)).toBeTruthy();
+  // The fact-lock flags rather than reverts: the rewrite is shown, with what
+  // to check, and the candidate decides.
+  const FLAG = {
+    bullet_id: "exp0_b0", original_text: "x", rejected_text: "y",
+    reasons: ["adds a number that isn't in your original: 5"],
+  };
+
+  it("shows on the card what a flagged rewrite needs checked", () => {
+    setup({ reverted: [FLAG] });
+    expect(screen.getByTestId("fact-check-exp0_b0").textContent).toMatch(
+      /check before you keep this — it adds a number that isn't in your original: 5/i,
+    );
+  });
+
+  it("an inline Rewrite's own flags replace the pipeline's", () => {
+    setup({ reverted: [FLAG], revertedReasons: { exp0_b0: ["runs to 40 words, over the 35-word limit"] } });
+    expect(screen.getByTestId("fact-check-exp0_b0").textContent).toMatch(/40 words/);
+    expect(screen.getByTestId("fact-check-exp0_b0").textContent).not.toMatch(/adds a number/);
+  });
+
+  it("auto-select leaves a flagged rewrite for the candidate to switch on", () => {
+    const p = setup({ reverted: [FLAG], decisions: { exp0_b1: "reject", exp0_b0: "reject" } });
+    fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({ exp0_b1: "accept" });
   });
 
   it("withdraws an accepted AI point when the confirmation is withdrawn", () => {

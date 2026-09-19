@@ -4,7 +4,6 @@ import {
   ArrowsClockwise,
   CaretRight,
   Checks,
-  LockSimple,
   PencilSimple,
   Sparkle,
   WarningCircle,
@@ -23,8 +22,15 @@ type Provenance = "reworded" | "adds_terms" | "ai";
 
 /** Auto-select: every point built on the user's own bullets. AI-written
  * points are left alone — they need the user's word, not a click. */
-export function autoSelectDecisions(changes: BulletChange[]): Record<string, Decision> {
-  return Object.fromEntries(changes.map((c) => [c.key, "accept" as const]));
+export function autoSelectDecisions(
+  changes: BulletChange[],
+  /** Rewrites the fact-lock flagged. Like AI-written points, each needs its
+   * own yes: a bulk click must not switch on a number nobody checked. */
+  flagged: ReadonlySet<string> = new Set(),
+): Record<string, Decision> {
+  return Object.fromEntries(
+    changes.filter((c) => !flagged.has(c.key)).map((c) => [c.key, "accept" as const]),
+  );
 }
 
 /** Clear all: every point off, AI-written included. */
@@ -105,13 +111,14 @@ export function PointsLedger({
    * a rewrite as a leave-one-out from the all-accepted state, so with other
    * rewrites off it understates what this one is worth. */
   liveBulletDeltas?: Record<string, number>;
-  /** Rewrites the fact-lock refused during tailoring; those bullets kept
-   * the candidate's own text. */
+  /** Rewrites the fact-lock flagged during tailoring (a number the original
+   * lacks, an invented ending…). Kept, started unticked, and shown with the
+   * reasons so the candidate decides. Stored under its old name. */
   reverted?: RevertedBullet[];
   busy?: Record<string, "rewrite" | "humanize" | null>;
   /** Why an inline Rewrite/Humanize failed, by change key. */
   rewriteErrors?: Record<string, string>;
-  /** Fact-lock reasons from an inline Rewrite/Humanize, by change key. */
+  /** Fact-lock flags from an inline Rewrite/Humanize, by change key. */
   revertedReasons?: Record<string, string[]>;
   /** e.g. "lg:hidden" when a rail elsewhere carries the same actions. */
   bulkActionsClassName?: string;
@@ -162,7 +169,6 @@ export function PointsLedger({
             well you match; the skills below are how to raise it.
           </p>
         </div>
-        <KeptAsWritten reverted={reverted} />
       </div>
     );
   }
@@ -176,6 +182,11 @@ export function PointsLedger({
   const show = (f: Filter) => filter === "all" || filter === f;
   const onCount = countPointsOn(changes, aiFixes, decisions);
   const isVouched = (f: AtsFix) => vouched[f.id] ?? decisions[`fix:${f.id}`] === "accept";
+  // The pipeline's flags, by review key; an inline Rewrite's own flags win.
+  const flags: Record<string, string[]> = Object.fromEntries(reverted.map((r) => [r.bullet_id, r.reasons]));
+  const flaggedKeys = new Set(
+    changes.map((c) => c.key).filter((k) => (revertedReasons?.[k] ?? flags[k] ?? []).length > 0),
+  );
 
   const cardFor = (change: BulletChange, provenance: Provenance, newTerms?: string[]) => (
     <ChangeCard
@@ -189,7 +200,7 @@ export function PointsLedger({
       on={decisions[change.key] !== "reject"}
       busy={busy?.[change.key] ?? null}
       error={rewriteErrors?.[change.key]}
-      reverted={revertedReasons?.[change.key]}
+      flags={revertedReasons?.[change.key] ?? flags[change.key]}
       onToggle={(on) => onDecide(change.key, on ? "accept" : "reject")}
       onRewrite={(m) => onRewrite(change, m)}
       onEdit={(t) => onEdit(change, t)}
@@ -224,7 +235,7 @@ export function PointsLedger({
           </span>
           <button
             type="button"
-            onClick={() => onBulk(autoSelectDecisions(changes))}
+            onClick={() => onBulk(autoSelectDecisions(changes, flaggedKeys))}
             title="Turns on every point built on your own bullets. AI-written points stay as they are."
             className={`flex items-center gap-1 rounded-xl bg-primary px-md py-xs text-label-sm font-semibold text-on-primary active:brightness-90 ${PRESS} ${FOCUS_RING}`}
           >
@@ -282,7 +293,6 @@ export function PointsLedger({
         </Group>
       )}
 
-      {filter === "all" && <KeptAsWritten reverted={reverted} />}
     </section>
   );
 }
@@ -296,34 +306,6 @@ function Group({ title, hint, children }: { title: string; hint: string; childre
       </header>
       <ul className="flex flex-col gap-md">{children}</ul>
     </section>
-  );
-}
-
-/** Rewrites the fact-lock refused: the bullet kept the candidate's own text.
- * Listed so an untouched bullet reads as a decision, not as nothing done. */
-function KeptAsWritten({ reverted }: { reverted: RevertedBullet[] }) {
-  if (reverted.length === 0) return null;
-  return (
-    <details data-testid="fact-lock-notice" className="group rounded-2xl border border-outline-variant/30 bg-surface-container-low">
-      <summary
-        className={`flex cursor-pointer list-none items-center gap-sm rounded-2xl px-md py-sm text-label-md text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
-      >
-        <LockSimple size={16} className="text-on-surface-variant" />
-        <span className="font-semibold">
-          {reverted.length} bullet{reverted.length === 1 ? "" : "s"} kept as you wrote {reverted.length === 1 ? "it" : "them"}
-        </span>
-        <span className="text-caption text-on-surface-variant">— the rewrite broke a fact-checking rule</span>
-        <CaretRight size={14} className="ml-auto transition-transform group-open:rotate-90" />
-      </summary>
-      <ul className="flex flex-col gap-sm px-md pb-md">
-        {reverted.map((r) => (
-          <li key={r.bullet_id} className="rounded-xl bg-surface-container-lowest p-sm text-body-sm">
-            <p className="text-on-surface">“{r.original_text}”</p>
-            <p className="text-caption text-on-surface-variant">{r.reasons.join("; ")}</p>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 
@@ -480,7 +462,7 @@ function ChangeCard({
   on,
   busy,
   error,
-  reverted,
+  flags,
   onToggle,
   onRewrite,
   onEdit,
@@ -492,7 +474,8 @@ function ChangeCard({
   on: boolean;
   busy: "rewrite" | "humanize" | null;
   error?: string;
-  reverted?: string[];
+  /** What the candidate should confirm before keeping this rewrite. */
+  flags?: string[];
   onToggle: (on: boolean) => void;
   onRewrite: (mode: "rewrite" | "humanize") => void;
   onEdit: (text: string) => void;
@@ -559,9 +542,15 @@ function ChangeCard({
         </p>
       )}
 
-      {(reverted?.length ?? 0) > 0 && (
-        <p className="text-caption text-tertiary">
-          The new wording was discarded — it {reverted!.join("; ")}. The previous text is kept.
+      {(flags?.length ?? 0) > 0 && (
+        <p
+          data-testid={`fact-check-${change.key}`}
+          className="flex items-start gap-xs rounded-xl bg-tertiary-container/60 px-sm py-xs text-caption text-on-tertiary-container"
+        >
+          <WarningCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
+          <span>
+            Check before you keep this — it {flags!.join("; ")}. Only switch it on if that&apos;s true.
+          </span>
         </p>
       )}
 

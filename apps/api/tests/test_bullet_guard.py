@@ -1,9 +1,9 @@
 """Deterministic fact-lock on Agent 3's rewrites.
 
 Agent 3's prompt promises: preserved_metrics survive verbatim, no NEW number
-appears, the word cap holds, banned filler stays out. Nothing enforced any of
-it — the tailoring pipeline never ran a validator at all. These are the rules
-that turn those promises into checks.
+appears, the word cap holds, banned filler and invented endings stay out.
+These checks turn those promises into FLAGS: the rewrite is kept, the reasons
+go with it, and the review leaves it unticked for the candidate to decide.
 """
 import pytest
 from app.services.bullet_guard import rewrite_violations, guard_rewrite
@@ -72,18 +72,20 @@ def test_a_banned_phrase_already_in_the_original_is_tolerated():
     ) == []
 
 
-# ── guard_rewrite: what the pipeline actually calls ──────────────────────────
+# ── guard_rewrite: flags, never reverts ─────────────────────────────────────
+# The candidate is the only one who knows whether a number is true, so a
+# broken rule is surfaced for them to decide, not silently undone.
 
-def test_guard_returns_the_rewrite_when_it_is_clean():
+def test_guard_returns_a_clean_rewrite_with_no_flags():
     text, reasons = guard_rewrite(ORIG, "Cut checkout latency 40% for 2M monthly users.", [])
     assert text == "Cut checkout latency 40% for 2M monthly users."
     assert reasons == []
 
 
-def test_guard_reverts_to_the_original_when_a_rule_is_broken():
+def test_guard_keeps_a_flagged_rewrite_and_says_why():
     text, reasons = guard_rewrite("Built the checkout flow.", "Built checkout flow for 2M users.", [])
-    assert text == "Built the checkout flow."
-    assert reasons
+    assert text == "Built checkout flow for 2M users."
+    assert any("2" in r for r in reasons)
 
 
 def test_guard_leaves_an_unchanged_bullet_alone():
@@ -92,98 +94,50 @@ def test_guard_leaves_an_unchanged_bullet_alone():
     assert reasons == []
 
 
-# ── Invented tools ──────────────────────────────────────────────────────────
-# The live eval caught a marketer's "Ran monthly reporting" rewritten as
-# "Built monthly dashboards and reports using SQL" — SQL appears nowhere in
-# that résumé. No number changed, so every metric check passed.
-
-MARKETER = "Ran monthly reporting on campaign performance. Skills: Excel, Google Analytics"
+def test_flags_are_worded_for_the_candidate():
+    _, reasons = guard_rewrite("Built the checkout flow.", "Built checkout flow for 2M users.", [])
+    assert reasons == ["adds a number that isn't in your original: 2"]
 
 
-def test_rejects_a_jd_tool_the_resume_never_mentions():
-    v = rewrite_violations(
-        "Ran monthly reporting on campaign performance",
-        "Built monthly SQL reports on campaign performance",
-        [], tool_terms=["SQL", "Tableau"], evidence_text=MARKETER,
-    )
-    assert any("SQL" in r for r in v)
+def test_a_tool_the_resume_never_mentions_is_not_the_guards_call():
+    # The review screen flags a JD term the résumé lacks and starts it unticked
+    # (lib/point-kind.ts); the guard does not second-guess that choice.
+    assert rewrite_violations("Ran monthly reporting", "Ran monthly SQL reporting", []) == []
 
 
-def test_allows_a_tool_named_elsewhere_in_the_resume():
-    assert rewrite_violations(
-        "Built marketing pages for client campaigns",
-        "Built marketing pages in React for client campaigns",
-        [], tool_terms=["React"], evidence_text="Skills: JavaScript, React, CSS",
-    ) == []
+# ── Invented endings ─────────────────────────────────────────────────────────
+# Each rewrite is real gpt-4.1-mini output from the eval run that motivated this.
+
+from app.services.bullet_guard import invented_tail
 
 
-def test_matches_whole_terms_only():
-    # "Java" is not claimed by a bullet that says JavaScript.
-    assert rewrite_violations(
-        "Built pages", "Built JavaScript pages", [],
-        tool_terms=["Java"], evidence_text="Skills: JavaScript",
-    ) == []
-
-
-def test_tool_check_is_off_without_the_resume():
-    # The single-bullet Rewrite endpoint has no JD tool list; unchanged there.
-    assert rewrite_violations("Built reports", "Built SQL reports", [], tool_terms=["SQL"]) == []
-
-
-def test_guard_reverts_an_invented_tool():
-    text, reasons = guard_rewrite(
-        "Ran monthly reporting", "Ran monthly SQL reporting", [],
-        tool_terms=["SQL"], evidence_text=MARKETER,
-    )
-    assert text == "Ran monthly reporting"
-    assert reasons
-
-
-# ── Invented purpose clauses are cut, not reverted ──────────────────────────
-# Each pair is real gpt-4.1-mini output from the eval run that motivated this.
-
-from app.services.bullet_guard import strip_invented_tail
-
-
-def test_cuts_an_invented_purpose_clause():
-    assert strip_invented_tail(
+def test_flags_an_invented_purpose_clause():
+    assert invented_tail(
         "Maintained the shared component library used across client projects",
         "Maintained the shared component library used across client projects to ensure consistency and reuse of UI elements.",
-    ) == "Maintained the shared component library used across client projects."
-    assert strip_invented_tail(
-        "Fixed accessibility issues flagged in client audits",
-        "Fixed web accessibility issues identified in client audits to improve compliance with accessibility standards.",
-    ) == "Fixed web accessibility issues identified in client audits."
-    assert strip_invented_tail(
+    ) == "to ensure consistency and reuse of UI elements"
+    assert invented_tail(
         "Built marketing pages for client campaigns",
         "Built marketing pages for client campaigns, creating responsive interfaces that supported campaign goals.",
-    ) == "Built marketing pages for client campaigns, creating responsive interfaces."
+    ) == "that supported campaign goals"
 
 
-def test_keeps_a_purpose_the_original_states():
-    original = "Rewrote the importer to improve reliability"
-    assert strip_invented_tail(original, "Rewrote the CSV importer to improve reliability.") == \
-        "Rewrote the CSV importer to improve reliability."
+def test_a_purpose_the_original_states_is_not_flagged():
+    assert invented_tail(
+        "Rewrote the importer to improve reliability",
+        "Rewrote the CSV importer to improve reliability.",
+    ) is None
 
 
-def test_keeps_result_clauses_that_are_not_padding():
-    text = "Rebuilt the service scaffolding, cutting new service setup from 3 weeks to 2 days."
-    assert strip_invented_tail("Rebuilt the service scaffolding", text) == text
+def test_a_result_clause_is_not_padding():
+    assert invented_tail(
+        "Rebuilt the service scaffolding",
+        "Rebuilt the service scaffolding, cutting new service setup from 3 weeks to 2 days.",
+    ) is None
 
 
-def test_guard_applies_the_cut():
-    text, reasons = guard_rewrite(
-        "Fixed accessibility issues flagged in client audits",
-        "Fixed accessibility issues flagged in client audits, ensuring compliance.", [],
-    )
-    assert text == "Fixed accessibility issues flagged in client audits."
-    assert reasons == []
-
-
-def test_a_practice_name_is_not_an_invented_tool():
-    # "automated deployment pipelines" is CI/CD: the eval run reverted this.
-    assert rewrite_violations(
-        "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
-        "Set up CI/CD pipelines that cut release time from 2 hours to 15 minutes",
-        [], tool_terms=["CI/CD", "Kubernetes"], evidence_text="Python, PostgreSQL",
-    ) == []
+def test_guard_flags_an_invented_ending_and_keeps_the_text():
+    rewritten = "Fixed accessibility issues flagged in client audits, ensuring compliance."
+    text, reasons = guard_rewrite("Fixed accessibility issues flagged in client audits", rewritten, [])
+    assert text == rewritten
+    assert reasons == ["adds an ending your original doesn't say: \"ensuring compliance\""]

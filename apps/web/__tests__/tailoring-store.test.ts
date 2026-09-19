@@ -792,6 +792,35 @@ describe("useTailoringStore", () => {
     expect(d.exp0_b1).toBe("accept"); // Python was already there
   });
 
+  it("runTailoring starts a rewrite the fact-lock flagged unticked", async () => {
+    const original = {
+      ...SAMPLE_CONTENT,
+      experience: [{ title: "Eng", company: "Acme", bullets: ["Built checkout.", "Wrote Python."] }],
+    } as ResumeContent;
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      tailored_content: {
+        ...original,
+        experience: [{ title: "Eng", company: "Acme", start: "2020",
+          bullets: ["Built checkout for 2M users.", "Wrote Python services."] }],
+      },
+      bullet_rationale: {},
+      // Kept, not reverted: the candidate decides whether "2M" is true.
+      reverted_bullets: [{
+        bullet_id: "exp0_b0", reasons: ["adds a number that isn't in your original: 2"],
+        original_text: "Built checkout.", rejected_text: "Built checkout for 2M users.",
+      }],
+    });
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    const d = useTailoringStore.getState().bulletDecisions;
+    expect(d.exp0_b0).toBe("reject");
+    expect(d.exp0_b1).toBe("accept");
+  });
+
   it("re-scores with the list of rewrites being kept, so each tick moves the number", async () => {
     vi.useFakeTimers();
     try {

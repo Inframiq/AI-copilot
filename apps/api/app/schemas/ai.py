@@ -105,9 +105,10 @@ class RewriteBulletRequest(BaseModel):
 
 class RewriteBulletOut(BaseModel):
     rewritten_text: str
-    # Non-empty when the deterministic fact-lock rejected the model's rewrite
-    # and rewritten_text is therefore the ORIGINAL, unchanged. The UI needs to
-    # say so — otherwise clicking Rewrite appears to do nothing.
+    # Non-empty when the deterministic fact-lock flagged the rewrite (a number
+    # the original lacks, an invented ending, over the word limit…).
+    # rewritten_text is still the new wording; the UI shows these reasons so
+    # the candidate decides whether to keep it. Name kept for compatibility.
     reverted_reasons: list[str] = []
 
 

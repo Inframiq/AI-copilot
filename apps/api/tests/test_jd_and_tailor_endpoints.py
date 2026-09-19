@@ -1211,8 +1211,9 @@ async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
                 )
         assert r.status_code == 200
         body = r.json()
-        # Reverted whole, not chopped at the summary's 80-word boundary.
-        assert body["rewritten_text"] == "Original bullet."
+        # Kept whole and flagged for the candidate — not chopped at the
+        # summary's 80-word boundary.
+        assert body["rewritten_text"] == long_bullet
         assert len(body["rewritten_text"].split()) != max_words
         assert any("word" in reason for reason in body["reverted_reasons"])
     finally:
@@ -1747,14 +1748,14 @@ async def test_rewrite_bullet_sends_the_pipeline_rule_set():
 
 
 @pytest.mark.asyncio
-async def test_rewrite_bullet_reverts_a_rewrite_that_invents_a_metric():
-    """Same fact-lock the pipeline applies. Without it this endpoint was the
-    one way to get a fabricated number into a resume."""
+async def test_rewrite_bullet_flags_a_rewrite_that_invents_a_metric():
+    """Same fact-lock the pipeline applies: the new wording comes back with
+    the reason, so the candidate decides instead of the number slipping in."""
     body = {"bullet_text": "Built the checkout flow", "mode": "rewrite",
             "humanize_level": 50, "field": "bullet"}
     r, _ = await _post_rewrite(body, "Built a checkout flow serving 2M users")
-    assert r.json()["rewritten_text"] == "Built the checkout flow"
-    assert r.json()["reverted_reasons"]
+    assert r.json()["rewritten_text"] == "Built a checkout flow serving 2M users"
+    assert any("adds a number" in reason for reason in r.json()["reverted_reasons"])
 
 
 @pytest.mark.asyncio

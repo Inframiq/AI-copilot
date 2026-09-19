@@ -69,11 +69,31 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
 
 
 def _exact_pattern(term: str) -> re.Pattern:
-    """Compile a case-insensitive no-adjacent-alphanum pattern for *term*."""
-    return re.compile(
-        r"(?<![A-Za-z0-9])" + re.escape(term.strip()) + r"(?![A-Za-z0-9])",
-        re.IGNORECASE,
-    )
+    """Compile a case-insensitive no-adjacent-alphanum pattern for *term*.
+
+    A multi-word phrase's first word may appear in its usual verb forms: a JD
+    asks to "own the platform roadmap", a résumé — in past tense, as every
+    bullet is — says "owned the platform roadmap". Requiring the JD's tense
+    scored the grammatical bullet as missing and pushed the writer toward
+    "Own the platform roadmap by…". Single words are left exact, so "Go"
+    never matches "Going"."""
+    words = term.strip().split()
+    if len(words) >= 2 and words[0].isalpha():
+        body = _lead_inflections(words[0]) + re.escape(" " + " ".join(words[1:]))
+    else:
+        body = re.escape(term.strip())
+    return re.compile(r"(?<![A-Za-z0-9])" + body + r"(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def _lead_inflections(word: str) -> str:
+    """Regex for *word* and its regular -s / -ed / -ing forms."""
+    low = word.lower()
+    if low.endswith("e"):                                   # automate → automated
+        return re.escape(word[:-1]) + "(?:e|es|ed|ing)"
+    if low.endswith("y") and len(low) > 2 and low[-2] not in "aeiou":  # apply → applied
+        return re.escape(word[:-1]) + "(?:y|ies|ied|ying)"
+    # own → owned; plan → planned (a doubled final consonant is allowed)
+    return re.escape(word) + "(?:" + re.escape(word[-1]) + "?(?:ed|ing)|s|es)?"
 
 
 # Words that carry no evidence of a skill on their own. A phrase's meaning

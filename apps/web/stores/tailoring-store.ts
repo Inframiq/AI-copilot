@@ -821,9 +821,13 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
             // and starts unticked until the user vouches for it.
             const rationale = (session.bullet_rationale ?? {}) as Record<string, BulletRationale>;
             const jdTerms = [...(session.matched_skills ?? []), ...(session.missing_skills ?? [])];
+            // And one the fact-lock flagged (an invented number or ending) is
+            // kept for the candidate to judge, so it starts unticked too.
+            const flagged = new Set((session.reverted_bullets ?? []).map((r) => r.bullet_id));
             for (const change of deriveBulletChanges(session.tailored_content, originalContent)) {
               const { kind } = classifyChange(change, rationale[change.key], originalContent, jdTerms);
-              initialDecisions[change.key] = kind === "reworded" ? "accept" : "reject";
+              initialDecisions[change.key] =
+                kind === "reworded" && !flagged.has(change.key) ? "accept" : "reject";
             }
             const originalSkillsSet = new Set(originalContent.skills || []);
             const tailoredSkillsSet = new Set(session.tailored_content.skills || []);

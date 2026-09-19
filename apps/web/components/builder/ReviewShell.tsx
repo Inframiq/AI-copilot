@@ -128,11 +128,13 @@ export function ReviewShell({
         jd_context: mode === "rewrite" ? jdText : undefined,
         humanize_level: humanizeLevel,
       });
-      // The server's fact-lock hands back the text it was given when it
-      // rejects a rewrite. Say so — otherwise the button looks broken.
-      setRewriteReverted((prev) => ({ ...prev, [change.key]: reverted_reasons ?? [] }));
+      // The server's fact-lock flags what the candidate must confirm (an
+      // invented number, an added ending…). The new wording is kept, shown
+      // with the reasons, and left off until they switch it on.
+      const flags = reverted_reasons ?? [];
+      setRewriteReverted((prev) => ({ ...prev, [change.key]: flags }));
       updatePendingBullet(change.key, rewritten_text);
-      setBulletDecision(change.key, "accept");
+      setBulletDecision(change.key, flags.length > 0 ? "reject" : "accept");
       // A rewrite spends a credit — keep the meter honest.
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
     } catch (err) {
@@ -183,6 +185,15 @@ export function ReviewShell({
     onApply();
   }
 
+  // Rewrites the fact-lock flagged — an inline Rewrite's own verdict wins.
+  const flaggedKeys = new Set(
+    bulletChanges
+      .map((c) => c.key)
+      .filter((k) =>
+        (rewriteReverted[k] ?? revertedBullets.find((r) => r.bullet_id === k)?.reasons ?? []).length > 0,
+      ),
+  );
+
   const before = atsScoreBefore ?? atsScore;
   const after = projectedAtsScore ?? atsScore;
   const skillsAdded =
@@ -198,7 +209,7 @@ export function ReviewShell({
     pointsOn: countPointsOn(bulletChanges, aiFixes, bulletDecisions),
     pointsTotal: bulletChanges.length + aiFixes.length,
     skillsAdded,
-    onAutoSelect: () => applyBulletDecisions(autoSelectDecisions(bulletChanges)),
+    onAutoSelect: () => applyBulletDecisions(autoSelectDecisions(bulletChanges, flaggedKeys)),
     onClear: () => applyBulletDecisions(clearDecisions(bulletChanges, aiFixes)),
     onApply: handleApply,
     canApply: !!pendingContent && !!originalContent,

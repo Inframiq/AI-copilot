@@ -80,8 +80,10 @@ export interface BulletRationale {
   score_delta?: number;
 }
 
-/** One rewrite the server's fact-lock refused, with the reason(s) why. The
- * bullet was left at its original text. */
+/** One rewrite the server's fact-lock flagged, with the reason(s) — e.g. a
+ * number the original lacks. The rewrite is kept; the review starts it
+ * unticked and shows the reasons. (Named for the old behaviour, when these
+ * were reverted; sessions from then carry the original text instead.) */
 export interface RevertedBullet {
   bullet_id: string;
   reasons: string[];
@@ -375,8 +377,8 @@ export const apiClient = {
     /** {original_bullet_id: "high"|"medium"|"low"} for the résumé's existing
      * bullets. `{}` on pre-feature sessions. */
     bullet_importance?: Record<string, "high" | "medium" | "low">;
-    /** Rewrites the server's deterministic fact-lock rejected — the bullet
-     * kept its original text. `[]` on sessions tailored before the guard
+    /** Rewrites the server's deterministic fact-lock flagged for the
+     * candidate to confirm. `[]` on sessions tailored before the guard
      * shipped. See apps/api/app/services/bullet_guard.py. */
     reverted_bullets?: RevertedBullet[];
     /** {bullet_id: rationale} — Agent 2's account of why each bullet was

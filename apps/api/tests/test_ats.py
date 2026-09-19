@@ -600,3 +600,29 @@ def test_a_fix_for_a_gap_the_resume_already_covers_adds_nothing():
     content = {"experience": [{"title": "Eng", "bullets": ["Used Python"]}], "skills": ["Python"]}
     base = score_content(content, jd, {}).ats_score
     assert estimate_fix_delta(content, jd, {}, base, _bullet_fix("Python", "More Python work")) == 0
+
+
+# ── A phrase's opening verb may take the résumé's tense ─────────────────────
+# JD: "own the platform roadmap". Résumé (past tense, like every bullet):
+# "Owned the platform roadmap". Scoring that as missing pushed the writer to
+# "Own the platform roadmap by…", which is worse English and no truer.
+
+from app.services.ats import _skill_matches
+
+
+@pytest.mark.parametrize("phrase,text", [
+    ("own the platform roadmap", "Owned the platform roadmap, cutting misses from 40% to 10%"),
+    ("automate data quality checks", "Automated data quality checks in Airflow"),
+    ("plan quarterly releases", "Planned quarterly releases with product"),
+    ("apply design patterns", "Applied design patterns across services"),
+])
+def test_a_phrase_matches_in_past_tense(phrase, text):
+    assert _skill_matches(phrase, text, "")
+
+
+def test_a_single_word_is_still_exact():
+    assert not _skill_matches("Go", "Going forward, led the migration", "")
+
+
+def test_only_real_inflections_match():
+    assert not _skill_matches("own the platform roadmap", "Owner of the platform roadmap", "")

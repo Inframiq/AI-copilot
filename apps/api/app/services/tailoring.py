@@ -361,23 +361,19 @@ def _guard_writer_output(
     indexed_resume: dict,
     writer: WriterOutput,
     mapping_plan: "MappingPlan | None" = None,
-    tool_terms: list[str] | None = None,
-    evidence_text: str = "",
 ) -> tuple[WriterOutput, list[dict]]:
-    """Enforce fact-lock on Agent 3's rewrites before they reach the résumé.
+    """Fact-check Agent 3's rewrites and flag the ones the candidate must OK.
 
-    tool_terms / evidence_text (the JD's tools, the whole original résumé)
-    also reject a rewrite that claims a tool the candidate never mentions.
+    Agent 3's rules about metrics, length and filler are prompt promises; this
+    is where they become checks. A rewrite that breaks one is KEPT — the
+    candidate decides, since only they know whether it is true — and listed
+    with its reasons. The review screen starts every listed rewrite unticked
+    and shows why, so nothing unverified reaches the résumé by default.
 
-    Agent 3's rules about metrics, length and banned filler were prompt-only —
-    this is where they become checks. A rewrite that breaks one is reverted to
-    the candidate's own original text (see bullet_guard for why reverting is
-    always the safe remedy) and reported in the returned list so the pipeline
-    can log it and the review screen can say what happened, instead of the
-    user silently getting a bullet they never chose.
-
-    Returns (guarded_writer_output, reverted) where each `reverted` entry is
-    {bullet_id, reasons, original_text, rejected_text}.
+    Returns (writer_output, flagged). Each flagged entry is {bullet_id,
+    reasons, original_text, rejected_text}; the last key keeps its old name
+    (it now holds the kept, flagged text) so sessions stored before flagging
+    replaced reverting still load. Persisted as TailoringSession.reverted_bullets.
     """
     originals: dict[str, str] = {}
     for section, _prefix in _BULLET_SECTIONS:
@@ -403,9 +399,7 @@ def _guard_writer_output(
         if not original:
             guarded.append(rb)
             continue
-        text, reasons = guard_rewrite(
-            original, rb.rewritten_text, metrics.get(rb.bullet_id, []), tool_terms, evidence_text,
-        )
+        text, reasons = guard_rewrite(original, rb.rewritten_text, metrics.get(rb.bullet_id, []))
         if reasons:
             reverted.append({
                 "bullet_id": rb.bullet_id,
@@ -791,83 +785,116 @@ async def _agent_gap_filler(
 _AGENT2_SYSTEM = """\
 <system_role>
 You are a senior resume strategist. Plan how each resume bullet should be \
-rewritten so it speaks to the Job Description (JD) while staying 100% true to \
-what the candidate actually did. A writer executes your plan literally, so \
-every instruction you give must be one an honest writer can follow.
+rewritten to score as high as possible against the Job Description (JD) in an \
+ATS, using only what the candidate genuinely did or has. ATS systems match \
+the JD's wording LITERALLY, so the plan's job is to put the JD's exact phrases \
+into the bullets wherever the candidate's real work supports them. A writer \
+executes your plan literally.
 </system_role>
 
 <rules>
-1. TRUTH FIRST — FACT LOCK: never plan a change that alters or adds a fact. \
-Facts are numbers, percentages, money, dates, company names, job titles, named \
-projects, AND the concrete things worked on (the system, domain, data, tool, \
-audience). "order fulfilment API" must not become "payment API"; "4M records" \
-must not become "4M transactions". Record every number, percentage, money \
-figure and date in preserved_metrics exactly as written.
-2. EVIDENCE RULE FOR KEYWORDS — a JD keyword may go in \
-target_jd_keywords_to_inject ONLY if it (a) already appears in the bullet, \
-(b) is the standard name or umbrella term for something the bullet explicitly \
-describes ("pulled data from three systems into a warehouse" → "ETL"; \
-"automated deployment pipelines" → "CI/CD"), or (c) is a tool/technology named \
-elsewhere in the SAME role or project entry. A tool, language or platform that \
-appears nowhere in that entry is never injected, however well it fits the JD — \
-that is fabrication, not tailoring. A JD domain is not an umbrella for a \
-different domain: "order fulfilment" work does not license "payment \
-processing". At most 2 keywords per bullet.
-3. RESPONSIBILITY-FIRST REASONING: before choosing a transformation, decide \
-which of jd_analysis.core_responsibilities (if any) the bullet's real work \
-evidences and copy it verbatim into jd_responsibility_addressed; leave it "" \
-if none honestly applies. The goal is a bullet that demonstrates that \
-responsibility, not one that merely contains its words. Keep reasoning to one \
-short sentence (max 30 words).
-4. TRANSFORMATION (the `transformation` field) — choose the lightest one that \
-does the job:
-   - REINFORCE: same content, clearer wording, JD terminology where rule 2 allows.
+1. FACT LOCK: never plan a change that alters or adds a fact — numbers, \
+percentages, money, dates, company names, job titles, named projects, or the \
+concrete thing worked on ("order fulfilment API" must not become "payment \
+API"; "4M records" must not become "4M transactions"). Record every number, \
+percentage, money figure and date in preserved_metrics exactly as written.
+2. EVIDENCE RULE — a JD phrase may go in target_jd_keywords_to_inject when \
+the candidate's résumé supports it in any of these ways:
+   (a) it is already in the bullet;
+   (b) it is the JD's name for what the bullet describes — same work, the \
+JD's words ("pulled data from three systems into a warehouse" → "ETL \
+pipelines"; "planned quarterly engineering priorities with product" → \
+"roadmap prioritisation"; "wrote SQL models that surfaced delay-prone \
+routes" → "model data for reporting"; ran planning for the platform they \
+led → "own the platform roadmap");
+   (c) it is a tool, skill or technology listed anywhere on the résumé \
+(skills, another role, a project) and this bullet's work plausibly used it;
+   (d) OPTION FOR THE CANDIDATE: a JD tool that appears nowhere on the \
+résumé, but only where this bullet's work is exactly what that tool is for \
+(monthly performance reporting → "SQL" or "Tableau"; never Kafka on a \
+bullet about spreadsheets). At most one such tool per bullet. The review \
+screen flags it as "not on your résumé" and leaves it unticked, so the \
+candidate keeps it only if it is true.
+   Never re-label the work as a different domain ("order fulfilment" is not \
+"payment processing"), and never plan a certification or employer the \
+résumé does not show.
+3. COVER THE GAPS: jd_terms_missing_from_resume lists JD phrases the résumé \
+does not contain yet — each one that rule 2 allows is worth ATS points. Make \
+sure every rule-2-supportable missing phrase is assigned to the bullet that \
+best evidences it, spreading them across bullets rather than piling them on \
+one. Use each phrase VERBATIM as the JD spells it — "roadmap \
+prioritisation", not "prioritised the roadmap". Keyword count per bullet \
+follows keyword_intensity. Keywords are short JD phrases of 1-5 words (a \
+tool, method or ATS phrase) — never a whole responsibility sentence, which \
+belongs in jd_responsibility_addressed and is shown by the work, not quoted.
+4. RESPONSIBILITY-FIRST REASONING: decide which of \
+jd_analysis.core_responsibilities the bullet's real work evidences and copy \
+it verbatim into jd_responsibility_addressed ("" if none honestly applies). \
+The rewrite should visibly demonstrate that duty. Keep reasoning to one short \
+sentence (max 30 words).
+5. TRANSFORMATION (the `transformation` field):
+   - INJECT: add rule-2 JD phrases — the default whenever a supportable \
+phrase fits the bullet.
    - REFRAME: same facts, lead with the aspect the JD cares about.
-   - INJECT: add a rule-2-approved keyword that names what the work already was.
-   - SKIP: no honest connection to the JD, or the bullet is already strong and \
-relevant. Unchanged is a valid, often correct, outcome — never force a change.
-   Spread distinct keywords across bullets: the same keyword in more than 2-3 \
-bullets reads as stuffing unless the JD itself repeats it 3+ times.
-5. SPECIFICITY OVER JD-MIRRORING: a rewrite must never be more generic than the \
-original. If matching the JD would cost a concrete detail, keep the detail.
-6. strategic_instruction: one or two plain sentences telling the writer what to \
-emphasise and which specifics to keep. Never instruct the writer to add a \
-purpose or benefit the original does not state ("to support business goals", \
-"ensuring quality") — that is padding.
-7. COMPLETE COVERAGE: exactly one mapping_plan entry per bullet_id in \
+   - REINFORCE: same content, sharper wording in the JD's vocabulary.
+   - SKIP: only when the bullet has no honest connection to the JD at all.
+   Do not use the same phrase in more than 2-3 bullets unless the JD itself \
+repeats it 3+ times.
+6. SPECIFICITY: never make a bullet more generic. The JD's phrase is added \
+to the bullet's own specifics, never swapped in for them.
+7. strategic_instruction: one or two plain sentences — which phrases go \
+where, what to lead with, which specifics to keep. Never ask the writer to \
+add a purpose or benefit the original does not state.
+8. COMPLETE COVERAGE: exactly one mapping_plan entry per bullet_id in \
 original_resume, including SKIPs.
-8. plausible_skills_to_add: at most 15 skills (the 15-skill cap), each (a) named \
-in the JD and (b) evidenced by the candidate's own résumé, most important \
-first — the frontend's quick-add takes them in list order. Each is a 1-4 word \
-skill/tool/method name ("Kubernetes", "Stakeholder Management"), never a \
-sentence or duty.
-9. priority_skills_from_user (if non-empty): the user confirms having these. \
-Always include every one in plausible_skills_to_add verbatim (outside the \
-15-skill cap) and prefer INJECT where a bullet's work genuinely shows one — \
-but never fabricate a metric or experience to force it in.
-10. Output ONLY valid JSON.
+9. plausible_skills_to_add: at most 15 skills (the 15-skill cap), each (a) \
+named in the JD and (b) evidenced by the candidate's own résumé, most \
+important first — the frontend's quick-add takes them in list order. Each is \
+a 1-4 word skill/tool/method name ("Kubernetes", "Stakeholder Management"), \
+never a sentence or duty.
+10. priority_skills_from_user (if non-empty): the user confirms having \
+these. Always include every one in plausible_skills_to_add verbatim (outside \
+the 15-skill cap) and INJECT each into a bullet whose work genuinely shows \
+it — but never fabricate a metric or experience to force it in.
+11. Output ONLY valid JSON.
 </rules>
 
 <examples>
-JD core_responsibility: "own end-to-end delivery of the payments platform"; \
-JD tools: ["Python", "Kubernetes"]
+JD phrases missing from the résumé: ["roadmap prioritisation", "Kubernetes"]
+BULLET: "Worked with the product team to plan quarterly engineering priorities"
+GOOD: INJECT, keywords ["roadmap prioritisation"], jd_responsibility_addressed \
+"partner with product on roadmap prioritisation", strategic_instruction "Say \
+they partnered with product on roadmap prioritisation for the quarterly \
+engineering plan; use the phrase verbatim."
+BAD: keywords ["Kubernetes"] — planning work is not what Kubernetes is for.
+
 BULLET: "Built the order fulfilment API in Python, cutting average order \
-processing time from 800ms to 240ms"
-GOOD: reasoning "Owning a transactional API end-to-end mirrors owning payments \
-delivery; Python is there, Kubernetes is not." transformation REINFORCE, \
-keywords ["Python"], preserved_metrics ["800ms", "240ms"], \
-strategic_instruction "Present the API as owned end-to-end; keep 'order \
-fulfilment', Python and both latency figures."
-BAD: INJECT ["Kubernetes", "payments platform"] — Kubernetes is not in the \
-entry, and it swaps the real system for the JD's words.
+processing time from 800ms to 240ms" (JD: "own end-to-end delivery")
+GOOD: REFRAME, keywords ["end-to-end delivery"], preserved_metrics ["800ms", \
+"240ms"], strategic_instruction "Lead with owning end-to-end delivery of the \
+order fulfilment API; keep Python and both latency figures."
+BAD: "payment processing API" — a different system.
 
 BULLET: "Ran monthly reporting on campaign performance across six channels" \
-(the JD wants SQL; no SQL anywhere in this role)
-GOOD: REINFORCE, keywords [], strategic_instruction "Keep it about the monthly \
-six-channel performance reporting; add no tool."
-
-BULLET: "Organised the team's annual offsite" → SKIP, jd_responsibility_addressed "".
+(the JD wants SQL; SQL appears nowhere on this résumé)
+GOOD: INJECT, keywords ["reports", "SQL"], strategic_instruction "Keep it \
+about the monthly six-channel performance reports; SQL is a rule-2(d) \
+option the candidate will confirm or drop."
 </examples>"""
+
+
+def _keyword_intensity(humanize_level: int) -> str:
+    """How hard Agent 2 pushes JD phrases in, from the same Humanize ↔ ATS
+    slider Agent 3's tone reads — so the two agents move together."""
+    if humanize_level < 30:
+        return ("natural: at most 1 JD phrase per bullet, only where it reads "
+                "as the obvious way to say it; leave already-strong bullets alone")
+    if humanize_level > 70:
+        return ("maximum ATS: up to 3 JD phrases per bullet; land every "
+                "rule-2-supportable missing phrase; SKIP only bullets with no "
+                "honest link to the JD")
+    return ("balanced: up to 2 JD phrases per bullet; land every "
+            "rule-2-supportable missing phrase somewhere in the résumé")
 
 
 async def _agent2_semantic_map(
@@ -875,11 +902,17 @@ async def _agent2_semantic_map(
     indexed_resume: dict,
     provider: AIProvider,
     priority_skills: list[str] | None = None,
+    missing_terms: list[str] | None = None,
+    humanize_level: int = 50,
 ) -> MappingPlan:
     payload = {
         "jd_analysis": jd_analysis.model_dump(),
         "original_resume": indexed_resume,
         "priority_skills_from_user": priority_skills or [],
+        # What the résumé does not yet contain is where the ATS points are;
+        # naming it is a few dozen tokens and focuses the whole plan (rule 3).
+        "jd_terms_missing_from_resume": list(missing_terms or [])[:30],
+        "keyword_intensity": _keyword_intensity(humanize_level),
     }
     # "premium" (not "pro") deliberately — this is the one call in the
     # pipeline that gets OpenAIProvider's pricier model. See the tier
@@ -901,9 +934,10 @@ def _humanize_tone(humanize_level: int) -> str:
         )
     if humanize_level > 70:
         return (
-            "Optimise for ATS matching. Put the most important approved JD "
-            "keyword early in the bullet, and use every approved keyword that "
-            "fits naturally — but never at the cost of a clear, literal sentence."
+            "Optimise for ATS matching. Put the most important planned JD "
+            "phrase in the first few words of the bullet and use every planned "
+            "phrase verbatim — reshape the sentence to hold them, while keeping "
+            "it one clear, grammatical sentence."
         )
     return (
         "Balance ATS density and human readability. Weave keywords naturally "
@@ -975,9 +1009,39 @@ angled toward the job. The plan says what to emphasise; you make it read well.
 <rules>
 1. EXECUTE THE PLAN: for each bullet_id, follow strategic_instruction and use \
 jd_responsibility_addressed to know which duty the bullet should visibly \
-evidence. Use target_jd_keywords_to_inject with the exact phrasing given — \
-keyword use is a byproduct of demonstrating jd_responsibility_addressed, not \
-the goal. A keyword that will not fit grammatically and truthfully is left out.
+evidence. Every phrase in target_jd_keywords_to_inject goes in VERBATIM — \
+same words, same order, same spelling — because the ATS matches it \
+literally: "roadmap prioritisation" stays exactly that, never "prioritised \
+the roadmap". The one change allowed: a phrase that starts with a verb takes \
+past tense like the rest of the bullet — "own the platform roadmap" → \
+"Owned the platform roadmap", "automate data quality checks" → "Automated \
+data quality checks". Never leave a bullet in present tense ("Own…", \
+"Mentor…"). Keyword use is a byproduct of demonstrating \
+jd_responsibility_addressed, not the goal, so build the sentence around the \
+phrase: rework the verb and object until it fits naturally rather than \
+dropping it. Leave a phrase out only if no grammatical, truthful sentence \
+can hold it.
+   PLACING A PHRASE — give it a real grammatical role:
+   - as the work itself: "Partnered with product on roadmap prioritisation \
+for quarterly engineering plans";
+   - as the tool or method: "Built ETL pipelines in Python that…", \
+"Automated releases with CI/CD pipelines…";
+   - as the thing produced: "Wrote SQL models to model data for reporting…".
+   Never as a stray label in front of a noun ("platform development service \
+scaffolding") or a phrase bolted on after the sentence is finished.
+   LEAD WITH THE REAL WORK: the bullet opens with what the candidate actually \
+did. Never open with a JD duty and attach the real work after it with \
+"by…", "as part of…" or "while…" — "Designed and scaled distributed systems \
+by migrating the checkout database" is wrong; "Migrated the checkout \
+database…" is right. jd_responsibility_addressed is shown by the work, never \
+quoted.
+   NO REPETITION: never say the same thing twice in a bullet ("Maintained \
+the shared component library by collaborating on a shared component \
+library", "Coached… through coaching").
+   NO DUTY TAILS OR INVENTED METHODS: never end with a JD duty as a purpose \
+("…to own the platform roadmap", "…as part of owning the roadmap"), and \
+never add a method or concept the original does not state ("applying \
+statistical analysis", "using data pipeline concepts").
 2. FACT LOCK — NEVER FABRICATE: every value in preserved_metrics appears \
 verbatim. Do not invent a number, tool, technology, team, audience, outcome or \
 purpose that is not in original_text or the plan's keywords, and do not rename \
@@ -1010,10 +1074,14 @@ rewrite is longer only when it carries more real information.
 goals", "to enhance…". If the original does not state a purpose or benefit, \
 you do not add one. End the sentence when the facts run out.
    - NO ADDED TAILS: every trailing phrase starting "for…", "to…", \
-"through…", "using…", "via…" or an adverb like "accurately" must restate \
-something the original says. "Built the order fulfilment API in Python for \
-payment processing" invents a purpose; "stored it in PostgreSQL using SQL \
-queries" invents a method.
+"through…", "using…", "via…" or an adverb like "accurately" must carry \
+either something the original says or one of the plan's keywords. "Built \
+the order fulfilment API in Python for payment processing" invents a \
+purpose; "stored it in PostgreSQL using SQL queries" invents a method \
+unless SQL is a planned keyword.
+   - ONE SENTENCE, CLEAR SPINE: one main clause (verb + what was done), at \
+most one supporting clause (how, or the result). No semicolons, no lists of \
+three clauses.
 7. ACRONYMS: the first time a keyword with a common acronym appears in the \
 set, pair them if length allows ("Continuous Integration (CI/CD)"); after \
 that the acronym alone.
@@ -1109,6 +1177,20 @@ async def _agent3_write(
     return out
 
 
+_MAX_KEYWORD_WORDS = 5
+
+
+def _verbatim_keywords(keywords: list[str]) -> list[str]:
+    """Only phrase-sized keywords reach the writer, whose rule 1 inserts them
+    word for word. Agent 2 sometimes copies a whole JD duty in ("design and
+    scale distributed systems handling high transaction volume"), and the
+    writer then glued it to the front of the bullet — "[JD duty] by [real
+    work]", the least readable and least honest sentence shape in the eval
+    runs. Duties still arrive as jd_responsibility_addressed, to be shown by
+    the work rather than quoted."""
+    return [k for k in keywords if 0 < len(k.split()) <= _MAX_KEYWORD_WORDS]
+
+
 async def _agent3_call(
     mapping_plan: MappingPlan,
     original_skills: list[str],
@@ -1122,10 +1204,15 @@ async def _agent3_call(
     # Agent 2's reasoning stays behind: it justified the plan, and the writer
     # needs the plan (jd_responsibility_addressed, strategic_instruction), not
     # the justification. Resending it cost input tokens on every bullet.
+    plan = mapping_plan.model_dump(
+        exclude={"mapping_plan": {"__all__": {"reasoning"}}}
+    )["mapping_plan"]
+    for entry in plan:
+        entry["target_jd_keywords_to_inject"] = _verbatim_keywords(
+            entry.get("target_jd_keywords_to_inject") or []
+        )
     payload = {
-        "mapping_plan": mapping_plan.model_dump(
-            exclude={"mapping_plan": {"__all__": {"reasoning"}}}
-        )["mapping_plan"],
+        "mapping_plan": plan,
         "plausible_skills_to_add": _sanitize_skill_list(
             mapping_plan.plausible_skills_to_add
         ),
@@ -1651,6 +1738,7 @@ async def run_tailoring_pipeline(
     # ── Agent 2 — semantic mapping (pro model) ────────────────────────────────
     mapping_plan = await _agent2_semantic_map(
         analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
+        missing_terms=analysis.missing_skills, humanize_level=humanize_level,
     )
 
     # ── Agent 3 — precision bullet rewrite ──────────────────────────────────
@@ -1668,20 +1756,16 @@ async def run_tailoring_pipeline(
     questions: list[PrepQuestionData] = []
 
     # ── fact-lock Agent 3's output, then patch it back in ───────────────────
-    # Rules 2, 7 and 8 of the Agent 3 prompt are promises; this is the check.
-    # A rewrite that fabricates a metric, drops one Agent 2 flagged to keep,
-    # runs past the word cap, or reaches for banned filler is reverted to the
-    # candidate's own text before it ever reaches the résumé.
-    # And a rewrite that claims one of the JD's tools the résumé never
-    # mentions anywhere — the prompt forbids it; this makes it certain.
-    guarded, reverted_bullets = _guard_writer_output(
-        indexed_resume, tailored_raw, mapping_plan,
-        tool_terms=analysis.jd_analysis.exact_technical_tools,
-        evidence_text=build_resume_text(resume_content)[0],
-    )
+    # Rules 2, 6 and 8 of the Agent 3 prompt are promises; this is the check.
+    # A rewrite that invents or drops a number, runs past the word cap, uses a
+    # cliché or tacks on a purpose the original never stated is kept but
+    # flagged: the review starts it unticked and says why. (A JD term the
+    # résumé never mentions is flagged the same way by the review itself —
+    # lib/point-kind.ts.)
+    guarded, reverted_bullets = _guard_writer_output(indexed_resume, tailored_raw, mapping_plan)
     if reverted_bullets:
-        logger.warning(
-            "fact-lock reverted %d/%d rewritten bullet(s): %s",
+        logger.info(
+            "fact-lock flagged %d/%d rewritten bullet(s): %s",
             len(reverted_bullets), len(tailored_raw.rewritten_bullets),
             [(r["bullet_id"], r["reasons"]) for r in reverted_bullets],
         )

@@ -432,10 +432,9 @@ async def rewrite_bullet(
         raise
     # Strip surrounding quotes if the model wrapped the output
     rewritten = rewritten.strip().strip('"').strip("'").strip()
-    # Same deterministic fact-lock the pipeline applies to Agent 3. Without it
-    # this endpoint was the one remaining way for a fabricated metric to reach
-    # a resume. A rejected rewrite returns the original plus the reasons, so
-    # the UI can explain why nothing changed.
+    # Same deterministic fact-lock the pipeline applies to Agent 3: a rewrite
+    # that invents a number, pads an ending or overruns comes back WITH the
+    # reasons, and the review leaves it for the candidate to confirm.
     reverted_reasons: list[str] = []
     if not is_summary:
         rewritten, reverted_reasons = guard_rewrite(body.bullet_text, rewritten)
