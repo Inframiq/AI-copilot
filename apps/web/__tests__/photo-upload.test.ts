@@ -51,8 +51,10 @@ describe("uploadProfilePhoto", () => {
       expect.any(File),
       expect.objectContaining({ upsert: true, contentType: "image/png" }),
     );
+    // ?v= changes per upload, so a photo replaced at the same path is
+    // never shown from a cached link to the old one.
     expect(result).toEqual({
-      url: "https://sb.example/avatars/user-9/profile.png",
+      url: expect.stringMatching(/^https:\/\/sb\.example\/avatars\/user-9\/profile\.png\?v=\d+$/),
       path: "user-9/profile.png",
     });
   });
@@ -78,6 +80,6 @@ describe("uploadResumePhoto", () => {
       expect.any(File),
       expect.objectContaining({ upsert: true, contentType: "image/jpeg" }),
     );
-    expect(url).toBe("https://sb.example/avatars/user-9/resume-3.jpg");
+    expect(url).toMatch(/^https:\/\/sb\.example\/avatars\/user-9\/resume-3\.jpg\?v=\d+$/);
   });
 });

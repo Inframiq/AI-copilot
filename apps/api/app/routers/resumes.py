@@ -13,7 +13,7 @@ from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerat
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
-    render_resume_html_with_meta, PhotoRequiredError,
+    render_resume_html_with_meta, PhotoRequiredError, photo_owned_by,
 )
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
@@ -406,7 +406,9 @@ async def generate_resume_pdf(
             changed = True
         if changed:
             await db.commit()
-    content = body.content if is_preview else resume.content
+    # Only the user's own photo: the render reads the private bucket with the
+    # service key, so a photo URL is never trusted on the content's word.
+    content = photo_owned_by((body.content if is_preview else resume.content) or {}, user["sub"])
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
@@ -483,7 +485,9 @@ async def render_resume_html_endpoint(
     if template_id not in _VALID_TEMPLATES:
         raise HTTPException(status_code=400, detail="Invalid template_id.")
 
-    content = (body.content if body and body.content is not None else resume.content) or {}
+    content = photo_owned_by(
+        (body.content if body and body.content is not None else resume.content) or {}, user["sub"]
+    )
     try:
         html, meta = await asyncio.to_thread(
             render_resume_html_with_meta,

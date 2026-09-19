@@ -273,7 +273,8 @@ export default function PrivacyPolicyPage() {
             <p className="text-body-md text-on-surface-variant">
               Account and application data is stored with Supabase (PostgreSQL), in the cloud region
               configured for our project. Generated PDF exports and uploaded files are stored in
-              Supabase Storage. Data may be processed and stored on servers located outside your country of
+              Supabase Storage. Resume files and profile photos are kept in private storage and are
+              only ever opened through short-lived links issued to your own account. Data may be processed and stored on servers located outside your country of
               residence; where required (for example, for transfers of personal data originating in the EEA,
               UK, or Switzerland), we rely on our subprocessors&apos; Standard Contractual Clauses or
               equivalent transfer mechanism with their own downstream infrastructure. Data is encrypted in

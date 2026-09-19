@@ -22,8 +22,11 @@ async function currentUserId(): Promise<string> {
   return user.id;
 }
 
-/** Upsert `file` at `path` in the public "avatars" bucket; return its public URL.
- * The bucket must exist and be public (Storage → New bucket → "avatars" → Public). */
+/** Upsert `file` at `path` in the private "avatars" bucket; return the URL
+ * that names it. That URL is an identifier, not a link anyone can open:
+ * display goes through useAvatarSrc (lib/avatar-url.ts), which signs it.
+ * `?v=` changes on every upload, so a replaced photo at the same path isn't
+ * shown from a cached link to the old one. */
 async function uploadToAvatars(path: string, file: File): Promise<string> {
   const supabase = createBrowserClient();
   const { error } = await supabase.storage.from("avatars").upload(path, file, {
@@ -32,7 +35,7 @@ async function uploadToAvatars(path: string, file: File): Promise<string> {
   });
   if (error) throw error;
   const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-  return data.publicUrl;
+  return `${data.publicUrl}?v=${Date.now()}`;
 }
 
 /**

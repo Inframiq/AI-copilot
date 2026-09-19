@@ -34,14 +34,12 @@ from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, gener
 TRUSTED_HOST = "https://test-project.supabase.co"
 
 
-def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+def _resume_for_template(template_id: str, base: dict, avatar_store) -> dict:
     if template_id not in TEMPLATES_REQUIRING_PHOTO:
         return base
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
     for _ in range(2):
-        httpx_mock.add_response(
-            url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
-        )
+        avatar_store.put(photo_url, b"\x89PNG\r\n\x1a\nfake-png-bytes")
     return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 TIGHT = {"line_spacing": 1.0, "paragraph_spacing": 0}
@@ -93,8 +91,8 @@ def _find_y(positions: list[tuple[str, float]], needle: str) -> float:
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_line_spacing_widens_the_gap_between_bullets(template_id, httpx_mock):
-    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+def test_line_spacing_widens_the_gap_between_bullets(template_id, avatar_store):
+    resume = _resume_for_template(template_id, RESUME, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))
@@ -111,8 +109,8 @@ def test_line_spacing_widens_the_gap_between_bullets(template_id, httpx_mock):
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id, httpx_mock):
-    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id, avatar_store):
+    resume = _resume_for_template(template_id, RESUME, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))
@@ -129,8 +127,8 @@ def test_paragraph_spacing_widens_the_gap_between_experience_entries(template_id
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_paragraph_spacing_widens_the_gap_between_education_entries(template_id, httpx_mock):
-    resume = _resume_for_template(template_id, RESUME, httpx_mock)
+def test_paragraph_spacing_widens_the_gap_between_education_entries(template_id, avatar_store):
+    resume = _resume_for_template(template_id, RESUME, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         tight_positions = _line_positions(generate_pdf(resume, template_id, **TIGHT))

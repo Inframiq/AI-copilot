@@ -66,19 +66,17 @@ _ONE_PIXEL_PNG = bytes.fromhex(
 )
 
 
-def _with_trusted_photo(resume: dict, httpx_mock, path: str = "/storage/v1/object/public/avatars/u/r.png") -> dict:
+def _with_trusted_photo(resume: dict, avatar_store, path: str = "/storage/v1/object/public/avatars/u/r.png") -> dict:
     photo_url = f"{TRUSTED_HOST}{path}"
-    httpx_mock.add_response(
-        url=photo_url, content=_ONE_PIXEL_PNG, headers={"content-type": "image/png"}
-    )
+    avatar_store.put(photo_url, _ONE_PIXEL_PNG)
     return {**resume, "contact": {**resume["contact"], "photo_url": photo_url}}
 
 
-def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+def _resume_for_template(template_id: str, base: dict, avatar_store) -> dict:
     """base as-is for templates that don't require a photo; base + a
     trusted mocked photo for the two that do."""
     if template_id in TEMPLATES_REQUIRING_PHOTO:
-        return _with_trusted_photo(base, httpx_mock)
+        return _with_trusted_photo(base, avatar_store)
     return base
 
 
@@ -150,15 +148,15 @@ def test_generate_pdf_returns_bytes_ats_modern():
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_returns_bytes_ats_sidebar(httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_generate_pdf_returns_bytes_ats_sidebar(avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     pdf = generate_pdf(resume, "ats_sidebar")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_returns_bytes_ats_professional(httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_generate_pdf_returns_bytes_ats_professional(avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     pdf = generate_pdf(resume, "ats_professional")
     assert isinstance(pdf, bytes)
     assert pdf[:4] == b"%PDF"
@@ -170,16 +168,16 @@ def test_generate_pdf_returns_bytes_ats_minimal():
     assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_renders_projects_section_on_every_template(httpx_mock, trusted_settings):
+def test_generate_pdf_renders_projects_section_on_every_template(avatar_store, trusted_settings):
     """Projects is a standalone section (separate from experience) — students
     without work history typically have projects instead."""
     for template_id in sorted(ALLOWED_TEMPLATES):
-        resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+        resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
         pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_works_with_projects_but_no_experience(httpx_mock, trusted_settings):
+def test_generate_pdf_works_with_projects_but_no_experience(avatar_store, trusted_settings):
     """The exact student scenario: no work experience, only projects."""
     student_resume = {
         "contact": {"name": "Alex Student", "email": "alex@example.com"},
@@ -195,12 +193,12 @@ def test_generate_pdf_works_with_projects_but_no_experience(httpx_mock, trusted_
         "skills": ["Python", "Flask"],
     }
     for template_id in sorted(ALLOWED_TEMPLATES):
-        resume = _resume_for_template(template_id, student_resume, httpx_mock)
+        resume = _resume_for_template(template_id, student_resume, avatar_store)
         pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
 
 
-def test_generate_pdf_new_templates_work_without_optional_fields(httpx_mock, trusted_settings):
+def test_generate_pdf_new_templates_work_without_optional_fields(avatar_store, trusted_settings):
     """Headline, languages, certifications, awards are all optional — photo
     is too for ats_minimal, but ats_sidebar/ats_professional require one
     (see the PhotoRequiredError tests below)."""
@@ -211,7 +209,7 @@ def test_generate_pdf_new_templates_work_without_optional_fields(httpx_mock, tru
         "skills": [],
     }
     for template_id in ("ats_sidebar", "ats_professional", "ats_minimal"):
-        resume = _resume_for_template(template_id, minimal_resume, httpx_mock)
+        resume = _resume_for_template(template_id, minimal_resume, avatar_store)
         pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
 
@@ -252,19 +250,19 @@ def test_every_template_declares_a_default_accent():
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_default_font_and_accent_preserve_original_look(template_id, httpx_mock, trusted_settings):
+def test_default_font_and_accent_preserve_original_look(template_id, avatar_store, trusted_settings):
     """With no font_choice/accent_color override, every template must render
     with the exact hex it always used — a regression guard so introducing
     customization can't shift the look of an existing saved resume."""
-    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, template_id)
     assert "Arial, Helvetica, sans-serif" in html
     assert TEMPLATE_DEFAULT_ACCENT_LOWER[template_id] in html.lower()
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_font_choice_overrides_body_font_stack(template_id, httpx_mock, trusted_settings):
-    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+def test_font_choice_overrides_body_font_stack(template_id, avatar_store, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, template_id, font_choice="serif")
     assert 'Georgia, "Times New Roman", serif' in html
     assert "Arial, Helvetica, sans-serif" not in html
@@ -273,12 +271,12 @@ def test_font_choice_overrides_body_font_stack(template_id, httpx_mock, trusted_
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_accent_color_override_appears_instead_of_default(template_id, httpx_mock, trusted_settings):
+def test_accent_color_override_appears_instead_of_default(template_id, avatar_store, trusted_settings):
     """Compares against the *default* render, not a literal hex absence —
     ats_minimal's own base text color happens to equal its default accent
     hex (#1a1a1a is both), so asserting the old hex is gone entirely would
     be wrong: it must still appear for unrelated body text."""
-    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     default_html = _render_html(resume, template_id)
     default_count = default_html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id])
     html = _render_html(resume, template_id, accent_color="#00aa55")
@@ -388,13 +386,12 @@ def test_generate_pdf_with_meta_returns_bytes_and_page_fit():
 # ---------------------------------------------------------------------------
 
 
-def test_untrusted_photo_url_is_never_fetched_and_falls_back_to_placeholder():
+def test_untrusted_photo_url_is_never_fetched_and_falls_back_to_placeholder(avatar_store):
     """A photo_url aimed at an internal/metadata host must not be fetched.
 
-    httpx_mock is deliberately absent: pytest-httpx fails the test on any
-    unmocked request, so a fetch here would show up as an error rather than
-    pass quietly. The render still succeeds — with the silhouette, not the
-    attacker's URL, and certainly not the response body."""
+    Photos only ever come out of our own storage bucket, by object path, so
+    nothing is downloaded at all. The render still succeeds — with the
+    silhouette, not the attacker's URL, and certainly not the response body."""
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "http://169.254.169.254/secret"},
@@ -402,10 +399,11 @@ def test_untrusted_photo_url_is_never_fetched_and_falls_back_to_placeholder():
     html = _render_html(malicious_resume, "ats_sidebar")
     assert "169.254.169.254" not in html
     assert _PLACEHOLDER_AVATAR in html
+    assert avatar_store.downloads == []
     assert generate_pdf(malicious_resume, "ats_sidebar")[:4] == b"%PDF"
 
 
-def test_file_scheme_photo_url_is_never_read_and_falls_back_to_placeholder():
+def test_file_scheme_photo_url_is_never_read_and_falls_back_to_placeholder(avatar_store):
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "file:///etc/passwd"},
@@ -413,6 +411,7 @@ def test_file_scheme_photo_url_is_never_read_and_falls_back_to_placeholder():
     html = _render_html(malicious_resume, "ats_professional")
     assert "/etc/passwd" not in html
     assert _PLACEHOLDER_AVATAR in html
+    assert avatar_store.downloads == []
     assert generate_pdf(malicious_resume, "ats_professional")[:4] == b"%PDF"
 
 
@@ -422,14 +421,14 @@ def test_file_scheme_photo_url_is_never_read_and_falls_back_to_placeholder():
 # ---------------------------------------------------------------------------
 
 
-def test_sidebar_photo_template_crops_not_stretches(httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_sidebar_photo_template_crops_not_stretches(avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, "ats_sidebar")
     assert "object-fit: cover" in html
 
 
-def test_professional_photo_template_crops_not_stretches(httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_professional_photo_template_crops_not_stretches(avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, "ats_professional")
     assert "object-fit: cover" in html
 
@@ -443,11 +442,11 @@ def test_sidebar_template_raises_when_photo_absent():
         _render_html(resume, "ats_sidebar")
 
 
-def test_sidebar_template_embeds_photo_when_trusted(httpx_mock, trusted_settings):
+def test_sidebar_template_embeds_photo_when_trusted(avatar_store, trusted_settings):
     """A trusted Supabase photo URL must be fetched and inlined as a data:
     URI — _blocked_url_fetcher rejects http/https at render time no matter
     how trusted the host is, so the raw URL can never reach the <img> tag."""
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     photo_url = resume["contact"]["photo_url"]
     html = _render_html(resume, "ats_sidebar")
     assert 'class="photo"' in html
@@ -455,12 +454,12 @@ def test_sidebar_template_embeds_photo_when_trusted(httpx_mock, trusted_settings
     assert photo_url not in html
 
 
-def test_sidebar_template_uses_placeholder_when_fetch_fails(httpx_mock, trusted_settings):
+def test_sidebar_template_uses_placeholder_when_fetch_fails(avatar_store, trusted_settings):
     """A trusted URL that 404s (a deleted avatar) is our failure, not the
     user's. The template they picked still renders, standing the silhouette
     in for the portrait, and the caller is told so it can warn them."""
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
-    httpx_mock.add_response(url=photo_url, status_code=404)
+    # Nothing stored at that path: the photo was deleted.
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
@@ -470,14 +469,11 @@ def test_sidebar_template_uses_placeholder_when_fetch_fails(httpx_mock, trusted_
     assert meta["photo_placeholder"] is True
 
 
-def test_oversized_photo_falls_back_to_placeholder(httpx_mock, trusted_settings):
+def test_oversized_photo_falls_back_to_placeholder(avatar_store, trusted_settings):
     """Over _MAX_PHOTO_BYTES the fetch returns None. Same reasoning: the
     resume renders, with the stand-in."""
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/big.png"
-    httpx_mock.add_response(
-        url=photo_url, content=b"x" * (5 * 1024 * 1024 + 1),
-        headers={"content-type": "image/png"},
-    )
+    avatar_store.put(photo_url, b"x" * (5 * 1024 * 1024 + 1))
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
@@ -487,8 +483,8 @@ def test_oversized_photo_falls_back_to_placeholder(httpx_mock, trusted_settings)
     assert meta["photo_placeholder"] is True
 
 
-def test_a_usable_photo_reports_no_placeholder(httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_a_usable_photo_reports_no_placeholder(avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     html, meta = render_resume_html_with_meta(resume, "ats_sidebar")
     assert _PLACEHOLDER_AVATAR not in html
     assert meta["photo_placeholder"] is False
@@ -525,8 +521,8 @@ def _pdf_draws_an_image(resume: dict, template_id: str) -> bool:
 
 
 @pytest.mark.parametrize("template_id", sorted(TEMPLATES_REQUIRING_PHOTO))
-def test_a_trusted_photo_actually_reaches_the_pdf(template_id, httpx_mock, trusted_settings):
-    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+def test_a_trusted_photo_actually_reaches_the_pdf(template_id, avatar_store, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, avatar_store)
     assert _pdf_draws_an_image(resume, template_id)
 
 
@@ -552,12 +548,12 @@ def test_the_data_only_fetcher_still_refuses_every_other_scheme():
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_omits_missing_location_instead_of_the_word_none(template_id, httpx_mock, trusted_settings):
+def test_render_html_omits_missing_location_instead_of_the_word_none(template_id, avatar_store, trusted_settings):
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "location": None},
     }
-    resume = _resume_for_template(template_id, resume, httpx_mock)
+    resume = _resume_for_template(template_id, resume, avatar_store)
     html = _render_html(resume, template_id)
     assert "None" not in html
 
@@ -578,9 +574,9 @@ def test_render_html_still_shows_location_when_present(template_id):
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_never_renders_a_headline(template_id, httpx_mock, trusted_settings):
+def test_render_html_never_renders_a_headline(template_id, avatar_store, trusted_settings):
     resume = {**SAMPLE_RESUME, "headline": "Sr. Business Analyst"}
-    resume = _resume_for_template(template_id, resume, httpx_mock)
+    resume = _resume_for_template(template_id, resume, avatar_store)
     html = _render_html(resume, template_id)
     assert '<div class="headline">' not in html
     # SAMPLE_RESUME's headline text doesn't otherwise appear anywhere else
@@ -600,8 +596,8 @@ def test_render_html_never_renders_a_headline(template_id, httpx_mock, trusted_s
 
 
 @pytest.mark.parametrize("template_id", ["ats_clean", "ats_modern", "ats_professional", "ats_minimal", "ats_sidebar"])
-def test_render_html_bullets_have_no_height_clip_at_any_line_spacing(template_id, httpx_mock, trusted_settings):
-    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+def test_render_html_bullets_have_no_height_clip_at_any_line_spacing(template_id, avatar_store, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, template_id, line_spacing=1.6)
     btxt_rule = re.search(r"\.btxt\s*\{[^}]*\}", html)
     assert btxt_rule is not None
@@ -787,7 +783,7 @@ def test_the_web_gallery_lists_exactly_the_templates_the_api_renders():
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
 def test_every_template_marks_its_links_for_the_studio_editor(
-    template_id, httpx_mock, trusted_settings
+    template_id, avatar_store, trusted_settings
 ):
     """A link is two values — the address and the text shown for it — so the
     Studio edits it through its own panel rather than in place. It finds them
@@ -808,7 +804,7 @@ def test_every_template_marks_its_links_for_the_studio_editor(
                 "website": "jane.dev",
             },
         },
-        httpx_mock,
+        avatar_store,
     )
     html = _render_html(resume, template_id)
     found = dict(re.findall(r'data-link="([^"]+)" data-link-url="([^"]*)"', html))
@@ -899,7 +895,7 @@ def test_url_link_empty_renders_nothing():
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_contact_fields_render_as_real_links_in_every_template(template_id, httpx_mock, trusted_settings):
+def test_contact_fields_render_as_real_links_in_every_template(template_id, avatar_store, trusted_settings):
     resume = {
         **SAMPLE_RESUME,
         "contact": {
@@ -909,7 +905,7 @@ def test_contact_fields_render_as_real_links_in_every_template(template_id, http
             "website": "janedoe.dev",
         },
     }
-    resume = _resume_for_template(template_id, resume, httpx_mock)
+    resume = _resume_for_template(template_id, resume, avatar_store)
     html = _render_html(resume, template_id)
     assert 'href="mailto:jane@example.com"' in html
     assert 'href="tel:5550100"' in html
@@ -921,8 +917,8 @@ def test_contact_fields_render_as_real_links_in_every_template(template_id, http
 @pytest.mark.parametrize(
     "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_project_link_renders_as_a_real_link(template_id, httpx_mock, trusted_settings):
-    resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
+def test_project_link_renders_as_a_real_link(template_id, avatar_store, trusted_settings):
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     html = _render_html(resume, template_id)
     assert 'href="https://github.com/jane/campus-marketplace"' in html
 
@@ -993,7 +989,7 @@ def test_url_link_marks_an_invalid_url_so_it_can_still_be_fixed():
 @pytest.mark.parametrize(
     "template", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_templates_render_link_display_text_with_the_real_href(template, httpx_mock, trusted_settings):
+def test_templates_render_link_display_text_with_the_real_href(template, avatar_store, trusted_settings):
     from app.services.pdf import render_resume_html
 
     content = {
@@ -1005,7 +1001,7 @@ def test_templates_render_link_display_text_with_the_real_href(template, httpx_m
         "projects": [{"name": "P", "link": "github.com/jane/p", "link_label": "Source", "bullets": ["b"]}],
         "experience": [], "education": [], "skills": [],
     }
-    html = render_resume_html(_resume_for_template(template, content, httpx_mock), template)
+    html = render_resume_html(_resume_for_template(template, content, avatar_store), template)
     assert 'href="https://linkedin.com/in/jane"' in html
     assert ">LinkedIn</a>" in html
     assert ">Portfolio</a>" in html

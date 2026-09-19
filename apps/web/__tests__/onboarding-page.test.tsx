@@ -96,7 +96,7 @@ describe("Onboarding — details step", () => {
     expect(next).toBeEnabled();
     await user.click(next);
     await screen.findByText("Upload your resume");
-    const saved = vi.mocked(upsertCareerProfile).mock.calls[0][0] as { contact: Record<string, string> };
+    const saved = vi.mocked(upsertCareerProfile).mock.calls[0][0] as unknown as { contact: Record<string, string> };
     expect("phone" in saved.contact).toBe(false);
   });
 });

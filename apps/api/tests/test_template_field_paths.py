@@ -35,7 +35,7 @@ CONTENT = {
 
 
 # The photo templates refuse to render without a trusted, successfully-fetched
-# photo, which needs test_pdf.py's httpx_mock machinery. They get their own
+# photo, which needs the avatar_store fixture (conftest.py). They get their own
 # test below rather than dragging that into every case. Both lists are derived
 # from the allowlist, so a newly added template is covered by this contract
 # the day it lands rather than whenever someone remembers to add it here.
@@ -187,15 +187,15 @@ def test_the_separator_is_not_part_of_the_editable_location(template_id):
 
 
 @pytest.mark.parametrize("template_id", PHOTO_TEMPLATES)
-def test_the_photo_templates_print_the_location_too(template_id, httpx_mock, trusted_settings):
-    html = render_resume_html(_with_trusted_photo(LOCATED, httpx_mock), template_id)
+def test_the_photo_templates_print_the_location_too(template_id, avatar_store, trusted_settings):
+    html = render_resume_html(_with_trusted_photo(LOCATED, avatar_store), template_id)
     assert "London, UK" in _visible_text(html)
     assert 'data-field="experience.2.location"' in html
 
 
 @pytest.mark.parametrize("template_id", PHOTO_TEMPLATES)
-def test_the_photo_templates_are_addressable_too(template_id, httpx_mock, trusted_settings):
+def test_the_photo_templates_are_addressable_too(template_id, avatar_store, trusted_settings):
     """Same annotation, but these two need a real photo to render at all."""
-    html = render_resume_html(_with_trusted_photo(CONTENT, httpx_mock), template_id)
+    html = render_resume_html(_with_trusted_photo(CONTENT, avatar_store), template_id)
     assert 'data-field="summary"' in html
     assert 'data-field="experience.2.bullets.0"' in html

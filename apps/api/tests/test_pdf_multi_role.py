@@ -21,13 +21,11 @@ from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, gener
 TRUSTED_HOST = "https://test-project.supabase.co"
 
 
-def _resume_for_template(template_id: str, base: dict, httpx_mock) -> dict:
+def _resume_for_template(template_id: str, base: dict, avatar_store) -> dict:
     if template_id not in TEMPLATES_REQUIRING_PHOTO:
         return base
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
-    httpx_mock.add_response(
-        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
-    )
+    avatar_store.put(photo_url, b"\x89PNG\r\n\x1a\nfake-png-bytes")
     return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 RESUME_WITH_TWO_ROLES = {
@@ -52,8 +50,8 @@ RESUME_WITH_TWO_ROLES = {
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_both_roles_and_all_their_bullets_survive_rendering(template_id, httpx_mock):
-    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, httpx_mock)
+def test_both_roles_and_all_their_bullets_survive_rendering(template_id, avatar_store):
+    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         pdf_bytes = generate_pdf(resume, template_id)
@@ -78,8 +76,8 @@ def test_both_roles_and_all_their_bullets_survive_rendering(template_id, httpx_m
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_company_name_renders_once_not_once_per_role(template_id, httpx_mock):
-    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, httpx_mock)
+def test_company_name_renders_once_not_once_per_role(template_id, avatar_store):
+    resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         pdf_bytes = generate_pdf(resume, template_id)

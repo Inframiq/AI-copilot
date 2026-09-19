@@ -6,6 +6,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { uploadResumePhoto, uploadProfilePhoto } from "@/lib/photo-upload";
 import { upsertCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
+import { useAvatarSrc } from "@/lib/avatar-url";
 
 interface PhotoRequirementModalProps {
   /** string = profile has a photo (Case A); null = none (Case B); undefined = loading. */
@@ -29,6 +30,7 @@ export function PhotoRequirementModal({
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
   const resumeId = useResumeStore((s) => s.resumeId);
+  const profilePhotoSrc = useAvatarSrc(profilePhotoUrl);
   const queryClient = useQueryClient();
 
   const caseB = profilePhotoUrl === null;
@@ -140,7 +142,7 @@ export function PhotoRequirementModal({
               </Dialog.Description>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={profilePhotoUrl}
+                src={profilePhotoSrc ?? undefined}
                 alt="Your profile photo"
                 className="w-20 h-20 rounded-full object-cover border border-outline-variant/30"
               />

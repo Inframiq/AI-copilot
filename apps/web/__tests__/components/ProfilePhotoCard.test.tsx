@@ -2,6 +2,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+// The bucket is private: the card must show a signed link, not the stored URL.
+vi.mock("@/lib/avatar-url", () => ({
+  useAvatarSrc: (url: string | null) => (url ? `signed:${url}` : null),
+}));
+
 import { ProfilePhotoCard } from "../../components/profile/ProfilePhotoCard";
 
 describe("ProfilePhotoCard", () => {
@@ -25,7 +30,7 @@ describe("ProfilePhotoCard", () => {
     );
     expect(screen.getByRole("img", { name: /profile photo/i })).toHaveAttribute(
       "src",
-      "https://sb.example/avatars/u/profile.png",
+      "signed:https://sb.example/avatars/u/profile.png",
     );
     expect(screen.getByText("Replace")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /remove/i })).toBeInTheDocument();

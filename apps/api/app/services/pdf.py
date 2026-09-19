@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
@@ -201,9 +201,60 @@ _jinja_env.filters["url_link"] = _url_link
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB — a portrait photo has no business being bigger
 
 
+# The object key a photo URL names inside the "avatars" bucket. Public and
+# signed URL shapes both count: rows saved while the bucket was public carry
+# /object/public/ URLs, and they still name the same object.
+_AVATAR_PATH = re.compile(r"^/storage/v1/object/(?:public|sign|authenticated)/avatars/(.+)$")
+
+# What an image's first bytes say it is. Checked instead of trusting a
+# content-type: the bucket stores what the browser claimed on upload.
+_IMAGE_SIGNATURES = (
+    (bytes.fromhex("89504e470d0a1a0a"), "image/png"),
+    (bytes.fromhex("ffd8ff"), "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def avatar_path(photo_url: str | None) -> str | None:
+    """The "avatars" object key photo_url points at, or None when it is not
+    a URL on our own Supabase host naming an object in that bucket."""
+    if not isinstance(photo_url, str) or not photo_url:
+        return None
+    allowed_host = urlparse(settings.supabase_url).hostname
+    parsed = urlparse(photo_url)
+    if parsed.scheme != "https" or not allowed_host or parsed.hostname != allowed_host:
+        return None
+    match = _AVATAR_PATH.match(parsed.path)
+    if not match:
+        return None
+    path = unquote(match.group(1))
+    if any(part in ("", ".", "..") for part in path.split("/")):
+        return None
+    return path
+
+
+def photo_owned_by(resume_content: dict, user_id: str) -> dict:
+    """resume_content with contact.photo_url removed unless it is one of
+    user_id's own photos (their folder in the bucket is their user id).
+
+    The render fetches photos with the service key, which can read any
+    object in the private bucket. Without this, a résumé pointing at someone
+    else's photo would have the server fetch it and hand it back.
+    """
+    contact = resume_content.get("contact") if isinstance(resume_content, dict) else None
+    photo_url = contact.get("photo_url") if isinstance(contact, dict) else None
+    if not photo_url:
+        return resume_content
+    path = avatar_path(photo_url)
+    if path and path.split("/", 1)[0] == str(user_id):
+        return resume_content
+    return {**resume_content, "contact": {**contact, "photo_url": None}}
+
+
 def _sanitize_resume_content(resume_content: dict) -> tuple[dict, str]:
-    """Strip contact.photo_url unless it points at the trusted Supabase Storage host,
-    and inline whatever survives as a data: URI.
+    """Strip contact.photo_url unless it names an object in our own "avatars"
+    bucket, and inline whatever survives as a data: URI.
 
     Returns the cleaned content and one of PHOTO_NONE / PHOTO_EMBEDDED /
     PHOTO_UNAVAILABLE. The caller needs that verdict because a blanked
@@ -215,20 +266,16 @@ def _sanitize_resume_content(resume_content: dict) -> tuple[dict, str]:
     fetches server-side via _blocked_url_fetcher — a default-deny fetcher that only
     ever allows data: URIs (never http/https, even to our own trusted host, since a
     render-time network fetch is itself part of the SSRF surface this function
-    guards against). So a trusted https:// URL that made it past the host check
-    below would still fail to render: it must be fetched and inlined here instead.
+    guards against). So the photo is downloaded and inlined here instead. Whose
+    photo it is gets checked by the caller (photo_owned_by), which knows the user.
     """
     contact = resume_content.get("contact")
     photo_url = contact.get("photo_url") if isinstance(contact, dict) else None
     if not photo_url:
         return resume_content, PHOTO_NONE
 
-    allowed_host = urlparse(settings.supabase_url).hostname
-    parsed = urlparse(photo_url)
-    if parsed.scheme != "https" or not allowed_host or parsed.hostname != allowed_host:
-        return {**resume_content, "contact": {**contact, "photo_url": None}}, PHOTO_UNAVAILABLE
-
-    data_uri = _fetch_photo_as_data_uri(photo_url)
+    path = avatar_path(photo_url)
+    data_uri = _as_data_uri(_download_avatar(path)) if path else None
     if not data_uri:
         return {**resume_content, "contact": {**contact, "photo_url": None}}, PHOTO_UNAVAILABLE
     return (
@@ -237,29 +284,36 @@ def _sanitize_resume_content(resume_content: dict) -> tuple[dict, str]:
     )
 
 
-def _fetch_photo_as_data_uri(photo_url: str) -> str | None:
-    """Fetch a trusted photo URL and return it as a data: URI, or None on any failure.
+def _download_avatar(path: str) -> bytes | None:
+    """The object's bytes from the private "avatars" bucket, or None on any
+    failure. A missing photo should degrade to the placeholder, not fail the
+    whole resume download.
 
-    Runs synchronously — callers (generate_pdf/count_pdf_pages) are always invoked
-    via asyncio.to_thread, same as the WeasyPrint render itself, so this blocking
-    call doesn't tie up the event loop. A missing/oversized/non-image photo should
-    degrade to "no photo in the PDF", not fail the whole resume download.
+    Runs synchronously — callers (generate_pdf/count_pdf_pages) are always
+    invoked via asyncio.to_thread, same as the WeasyPrint render itself, so
+    this blocking call doesn't tie up the event loop.
     """
-    import base64
-
-    import httpx
+    from app.core.supabase_admin import get_supabase_admin
 
     try:
-        with httpx.Client(timeout=10.0) as client:
-            response = client.get(photo_url)
-            response.raise_for_status()
-            content_type = response.headers.get("content-type", "").split(";")[0].strip()
-            if not content_type.startswith("image/") or len(response.content) > _MAX_PHOTO_BYTES:
-                return None
-            encoded = base64.b64encode(response.content).decode("ascii")
-            return f"data:{content_type};base64,{encoded}"
-    except httpx.HTTPError:
+        return get_supabase_admin().storage.from_("avatars").download(path)
+    except Exception:
         return None
+
+
+def _as_data_uri(image: bytes | None) -> str | None:
+    """image as a data: URI, or None when it is too big or not an image."""
+    import base64
+
+    if not image or len(image) > _MAX_PHOTO_BYTES:
+        return None
+    if image[:4] == b"RIFF" and image[8:12] == b"WEBP":
+        content_type = "image/webp"
+    else:
+        content_type = next((t for sig, t in _IMAGE_SIGNATURES if image.startswith(sig)), None)
+    if not content_type:
+        return None
+    return f"data:{content_type};base64,{base64.b64encode(image).decode('ascii')}"
 
 
 # Every stack ends in a bare generic (sans-serif/serif) deliberately — the

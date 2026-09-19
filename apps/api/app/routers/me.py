@@ -185,6 +185,16 @@ async def delete_my_account(
             _supabase().storage.from_("resumes").remove(storage_paths)
         except Exception:
             logger.warning("Failed to remove resume storage objects for %s", uid_str)
+    # Everything in the user's folder, not just the profile photo: a photo
+    # uploaded for one resume ("<uid>/<resume id>.<ext>") is theirs too, and
+    # nothing in the database points at it once the resumes are gone.
+    try:
+        listed = _supabase().storage.from_("avatars").list(uid_str) or []
+        avatar_paths = sorted(
+            set(avatar_paths) | {f"{uid_str}/{item['name']}" for item in listed if item.get("name")}
+        )
+    except Exception:
+        logger.warning("Could not list avatar storage objects for %s", uid_str)
     if avatar_paths:
         try:
             _supabase().storage.from_("avatars").remove(avatar_paths)

@@ -1,6 +1,7 @@
 "use client";
 import { useResumeStore } from "@/stores/resume-store";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
+import { useAvatarSrc } from "@/lib/avatar-url";
 import type { ResumeContent } from "@career-copilot/types";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
@@ -18,6 +19,7 @@ export function ContactSection() {
   const updateContent = useResumeStore((s) => s.updateContent);
   const templateId = useResumeStore((s) => s.templateId);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
+  const photoSrc = useAvatarSrc(content?.contact.photo_url);
   if (!content) return null;
 
   return (
@@ -33,7 +35,7 @@ export function ContactSection() {
               <div className="flex items-center gap-md">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={content.contact.photo_url}
+                  src={photoSrc ?? undefined}
                   alt="Profile"
                   className="w-16 h-16 rounded-lg object-cover border border-outline-variant/30"
                 />
