@@ -391,6 +391,28 @@ describe("Studio preview page", () => {
     });
     await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
   });
+
+  // Reported: standard -> small works, small -> standard does not change back.
+  // Every earlier test moved the size once, so a round trip was never covered.
+  it("goes back to standard after a step away from it", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(1));
+
+    await act(async () => useResumeStore.getState().setTextSize("body", -1));
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(apiClient.renderResumeHtml).mock.calls[1][1]).toMatchObject({
+      body_size_delta: -1,
+    });
+
+    await act(async () => useResumeStore.getState().setTextSize("body", 0));
+    await waitFor(() => expect(useResumeStore.getState().bodySizeDelta).toBe(0));
+    // Whether by a fresh request or the cached standard render, the document
+    // on screen must be the standard one again.
+    await waitFor(() => {
+      const calls = vi.mocked(apiClient.renderResumeHtml).mock.calls;
+      expect(calls[calls.length - 1][1]).toMatchObject({ body_size_delta: 0 });
+    });
+  });
 });
 
 describe("Export when the file cannot be fetched", () => {

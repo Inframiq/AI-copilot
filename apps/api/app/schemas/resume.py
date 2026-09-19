@@ -82,6 +82,13 @@ class PdfGenerateRequest(BaseModel):
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
     font_choice: FontChoice | None = None
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
+    # A point either side of the template's own sizes, headings and body
+    # independently. Declared here as well as on ResumeUpdate: this is the
+    # render's own body, and a field missing from it is dropped silently —
+    # the endpoint then falls back to the saved row, so the preview follows
+    # the debounced autosave instead of the control the user just clicked.
+    heading_size_delta: int | None = Field(default=None, ge=-1, le=1)
+    body_size_delta: int | None = Field(default=None, ge=-1, le=1)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

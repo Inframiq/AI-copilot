@@ -295,6 +295,30 @@ def _group_experience_by_company(experience: list) -> list[dict]:
 MAX_SIZE_DELTA = 1
 
 
+# Résumé guidance puts body text at 10–12pt; these templates sit at 10–10.5pt
+# with secondary lines (dates, contact) at 9–9.5pt. Nine is the floor — below
+# it a résumé stops being comfortably readable, and the small step used to take
+# secondary text to 8pt. Every template's own smallest size is already 9, so
+# the floor never engages at standard and no existing résumé reflows.
+MIN_FONT_PT = 9
+
+
+def _size_stepper(delta: int | None):
+    """One of the template's own sizes, moved by *delta* and floored.
+
+    Returned as a callable the template applies per rule, so the arithmetic
+    and the floor live here rather than being repeated across fifty CSS
+    declarations — where a missed one is invisible until someone measures.
+    """
+    step = _clamp_size_delta(delta)
+
+    def size(base: float) -> str:
+        # :g drops a trailing .0, so 10 renders as "10" and 9.5 as "9.5".
+        return f"{max(MIN_FONT_PT, base + step):g}"
+
+    return size
+
+
 def _clamp_size_delta(delta: int | None) -> int:
     try:
         return max(-MAX_SIZE_DELTA, min(MAX_SIZE_DELTA, int(delta or 0)))
@@ -345,11 +369,10 @@ def _render_html(
         font_family=Markup(FONT_STACKS.get(font_choice, FONT_STACKS["sans"])),
         accent_color=Markup(resolved_accent),
         experience_groups=_group_experience_by_company(resume_content.get("experience") or []),
-        # Points added to every size the templates declare. Clamped rather
-        # than trusted: the templates do arithmetic with these, and a large
-        # value would produce a résumé no ATS or human reads happily.
-        heading_pt=_clamp_size_delta(heading_size_delta),
-        body_pt=_clamp_size_delta(body_size_delta),
+        # Applied per declaration by the templates, so the step and its floor
+        # are decided in one place. Clamped rather than trusted.
+        heading_size=_size_stepper(heading_size_delta),
+        body_size=_size_stepper(body_size_delta),
         **_derived_spacing(line_spacing, paragraph_spacing),
     )
 

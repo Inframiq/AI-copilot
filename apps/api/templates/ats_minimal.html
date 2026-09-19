@@ -6,17 +6,17 @@
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
   @page { margin: 0.5in; }
-  body { font-family: {{ font_family }}; font-size: {{ 10 + body_pt }}pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
-  .name { text-transform: uppercase; font-size: {{ 18 + heading_pt }}pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 3px; color: #1a1a1a; line-height: 1.1; }
-  .contact-line { font-size: {{ 9 + body_pt }}pt; text-align: center; color: #444; margin-bottom: 6px; }
+  body { font-family: {{ font_family }}; font-size: {{ body_size(10) }}pt; line-height: {{ line_spacing }}; color: #1a1a1a; margin: 0; }
+  .name { text-transform: uppercase; font-size: {{ heading_size(18) }}pt; font-weight: 800; text-align: center; letter-spacing: 0.04em; margin: 0 0 3px; color: #1a1a1a; line-height: 1.1; }
+  .contact-line { font-size: {{ body_size(9) }}pt; text-align: center; color: #444; margin-bottom: 6px; }
   hr { border: none; border-top: 1.5pt solid #333; margin: 4px 0 6px; }
   /* Top margin is section_gap (1.5x paragraph_spacing) — the gap between
      one section's content and the next section's header. Bottom margin
      (header-to-first-item) stays a small fixed value; that pairing is
      meant to stay tight regardless of the paragraph_spacing setting. */
-  h2 { font-size: {{ 11 + heading_pt }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  h2 { font-size: {{ heading_size(11) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
     color: #1a1a1a; border-bottom: 1.5pt solid {{ accent_color }}; padding-bottom: 2px; margin: {{ section_gap }}px 0 5px; page-break-after: avoid; }
-  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: {{ 9.5 + body_pt }}pt; }
+  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; font-size: {{ body_size(9.5) }}pt; }
   /* Plain inline flow, not flex/float/a right-aligned table column — any
      mechanism that visually right-aligns or right-pushes text (flex
      justify-content, float:right, and even a table cell with a
@@ -33,15 +33,15 @@
      bullets table to borrow from, so it needs its own top margin. */
   .job-row { margin-top: 0; }
   .edu-row { margin-top: {{ paragraph_spacing }}px; }
-  .job-title { font-weight: 700; font-size: {{ 10.5 + body_pt }}pt; }
-  .job-dates { font-size: {{ 9 + body_pt }}pt; color: #555; }
+  .job-title { font-weight: 700; font-size: {{ body_size(10.5) }}pt; }
+  .job-dates { font-size: {{ body_size(9) }}pt; color: #555; }
   /* Multiple roles at one company (promotion/internal transfer): the
      company name renders once as a header, and each role underneath gets
      its own title+dates line (.role-row) instead of repeating the company
      for every role. */
-  .company-header { font-weight: 700; font-size: {{ 10.5 + body_pt }}pt; margin-top: 0; }
+  .company-header { font-weight: 700; font-size: {{ body_size(10.5) }}pt; margin-top: 0; }
   .role-row { margin: 2px 0 0 10px; }
-  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: {{ 9.5 + body_pt }}pt; }
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; font-size: {{ body_size(9.5) }}pt; }
   /* Without this, WeasyPrint can split a <tr> across a page break — the
      bullet dot's <td> renders at the bottom of one page and its text <td>
      at the top of the next, as two orphaned fragments of the same row. */
@@ -51,13 +51,13 @@
   .bdot { width: 11px; padding: 0 5px {{ bullet_gap }}px 0; vertical-align: top; font-weight: bold; }
   .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: justify; }
   .kw { font-weight: 700; }
-  .edu-degree { font-weight: 700; font-size: {{ 10.5 + body_pt }}pt; }
-  .edu-institution { font-size: {{ 9.5 + body_pt }}pt; color: #444; }
+  .edu-degree { font-weight: 700; font-size: {{ body_size(10.5) }}pt; }
+  .edu-institution { font-size: {{ body_size(9.5) }}pt; color: #444; }
   /* Skills / Languages render as a flush inline block (like ats_clean's
      .skills), not a bulleted list — its bottom margin is a small fixed
      value, same as ats_clean/ats_modern. */
-  .skills-list { font-size: {{ 9.5 + body_pt }}pt; margin: 4px 0 6px; }
-  ul.additional { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: {{ 9.5 + body_pt }}pt; }
+  .skills-list { font-size: {{ body_size(9.5) }}pt; margin: 4px 0 6px; }
+  ul.additional { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: {{ body_size(9.5) }}pt; }
   ul.additional li { margin-bottom: 2px; }
 </style>
 </head>

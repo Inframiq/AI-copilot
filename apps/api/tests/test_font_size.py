@@ -54,8 +54,10 @@ def test_larger_body_text_moves_the_body_up_a_point():
 
 def test_smaller_body_text_moves_it_down_a_point():
     html = render_resume_html(CONTENT, "ats_clean", body_size_delta=-1)
-    assert "font-size: 9pt" in html    # body was 10
-    assert "font-size: 8.5pt" in html  # contact was 9.5
+    assert "font-size: 9pt" in html  # body was 10
+    # The contact line was 9.5 and stops at the 9pt floor rather than 8.5 —
+    # see test_nothing_shrinks_below_nine_point.
+    assert "font-size: 8.5pt" not in html
 
 
 def test_the_body_step_leaves_the_headings_where_they_are():
@@ -117,3 +119,44 @@ def test_generate_pdf_accepts_the_sizes():
 
     pdf = generate_pdf(CONTENT, "ats_clean", heading_size_delta=1, body_size_delta=-1)
     assert pdf.startswith(b"%PDF")
+
+
+# ── A floor under the small step ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+def test_nothing_shrinks_below_nine_point(template):
+    """Small took secondary text to 8pt, which no résumé should carry.
+
+    Every template's own smallest size is 9pt, so a 9pt floor never engages
+    at standard — existing résumés keep their exact layout — and only ever
+    catches the bottom of the small step.
+    """
+    html = render_resume_html(CONTENT, template,
+                              heading_size_delta=-1, body_size_delta=-1)
+    assert min(sizes(html)) >= 9
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+def test_the_floor_does_not_touch_standard(template):
+    assert min(sizes(render_resume_html(CONTENT, template))) >= 9
+
+
+def test_text_already_at_the_floor_stays_put_rather_than_going_under():
+    # ats_minimal's contact line is 9pt at standard: the smallest thing on it.
+    small = render_resume_html(CONTENT, "ats_minimal", body_size_delta=-1)
+    assert "font-size: 9pt" in small
+    assert "font-size: 8pt" not in small
+
+
+def test_the_body_still_steps_down_where_there_is_room():
+    """The floor must not flatten the whole step into a no-op."""
+    standard = sizes(render_resume_html(CONTENT, "ats_clean"))
+    small = sizes(render_resume_html(CONTENT, "ats_clean", body_size_delta=-1))
+    assert small != standard
+    assert max(small) < max(standard) or 9 in small
+
+
+def test_large_has_no_ceiling_to_trip_over():
+    html = render_resume_html(CONTENT, "ats_clean", heading_size_delta=1, body_size_delta=1)
+    assert "font-size: 17pt" in html

@@ -22,6 +22,7 @@ def _resume():
         content={"contact": {"name": "Jane"}, "experience": [], "education": [], "skills": []},
         template_id="ats_clean", line_spacing=1.25, paragraph_spacing=12,
         font_choice="sans", accent_color=None,
+        heading_size_delta=-1, body_size_delta=-1,
     )
 
 
@@ -115,3 +116,49 @@ async def test_a_font_override_is_rendered():
 async def test_the_saved_values_still_apply_when_nothing_is_overridden():
     r = await _post()
     assert "line-height: 1.25" in r.json()["html"]
+
+
+# ── Text size ───────────────────────────────────────────────────────────────
+# The saved row above is Small/Small, so a request that reaches the render
+# produces something different from one that silently falls back to the row.
+
+
+@pytest.mark.asyncio
+async def test_the_requested_text_size_reaches_the_render():
+    """Reported as: standard -> small works, small -> standard does not.
+
+    The size fields were declared on ResumeUpdate but not on this route's
+    PdfGenerateRequest, so Pydantic dropped them and the endpoint always
+    rendered the row's saved size. The preview then followed the debounced
+    autosave rather than the control, which is a race: whichever landed
+    first won.
+    """
+    r = await _post({"body_size_delta": 0})
+    assert "font-size: 10pt" in r.json()["html"]   # standard, as asked
+    assert "font-size: 9pt" not in r.json()["html"]  # not the row's small
+
+
+@pytest.mark.asyncio
+async def test_each_step_is_honoured_in_both_directions():
+    small = (await _post({"body_size_delta": -1})).json()["html"]
+    standard = (await _post({"body_size_delta": 0})).json()["html"]
+    large = (await _post({"body_size_delta": 1})).json()["html"]
+    assert small != standard != large
+    assert "font-size: 9pt" in small
+    assert "font-size: 10pt" in standard
+    assert "font-size: 11pt" in large
+
+
+@pytest.mark.asyncio
+async def test_headings_are_requested_separately_from_the_body():
+    r = await _post({"heading_size_delta": 1, "body_size_delta": 0})
+    html = r.json()["html"]
+    assert "font-size: 17pt" in html   # name 16 -> 17
+    assert "font-size: 10pt" in html   # body untouched
+
+
+@pytest.mark.asyncio
+async def test_omitting_the_size_still_uses_the_saved_one():
+    """Omission is not the same as standard: the résumé keeps its choice."""
+    r = await _post({"line_spacing": 1.5})
+    assert "font-size: 9pt" in r.json()["html"]
