@@ -55,6 +55,9 @@ describe("JDIndexPage — Tailor Resume", () => {
     );
     useTailoringStore.getState().setJd("jd-1", "We need a senior engineer with Python.");
     useTailoringStore.setState({
+      // profileAnalysis is where an analysis lives now; the flat fields are
+      // the review's copy of it.
+      profileAnalysis: { atsScore: 72, matchedSkills: ["Python"], missingSkills: ["AWS"] },
       atsScore: 72,
       matchedSkills: ["Python"],
       missingSkills: ["AWS"],

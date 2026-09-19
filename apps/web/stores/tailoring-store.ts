@@ -282,6 +282,20 @@ interface TailoringState {
   jdText: string;
   companyName: string;
   sessionId: string | null;
+  /** The résumé saved in the profile, measured against this JD — what the JD
+   * Analyzer's "Profile Match & Keywords" shows.
+   *
+   * Separate from atsScore, matchedSkills and missingSkills, which track the
+   * *tailored* résumé through the review and are overwritten the moment a
+   * tailoring run completes. Sharing one slot meant tailoring silently moved
+   * the analyzer's gauge: it reported the tailored résumé's score as the
+   * profile's, for a tailored résumé that had never been saved. Written only
+   * by an analysis of the saved résumé; a tailoring run never touches it. */
+  profileAnalysis: {
+    atsScore: number;
+    matchedSkills: string[];
+    missingSkills: string[];
+  } | null;
   atsScore: number | null;
   /** The score before tailoring ran. Paired with atsScore this is the
    * lift — the product's core claim, and previously never returned. */
@@ -420,6 +434,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   companyName: "",
   sessionId: null,
   atsScore: null,
+  profileAnalysis: null,
   matchedSkills: [],
   missingSkills: [],
   companyKeywords: [],
@@ -454,6 +469,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       jdId: id,
       jdText: text,
       companyName: isDifferentJd ? "" : current.companyName,
+      profileAnalysis: isDifferentJd ? null : current.profileAnalysis,
       atsScore: isDifferentJd ? null : current.atsScore,
       matchedSkills: isDifferentJd ? [] : current.matchedSkills,
       missingSkills: isDifferentJd ? [] : current.missingSkills,
@@ -474,8 +490,19 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   },
   setCompanyName: (name) => set({ companyName: name }),
   setHumanizeLevel: (n) => set({ humanizeLevel: n }),
+  // Both callers pass an analysis of the *saved* résumé — the JD detail
+  // page's own query, and the analyzer re-seeding after setJd cleared it — so
+  // this records the profile analysis as well as the review's context.
   setAnalysisResults: ({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance }) =>
-    set({ atsScore, matchedSkills, missingSkills, companyKeywords, jdImportance: jdImportance ?? {} }),
+    set({
+      // A null score is "no analysis", not an analysis scoring nothing.
+      ...(atsScore !== null ? { profileAnalysis: { atsScore, matchedSkills, missingSkills } } : {}),
+      atsScore,
+      matchedSkills,
+      missingSkills,
+      companyKeywords,
+      jdImportance: jdImportance ?? {},
+    }),
   // Any edit made after a preview was already rendered invalidates that
   // preview — it was built from a snapshot of pendingContent/bulletDecisions
   // at generatePreview time, so a later Humanize/Rewrite/accept-reject/skill
@@ -648,6 +675,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       isAnalyzing: true,
       error: null,
       atsScore: null,
+      profileAnalysis: null,
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],
@@ -658,6 +686,14 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       const result = await apiClient.analyzeJd(resumeId, jdId, companyName || undefined);
       if (get().jdText !== startedForJdText) return;
       set({
+        // Recorded twice on purpose: profileAnalysis is the analyzer's own
+        // record, which nothing else may overwrite, while the flat fields
+        // seed the review's context until a tailoring run replaces them.
+        profileAnalysis: {
+          atsScore: result.ats_score,
+          matchedSkills: result.matched_skills,
+          missingSkills: result.missing_skills,
+        },
         atsScore: result.ats_score,
         matchedSkills: result.matched_skills,
         missingSkills: result.missing_skills,
@@ -1048,6 +1084,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       companyName: "",
       sessionId: null,
       atsScore: null,
+      profileAnalysis: null,
       matchedSkills: [],
       missingSkills: [],
       companyKeywords: [],

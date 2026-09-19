@@ -105,9 +105,13 @@ export default function JDIndexPage() {
   const jdId = useTailoringStore((s) => s.jdId);
   const runAnalysis = useTailoringStore((s) => s.runAnalysis);
   const isAnalyzing = useTailoringStore((s) => s.isAnalyzing);
-  const atsScore = useTailoringStore((s) => s.atsScore);
-  const matchedSkills = useTailoringStore((s) => s.matchedSkills);
-  const missingSkills = useTailoringStore((s) => s.missingSkills);
+  // The profile's own analysis, not the shared fields: those follow the
+  // tailored résumé once a run completes, and this panel is about the résumé
+  // saved in the profile.
+  const profileAnalysis = useTailoringStore((s) => s.profileAnalysis);
+  const atsScore = profileAnalysis?.atsScore ?? null;
+  const matchedSkills = profileAnalysis?.matchedSkills ?? [];
+  const missingSkills = profileAnalysis?.missingSkills ?? [];
   const sessionId = useTailoringStore((s) => s.sessionId);
   const storedJdText = useTailoringStore((s) => s.jdText);
   const storeResumeId = useResumeStore((s) => s.resumeId);
@@ -327,7 +331,9 @@ export default function JDIndexPage() {
     // one's badge) — but this call is just a defensive re-sync of the JD
     // already analyzed above, not an actual JD change, so restore them from
     // what was captured just before the reset.
-    useTailoringStore.getState().setAnalysisResults({ atsScore, matchedSkills, missingSkills, companyKeywords });
+    if (atsScore !== null) {
+      useTailoringStore.getState().setAnalysisResults({ atsScore, matchedSkills, missingSkills, companyKeywords });
+    }
     useTailoringStore.getState().discardPending();
     // The JD path lands on the tailoring review, not the six-section
     // Builder: arriving here you have already said what you want.
