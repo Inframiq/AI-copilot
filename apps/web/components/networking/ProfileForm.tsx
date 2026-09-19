@@ -311,6 +311,12 @@ export function ProfileForm({ initial, careerProfile, onSave, isSaving, error }:
 
       {error && <p className="text-body-sm text-error">{error}</p>}
 
+      <p className="text-body-sm text-on-surface-variant">
+        Saving publishes this profile to other signed-in KripaX users in Discover: your name, headline,
+        bio, location, skills, availability, and profile links. Your resumes and contact details are not
+        shared. You can edit or delete this profile at any time.
+      </p>
+
       <button
         type="submit"
         disabled={isSaving || !form.display_name.trim()}

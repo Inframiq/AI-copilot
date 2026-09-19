@@ -90,7 +90,7 @@ async def _evict_oldest_resumes(db: AsyncSession, user_id: uuid.UUID) -> None:
         for r in resumes_to_delete:
             storage_paths.extend(p for p in (r.original_file_path, r.pdf_url) if p)
             db.add(ResumeDeletionLog(
-                resume_id=r.id, user_id=r.user_id, title=r.title, was_master_resume=False,
+                resume_id=r.id, user_id=r.user_id, title="", was_master_resume=False,
             ))
             await db.delete(r)
         await db.commit()
@@ -305,7 +305,9 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
     db.add(ResumeDeletionLog(
         resume_id=resume_id,
         user_id=resume.user_id,
-        title=resume.title,
+        # No title: the log outlives the resume, and a title is often the
+        # user's name. The ids answer "who deleted what, when" without it.
+        title="",
         was_master_resume=was_master_resume,
     ))
 
@@ -327,8 +329,8 @@ async def delete_resume(resume_id: uuid.UUID, user=Depends(get_current_user), db
     )
     await db.commit()
     logger.info(
-        "resume_deleted resume_id=%s user_id=%s title=%r was_master_resume=%s",
-        resume_id, resume.user_id, resume.title, was_master_resume,
+        "resume_deleted resume_id=%s user_id=%s was_master_resume=%s",
+        resume_id, resume.user_id, was_master_resume,
     )
 
     # Best-effort — the resume row is already gone regardless of whether

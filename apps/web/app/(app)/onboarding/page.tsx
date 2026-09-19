@@ -42,7 +42,9 @@ export default function OnboardingPage() {
     })();
   }, []);
 
-  const detailsValid = name.trim() && email.trim() && phone.trim() && roleStatus;
+  // Phone is optional: a résumé is complete without one, so we don't ask
+  // for it as a condition of using the app.
+  const detailsValid = name.trim() && email.trim() && roleStatus;
 
   async function handleDetailsSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,7 +54,7 @@ export default function OnboardingPage() {
     try {
       await upsertCareerProfile({
         master_resume_id: null,
-        contact: { name: name.trim(), email: email.trim(), phone: phone.trim() },
+        contact: { name: name.trim(), email: email.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}) },
         headline: null,
         experience: [],
         projects: [],
@@ -156,8 +158,8 @@ export default function OnboardingPage() {
                 placeholder="jane@example.com" className={inputCls} />
             </div>
             <div className="flex flex-col gap-xs">
-              <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Phone size={14} /> Phone Number</label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required
+              <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Phone size={14} /> Phone Number <span className="font-normal">(optional)</span></label>
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
                 placeholder="+1 (555) 000-0000" className={inputCls} />
             </div>
             <div className="flex flex-col gap-xs">

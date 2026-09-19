@@ -83,3 +83,20 @@ describe("Onboarding — plan step", () => {
     expect(pushMock).toHaveBeenCalledWith("/dashboard?tour=1");
   });
 });
+
+describe("Onboarding — details step", () => {
+  it("goes on without a phone number, and saves none", async () => {
+    const { upsertCareerProfile } = await import("../lib/career-profile-client");
+    vi.mocked(upsertCareerProfile).mockClear();
+    const user = userEvent.setup();
+    renderOnboarding();
+    await screen.findByDisplayValue("Jane");
+    await user.selectOptions(screen.getByRole("combobox"), "working");
+    const next = screen.getByRole("button", { name: /^continue$/i });
+    expect(next).toBeEnabled();
+    await user.click(next);
+    await screen.findByText("Upload your resume");
+    const saved = vi.mocked(upsertCareerProfile).mock.calls[0][0] as { contact: Record<string, string> };
+    expect("phone" in saved.contact).toBe(false);
+  });
+});

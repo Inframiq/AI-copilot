@@ -73,6 +73,12 @@ async function request<T>(
 
 /** Why one bullet was transformed: the JD responsibility the rewrite is meant
  * to demonstrate, and the JD keywords woven in to do it. */
+export interface PolicyAcceptance {
+  terms_version: string | null;
+  privacy_version: string | null;
+  accepted_at: string | null;
+}
+
 export interface BulletRationale {
   responsibility: string;
   keywords: string[];
@@ -484,6 +490,13 @@ export const apiClient = {
   // ── Account / credits ────────────────────────────────────────────────────
   getSubscription: (): Promise<Subscription> =>
     request<Subscription>("GET", "/me/subscription"),
+
+  /** The Terms/Privacy versions this user last agreed to (nulls if never). */
+  getPolicyAcceptance: (): Promise<PolicyAcceptance> =>
+    request<PolicyAcceptance>("GET", "/me/policy-acceptance"),
+
+  acceptPolicies: (terms_version: string, privacy_version: string): Promise<void> =>
+    request<void>("PUT", "/me/policy-acceptance", { terms_version, privacy_version }),
 
   /** Permanently deletes the signed-in user's account, all their data, and
    * the Supabase auth user itself. Irreversible — the caller is responsible

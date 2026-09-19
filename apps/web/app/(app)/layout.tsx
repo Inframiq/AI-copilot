@@ -3,6 +3,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { PageTransition } from "@/components/PageTransition";
 import { GuidedTour } from "@/components/tour/GuidedTour";
 import { PlanTracker } from "@/components/analytics/PlanTracker";
+import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
       <GuidedTour />
       <PlanTracker />
+      <PolicyUpdatePrompt />
     </div>
   );
 }

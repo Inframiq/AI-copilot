@@ -115,6 +115,9 @@ class OpenAIProvider(AIProvider):
             instructions=system,
             input=user,
             max_output_tokens=max_output_tokens or self._max_output_tokens,
+            # Resume and job text: nothing here reads a response back later,
+            # so OpenAI has no reason to keep it (the API stores by default).
+            store=False,
         )
         self._log_usage(call_name, model_tier, model, getattr(response, "usage", None))
         budget = max_output_tokens or self._max_output_tokens
@@ -141,6 +144,7 @@ class OpenAIProvider(AIProvider):
             input=user,
             text_format=schema,
             max_output_tokens=max_output_tokens or self._max_output_tokens,
+            store=False,
         )
         self._log_usage(call_name, model_tier, model, getattr(response, "usage", None))
         budget = max_output_tokens or self._max_output_tokens

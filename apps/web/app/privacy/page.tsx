@@ -88,10 +88,14 @@ export default function PrivacyPolicyPage() {
                 reuse your past results within the Service.
               </li>
               <li>
-                <strong className="text-on-surface">Networking data</strong> — professional profile links
-                (e.g. LinkedIn or GitHub URLs) and connection information you choose to enter if you use the
-                Networking feature. These are optional fields you type in yourself, not data obtained from a
-                third-party login or by us visiting those profiles on your behalf.
+                <strong className="text-on-surface">Networking data</strong> — if you use the Networking
+                feature: the networking profile you choose to create (name, headline, bio, location, skills,
+                availability, and LinkedIn/GitHub links), your connection requests, and any contacts you add
+                to your own list. A networking profile is visible to other signed-in users in Discover, and the
+                form says so before you save it; you can remove it at any time. Contacts you add are visible
+                only to you. These are fields you type in yourself, not data obtained from a third-party login
+                or by us visiting those profiles on your behalf. If you add someone else&apos;s details as a
+                contact, please add only what you need and have a legitimate reason to keep.
               </li>
               <li>
                 <strong className="text-on-surface">Plan and credit data</strong> — your subscription tier
@@ -210,9 +214,11 @@ export default function PrivacyPolicyPage() {
               We access OpenAI through its standard commercial API, under OpenAI&apos;s published API terms,
               which state that API-submitted content is not used to train its general models by default. We
               have not independently negotiated a separate data-processing agreement with OpenAI beyond its
-              standard API terms, and OpenAI may retain prompts and outputs for a limited period for abuse
-              and safety monitoring under its own policies — we do not control that retention and encourage
-              you to review OpenAI&apos;s own privacy and API data-usage terms directly.
+              standard API terms. We send every request with OpenAI&apos;s response storage turned off, so
+              OpenAI does not keep prompts and outputs for later retrieval. It may still retain them for a
+              limited period for abuse and safety monitoring under its own policies — we do not control that
+              retention and encourage you to review OpenAI&apos;s own privacy and API data-usage terms
+              directly.
             </p>
             <p className="text-body-md text-on-surface-variant">
               Other subprocessors that handle personal data on our behalf, used solely to provide the
@@ -286,7 +292,7 @@ export default function PrivacyPolicyPage() {
               <li>Payment/transaction records: retained for 8 years to meet Indian tax and accounting record-
                 keeping obligations, even after account deletion.</li>
               <li>Support communications: retained for up to 24 months after your last contact, then deleted
-                or anonymized.</li>
+                or anonymized. Feedback sent through the in-app form is deleted with your account.</li>
               <li>Encrypted database backups: rolled over on a cycle of no more than 90 days.</li>
             </ul>
             <p className="text-body-md text-on-surface-variant">

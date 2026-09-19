@@ -506,7 +506,9 @@ async def test_delete_resume_writes_audit_log_entry():
         entry = logged[0]
         assert entry.resume_id == existing.id
         assert entry.user_id == existing.user_id
-        assert entry.title == "My Resume"
+        # The log outlives the resume, so it keeps no title (often the
+        # user's own name) — only the ids that say who deleted what.
+        assert entry.title == ""
         assert entry.was_master_resume is True
     finally:
         app.dependency_overrides.pop(get_db, None)

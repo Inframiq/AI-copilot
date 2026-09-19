@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 vi.mock("@/components/analytics/PlanTracker", () => ({ PlanTracker: () => <div /> }));
+vi.mock("@/components/legal/PolicyUpdatePrompt", () => ({ PolicyUpdatePrompt: () => <div /> }));
 
 import BuilderLayout from "../app/(builder)/layout";
 

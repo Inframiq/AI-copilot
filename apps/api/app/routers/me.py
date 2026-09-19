@@ -17,6 +17,7 @@ from app.db.models import (
     AiUsageEvent,
     CoverLetter,
     ExternalContact,
+    Feedback,
     JobDescription,
     LearningItem,
     PolicyAcceptance,
@@ -55,6 +56,22 @@ async def get_my_subscription(
 class PolicyAcceptanceIn(BaseModel):
     terms_version: str = Field(..., max_length=20)
     privacy_version: str = Field(..., max_length=20)
+
+
+@router.get("/policy-acceptance")
+async def get_policy_acceptance(
+    user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """The Terms/Privacy versions this user last agreed to, or nulls if they
+    never have. The app compares these to the current versions and asks a
+    signed-in user to agree again after a change, since a sign-in session
+    can outlast a policy update by months."""
+    row = await db.get(PolicyAcceptance, uuid.UUID(user["sub"]))
+    return {
+        "terms_version": row.terms_version if row else None,
+        "privacy_version": row.privacy_version if row else None,
+        "accepted_at": row.accepted_at.isoformat() if row and row.accepted_at else None,
+    }
 
 
 @router.put("/policy-acceptance", status_code=status.HTTP_204_NO_CONTENT)
@@ -145,6 +162,7 @@ async def delete_my_account(
         Resume,
         LearningItem,
         ExternalContact,
+        Feedback,
         AiUsageEvent,
         Subscription,
         ResumeDeletionLog,

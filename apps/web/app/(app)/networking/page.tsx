@@ -14,6 +14,7 @@ import {
 import {
   getMyProfile,
   upsertProfile,
+  deleteMyProfile,
   getAllProfiles,
   getMyConnections,
   getIncomingRequests,
@@ -178,6 +179,20 @@ export default function NetworkingPage() {
     mutationFn: upsertProfile,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["myProfile"] });
+      setEditingProfile(false);
+      setSaveError(null);
+    },
+    onError: (e: Error) => setSaveError(e.message),
+  });
+
+  const deleteProfileMutation = useMutation({
+    mutationFn: deleteMyProfile,
+    onSuccess: () => {
+      qc.setQueryData(["myProfile"], null);
+      qc.invalidateQueries({ queryKey: ["allProfiles"] });
+      qc.invalidateQueries({ queryKey: ["myConnections"] });
+      qc.invalidateQueries({ queryKey: ["incomingRequests"] });
+      qc.invalidateQueries({ queryKey: ["outgoingRequests"] });
       setEditingProfile(false);
       setSaveError(null);
     },
@@ -375,15 +390,32 @@ export default function NetworkingPage() {
                   <h2 className="text-headline-md text-on-surface font-semibold">
                     Edit Profile
                   </h2>
-                  <button
-                    onClick={() => {
-                      setEditingProfile(false);
-                      setSaveError(null);
-                    }}
-                    className="text-label-sm text-on-surface-variant hover:text-on-surface"
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex items-center gap-md">
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Remove your profile from Discover? Your connections and pending requests will be removed too."
+                          )
+                        ) {
+                          deleteProfileMutation.mutate();
+                        }
+                      }}
+                      disabled={deleteProfileMutation.isPending}
+                      className="text-label-sm text-error hover:underline disabled:opacity-50"
+                    >
+                      {deleteProfileMutation.isPending ? "Removing…" : "Remove from Discover"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingProfile(false);
+                        setSaveError(null);
+                      }}
+                      className="text-label-sm text-on-surface-variant hover:text-on-surface"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
               <ProfileForm

@@ -88,6 +88,15 @@ export async function upsertProfile(input: ProfileInput): Promise<Profile> {
   return data as Profile;
 }
 
+/** Takes the profile out of Discover. Connections and requests go with it
+ *  (their foreign keys cascade). */
+export async function deleteMyProfile(): Promise<void> {
+  const sb = createBrowserClient();
+  const me = await uid();
+  const { error } = await sb.from("profiles").delete().eq("id", me);
+  if (error) throw new Error(error.message);
+}
+
 export async function getAllProfiles(): Promise<Profile[]> {
   const sb = createBrowserClient();
   const me = await uid();

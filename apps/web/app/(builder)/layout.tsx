@@ -1,4 +1,5 @@
 import { PlanTracker } from "@/components/analytics/PlanTracker";
+import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
 
 /**
  * The Builder and Studio own the full viewport — no app sidebar, no top nav.
@@ -13,6 +14,7 @@ export default function BuilderLayout({ children }: { children: React.ReactNode 
     <div className="flex h-screen flex-col overflow-hidden bg-background text-on-background">
       {children}
       <PlanTracker />
+      <PolicyUpdatePrompt />
     </div>
   );
 }

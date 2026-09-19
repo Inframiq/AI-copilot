@@ -244,3 +244,19 @@ async def test_complete_raises_empty_rather_than_returning_none_text():
 
     with pytest.raises(AIResponseError):
         await provider.complete("s", "u")
+
+
+@pytest.mark.asyncio
+async def test_neither_call_asks_openai_to_keep_the_response():
+    # The Responses API stores prompts and outputs unless told not to, and
+    # these carry resume and job-description text. Nothing reads one back.
+    mock_client = MagicMock()
+    mock_client.responses.create = AsyncMock(return_value=MagicMock(output_text="ok"))
+    mock_client.responses.parse = AsyncMock(return_value=MagicMock(output_parsed=_Schema(text="ok")))
+    provider = _make_provider(mock_client)
+
+    await provider.complete("system", "user")
+    await provider.complete_structured("system", "user", _Schema)
+
+    assert mock_client.responses.create.call_args.kwargs["store"] is False
+    assert mock_client.responses.parse.call_args.kwargs["store"] is False
