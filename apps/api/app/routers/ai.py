@@ -449,6 +449,7 @@ async def rewrite_bullet(
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)
+@limiter.limit("60/minute")
 # Fires on every tick in the review (debounced 400ms) and is pure scoring —
 # no model call — so a user working through a list must never hit the cap.
 @limiter.limit("120/minute")

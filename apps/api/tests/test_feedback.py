@@ -17,6 +17,7 @@ def make_auth_header(email="test@test.com"):
         "sub": TEST_USER_ID,
         "email": email,
         "aud": "authenticated",
+        "app_metadata": {"provider": "google", "providers": ["google"]},
         "exp": int(time.time()) + 3600,
     }
     token = pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")

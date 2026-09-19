@@ -8,6 +8,7 @@ import {
   Briefcase,
 } from "@phosphor-icons/react";
 import type { Profile } from "@/lib/networking-client";
+import { safeHref } from "@/lib/safe-url";
 import { getInitials, getAvatarColor } from "@/lib/networking-client";
 
 interface Props {
@@ -156,11 +157,11 @@ export function ConnectionDrawer({
           )}
 
           {/* Links */}
-          {(profile.linkedin_url || profile.github_url) && (
+          {(safeHref(profile.linkedin_url) || safeHref(profile.github_url)) && (
             <div className="flex gap-sm flex-wrap">
-              {profile.linkedin_url && (
+              {safeHref(profile.linkedin_url) && (
                 <a
-                  href={profile.linkedin_url}
+                  href={safeHref(profile.linkedin_url)!}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-xs px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-on-surface-variant hover:text-primary hover:border-primary/40 transition-all"
@@ -168,9 +169,9 @@ export function ConnectionDrawer({
                   <LinkedinLogo size={16} /> LinkedIn
                 </a>
               )}
-              {profile.github_url && (
+              {safeHref(profile.github_url) && (
                 <a
-                  href={profile.github_url}
+                  href={safeHref(profile.github_url)!}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-xs px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-on-surface-variant hover:text-primary hover:border-primary/40 transition-all"

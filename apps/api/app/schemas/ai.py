@@ -166,7 +166,7 @@ class GenerateResumeOut(BaseModel):
 
 class ProjectScoreRequest(BaseModel):
     session_id: uuid.UUID
-    accepted_fix_ids: list[str] = []
+    accepted_fix_ids: list[str] = Field(default_factory=list, max_length=500)
     # The résumé exactly as the review screen currently shows it — accepted /
     # rejected bullet rewrites, chosen skills, per-fix role overrides and
     # inline edits already merged in by the client. When present this IS the
@@ -183,7 +183,7 @@ class ProjectScoreRequest(BaseModel):
     # cannot score "this rewrite turned off" and the rewrite badges stay
     # frozen at their pipeline values. Omitted by older clients, in which case
     # no rewrite deltas come back.
-    original_bullets: dict[str, str] | None = Field(default=None)
+    original_bullets: dict[str, str] | None = Field(default=None, max_length=500)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

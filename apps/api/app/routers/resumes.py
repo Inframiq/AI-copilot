@@ -138,6 +138,7 @@ async def _dedupe_title(db: AsyncSession, user_id: uuid.UUID, base_title: str) -
 # conversion path (and no need for a LibreOffice dependency). Users with a
 # DOCX resume convert it to PDF themselves before uploading.
 _ALLOWED_MIME = {"application/pdf"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
 ]
@@ -615,9 +616,11 @@ async def parse_and_create_resume(
     if content_type not in _ALLOWED_MIME and not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
 
-    raw_bytes = await file.read()
+    # Read one byte past the limit rather than the whole upload: a
+    # multi-gigabyte file must not be pulled into memory just to be refused.
+    raw_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
 
-    if len(raw_bytes) > 10 * 1024 * 1024:  # 10 MB guard
+    if len(raw_bytes) > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File must be smaller than 10 MB.")
 
     # Magic byte check — prevents content-type spoofing
@@ -648,7 +651,9 @@ async def parse_and_create_resume(
         # synchronous CPU work that would otherwise block every other
         # concurrent request on this worker for its duration.
         raw_text = await asyncio.wait_for(
-            asyncio.to_thread(extract_text, raw_bytes, content_type or file.filename or ""),
+            # The magic bytes said PDF, so parse it as one, whatever type the
+            # client claimed it was.
+            asyncio.to_thread(extract_text, raw_bytes, "application/pdf"),
             timeout=_PARSE_TIMEOUT_SECONDS,
         )
     except ValueError as exc:

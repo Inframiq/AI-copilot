@@ -19,6 +19,7 @@ def auth_header(email: str):
         "sub": "00000000-0000-0000-0000-000000000001",
         "email": email,
         "aud": "authenticated",
+        "app_metadata": {"provider": "google", "providers": ["google"]},
         "exp": int(time.time()) + 3600,
     }
     return {"Authorization": f"Bearer {pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm='HS256')}"}

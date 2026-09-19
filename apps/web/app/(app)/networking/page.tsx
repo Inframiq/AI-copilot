@@ -31,6 +31,7 @@ import {
   type ConnectStatus,
 } from "@/lib/networking-client";
 import { ProfileForm } from "@/components/networking/ProfileForm";
+import { safeHref } from "@/lib/safe-url";
 import { ProfileCard } from "@/components/networking/ProfileCard";
 import { ConnectionDrawer } from "@/components/networking/ConnectionDrawer";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -509,11 +510,11 @@ export default function NetworkingPage() {
                 </div>
               )}
 
-              {(myProfile.linkedin_url || myProfile.github_url) && (
+              {(safeHref(myProfile.linkedin_url) || safeHref(myProfile.github_url)) && (
                 <div className="flex gap-sm flex-wrap pt-sm border-t border-outline-variant/20">
-                  {myProfile.linkedin_url && (
+                  {safeHref(myProfile.linkedin_url) && (
                     <a
-                      href={myProfile.linkedin_url}
+                      href={safeHref(myProfile.linkedin_url)!}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-xs px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-on-surface-variant hover:text-primary hover:border-primary/40 transition-all"
@@ -521,9 +522,9 @@ export default function NetworkingPage() {
                       LinkedIn ↗
                     </a>
                   )}
-                  {myProfile.github_url && (
+                  {safeHref(myProfile.github_url) && (
                     <a
-                      href={myProfile.github_url}
+                      href={safeHref(myProfile.github_url)!}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-xs px-md py-sm rounded-xl border border-outline-variant/40 text-label-sm text-on-surface-variant hover:text-primary hover:border-primary/40 transition-all"

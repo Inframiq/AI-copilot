@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
           // Don't leak full URLs (which may carry tokens/paths) to third-party
           // origins referenced from the app; still allow same-origin nav.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // HTTPS only, for two years, subdomains included — a first visit over
+          // plain HTTP can't be downgraded or have its session read in transit.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          // Nothing here uses the camera, microphone, location or USB, so no
+          // page (or anything injected into one) may ask for them.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), usb=(), browsing-topics=()" },
         ],
       },
     ];

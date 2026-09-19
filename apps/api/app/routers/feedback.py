@@ -1,9 +1,10 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
 from app.db.models import Feedback
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user, require_admin
 from app.core.supabase_admin import extract_name, list_all_auth_users
 from app.schemas.feedback import FeedbackIn, FeedbackOut, FeedbackAdminOut
@@ -12,8 +13,9 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
 @router.post("", response_model=FeedbackOut, status_code=201)
+@limiter.limit("10/minute")
 async def submit_feedback(
-    body: FeedbackIn, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    request: Request, body: FeedbackIn, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     item = Feedback(
         user_id=uuid.UUID(user["sub"]),

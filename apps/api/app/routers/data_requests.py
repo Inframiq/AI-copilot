@@ -34,6 +34,10 @@ logger = logging.getLogger("app")
 
 @router.post("/deletion", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/hour")
+# The per-IP limit trusts X-Forwarded-For, which a client can set. This one
+# can't be dodged: however the requests are dressed up, the table can't be
+# flooded faster than this.
+@limiter.limit("100/hour", key_func=lambda request: "deletion-requests")
 async def request_deletion(
     request: Request, body: DeletionRequestIn, db: AsyncSession = Depends(get_db)
 ):

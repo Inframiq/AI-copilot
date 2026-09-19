@@ -19,6 +19,7 @@ def admin_auth():
         "sub": TEST_USER_ID,
         "email": settings.admin_emails.split(",")[0],
         "aud": "authenticated",
+        "app_metadata": {"provider": "google", "providers": ["google"]},
         "exp": int(time.time()) + 3600,
     }
     return {"Authorization": f"Bearer {pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm='HS256')}"}
@@ -29,6 +30,7 @@ def non_admin_auth():
         "sub": TEST_USER_ID,
         "email": "nobody@example.com",
         "aud": "authenticated",
+        "app_metadata": {"provider": "google", "providers": ["google"]},
         "exp": int(time.time()) + 3600,
     }
     return {"Authorization": f"Bearer {pyjwt.encode(payload, settings.supabase_jwt_secret, algorithm='HS256')}"}

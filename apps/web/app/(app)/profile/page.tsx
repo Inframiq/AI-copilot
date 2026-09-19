@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { safeHref } from "@/lib/safe-url";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   User,
@@ -979,8 +980,8 @@ export default function ProfilePage() {
                       <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
                         {proj.description || proj.techStack || "No description yet — click to edit"}
                       </p>
-                      {(proj.liveLink || proj.link) && (
-                        <a href={proj.liveLink || proj.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                      {safeHref(proj.liveLink || proj.link) && (
+                        <a href={safeHref(proj.liveLink || proj.link)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                           className={`mt-md w-fit flex items-center gap-xs text-label-sm font-semibold rounded-lg px-md py-xs transition-all ${
                             tint === "primary" ? "text-primary bg-primary/5 hover:bg-primary/10" : "text-secondary bg-secondary/5 hover:bg-secondary/10"
                           }`}>

@@ -7,12 +7,14 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import resumes, jd, ai, learning, contacts, cover_letters, me, plans, feedback, admin, data_requests
 from app.core.rate_limit import limiter
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.config import settings
 from app.core.security import get_optional_user_email, is_admin_only_email
 
 logger = logging.getLogger("app")
 
 app = FastAPI(title="KripaX API", version="1.0.0")
+app.add_middleware(BodySizeLimitMiddleware)
 
 # Rate limiter
 app.state.limiter = limiter

@@ -101,9 +101,18 @@ async def get_current_user(
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     """Gate for the admin dashboard (feedback list, user/plan management) —
     no roles table, just a comma-separated allowlist in settings.admin_emails
-    checked against the JWT's email claim."""
+    checked against the JWT's email claim.
+
+    The email must also be vouched for by Google. Supabase's email/password
+    sign-up is reachable with the public key, and depending on project
+    settings it can issue a token for an address nobody has proven they own.
+    Google has verified every address it signs in, so an admin must have
+    signed in through Google at least once."""
     admin_emails = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
     if (user.get("email") or "").lower() not in admin_emails:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    providers = (user.get("app_metadata") or {}).get("providers") or []
+    if "google" not in providers:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
 
