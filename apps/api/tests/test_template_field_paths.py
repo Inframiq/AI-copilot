@@ -32,11 +32,15 @@ CONTENT = {
 }
 
 
-# ats_sidebar and ats_professional refuse to render without a trusted,
-# successfully-fetched photo, which needs test_pdf.py's httpx_mock machinery.
-# They get their own test below rather than dragging that into every case.
-TEMPLATES = ["ats_clean", "ats_modern", "ats_minimal"]
-PHOTO_TEMPLATES = ["ats_sidebar", "ats_professional"]
+# The photo templates refuse to render without a trusted, successfully-fetched
+# photo, which needs test_pdf.py's httpx_mock machinery. They get their own
+# test below rather than dragging that into every case. Both lists are derived
+# from the allowlist, so a newly added template is covered by this contract
+# the day it lands rather than whenever someone remembers to add it here.
+from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO  # noqa: E402
+
+TEMPLATES = sorted(ALLOWED_TEMPLATES - TEMPLATES_REQUIRING_PHOTO)
+PHOTO_TEMPLATES = sorted(TEMPLATES_REQUIRING_PHOTO)
 
 
 def _html(template_id="ats_clean"):

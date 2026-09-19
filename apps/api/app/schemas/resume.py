@@ -4,7 +4,10 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
-ValidTemplateId = Literal["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+ValidTemplateId = Literal[
+    "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
+    "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
+]
 
 FontChoice = Literal["sans", "modern_sans", "serif", "classic_serif"]
 

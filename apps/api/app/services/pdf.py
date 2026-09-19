@@ -12,13 +12,16 @@ from app.services.rich_text import sanitize_inline
 from app.core.config import settings
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-ALLOWED_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
+ALLOWED_TEMPLATES = {
+    "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
+    "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
+}
 
 # Mirrors apps/web/lib/resume-templates.ts's templateRequiresPhoto — these
 # two templates' whole layout (banner/sidebar photo block) only shows up
 # when a photo is present; without one they degrade to a plain single-column
 # resume that looks nothing like what the user picked.
-TEMPLATES_REQUIRING_PHOTO = {"ats_sidebar", "ats_professional"}
+TEMPLATES_REQUIRING_PHOTO = {"ats_sidebar", "ats_professional", "ats_portrait"}
 
 # What became of contact.photo_url on its way into the template.
 #
@@ -280,6 +283,11 @@ TEMPLATE_DEFAULT_ACCENT = {
     "ats_sidebar": "#4c6178",
     "ats_professional": "#1f5fbf",
     "ats_minimal": "#1a1a1a",
+    "ats_executive": "#2f4858",
+    "ats_compact": "#37474f",
+    "ats_banner": "#1f3b73",
+    "ats_portrait": "#6d4c41",
+    "ats_technical": "#00695c",
 }
 
 

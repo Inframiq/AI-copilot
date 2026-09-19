@@ -16,6 +16,7 @@ import pytest
 weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import (  # noqa: E402
+    ALLOWED_TEMPLATES,
     UNDERFILL_PAGE_FILL_THRESHOLD,
     PhotoRequiredError,
     TEMPLATES_REQUIRING_PHOTO,
@@ -172,7 +173,7 @@ def test_generate_pdf_returns_bytes_ats_minimal():
 def test_generate_pdf_renders_projects_section_on_every_template(httpx_mock, trusted_settings):
     """Projects is a standalone section (separate from experience) — students
     without work history typically have projects instead."""
-    for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
+    for template_id in sorted(ALLOWED_TEMPLATES):
         resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
         pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
@@ -193,7 +194,7 @@ def test_generate_pdf_works_with_projects_but_no_experience(httpx_mock, trusted_
         "education": [{"institution": "State University", "degree": "B.S. CS", "year": "2026"}],
         "skills": ["Python", "Flask"],
     }
-    for template_id in ("ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"):
+    for template_id in sorted(ALLOWED_TEMPLATES):
         resume = _resume_for_template(template_id, student_resume, httpx_mock)
         pdf = generate_pdf(resume, template_id)
         assert pdf[:4] == b"%PDF"
@@ -233,12 +234,24 @@ TEMPLATE_DEFAULT_ACCENT_LOWER = {
     "ats_sidebar": "#4c6178",
     "ats_professional": "#1f5fbf",
     "ats_minimal": "#1a1a1a",
+    "ats_executive": "#2f4858",
+    "ats_compact": "#37474f",
+    "ats_banner": "#1f3b73",
+    "ats_portrait": "#6d4c41",
+    "ats_technical": "#00695c",
 }
 
 
-@pytest.mark.parametrize(
-    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
-)
+def test_every_template_declares_a_default_accent():
+    """A template missing from TEMPLATE_DEFAULT_ACCENT raises a KeyError
+    mid-render, so the map has to cover the allowlist exactly."""
+    from app.services.pdf import TEMPLATE_DEFAULT_ACCENT
+
+    assert set(TEMPLATE_DEFAULT_ACCENT) == ALLOWED_TEMPLATES
+    assert set(TEMPLATE_DEFAULT_ACCENT_LOWER) == ALLOWED_TEMPLATES
+
+
+@pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
 def test_default_font_and_accent_preserve_original_look(template_id, httpx_mock, trusted_settings):
     """With no font_choice/accent_color override, every template must render
     with the exact hex it always used — a regression guard so introducing
@@ -249,9 +262,7 @@ def test_default_font_and_accent_preserve_original_look(template_id, httpx_mock,
     assert TEMPLATE_DEFAULT_ACCENT_LOWER[template_id] in html.lower()
 
 
-@pytest.mark.parametrize(
-    "template_id", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
-)
+@pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
 def test_font_choice_overrides_body_font_stack(template_id, httpx_mock, trusted_settings):
     resume = _resume_for_template(template_id, SAMPLE_RESUME, httpx_mock)
     html = _render_html(resume, template_id, font_choice="serif")
@@ -737,6 +748,87 @@ def test_template_allowlists_stay_in_sync():
 
     assert set(get_args(ValidTemplateId)) == ALLOWED_TEMPLATES
     assert _VALID_TEMPLATES == ALLOWED_TEMPLATES
+
+
+def test_every_allowed_template_has_a_file_to_render():
+    """An id on the allowlist with no template beside it is a 500 the moment
+    somebody picks it — the allowlist is what the API validates against, so
+    it must not promise a template that does not exist."""
+    from app.services.pdf import TEMPLATES_DIR
+
+    missing = sorted(t for t in ALLOWED_TEMPLATES if not (TEMPLATES_DIR / f"{t}.html").is_file())
+    assert not missing, f"no template file for: {missing}"
+
+
+def test_the_web_gallery_lists_exactly_the_templates_the_api_renders():
+    """apps/web/lib/resume-templates.ts is a fourth, hand-written allowlist on
+    the other side of the wire. A template the API renders but the gallery
+    omits is one nobody can pick; one the gallery offers but the API rejects
+    is a 400 on click. Parsed rather than imported — there is no TS runtime
+    here, and the shape is a flat literal."""
+    import re
+    from pathlib import Path
+
+    registry = Path(__file__).resolve().parents[3] / "apps" / "web" / "lib" / "resume-templates.ts"
+    source = registry.read_text(encoding="utf-8")
+    body = source.split("RESUME_TEMPLATES = [", 1)[1].split("] as const", 1)[0]
+    entries = re.findall(r'\{\s*id:\s*"([^"]+)"(.*?)\}(?=,\s*(?:\{|$))', body, re.S)
+    assert entries, "could not parse RESUME_TEMPLATES"
+
+    listed = {tid for tid, _ in entries}
+    assert listed == ALLOWED_TEMPLATES
+
+    # And the two photo lists have to agree: a template this side calls
+    # photo-required, but the gallery does not, refuses to render with no
+    # prompt ever offered to fix it.
+    web_photo = {tid for tid, rest in entries if "photo:" in rest}
+    assert web_photo == TEMPLATES_REQUIRING_PHOTO
+
+
+@pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
+def test_every_template_marks_its_links_for_the_studio_editor(
+    template_id, httpx_mock, trusted_settings
+):
+    """A link is two values — the address and the text shown for it — so the
+    Studio edits it through its own panel rather than in place. It finds them
+    by the data-link attributes the url_link filter emits, and only when the
+    template passes the field's path to that filter. Forget the path and the
+    link silently becomes uneditable: it still renders, so nothing looks
+    wrong. Pinned per template because that is the granularity it breaks at.
+    """
+    resume = _resume_for_template(
+        template_id,
+        {
+            **SAMPLE_RESUME,
+            "contact": {
+                **SAMPLE_RESUME["contact"],
+                "linkedin": "linkedin.com/in/jane",
+                "linkedin_label": "My LinkedIn",
+                "github": "github.com/jane",
+                "website": "jane.dev",
+            },
+        },
+        httpx_mock,
+    )
+    html = _render_html(resume, template_id)
+    found = dict(re.findall(r'data-link="([^"]+)" data-link-url="([^"]*)"', html))
+    assert "contact.linkedin" in found
+    assert "contact.github" in found
+    assert "contact.website" in found
+    assert "projects.0.link" in found
+    # The display text round-trips too — it is the half of the pair that has
+    # no other home, so a dropped label is a silently lost edit.
+    assert 'data-link-text="My LinkedIn"' in html
+
+
+def test_every_template_has_a_gallery_thumbnail():
+    """The gallery renders /resume-templates/<id>.png for every entry; a
+    missing file is a broken tile in the picker."""
+    from pathlib import Path
+
+    thumbs = Path(__file__).resolve().parents[3] / "apps" / "web" / "public" / "resume-templates"
+    missing = sorted(t for t in ALLOWED_TEMPLATES if not (thumbs / f"{t}.png").is_file())
+    assert not missing, f"no gallery thumbnail for: {missing}"
 
 
 # ---------------------------------------------------------------------------

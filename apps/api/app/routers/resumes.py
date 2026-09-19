@@ -142,7 +142,10 @@ _MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
 ]
 
-_VALID_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"}
+_VALID_TEMPLATES = {
+    "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
+    "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
+}
 
 
 def _check_magic_bytes(data: bytes) -> None:

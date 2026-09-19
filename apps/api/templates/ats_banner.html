@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* A normal uniform @page margin, so page 2+ is spaced like every other
+     template — and so the Studio canvas, which reads this rule and can only
+     honour a single uniform value, lays the document out at the width the
+     PDF will actually use. The banner bleeds past it with negative margins
+     rather than by zeroing the page, which would have left every overflow
+     page flush to the paper's edge. */
+  @page { margin: 0.5in; }
+  body { font-family: {{ font_family }}; font-size: {{ body_size(11) }}pt; line-height: {{ line_spacing }}; margin: 0; color: #16191c; }
+
+  /* Reversed out of a solid accent field, bled to the top and side edges by
+     cancelling the page margin and paying it back as padding. print-color-adjust
+     is what stops a print pipeline helpfully dropping the fill and leaving
+     white text on white paper. */
+  .band { background: {{ accent_color }}; color: #ffffff;
+          margin: -0.5in -0.5in 14px; padding: 40px 0.5in 20px;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1 { font-size: {{ heading_size(20) }}pt; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 4px; line-height: 1.08; color: #ffffff; }
+  .headline { font-size: {{ body_size(10.5) }}pt; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; opacity: 0.9; margin-bottom: 6px; }
+  .contact { font-size: {{ body_size(10) }}pt; color: #ffffff; opacity: 0.95; }
+  /* Links inherit the band's white; the default blue is unreadable on the
+     accent fill, and these are the same links the Studio lets you edit. */
+  .band a { color: #ffffff; text-decoration: underline; }
+
+  /* The band paid the page margin back as padding, so its text already
+     lines up with everything below it — the content column needs no indent
+     of its own. */
+  .sheet { padding: 0; }
+
+  h2 { font-size: {{ heading_size(13) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;
+       color: {{ accent_color }}; margin: {{ section_gap }}px 0 5px; padding-bottom: 3px;
+       border-bottom: 1pt solid #d3d8dd;
+       page-break-after: avoid; break-after: avoid; }
+
+  /* Plain inline flow, never flex/float/right-alignment for text — that
+     reorders the PDF content stream and dumps date ranges at the end of the
+     ATS-extracted text. See the long note in ats_clean.html. */
+  .job-row { margin-top: 0; }
+  .job-title { font-weight: 700; font-size: {{ body_size(11.5) }}pt; }
+  .company { font-size: {{ body_size(10) }}pt; color: #444a50; }
+  .dates { font-size: {{ body_size(10) }}pt; color: #5c636a; }
+  .company-header { font-weight: 700; font-size: {{ body_size(11.5) }}pt; margin-top: 0; }
+  .role-row { margin: 2px 0 0 10px; }
+  .edu-row { margin-top: {{ paragraph_spacing }}px; }
+
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; }
+  /* Without this WeasyPrint can split a <tr> across a page break, leaving
+     the bullet dot on one page and its text on the next. */
+  table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
+  .bdot { width: 11px; padding: 0 5px {{ bullet_gap }}px 0; vertical-align: top; color: {{ accent_color }}; font-weight: bold; }
+  .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: justify; }
+  .kw { font-weight: 700; }
+  .skills { margin: 4px 0 6px; }
+  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; text-align: justify; }
+  ul.plain { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; }
+</style>
+</head>
+<body>
+<div class="band">
+  <h1 data-field="contact.name">{{ contact.name }}</h1>
+  {% if headline %}<div class="headline" data-field="headline">{{ headline }}</div>{% endif %}
+  {% set contact_parts = [
+    ('contact.email', contact.email | email_link),
+    ('contact.phone', contact.phone | phone_link),
+    ('contact.location', contact.location),
+    ('contact.linkedin', contact.linkedin | url_link(contact.linkedin_label, 'contact.linkedin')),
+    ('contact.github', contact.github | url_link(contact.github_label, 'contact.github'))
+  ] %}
+  <div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %} &nbsp;·&nbsp; {% endif %}<span data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
+</div>
+
+<div class="sheet">
+
+{% macro render_summary_or_objective() %}
+  {% if summary %}
+  <h2>Summary</h2>
+  <p class="summary" data-field="summary" data-field-rich>{{ summary | rich }}</p>
+  {% elif objective %}
+  <h2>Objective</h2>
+  <p class="summary">{{ objective }}</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_experience() %}
+  {% if experience %}
+  <h2>Experience</h2>
+  {% for group in experience_groups %}
+    {% if group.roles | length > 1 %}
+    {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
+    <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
+    {% for job in group.roles %}
+    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">&nbsp;|&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    {% endfor %}
+    {% else %}
+    {% set job = group.roles[0] %}
+    <div class="job-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span>, <b data-field="experience.{{ job._index }}.company">{{ job.company }}</b> <span class="dates">&nbsp;|&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
+    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_projects() %}
+  {% if projects %}
+  <h2>Projects</h2>
+  {% for p in projects %}
+  <div class="job-row"><span class="job-title" data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.tech_stack %} — <span class="company" data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</span>{% endif %}{% if p.start %} <span class="dates">&nbsp;|&nbsp; <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> – <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
+  {% if p.link %}<div class="company">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</div>{% endif %}
+  {% set pidx = loop.index0 %}<table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="projects.{{ pidx }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_education() %}
+  {% if education %}
+  <h2>Education</h2>
+  {% for edu in education %}
+  <div class="edu-row"><span class="job-title" data-field="education.{{ loop.index0 }}.degree">{{ edu.degree }}</span>, <span data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</span>{% if edu.year %} <span class="dates">&nbsp;|&nbsp; <span data-field="education.{{ loop.index0 }}.year">{{ edu.year }}</span></span>{% endif %}{% if edu.gpa %} <span class="dates">&nbsp;·&nbsp; <span data-field="education.{{ loop.index0 }}.gpa">{{ edu.gpa }}</span></span>{% endif %}</div>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_skills() %}
+  {% if skills %}
+  <h2>Skills</h2>
+  {% if skills is mapping %}
+    {% for category, items in skills.items() %}
+    <div class="skills"><b>{{ category }}:</b> {{ items | join(", ") }}</div>
+    {% endfor %}
+  {% else %}
+  <div class="skills" data-field="skills" data-field-split=", ">{{ skills | join(", ") }}</div>
+  {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_languages() %}
+  {% if languages %}
+  <h2>Languages</h2>
+  <div class="skills">{% for l in languages %}<span data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</span>{% if l.level %} (<span data-field="languages.{{ loop.index0 }}.level">{{ l.level }}</span>){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_certifications() %}
+  {% if certifications %}
+  <h2>Certifications</h2>
+  <ul class="plain">{% for c in certifications %}<li data-field="certifications.{{ loop.index0 }}">{{ c }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_awards() %}
+  {% if awards %}
+  <h2>Awards</h2>
+  <ul class="plain">{% for a in awards %}<li data-field="awards.{{ loop.index0 }}">{{ a }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_achievements() %}
+  {% if achievements %}
+  <h2>Achievements</h2>
+  <ul class="plain">{% for a in achievements %}<li data-field="achievements.{{ loop.index0 }}">{{ a }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_leadership() %}
+  {% if leadership %}
+  <h2>Leadership</h2>
+  <ul class="plain">{% for l in leadership %}<li data-field="leadership.{{ loop.index0 }}">{{ l }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_volunteer() %}
+  {% if volunteer %}
+  <h2>Volunteer</h2>
+  <ul class="plain">{% for v in volunteer %}<li data-field="volunteer.{{ loop.index0 }}">{{ v }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_links() %}
+  {% if contact.website %}
+  <h2>Links</h2>
+  <div class="skills" data-field="contact.website">{{ contact.website | url_link(contact.website_label, 'contact.website') }}</div>
+  {% endif %}
+{% endmacro %}
+
+{% set default_order = ["summary_or_objective", "experience", "projects", "education", "skills", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer"] %}
+{% for section in (section_order or default_order) %}
+  {% if section == "summary_or_objective" %}{{ render_summary_or_objective() }}
+  {% elif section == "experience" %}{{ render_experience() }}
+  {% elif section == "projects" %}{{ render_projects() }}
+  {% elif section == "education" %}{{ render_education() }}
+  {% elif section == "skills" %}{{ render_skills() }}
+  {% elif section == "languages" %}{{ render_languages() }}
+  {% elif section == "certifications" %}{{ render_certifications() }}
+  {% elif section == "awards" %}{{ render_awards() }}
+  {% elif section == "achievements" %}{{ render_achievements() }}
+  {% elif section == "leadership" %}{{ render_leadership() }}
+  {% elif section == "volunteer" %}{{ render_volunteer() }}
+  {% elif section == "links" %}{{ render_links() }}
+  {% endif %}
+{% endfor %}
+</div>
+</body>
+</html>
