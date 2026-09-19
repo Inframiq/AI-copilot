@@ -26,10 +26,13 @@ interface ResumeState {
   saveError: string | null;
   pdfSignedUrl: string | null;
   /** True when the most recently rendered preview is a single page that
-   *  doesn't fill down to the bottom — drives the "resume is shorter than a
-   *  page, add more points" advisory banner. Reset whenever a new resume is
-   *  loaded; updated by whoever renders a preview (PreviewPanel, and the
-   *  tailoring store which mirrors its preview here). */
+   *  doesn't fill down to the bottom. The backend computes it (pdf.py's
+   *  UNDERFILL_PAGE_FILL_THRESHOLD) and the tailoring store writes it here.
+   *
+   *  Nothing displays it. Its banner lived in the preview dock, which the
+   *  Studio replaced and which was deleted along with its orphans; the flag
+   *  is kept because it is still computed and still true, and it is the seam
+   *  to hang the advisory back on. Reset whenever a new resume loads. */
   previewUnderfilled: boolean;
   /** Whether the split preview pane is showing. Starts closed — an empty
    *  "no preview yet" pane eats half the screen for nothing before the user

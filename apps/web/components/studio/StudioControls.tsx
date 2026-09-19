@@ -2,9 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowsOutLineVertical, Cards, TextAa } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
-import { TemplateGallery } from "@/components/studio/preview/TemplateGallery";
-import { TypePanel } from "@/components/studio/preview/TypePopover";
-import { SpacingPanel } from "@/components/studio/preview/SpacingPopover";
+import { TemplateGallery } from "@/components/studio/controls/TemplateGallery";
+import { TypePanel } from "@/components/studio/controls/TypePanel";
+import { SpacingPanel } from "@/components/studio/controls/SpacingPanel";
 import { FOCUS_RING } from "@/lib/focus";
 
 /**
