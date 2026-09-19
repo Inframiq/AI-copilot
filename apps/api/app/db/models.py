@@ -23,6 +23,14 @@ class Resume(Base):
     line_spacing: Mapped[float] = mapped_column(Float, nullable=False, default=1.25)
     paragraph_spacing: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
     font_choice: Mapped[str] = mapped_column(String(20), nullable=False, default="sans")
+    # Points added to the sizes the template declares, headings and body text
+    # independently. 0 is "standard" — the template's own numbers.
+    heading_size_delta: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    body_size_delta: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # NULL = template's own default accent color (see services/pdf.py
     # TEMPLATE_DEFAULT_ACCENT) — every template always renders with some
     # accent color, this just means "the user hasn't overridden it".

@@ -245,7 +245,7 @@ async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_gene
         assert resume.line_spacing == 1.5
         assert resume.paragraph_spacing == 20
         # And forwarded to the actual render call.
-        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20, "sans", None)
+        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20, "sans", None, 0, 0)
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -274,7 +274,7 @@ async def test_generate_pdf_content_override_preview_does_not_persist_spacing():
         # A content-override preview never persists — same rule template_id
         # already follows, now applied to spacing too.
         assert resume.line_spacing == 1.25
-        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.25, 12, "sans", None)
+        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.25, 12, "sans", None, 0, 0)
     finally:
         app.dependency_overrides.pop(get_db, None)
 

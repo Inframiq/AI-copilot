@@ -135,7 +135,8 @@ export const apiClient = {
     payload: Partial<
       Pick<
         Resume,
-        "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing" | "font_choice" | "accent_color"
+        | "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing"
+        | "font_choice" | "accent_color" | "heading_size_delta" | "body_size_delta"
       >
     >
   ): Promise<Resume> => request<Resume>("PATCH", `/resumes/${id}`, payload),
@@ -157,6 +158,8 @@ export const apiClient = {
       paragraph_spacing?: number;
       font_choice?: string;
       accent_color?: string | null;
+      heading_size_delta?: number;
+      body_size_delta?: number;
     },
   ): Promise<{ html: string }> =>
     request<{ html: string }>("POST", `/resumes/${resumeId}/html`, opts ?? {}),

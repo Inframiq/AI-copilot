@@ -372,6 +372,25 @@ describe("Studio preview page", () => {
     });
     await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
   });
+
+  it("renders at the chosen text sizes", async () => {
+    useResumeStore.setState({ headingSizeDelta: 1, bodySizeDelta: -1 } as never);
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+    expect(vi.mocked(apiClient.renderResumeHtml).mock.calls[0][1]).toMatchObject({
+      heading_size_delta: 1,
+      body_size_delta: -1,
+    });
+  });
+
+  it("re-renders when a text size changes", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      useResumeStore.getState().setTextSize("body", 1);
+    });
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("Export when the file cannot be fetched", () => {

@@ -38,6 +38,8 @@ export default function StudioPreviewPage({
   const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
   const fontChoice = useResumeStore((s) => s.fontChoice);
   const accentColor = useResumeStore((s) => s.accentColor);
+  const headingSizeDelta = useResumeStore((s) => s.headingSizeDelta);
+  const bodySizeDelta = useResumeStore((s) => s.bodySizeDelta);
   const updateContent = useResumeStore((s) => s.updateContent);
   // The JD path reached the Studio through the review, not the Builder, so
   // "Back" must retrace that route. The Builder itself is not offered on this
@@ -60,7 +62,7 @@ export default function StudioPreviewPage({
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: [
       "resumeHtml", resumeId, templateId, lineSpacing, paragraphSpacing,
-      fontChoice, accentColor, content,
+      fontChoice, accentColor, headingSizeDelta, bodySizeDelta, content,
     ],
     queryFn: () =>
       apiClient.renderResumeHtml(resumeId, {
@@ -70,6 +72,8 @@ export default function StudioPreviewPage({
         paragraph_spacing: paragraphSpacing,
         font_choice: fontChoice,
         accent_color: accentColor,
+        heading_size_delta: headingSizeDelta,
+        body_size_delta: bodySizeDelta,
       }),
     enabled: !!content,
   });

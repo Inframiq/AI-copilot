@@ -269,5 +269,12 @@ describe("ResumeCanvas", () => {
     // jsdom lays nothing out, so every measurement is 0 — one page.
     await vi.waitFor(() => expect(onPageCount).toHaveBeenCalledWith(1));
   });
+
+  it("makes the document's body rule apply inside the shadow root", () => {
+    const html = `<style>body { font-size: 10pt; }</style><p data-field="summary">x</p>`;
+    const { container } = render(<ResumeCanvas html={html} editable={false} onEdit={() => {}} />);
+    const css = shadow(container).querySelector("style")!.textContent!;
+    expect(css).toContain(":host { font-size: 10pt; }");
+  });
 });
 

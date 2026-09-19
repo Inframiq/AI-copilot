@@ -46,6 +46,8 @@ export function useHydratedResume(resumeId: string) {
         resume.paragraph_spacing,
         resume.font_choice,
         resume.accent_color,
+        resume.heading_size_delta,
+        resume.body_size_delta,
       );
     }
   }, [resume, resumeId, loaded, setResume]);

@@ -16,6 +16,8 @@ interface ResumeState {
   paragraphSpacing: number;
   /** Key into the backend's FONT_STACKS map (see services/pdf.py). */
   fontChoice: string;
+  headingSizeDelta: number;
+  bodySizeDelta: number;
   /** "#RRGGBB", or null to use the template's own default accent color. */
   accentColor: string | null;
   isDirty: boolean;
@@ -57,12 +59,18 @@ interface ResumeState {
     lineSpacing?: number,
     paragraphSpacing?: number,
     fontChoice?: string,
-    accentColor?: string | null
+    accentColor?: string | null,
+    headingSizeDelta?: number,
+    bodySizeDelta?: number
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setFontChoice: (fontChoice: string) => void;
+  /** Points added to the sizes the template declares, headings and body
+   *  content independently. 0 is "standard" — the template's own numbers,
+   *  which are what a résumé is generated at. */
+  setTextSize: (which: "heading" | "body", delta: number) => void;
   setAccentColor: (accentColor: string | null) => void;
   setPdfSignedUrl: (url: string | null) => void;
   setPreviewUnderfilled: (underfilled: boolean) => void;
@@ -86,6 +94,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   lineSpacing: DEFAULT_LINE_SPACING,
   paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
   fontChoice: DEFAULT_FONT_CHOICE,
+  headingSizeDelta: 0,
+  bodySizeDelta: 0,
   accentColor: null,
   isDirty: false,
   isSaving: false,
@@ -97,7 +107,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   photoModalRevertTo: null,
   _saveTimer: null,
 
-  setResume: (id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor) =>
+  setResume: (
+    id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor,
+    headingSizeDelta, bodySizeDelta,
+  ) =>
     set({
       resumeId: id,
       content,
@@ -106,6 +119,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       paragraphSpacing: paragraphSpacing ?? DEFAULT_PARAGRAPH_SPACING,
       fontChoice: fontChoice ?? DEFAULT_FONT_CHOICE,
       accentColor: accentColor ?? null,
+      headingSizeDelta: headingSizeDelta ?? 0,
+      bodySizeDelta: bodySizeDelta ?? 0,
       isDirty: false,
       isSaving: false,
       saveError: null,
@@ -131,6 +146,14 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
   setSpacing: (lineSpacing, paragraphSpacing) => {
     set({ lineSpacing, paragraphSpacing, isDirty: true, saveError: null });
+    get()._triggerAutoSave();
+  },
+
+  setTextSize: (which, delta) => {
+    // Clamped to match the server, which will not render a larger step.
+    const value = Math.max(-1, Math.min(1, Math.round(delta)));
+    set(which === "heading" ? { headingSizeDelta: value } : { bodySizeDelta: value });
+    set({ isDirty: true, saveError: null });
     get()._triggerAutoSave();
   },
 
@@ -163,6 +186,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       lineSpacing: DEFAULT_LINE_SPACING,
       paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
       fontChoice: DEFAULT_FONT_CHOICE,
+  headingSizeDelta: 0,
+  bodySizeDelta: 0,
       accentColor: null,
       isDirty: false,
       isSaving: false,
@@ -193,7 +218,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     if (timer !== null) clearTimeout(timer);
     set({ _saveTimer: null });
 
-    const { resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor } = get();
+    const {
+      resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
+      accentColor, headingSizeDelta, bodySizeDelta,
+    } = get();
     if (!resumeId || !content) return;
     set({ isSaving: true });
     try {
@@ -204,6 +232,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
         paragraph_spacing: paragraphSpacing,
         font_choice: fontChoice,
         accent_color: accentColor,
+        heading_size_delta: headingSizeDelta,
+        body_size_delta: bodySizeDelta,
       });
       set({ isDirty: false, isSaving: false, saveError: null });
     } catch (err) {

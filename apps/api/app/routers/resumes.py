@@ -395,6 +395,8 @@ async def generate_resume_pdf(
             resume.paragraph_spacing,
             resume.font_choice,
             resume.accent_color,
+            resume.heading_size_delta or 0,
+            resume.body_size_delta or 0,
         )
     except PhotoRequiredError:
         raise HTTPException(
@@ -463,6 +465,8 @@ async def render_resume_html_endpoint(
             _given(body, "paragraph_spacing", resume.paragraph_spacing),
             _given(body, "font_choice", resume.font_choice),
             _given(body, "accent_color", resume.accent_color),
+            _given(body, "heading_size_delta", resume.heading_size_delta),
+            _given(body, "body_size_delta", resume.body_size_delta),
         )
     except PhotoRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -644,7 +644,7 @@ describe("useTailoringStore", () => {
       line_spacing: 1.25,
       paragraph_spacing: 12,
       font_choice: "sans",
-      accent_color: null,
+      accent_color: null, heading_size_delta: 0, body_size_delta: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -685,7 +685,7 @@ describe("useTailoringStore", () => {
       line_spacing: 1.25,
       paragraph_spacing: 12,
       font_choice: "sans",
-      accent_color: null,
+      accent_color: null, heading_size_delta: 0, body_size_delta: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

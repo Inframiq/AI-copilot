@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { sanitizeInline } from "@/lib/rich-text";
 import { pageGeometry, pageCount } from "@/lib/page-geometry";
+import { scopeBodyToHost } from "@/lib/shadow-document";
 
 /**
  * Editing affordance, injected into the shadow root rather than written into
@@ -110,7 +111,10 @@ export function ResumeCanvas({
     if (!rootRef.current) {
       rootRef.current = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     }
-    rootRef.current.innerHTML = html;
+    // Retargeted at :host first — a shadow root has no <body>, so the
+    // template's body rule would select nothing and its font, size,
+    // line-height and colour would all be missing from the preview.
+    rootRef.current.innerHTML = scopeBodyToHost(html);
 
     // On the host, not inside the shadow root: injecting a full document as
     // innerHTML makes the parser drop <html>/<head>/<body>, so a `body` rule

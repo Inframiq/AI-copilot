@@ -289,6 +289,19 @@ def _group_experience_by_company(experience: list) -> list[dict]:
     return groups
 
 
+# One point either side of each template's own sizes. Those sizes already sit
+# in the 10–12pt band résumé guidance asks for, so "standard" is zero and the
+# steps stay inside what is still comfortably readable and parseable.
+MAX_SIZE_DELTA = 1
+
+
+def _clamp_size_delta(delta: int | None) -> int:
+    try:
+        return max(-MAX_SIZE_DELTA, min(MAX_SIZE_DELTA, int(delta or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _render_html(
     resume_content: dict,
     template_id: str,
@@ -296,6 +309,8 @@ def _render_html(
     paragraph_spacing: int = 12,
     font_choice: str = "sans",
     accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
 ) -> str:
     """Validate template_id and render resume_content to an HTML string.
 
@@ -330,6 +345,11 @@ def _render_html(
         font_family=Markup(FONT_STACKS.get(font_choice, FONT_STACKS["sans"])),
         accent_color=Markup(resolved_accent),
         experience_groups=_group_experience_by_company(resume_content.get("experience") or []),
+        # Points added to every size the templates declare. Clamped rather
+        # than trusted: the templates do arithmetic with these, and a large
+        # value would produce a résumé no ATS or human reads happily.
+        heading_pt=_clamp_size_delta(heading_size_delta),
+        body_pt=_clamp_size_delta(body_size_delta),
         **_derived_spacing(line_spacing, paragraph_spacing),
     )
 
@@ -349,6 +369,8 @@ def render_resume_html(
     paragraph_spacing: int = 12,
     font_choice: str = "sans",
     accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
 ) -> str:
     """The exact HTML generate_pdf hands to WeasyPrint.
 
@@ -364,6 +386,8 @@ def render_resume_html(
         paragraph_spacing,
         font_choice,
         accent_color,
+        heading_size_delta,
+        body_size_delta,
     )
 
 
@@ -374,6 +398,8 @@ def _render_document(
     paragraph_spacing: int = 12,
     font_choice: str = "sans",
     accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
 ):
     """Lay out resume_content with the named template and return a WeasyPrint
     Document. Shared by generate_pdf (→ .write_pdf()), count_pdf_pages, and
@@ -382,7 +408,8 @@ def _render_document(
     import weasyprint  # deferred so import errors surface as ImportError, not module-level
 
     html = _render_html(
-        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
+        heading_size_delta, body_size_delta,
     )
     return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).render()
 
@@ -442,6 +469,8 @@ def generate_pdf(
     paragraph_spacing: int = 12,
     font_choice: str = "sans",
     accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
 ) -> bytes:
     """Render resume_content with the named template and return PDF bytes.
 
@@ -464,7 +493,8 @@ def generate_pdf(
         ValueError: If template_id is not in ALLOWED_TEMPLATES.
     """
     document = _render_document(
-        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
+        heading_size_delta, body_size_delta,
     )
     return document.write_pdf()
 
@@ -476,13 +506,16 @@ def generate_pdf_with_meta(
     paragraph_spacing: int = 12,
     font_choice: str = "sans",
     accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
 ) -> tuple[bytes, dict]:
     """Like generate_pdf but renders once and also returns _page_meta() —
     used by the preview endpoint so the "resume is shorter than a page"
     advisory needs no second WeasyPrint pass.
     """
     document = _render_document(
-        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
+        heading_size_delta, body_size_delta,
     )
     return document.write_pdf(), _page_meta(document)
 

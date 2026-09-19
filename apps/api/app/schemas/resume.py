@@ -41,6 +41,11 @@ class ResumeCreate(BaseModel):
     # None = template's own default accent color (see services/pdf.py
     # TEMPLATE_DEFAULT_ACCENT).
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
+    # A point either side of the template's own sizes. Headings and body move
+    # independently: shrinking the text to win back a page should not shrink
+    # the section labels with it.
+    heading_size_delta: int | None = Field(default=None, ge=-1, le=1)
+    body_size_delta: int | None = Field(default=None, ge=-1, le=1)
     # When set, this create is "save the tailored resume for this JD" —
     # see create_resume in routers/resumes.py, which overwrites the JD's
     # already-linked resume (if any) instead of creating a new row.
@@ -57,6 +62,8 @@ class ResumeUpdate(BaseModel):
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
     font_choice: FontChoice | None = None
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
+    heading_size_delta: int | None = Field(default=None, ge=-1, le=1)
+    body_size_delta: int | None = Field(default=None, ge=-1, le=1)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -79,6 +86,11 @@ class PdfGenerateRequest(BaseModel):
     _check_content_size = field_validator("content")(_validate_content_size)
 
 
+def _standard_when_unset(value):
+    """None means the size was never chosen, which is what 0 encodes."""
+    return 0 if value is None else value
+
+
 class ResumeOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
@@ -89,6 +101,11 @@ class ResumeOut(BaseModel):
     paragraph_spacing: int
     font_choice: str
     accent_color: str | None
+    heading_size_delta: int = 0
+    body_size_delta: int = 0
+    _sizes_default = field_validator(
+        "heading_size_delta", "body_size_delta", mode="before"
+    )(_standard_when_unset)
     pdf_url: str | None
     # Presence (not the raw storage path) is what the frontend needs — it
     # decides whether Preview can show the untouched original vs. falling

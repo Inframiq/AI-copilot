@@ -66,6 +66,11 @@ export interface Resume {
   font_choice: string;
   /** "#RRGGBB", or null to use the template's own default accent color. */
   accent_color: string | null;
+  /** Points added to the sizes the template declares, headings and body
+   *  content independently. 0 is "standard" — the template's own numbers,
+   *  which are already inside the 10-12pt band résumé guidance asks for. */
+  heading_size_delta: number;
+  body_size_delta: number;
   ats_score?: number;
   // Storage path (not a signed URL) — null until this resume's PDF has been
   // generated at least once. Presence, not the raw path, is what the

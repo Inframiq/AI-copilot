@@ -4,6 +4,7 @@ import { ArrowsOutLineVertical, Cards, TextAa } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { TemplateGallery } from "@/components/studio/controls/TemplateGallery";
 import { TypePanel } from "@/components/studio/controls/TypePanel";
+import { TextSizePanel } from "@/components/studio/controls/TextSizePanel";
 import { SpacingPanel } from "@/components/studio/controls/SpacingPanel";
 import { FOCUS_RING } from "@/lib/focus";
 
@@ -89,7 +90,11 @@ export function StudioControls() {
         <TemplateGallery value={templateId} onChange={setTemplateId} />
       </Popover>
       <Popover label="Type" icon={<TextAa size={16} />}>
-        <TypePanel />
+        <div className="flex flex-col gap-md">
+          <TypePanel />
+          <div className="h-px bg-outline-variant/40" />
+          <TextSizePanel />
+        </div>
       </Popover>
       <Popover label="Spacing" icon={<ArrowsOutLineVertical size={16} />}>
         <SpacingPanel />
