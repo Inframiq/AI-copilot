@@ -10,15 +10,14 @@ import {
   Briefcase,
   BookOpen,
   Trash,
-  CheckCircle,
-  Circle,
-  X,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { createBrowserClient } from "@/lib/supabase";
+import { firstName, greeting, isNewAccount, type Greeting } from "@/lib/greeting";
 import type { Resume, JobDescription, LearningItem, PrepQuestionWithJdOut } from "@career-copilot/types";
 
 const STATUS_CYCLE: Record<LearningItem["status"], LearningItem["status"]> = {
@@ -65,8 +64,6 @@ function computeProfileHealth(profile: CareerProfile | null): { score: number; l
   return { score, label };
 }
 
-const ONBOARDING_DISMISSED_KEY = "career-copilot-onboarding-dismissed";
-
 export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,11 +71,9 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(true); // default hidden until we know client-side state
-
-  useEffect(() => {
-    setOnboardingDismissed(localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "1");
-  }, []);
+  // Set after mount, not during render: it depends on the clock and a
+  // random pick, which would differ between the server render and hydration.
+  const [hello, setHello] = useState<Greeting | null>(null);
 
   // "?tour=1" is set by onboarding's finish() and by the Account page's
   // "Replay guide" link — both routes into the same trigger, so there's no
@@ -89,11 +84,6 @@ export default function DashboardPage() {
       router.replace("/dashboard");
     }
   }, [searchParams, startTour, router]);
-
-  function dismissOnboarding() {
-    localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
-    setOnboardingDismissed(true);
-  }
 
   const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
@@ -194,6 +184,29 @@ export default function DashboardPage() {
     }
   }
 
+  // Who is signed in, for the greeting: whether this is their first session,
+  // and the name they signed up with (Google gives full_name) for when My
+  // Profile has none yet.
+  const authUserQuery = useQuery({
+    queryKey: ["authUser"],
+    queryFn: async () => (await createBrowserClient().auth.getUser()).data.user,
+    staleTime: 5 * 60 * 1000,
+  });
+  const authUser = authUserQuery.data ?? null;
+  const greetingName = firstName(
+    careerProfile?.contact?.name ||
+      (authUser?.user_metadata?.full_name as string | undefined) ||
+      (authUser?.user_metadata?.name as string | undefined),
+  );
+  const isNew = isNewAccount(authUser?.created_at, authUser?.last_sign_in_at);
+  const greetingReady = !careerProfileQuery.isPending && !authUserQuery.isPending;
+
+  useEffect(() => {
+    // Wait for the name, or the line would appear nameless and then change.
+    if (!greetingReady) return;
+    setHello(greeting({ name: greetingName, isNew, hour: new Date().getHours(), pick: Math.random() }));
+  }, [greetingReady, greetingName, isNew]);
+
   const hasProfile = !!careerProfile?.contact?.name?.trim();
   const { score: profileScore, label: profileLabel } = computeProfileHealth(careerProfile);
 
@@ -220,13 +233,6 @@ export default function DashboardPage() {
   );
   const interviewLabel =
     interviewReadiness >= 80 ? "Ready" : interviewReadiness > 0 ? "In progress" : "Needs prep";
-
-  const onboardingSteps = [
-    { label: "Build your first resume", done: resumes.length > 0, action: () => (resumes.length > 0 ? router.push("/studio") : createNewResume()) },
-    { label: "Analyze a job description", done: jds.length > 0, action: () => router.push("/jd") },
-    { label: "Practice for an interview", done: sessionId !== null, action: () => router.push("/interview") },
-  ];
-  const showOnboarding = !onboardingDismissed && onboardingSteps.some((s) => !s.done);
 
   const metrics: Array<{
     label: string;
@@ -283,54 +289,23 @@ export default function DashboardPage() {
         isRetrying={isRetrying}
       />
 
-      {/* Hero Greeting */}
-      <section className="pt-lg pb-md">
-        <h1 className="text-headline-xl text-on-surface mb-sm font-bold" style={{ letterSpacing: "-0.02em" }}>
-          Welcome back!
-        </h1>
-        <p className="text-body-lg text-on-surface-variant">
-          Your career trajectory is looking strong. Here&apos;s a snapshot of your progress.
-        </p>
+      {/* Hero Greeting — the Get Started checklist that used to sit below
+          it was removed: Quick Actions already offers the same three steps. */}
+      <section className="pt-lg pb-md min-h-[5.5rem]" aria-live="polite">
+        {hello ? (
+          <>
+            <h1 className="text-headline-xl text-on-surface mb-sm font-bold" style={{ letterSpacing: "-0.02em" }}>
+              {hello.title}
+            </h1>
+            <p className="text-body-lg text-on-surface-variant">{hello.subtitle}</p>
+          </>
+        ) : (
+          <div aria-hidden className="flex flex-col gap-sm">
+            <div className="skeleton h-9 w-72 max-w-full rounded-full" />
+            <div className="skeleton h-5 w-96 max-w-full rounded-full" />
+          </div>
+        )}
       </section>
-
-      {/* Onboarding Nudge */}
-      {showOnboarding && (
-        <section className="bg-primary-container/20 border border-primary/20 rounded-2xl p-lg flex flex-col gap-md relative">
-          <button
-            onClick={dismissOnboarding}
-            aria-label="Dismiss"
-            className="absolute top-md right-md w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high/50 transition-colors"
-          >
-            <X size={16} />
-          </button>
-          <div>
-            <h2 className="text-headline-md text-on-surface font-semibold">Get started</h2>
-            <p className="text-body-sm text-on-surface-variant mt-xs">
-              A few quick steps to get the most out of KripaX.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-sm">
-            {onboardingSteps.map(({ label, done, action }) => (
-              <button
-                key={label}
-                onClick={action}
-                className={`flex-1 flex items-center gap-sm px-md py-md rounded-xl border text-left transition-all ${
-                  done
-                    ? "bg-surface-container-lowest border-outline-variant/20 text-on-surface-variant"
-                    : "bg-surface-container-lowest border-primary/30 hover:border-primary/60 hover:shadow-md text-on-surface"
-                }`}
-              >
-                {done ? (
-                  <CheckCircle size={20} weight="fill" className="text-success-accent shrink-0" />
-                ) : (
-                  <Circle size={20} className="text-primary shrink-0" />
-                )}
-                <span className={`text-label-md ${done ? "line-through" : ""}`}>{label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Key Metrics Bento Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
