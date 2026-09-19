@@ -6,6 +6,18 @@ const DEFAULT_LINE_SPACING = 1.25;
 const DEFAULT_PARAGRAPH_SPACING = 12;
 const DEFAULT_FONT_CHOICE = "sans";
 
+/** What a draft replaces, so discarding it restores all of it. */
+interface DraftBase {
+  content: ResumeContent | null;
+  templateId: string;
+  lineSpacing: number;
+  paragraphSpacing: number;
+  fontChoice: string;
+  accentColor: string | null;
+  headingSizeDelta: number;
+  bodySizeDelta: number;
+}
+
 interface ResumeState {
   resumeId: string | null;
   content: ResumeContent | null;
@@ -51,6 +63,14 @@ interface ResumeState {
    *  null when the modal was opened manually (nothing to revert). */
   photoModalRevertTo: string | null;
   _saveTimer: ReturnType<typeof setTimeout> | null;
+  /** Set while the store holds a tailored draft that has not been saved to
+   *  its JD yet: the JD's id. resumeId is then still the résumé tailoring
+   *  ran against — usually the profile's master — so autosave is off
+   *  entirely. Nothing reaches the server until saveDraftToJd, which writes
+   *  a separate résumé linked to the JD. Cleared by setResume. */
+  draftJdId: string | null;
+  /** What the draft was built on, restored by discardDraft. */
+  _draftBase: DraftBase | null;
 
   setResume: (
     id: string,
@@ -64,6 +84,15 @@ interface ResumeState {
     bodySizeDelta?: number
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
+  /** Load a tailored résumé as an unsaved draft for this JD. The résumé it
+   *  came from is never written: see draftJdId. */
+  startDraft: (content: ResumeContent, jdId: string) => void;
+  /** Drop an unsaved draft and put back the content it was built on. */
+  discardDraft: () => void;
+  /** Save the draft as the tailored résumé for its JD — a new résumé, or the
+   *  one already linked to that JD, never the source — and switch the store
+   *  to it so later edits autosave there. Returns the saved résumé's id. */
+  saveDraftToJd: (title: string) => Promise<string>;
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setFontChoice: (fontChoice: string) => void;
@@ -106,12 +135,16 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   photoModalOpen: false,
   photoModalRevertTo: null,
   _saveTimer: null,
+  draftJdId: null,
+  _draftBase: null,
 
   setResume: (
     id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor,
     headingSizeDelta, bodySizeDelta,
   ) =>
     set({
+      draftJdId: null,
+      _draftBase: null,
       resumeId: id,
       content,
       templateId,
@@ -137,6 +170,74 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       saveError: null,
     });
     get()._triggerAutoSave();
+  },
+
+  startDraft: (content, jdId) => {
+    // A save queued for the source résumé must not land after this.
+    const timer = get()._saveTimer;
+    if (timer !== null) clearTimeout(timer);
+    const s = get();
+    set({
+      content,
+      draftJdId: jdId,
+      // Re-applying over a draft keeps the original as the base, not the draft.
+      _draftBase: s.draftJdId
+        ? s._draftBase
+        : {
+            content: s.content,
+            templateId: s.templateId,
+            lineSpacing: s.lineSpacing,
+            paragraphSpacing: s.paragraphSpacing,
+            fontChoice: s.fontChoice,
+            accentColor: s.accentColor,
+            headingSizeDelta: s.headingSizeDelta,
+            bodySizeDelta: s.bodySizeDelta,
+          },
+      isDirty: false,
+      saveError: null,
+      _saveTimer: null,
+    });
+  },
+
+  discardDraft: () => {
+    const base = get()._draftBase;
+    if (!get().draftJdId || !base) return;
+    set({ ...base, draftJdId: null, _draftBase: null, isDirty: false });
+  },
+
+  saveDraftToJd: async (title) => {
+    const {
+      draftJdId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
+      accentColor, headingSizeDelta, bodySizeDelta,
+    } = get();
+    if (!draftJdId || !content) throw new Error("There is no tailored draft to save.");
+    set({ isSaving: true, saveError: null });
+    try {
+      // POST with jd_id, never PATCH: the backend creates the JD's own
+      // résumé, or overwrites the one already linked to it (never the
+      // profile's master), so the source résumé cannot be touched here.
+      const saved = await apiClient.createResume({
+        title,
+        content,
+        template_id: templateId,
+        line_spacing: lineSpacing,
+        paragraph_spacing: paragraphSpacing,
+        font_choice: fontChoice,
+        accent_color: accentColor,
+        heading_size_delta: headingSizeDelta,
+        body_size_delta: bodySizeDelta,
+        jd_id: draftJdId,
+      });
+      get().setResume(
+        saved.id, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
+        accentColor, headingSizeDelta, bodySizeDelta,
+      );
+      return saved.id;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save";
+      set({ isSaving: false, saveError: message });
+      throw err;
+    }
   },
 
   setTemplateId: (id) => {
@@ -198,10 +299,14 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       photoModalOpen: false,
       photoModalRevertTo: null,
       _saveTimer: null,
+      draftJdId: null,
+      _draftBase: null,
     });
   },
 
   _triggerAutoSave: () => {
+    // A draft is saved only by saveDraftToJd; see draftJdId.
+    if (get().draftJdId) return;
     const prev = get()._saveTimer;
     if (prev !== null) clearTimeout(prev);
     const timer = setTimeout(() => {
@@ -220,9 +325,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
     const {
       resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-      accentColor, headingSizeDelta, bodySizeDelta,
+      accentColor, headingSizeDelta, bodySizeDelta, draftJdId,
     } = get();
-    if (!resumeId || !content) return;
+    // resumeId is the draft's source (usually the master) — never write it.
+    if (!resumeId || !content || draftJdId) return;
     set({ isSaving: true });
     try {
       await apiClient.updateResume(resumeId, {

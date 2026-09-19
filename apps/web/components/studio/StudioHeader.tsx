@@ -22,6 +22,7 @@ export function StudioHeader({
   backLabel,
   onExport,
   isExporting,
+  saveSlot,
 }: {
   title: string;
   mode: StudioMode;
@@ -31,6 +32,8 @@ export function StudioHeader({
   backLabel: string;
   onExport: () => void;
   isExporting: boolean;
+  /** The JD path's "Save to JD" control, beside Export. */
+  saveSlot?: React.ReactNode;
 }) {
   // The ARIA tablist pattern: arrows move between tabs and wrap, and only the
   // active tab sits in the tab order. Declaring role="tab" without this tells
@@ -87,6 +90,8 @@ export function StudioHeader({
       </div>
 
       <StudioControls />
+
+      {saveSlot}
 
       <button
         type="button"

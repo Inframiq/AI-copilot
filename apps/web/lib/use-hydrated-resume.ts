@@ -14,14 +14,22 @@ import type { Resume } from "@career-copilot/types";
  * to the Builder and forward again "fixed" it. Each route that shows a
  * résumé now hydrates it, and they share this so the two cannot drift.
  */
-export function useHydratedResume(resumeId: string) {
+export function useHydratedResume(
+  resumeId: string,
+  /** Accept an unsaved tailored draft built on this résumé as loaded. Only
+   *  the Studio, which can save a draft to its JD, should: anywhere else the
+   *  draft is replaced by the résumé as saved, so a page that autosaves
+   *  never edits a draft whose autosave is off. */
+  { allowDraft = false }: { allowDraft?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   const setResume = useResumeStore((s) => s.setResume);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const hasContent = useResumeStore((s) => s.content !== null);
+  const isDraft = useResumeStore((s) => s.draftJdId !== null);
   // The right id with no content is still not loaded — the JD path reaches
   // the review before anything has filled the store.
-  const loaded = storeResumeId === resumeId && hasContent;
+  const loaded = storeResumeId === resumeId && hasContent && (allowDraft || !isDraft);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],

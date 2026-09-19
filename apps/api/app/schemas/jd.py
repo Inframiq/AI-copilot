@@ -33,6 +33,8 @@ class JDOut(BaseModel):
     # because match quality is a property of "this resume against this job",
     # and one resume can be tailored against many JDs with different scores.
     ats_score: int | None = None
+    # The tailored résumé the user saved for this JD from the Studio, if any.
+    tailored_resume_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}
 
     @computed_field

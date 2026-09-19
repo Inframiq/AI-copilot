@@ -833,11 +833,37 @@ describe("useTailoringStore", () => {
         text: "Docker", experience_index: null, score_delta: 3, default_accept: true,
       }],
       bulletDecisions: { "skill_add:Docker": "accept", "fix:skill:docker": "reject" },
+      jdId: "jd-1",
     } as never);
 
-    useTailoringStore.getState().commitReview();
+    expect(useTailoringStore.getState().commitReview()).toBe(true);
 
     expect(useResumeStore.getState().content?.skills).not.toContain("Docker");
+  });
+
+  it("Apply loads the tailored résumé as a draft and never saves over the source", async () => {
+    vi.useFakeTimers();
+    try {
+      useResumeStore.getState().setResume("master-1", SAMPLE_CONTENT, "ats_clean");
+      useTailoringStore.setState({
+        pendingContent: { ...SAMPLE_CONTENT, summary: "Tailored summary" },
+        bulletDecisions: { summary: "accept" },
+        suggestedSkills: [],
+        atsFixes: [],
+        jdId: "jd-1",
+      } as never);
+      vi.mocked(apiClient.updateResume).mockClear();
+
+      expect(useTailoringStore.getState().commitReview()).toBe(true);
+      await vi.runAllTimersAsync();
+
+      const s = useResumeStore.getState();
+      expect(s.draftJdId).toBe("jd-1");
+      expect(s.resumeId).toBe("master-1");
+      expect(apiClient.updateResume).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("flags the projected score as updating until the re-score lands", async () => {

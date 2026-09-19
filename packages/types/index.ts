@@ -96,6 +96,8 @@ export interface JobDescription {
   // null if it's never been tailored against. See JDOut.ats_score (backend)
   // for why this lives on the JD rather than on Resume.
   ats_score: number | null;
+  /** The tailored résumé saved for this JD from the Studio, if any. */
+  tailored_resume_id?: string | null;
 }
 
 export interface ExternalContact {

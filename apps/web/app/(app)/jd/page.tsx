@@ -25,6 +25,7 @@ import {
   PencilSimple,
   ArrowCounterClockwise,
   Check,
+  FileText,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
@@ -836,6 +837,22 @@ export default function JDIndexPage() {
                     View analysis →
                   </button>
                 </p>
+
+                {/* The résumé saved for this JD from the Studio's "Save to JD". */}
+                {jd.tailored_resume_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJd(jd.id, jd.raw_text);
+                      router.push(`/studio/${jd.tailored_resume_id}/preview`);
+                    }}
+                    className="flex items-center gap-xs rounded-lg border border-success/30 bg-success-container/25 px-sm py-xs text-caption font-semibold text-on-success-container hover:border-success/60 transition-colors"
+                  >
+                    <FileText size={14} weight="fill" className="text-success shrink-0" />
+                    <span className="flex-1 text-left">Tailored résumé saved</span>
+                    <span className="text-primary">Open →</span>
+                  </button>
+                )}
 
                 <select
                   value={jd.status}

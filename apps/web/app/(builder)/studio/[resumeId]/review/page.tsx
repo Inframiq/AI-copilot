@@ -32,10 +32,19 @@ export default function StudioReviewPage({
   // usually the first that needs it. The review diffs tailored bullets
   // against it, and runTailoring seeds its decisions from it — without it the
   // review lists nothing and Apply has nothing to merge into.
-  useHydratedResume(resumeId);
+  //
+  // allowDraft, with the draft discarded once on arrival instead: Apply loads
+  // a draft while this page is still mounted, and letting the hook replace it
+  // would wipe it before the Studio opens.
+  useHydratedResume(resumeId, { allowDraft: true });
+  useEffect(() => {
+    // Coming back from the Studio: the review diffs against the original.
+    useResumeStore.getState().discardDraft();
+  }, []);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const hasContent = useResumeStore((s) => s.content !== null);
-  const resumeLoaded = storeResumeId === resumeId && hasContent;
+  const isDraft = useResumeStore((s) => s.draftJdId !== null);
+  const resumeLoaded = storeResumeId === resumeId && hasContent && !isDraft;
 
   // One run per mount. Without the ref a re-render mid-flight — or React's
   // development double-invoke — would spend a second credit.
@@ -56,10 +65,9 @@ export default function StudioReviewPage({
         onTryAnother={() => useTailoringStore.getState().runTailoring(resumeId, { fresh: true })}
         onRetry={() => useTailoringStore.getState().runTailoring(resumeId)}
         onApply={() => {
-          // commitReview has just written the merged résumé into resume-store;
-          // flush it now rather than waiting on the autosave debounce, so a
-          // refresh in the Studio cannot lose the review.
-          useResumeStore.getState().saveNow().catch(() => {});
+          // commitReview has loaded the merged résumé as an unsaved draft. It
+          // is deliberately not saved here: resumeId is the source (usually
+          // the master), and the Studio's "Save to JD" writes a separate copy.
           router.push(`/studio/${resumeId}/preview`);
         }}
       />

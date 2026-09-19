@@ -119,6 +119,7 @@ async def list_jds(user=Depends(get_current_user), db: AsyncSession = Depends(ge
             id=jd.id, user_id=jd.user_id, title=jd.title, raw_text=jd.raw_text,
             parsed=jd.parsed, status=jd.status, created_at=jd.created_at,
             ats_score=latest_scores.get(jd.id),
+            tailored_resume_id=jd.tailored_resume_id,
         )
         for jd in jds
     ]

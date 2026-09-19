@@ -123,6 +123,8 @@ export const apiClient = {
     paragraph_spacing?: number;
     font_choice?: string;
     accent_color?: string | null;
+    heading_size_delta?: number;
+    body_size_delta?: number;
     /** When set, saves this as "the tailored resume for this JD" — the
      * backend overwrites the JD's already-linked resume (if any) instead of
      * creating a new row, so re-tailoring + saving again doesn't pile up
@@ -176,7 +178,9 @@ export const apiClient = {
     lineSpacing?: number,
     paragraphSpacing?: number,
     fontChoice?: string,
-    accentColor?: string | null
+    accentColor?: string | null,
+    headingSizeDelta?: number,
+    bodySizeDelta?: number,
     // page_count / page_fill / underfilled: "resume is shorter than a page"
     // advisory. underfilled is true only for a single-page resume that leaves
     // a visible empty band at the bottom.
@@ -188,6 +192,8 @@ export const apiClient = {
       ...(paragraphSpacing !== undefined ? { paragraph_spacing: paragraphSpacing } : {}),
       ...(fontChoice !== undefined ? { font_choice: fontChoice } : {}),
       ...(accentColor !== undefined ? { accent_color: accentColor } : {}),
+      ...(headingSizeDelta !== undefined ? { heading_size_delta: headingSizeDelta } : {}),
+      ...(bodySizeDelta !== undefined ? { body_size_delta: bodySizeDelta } : {}),
     }),
 
   parseResumeFile: async (

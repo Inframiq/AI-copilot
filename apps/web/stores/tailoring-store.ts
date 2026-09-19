@@ -406,8 +406,9 @@ interface TailoringState {
    * until saveTailoredResume is explicitly called. */
   generatePreview: (resumeId: string) => Promise<void>;
   /** The review's "Apply": folds every accepted rewrite, skill and fix into
-   * the résumé in resume-store (which autosaves it). Returns false when there
-   * is no review or no résumé loaded to apply it to. */
+   * the résumé and loads it into resume-store as an unsaved draft for the JD
+   * (startDraft), so the source résumé is never autosaved over. Returns false
+   * when there is no review, no résumé loaded, or no JD to save it to. */
   commitReview: () => boolean;
   /** Re-scores the resume exactly as currently shown in review (accepted/
    * rejected/humanized bullets, still unsaved) against the JD. Updates
@@ -897,14 +898,19 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   },
 
   commitReview: () => {
-    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex } = get();
+    const { pendingContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, jdId } = get();
     const originalContent = useResumeStore.getState().content;
-    if (!pendingContent || !originalContent) return false;
+    // runTailoring always creates the JD row, so a review without one has
+    // nowhere to save to.
+    if (!pendingContent || !originalContent || !jdId) return false;
     const mergedContent = buildMergedContent(
       pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
     );
     set({ mergedContent });
-    useResumeStore.getState().updateContent(mergedContent);
+    // A draft, not updateContent: the store's résumé is the one tailoring ran
+    // against — usually the master — and updateContent would autosave the
+    // tailored version over it. The Studio's "Save to JD" writes it instead.
+    useResumeStore.getState().startDraft(mergedContent, jdId);
     return true;
   },
 

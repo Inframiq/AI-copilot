@@ -1,6 +1,6 @@
 "use client";
-import { use, useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { use, useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
 import { ApiError, apiClient } from "@/lib/api-client";
@@ -15,6 +15,7 @@ import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { PageMeter } from "@/components/studio/PageMeter";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
+import { SaveToJd } from "@/components/studio/SaveToJd";
 
 /**
  * The Resume Studio: the document is the interface.
@@ -31,7 +32,13 @@ export default function StudioPreviewPage({
   const router = useRouter();
   // The store is shared with the Builder but only the Builder used to fill
   // it, so opening this link directly showed an empty page.
-  const { isLoading: isLoadingResume, isError: resumeFailed } = useHydratedResume(resumeId);
+  // allowDraft: the review's Apply lands here with an unsaved tailored draft.
+  const { isLoading: isLoadingResume, isError: resumeFailed } = useHydratedResume(resumeId, {
+    allowDraft: true,
+  });
+  const queryClient = useQueryClient();
+  const draftJdId = useResumeStore((s) => s.draftJdId);
+  const isSavingDraft = useResumeStore((s) => s.isSaving && s.draftJdId !== null);
   const content = useResumeStore((s) => s.content);
   const templateId = useResumeStore((s) => s.templateId);
   const lineSpacing = useResumeStore((s) => s.lineSpacing);
@@ -52,6 +59,45 @@ export default function StudioPreviewPage({
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [pages, setPages] = useState(1);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // The JD this Studio is working for: a draft's, or the analyzer's. Its
+  // tailored_resume_id says whether the résumé open here is the saved one.
+  const linkedJdId = draftJdId ?? jdId;
+  const { data: jd } = useQuery({
+    queryKey: ["jd", linkedJdId],
+    queryFn: () => apiClient.getJd(linkedJdId!),
+    enabled: !!linkedJdId,
+  });
+  const savedToJd = !draftJdId && !!jd && jd.tailored_resume_id === resumeId;
+
+  // A draft lives only in memory: warn before a refresh or close drops it.
+  useEffect(() => {
+    if (!draftJdId) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draftJdId]);
+
+  async function handleSaveToJd() {
+    setSaveError(null);
+    try {
+      const name = useResumeStore.getState().content?.contact?.name?.trim();
+      const title = [name ? `${name}'s Resume` : "Tailored Resume", jd?.title]
+        .filter(Boolean)
+        .join(" — ")
+        .slice(0, 255);
+      const savedId = await useResumeStore.getState().saveDraftToJd(title);
+      queryClient.invalidateQueries({ queryKey: ["jds"] });
+      queryClient.invalidateQueries({ queryKey: ["jd", linkedJdId] });
+      queryClient.invalidateQueries({ queryKey: ["jdDetails", linkedJdId] });
+      queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      // The Studio now edits the JD's own copy, and autosaves into it.
+      router.replace(`/studio/${savedId}/preview`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Couldn't save. Please try again.");
+    }
+  }
 
   // Keyed on everything the render depends on, and every one of them sent.
   // Content and template alone meant the Type and Spacing panels changed
@@ -93,11 +139,22 @@ export default function StudioPreviewPage({
     setIsExporting(true);
     setExportError(null);
     try {
-      // The page shows the store's content, which autosave writes only after
-      // a pause; the PDF is rendered from what is saved. Flush first, or an
-      // export right after an edit would miss it.
-      if (useResumeStore.getState().isDirty) await useResumeStore.getState().saveNow();
-      const { signed_url } = await apiClient.generatePdf(resumeId, templateId);
+      const s = useResumeStore.getState();
+      let signed_url: string;
+      if (s.draftJdId && s.content) {
+        // An unsaved draft renders from what is on screen and persists
+        // nothing: resumeId is the résumé it was built from.
+        ({ signed_url } = await apiClient.generatePdf(
+          resumeId, s.templateId, s.content, s.lineSpacing, s.paragraphSpacing,
+          s.fontChoice, s.accentColor, s.headingSizeDelta, s.bodySizeDelta,
+        ));
+      } else {
+        // The page shows the store's content, which autosave writes only after
+        // a pause; the PDF is rendered from what is saved. Flush first, or an
+        // export right after an edit would miss it.
+        if (s.isDirty) await s.saveNow();
+        ({ signed_url } = await apiClient.generatePdf(resumeId, templateId));
+      }
       // Generating is not downloading: this step was lost when the old
       // workbench was removed, so the button spun and then did nothing.
       await downloadFile(signed_url, resumeFileName(content?.contact?.name));
@@ -199,13 +256,44 @@ export default function StudioPreviewPage({
         title="Resume"
         mode={mode}
         onMode={setMode}
-        backLabel={fromJd ? "Back to Review" : "Back to Builder"}
+        // Once saved, the review is behind you: it belongs to the source
+        // résumé, and this is the JD's own copy.
+        backLabel={savedToJd ? "Back to Analyzer" : fromJd ? "Back to Review" : "Back to Builder"}
         onBack={() =>
-          router.push(fromJd ? `/studio/${resumeId}/review` : `/studio/${resumeId}`)
+          router.push(
+            savedToJd
+              ? `/jd/${linkedJdId}`
+              : fromJd
+                ? `/studio/${resumeId}/review`
+                : `/studio/${resumeId}`,
+          )
         }
         onExport={handleExport}
         isExporting={isExporting}
+        saveSlot={
+          linkedJdId && (draftJdId || savedToJd) ? (
+            <SaveToJd saved={savedToJd} isSaving={isSavingDraft} onSave={handleSaveToJd} />
+          ) : undefined
+        }
       />
+      {draftJdId && (
+        <p
+          role="status"
+          className="flex shrink-0 items-center gap-xs border-b border-primary/20 bg-primary/5 px-lg py-sm text-caption text-on-surface"
+        >
+          Unsaved tailored draft{jd?.title ? ` for ${jd.title}` : ""}. Your master résumé is not
+          changed — Save to JD keeps this version with the job.
+        </p>
+      )}
+      {saveError && (
+        <p
+          role="alert"
+          className="flex shrink-0 items-center gap-xs border-b border-error/20 bg-error-container px-lg py-sm text-caption text-on-error-container"
+        >
+          <WarningCircle size={14} weight="fill" />
+          Couldn&apos;t save: {saveError}
+        </p>
+      )}
       {exportError && (
         <p
           role="alert"

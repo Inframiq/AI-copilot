@@ -106,6 +106,15 @@ async def _evict_oldest_resumes(db: AsyncSession, user_id: uuid.UUID) -> None:
         logger.warning("Resume eviction (keep last %d) failed for user %s", _MAX_RESUMES_PER_USER, user_id, exc_info=True)
 
 
+async def _is_master_resume(db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID) -> bool:
+    """Whether career_profiles.master_resume_id points at this résumé."""
+    result = await db.execute(
+        text("SELECT 1 FROM career_profiles WHERE user_id = :uid AND master_resume_id = :rid"),
+        {"uid": str(user_id), "rid": str(resume_id)},
+    )
+    return result.first() is not None
+
+
 async def _dedupe_title(db: AsyncSession, user_id: uuid.UUID, base_title: str) -> str:
     """Appends "(2)", "(3)", ... when base_title collides with one of this
     user's existing resume titles — otherwise every upload/generate of the
@@ -154,6 +163,11 @@ async def list_resumes(user=Depends(get_current_user), db: AsyncSession = Depend
 async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     uid = uuid.UUID(user["sub"])
     payload = body.model_dump(exclude={"jd_id"})
+    # The size columns are NOT NULL; None means "not chosen", which the
+    # column default already encodes. Passing it through writes a NULL.
+    for field in ("heading_size_delta", "body_size_delta"):
+        if payload.get(field) is None:
+            payload.pop(field, None)
 
     jd = None
     if body.jd_id:
@@ -172,6 +186,11 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
                 select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
             )
             existing = result.scalar_one_or_none()
+            # Never overwrite the profile's master résumé, even if an older
+            # flow linked it to this JD: a tailored save goes to its own row,
+            # and the link moves to that row below.
+            if existing and await _is_master_resume(db, uid, existing.id):
+                existing = None
             if existing:
                 for field, value in payload.items():
                     setattr(existing, field, value)
@@ -386,17 +405,20 @@ async def generate_resume_pdf(
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
+    # The request's own settings win over the saved row: an unsaved preview
+    # (a tailored draft not yet saved to its JD) persists none of them, so
+    # reading the row would export the master's layout, not the draft's.
     try:
         pdf_bytes, page_meta = await asyncio.to_thread(
             generate_pdf_with_meta,
             content,
             template_id,
-            resume.line_spacing,
-            resume.paragraph_spacing,
-            resume.font_choice,
-            resume.accent_color,
-            resume.heading_size_delta or 0,
-            resume.body_size_delta or 0,
+            _given(body, "line_spacing", resume.line_spacing),
+            _given(body, "paragraph_spacing", resume.paragraph_spacing),
+            _given(body, "font_choice", resume.font_choice),
+            _given(body, "accent_color", resume.accent_color),
+            _given(body, "heading_size_delta", resume.heading_size_delta) or 0,
+            _given(body, "body_size_delta", resume.body_size_delta) or 0,
         )
     except PhotoRequiredError:
         raise HTTPException(

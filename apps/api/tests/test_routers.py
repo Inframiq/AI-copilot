@@ -204,7 +204,9 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
     jd_result.scalar_one_or_none.return_value = jd_row
     resume_result = MagicMock()
     resume_result.scalar_one_or_none.return_value = existing_resume
-    mock_session.execute = AsyncMock(side_effect=[jd_result, resume_result])
+    not_master = MagicMock()
+    not_master.first.return_value = None
+    mock_session.execute = AsyncMock(side_effect=[jd_result, resume_result, not_master])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -224,6 +226,62 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
         assert data["id"] == str(existing_resume_id)
         assert data["title"] == "Resume — Acme v2"
         assert data["content"] == {"new": True}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_resume_with_jd_id_never_overwrites_the_master_resume():
+    """If a JD is linked to the profile's master résumé (an older flow could
+    do that), saving a tailored résumé for it must create a new row and move
+    the link there — the master's content stays exactly as it was."""
+    from app.db.models import Resume, JobDescription
+    from datetime import datetime, timezone
+
+    jd_id = uuid.uuid4()
+    master_id = uuid.uuid4()
+    new_id = uuid.uuid4()
+    jd_row = JobDescription(
+        id=jd_id, user_id=uuid.UUID(TEST_USER_ID), title="Acme JD", raw_text="...",
+        tailored_resume_id=master_id,
+    )
+    master = Resume(
+        id=master_id, user_id=uuid.UUID(TEST_USER_ID), title="Master", content={"master": True},
+        template_id="ats_clean", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+    )
+
+    override, mock_session = make_mock_db()
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd_row
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = master
+    is_master = MagicMock()
+    is_master.first.return_value = (1,)
+    # Anything after that is the eviction pass, which is best-effort.
+    mock_session.execute = AsyncMock(side_effect=[jd_result, resume_result, is_master] + [MagicMock()] * 5)
+
+    async def fake_refresh(obj):
+        if obj is master:
+            return
+        obj.id = new_id
+        obj.created_at = datetime.now(timezone.utc)
+        obj.updated_at = datetime.now(timezone.utc)
+
+    mock_session.refresh = fake_refresh
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/resumes",
+                json={"title": "Resume — Acme", "jd_id": str(jd_id), "content": {"tailored": True}},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 201
+        assert r.json()["id"] == str(new_id)
+        assert master.content == {"master": True}
+        assert master.title == "Master"
+        assert jd_row.tailored_resume_id == new_id
     finally:
         app.dependency_overrides.pop(get_db, None)
 
