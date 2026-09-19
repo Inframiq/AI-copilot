@@ -40,8 +40,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
       SUPABASE_JWT_SECRET: ci-placeholder-secret-at-least-32-chars-long
       DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci_placeholder
-      AI_PROVIDER: gemini
-      GEMINI_API_KEY: ci-placeholder
       OPENAI_API_KEY: ci-placeholder
     steps:
       - uses: actions/checkout@v4
@@ -64,14 +62,12 @@ jobs:
 
       - name: Dependency audit
         working-directory: apps/api
-        # Blocking, with one accepted/tracked exception:
-        #   PYSEC-2026-1805 (protobuf) — fix requires protobuf>=5.0, which
-        #     google-ai-generativelanguage (pulled in by google-generativeai
-        #     0.7.2) hard-pins below; needs a coordinated google-generativeai
-        #     upgrade, tracked separately.
+        # Blocking, no exceptions. (protobuf's PYSEC-2026-1805 was ignored
+        # here while google-generativeai pinned it; that package went with
+        # the Gemini provider, and nothing else installs protobuf.)
         # (weasyprint PYSEC-2026-3412 / PYSEC-2026-3940 are both fixed in 70.0,
         #  which requirements.txt now pins — no ignore needed.)
         # Any other new finding fails the build.
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1805
+          pip-audit -r requirements.txt

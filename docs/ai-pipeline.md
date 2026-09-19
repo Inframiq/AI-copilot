@@ -8,17 +8,16 @@ configuration (not just the code's hardcoded defaults).
 ## Active provider (as configured in `apps/api/.env`)
 
 ```
-AI_PROVIDER=openai
-GEMINI_API_KEY=            # empty — Gemini path is unused
 OPENAI_API_KEY=<set>
 OPENAI_MODEL_FAST=gpt-5.6-luna
 OPENAI_MODEL_PREMIUM=gpt-5.6-sol
 OPENAI_MAX_OUTPUT_TOKENS=16384
 ```
 
-`apps/api/app/services/ai_engine/factory.py` reads `AI_PROVIDER` and picks
-the provider class at runtime. With this `.env`, **every** agent call in the
-app goes through `OpenAIProvider` (`apps/api/app/services/ai_engine/openai_provider.py`).
+OpenAI is the only provider. `apps/api/app/services/ai_engine/factory.py`
+returns `OpenAIProvider` (`apps/api/app/services/ai_engine/openai_provider.py`)
+for **every** agent call in the app. A Gemini provider existed until
+2026-09-19 and was removed; the history below still mentions it.
 
 ### `model_tier` now resolves to two models, deliberately not three
 
@@ -40,10 +39,6 @@ the tailoring makes sense — lands close to that budget.
 requests `"fast"` or `"pro"` and lands on `gpt-5.6-luna`, same as before —
 this is intentional, re-derive the cost math in the git history before
 changing which calls get `"premium"`.
-
-`GeminiProvider` (currently unused — `AI_PROVIDER=openai`) has no distinct
-premium model; `model_tier="premium"` falls back to its `"pro"` model
-(`gemini-2.5-pro`) rather than silently downgrading to `"fast"`.
 
 ### Confirmed bug (2026-08-13): 4096 output tokens is too low, and it was silently killing entire tailoring runs
 
@@ -102,10 +97,6 @@ comment at the top of `tailoring.py` (`_MAX_TOKENS_*`) for the exact value
 per call site. Every value keeps a wide safety margin over its realistic max
 output specifically so this doesn't reintroduce the 4096-was-too-low
 truncation bug above — this is a headroom trim, not a re-run of that mistake.
-
-`GeminiProvider` accepts the same two parameters for interface parity
-(building a per-call `GenerationConfig` override when `max_output_tokens` is
-passed) even though it's currently unused in production (`AI_PROVIDER=openai`).
 
 ### Token-usage telemetry now exists
 
