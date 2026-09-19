@@ -91,7 +91,14 @@ export default function RefundPolicyPage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">4. When we refund</h2>
             <p className="text-body-md text-on-surface-variant">
-              We refund the full amount of a charge in these cases:
+              <strong className="text-on-surface">7-day money-back guarantee.</strong> If Premium isn&apos;t
+              right for you, ask for a refund within 7 days of your first Premium payment and we will refund
+              it in full. You don&apos;t need to give a reason. This applies once per account, to the first
+              Premium payment only, and not to renewals. When we refund it, your account moves back to the
+              Free plan straight away and any Premium credits left are removed.
+            </p>
+            <p className="text-body-md text-on-surface-variant">
+              We also refund the full amount of a charge in these cases:
             </p>
             <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
               <li>
@@ -125,8 +132,9 @@ export default function RefundPolicyPage() {
               </li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
-              Outside these cases, payments are non-refundable. That includes a period you have started but
-              not fully used, unused credits, and a change of mind after paying. Nothing in this policy limits
+              Outside these cases, payments are non-refundable. That includes renewals, a period you have
+              started but not fully used, unused credits, and a change of mind after the 7-day money-back
+              window has passed. Nothing in this policy limits
               a right to a refund, cancellation, or withdrawal that the consumer-protection law of your country
               gives you and that cannot be waived. Where such a right applies, we will honour it.
             </p>
@@ -137,7 +145,8 @@ export default function RefundPolicyPage() {
             <p className="text-body-md text-on-surface-variant">
               Email{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
-              within 30 days of the charge, from the address on your account. Include the date and amount of
+              from the address on your account: within 7 days of your first Premium payment for the
+              money-back guarantee, or within 30 days of the charge in any other case. Include the date and amount of
               the charge, the payment reference from your receipt if you have it, and why you are asking. We
               will reply within 3 business days to tell you whether the refund is approved, or to ask for
               anything else we need.
