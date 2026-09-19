@@ -9,7 +9,7 @@ export function LandingHero() {
       <div className="max-w-[36rem] lg:pt-xl">
         <p className="mb-lg inline-flex items-center gap-xs rounded-full border border-primary/15 bg-white/70 px-md py-1 text-caption font-medium text-primary backdrop-blur">
           <ShieldCheck size={14} weight="fill" />
-          The résumé tailor that never makes things up
+          The résumé tailor that shows you every change
         </p>
         <h1 className="text-[44px] font-bold leading-[1.02] tracking-[-0.035em] text-on-surface sm:text-[60px] lg:text-[68px]">
           Tailored to every job.{" "}
@@ -19,8 +19,8 @@ export function LandingHero() {
         </h1>
         <p className="mt-lg max-w-[31rem] text-body-lg text-on-surface-variant">
           Paste a job description. KripaX rewrites your résumé in the job&apos;s own
-          language, shows your ATS score rising with every change you accept — and
-          flags anything you&apos;d have to vouch for before it goes in.
+          language, shows your match score rising with every change you accept, and
+          holds back new numbers and new skills until you confirm them.
         </p>
         <div className="mt-xl flex flex-col gap-sm sm:flex-row sm:gap-md">
           <Link href="/register" className={`${CTA_PRIMARY} ${CTA_SIZE_LG} sm:min-w-[12.5rem]`}>

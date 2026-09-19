@@ -1,10 +1,12 @@
-import { Hash, Wrench, Scissors, UserCheck, ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { Hash, Quotes, Scissors, UserCheck, ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "./Reveal";
 
+// Only what bullet_guard.py actually checks in code. A claim here that the
+// code doesn't enforce is a promise the product can't keep.
 const CHECKS = [
-  { icon: Hash, title: "A number you didn't write", body: "“for 2M users” appears from nowhere — flagged, never slipped in." },
-  { icon: Wrench, title: "A tool that isn't yours", body: "Kubernetes on a résumé that never mentions it — yours to confirm." },
-  { icon: Scissors, title: "Filler dressed as impact", body: "“…ensuring seamless alignment” — called out, so you can cut it." },
+  { icon: Hash, title: "A number you didn't write", body: "“for 2M users” appears from nowhere — flagged, not slipped in." },
+  { icon: Quotes, title: "A reason you never gave", body: "“…ensuring alignment” is an ending your original doesn't say — flagged." },
+  { icon: Scissors, title: "Stock phrasing", body: "“seamless” is a cliché the rewrite brought in — flagged, so you can cut it." },
 ];
 
 /**
@@ -32,10 +34,12 @@ export function HonestByDesign() {
               </span>
             </h2>
             <p className="mt-lg max-w-[30rem] text-body-lg text-white/70">
-              KripaX pushes the job&apos;s own phrases into your bullets wherever your
-              work supports them. Every rewrite is then fact-checked in code. Anything it
-              can&apos;t verify still reaches you — switched off, with the reason — so the
-              call is always yours.
+              KripaX works the job&apos;s own phrases into your bullets, and the AI is told to
+              use them only where your experience backs them up. Every rewrite is then checked
+              in code for numbers you didn&apos;t write, endings you never gave, and stock
+              phrasing. Anything that fails reaches you switched off, with the reason, and so
+              does any new line for a skill your résumé doesn&apos;t mention. No check catches
+              everything, so read what you keep.
             </p>
           </Reveal>
 
@@ -44,9 +48,11 @@ export function HonestByDesign() {
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-md backdrop-blur">
               <p className="mb-xs text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">AI rewrite</p>
               <p className="text-body-sm text-white/85">
-                Scaled the checkout service on <span className="rounded bg-[#f0bd8b]/20 px-1 text-[#ffd7ae]">Kubernetes</span> for{" "}
+                Scaled the checkout service for{" "}
                 <span className="rounded bg-[#f0bd8b]/20 px-1 text-[#ffd7ae]">2M users</span>
-                <span className="text-white/40">, ensuring seamless alignment</span>
+                <span className="text-white/40">, ensuring </span>
+                <span className="rounded bg-[#f0bd8b]/20 px-1 text-[#ffd7ae]">seamless</span>
+                <span className="text-white/40"> alignment</span>
               </p>
             </div>
 

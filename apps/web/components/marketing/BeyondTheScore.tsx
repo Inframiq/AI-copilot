@@ -48,8 +48,8 @@ export function BeyondTheScore() {
         </h2>
         <ul className="mt-xl flex flex-col gap-lg">
           <Point icon={Hash} title="Real numbers, from you">
-            We never invent a figure. For each bullet without one, KripaX asks the question a recruiter
-            would — you add the number you actually know.
+            A number you didn&apos;t write is flagged, not slipped in. For each bullet without one, KripaX
+            asks the question a recruiter would — you add the number you actually know.
           </Point>
           <Point icon={Repeat} title="Wording that doesn’t repeat itself">
             Overused verbs and phrases are pointed out as you review, before a checker or a hiring manager

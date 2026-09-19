@@ -23,7 +23,7 @@ export function HowItWorks() {
           className="absolute left-[1.15rem] top-6 hidden h-px w-[calc(100%-2.3rem)] bg-gradient-to-r from-primary/40 via-primary/20 to-primary/40 md:block"
         />
         <Step n={1} title="Paste the job" delay={0}
-          text="We read it the way an ATS does: the tools, methods and phrases it will screen for, and which ones your résumé is missing.">
+          text="We pull out the tools, methods and phrases an applicant tracking system is likely to screen for, and which ones your résumé is missing.">
           <div className="flex flex-col gap-xs">
             <div className="h-2 w-4/5 rounded-full bg-surface-container-high" />
             <div className="flex flex-wrap items-center gap-1 text-[11px] leading-none text-on-surface-variant">
@@ -41,7 +41,7 @@ export function HowItWorks() {
           </div>
         </Step>
         <Step n={2} title="Review every change" delay={0.1}
-          text="Each rewrite has a switch and shows the points it adds. Anything unverified starts off, with the reason, until you say it's true.">
+          text="Each rewrite has a switch and shows the points it adds. Anything our checks flag starts off, with the reason, until you say it's true.">
           <div className="flex flex-col gap-xs">
             {[
               { on: true, w: "w-11/12" },
@@ -59,7 +59,7 @@ export function HowItWorks() {
           </div>
         </Step>
         <Step n={3} title="Export and apply" delay={0.2}
-          text="One click to a clean PDF in a template ATS systems read correctly — saved against the job, so each application keeps its own version.">
+          text="One click to a clean PDF whose text reads in order when software extracts it — saved against the job, so each application keeps its own version.">
           <div className="flex items-end gap-md">
             <div className="flex h-[92px] w-[72px] flex-col gap-1 rounded-md bg-white p-1.5 shadow-[0_6px_16px_-8px_rgba(23,24,29,0.35)]">
               <div className="h-1.5 w-2/3 rounded-full bg-on-surface/40" />

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s | KripaX",
   },
   description:
-    "KripaX is a free AI resume builder that tailors your resume to any job description in seconds, scores it against real ATS criteria, and generates interview questions targeting your exact skill gaps.",
+    "KripaX is an AI resume builder with a free plan. It tailors your resume to a job description, shows how well it matches the job's keywords, and generates interview questions for your skill gaps.",
   keywords: [
     "resume builder",
     "AI resume builder",
@@ -45,14 +45,14 @@ export const metadata: Metadata = {
     siteName: "KripaX",
     title: "KripaX — AI Resume Builder & Resume Tailoring Tool",
     description:
-      "Tailor your resume to any job description in seconds, get a real ATS compatibility score, and generate interview questions targeting your exact skill gaps.",
+      "Tailor your resume to a job description, see how well it matches the job's keywords, and generate interview questions for your skill gaps.",
     images: [{ url: "/icon.png", width: 512, height: 512, alt: "KripaX" }],
   },
   twitter: {
     card: "summary",
     title: "KripaX — AI Resume Builder & Resume Tailoring Tool",
     description:
-      "Tailor your resume to any job description in seconds, get a real ATS compatibility score, and generate interview questions targeting your exact skill gaps.",
+      "Tailor your resume to a job description, see how well it matches the job's keywords, and generate interview questions for your skill gaps.",
     images: ["/icon.png"],
   },
   robots: { index: true, follow: true },

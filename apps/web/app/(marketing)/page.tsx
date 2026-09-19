@@ -8,9 +8,9 @@ import { ClosingCta } from "@/components/marketing/ClosingCta";
 import { LandingFooter } from "@/components/marketing/LandingFooter";
 
 export const metadata: Metadata = {
-  title: "AI Resume Builder — Tailor Your Resume to Any Job in Seconds",
+  title: "AI Resume Builder — Tailor Your Resume to Any Job Description",
   description:
-    "Free AI resume builder and resume tailoring tool. Paste a job description and KripaX rewrites your resume to match it, scores it against real ATS criteria, and generates interview questions for your exact skill gaps.",
+    "AI resume builder and resume tailoring tool with a free plan. Paste a job description and KripaX rewrites your resume in its language, shows how well you match its keywords, and generates interview questions for your skill gaps.",
   alternates: { canonical: "/" },
 };
 
@@ -23,7 +23,7 @@ const JSON_LD = {
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   description:
-    "AI resume builder that tailors your resume to any job description, scores it against ATS criteria, and generates targeted interview prep questions.",
+    "AI resume builder that tailors your resume to a job description, scores how well it matches the job's keywords, and generates targeted interview prep questions.",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   url: "https://kripax.inframiq.com",
 };

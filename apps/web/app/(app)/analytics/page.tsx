@@ -85,7 +85,9 @@ export default function AnalyticsPage() {
 
   const funnel = [
     { stage: "Applied", count: jds.length, color: "bg-primary" },
-    { stage: "ATS Passed", count: jds.filter((jd) => (jd.ats_score ?? 0) >= 70).length, color: "bg-primary/75" },
+    // Our own keyword-match score, not a real screening result: nobody knows
+    // whether an employer's system passed you, so the label mustn't say so.
+    { stage: "Strong match", count: jds.filter((jd) => (jd.ats_score ?? 0) >= 70).length, color: "bg-primary/75" },
     { stage: "Interview", count: reachedInterview, color: "bg-primary/55" },
     { stage: "Final Round", count: reachedFinalRound, color: "bg-primary/35" },
     { stage: "Offer", count: reachedOffer, color: "bg-primary/20" },
@@ -230,7 +232,7 @@ export default function AnalyticsPage() {
       <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
         <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
           Application Funnel
-          <InfoTooltip text="How your applications progress: Applied is every JD analyzed, ATS Passed is those scoring 70% or higher, and Interview/Final Round/Offer reflect the status you've set on each JD." />
+          <InfoTooltip text="How your applications progress: Applied is every JD analyzed, Strong match is those our match score rates 70% or higher (an estimate, not an employer's screening result), and Interview/Final Round/Offer reflect the status you've set on each JD." />
         </h2>
         {jds.length > 0 || sessionId ? (
           <div className="flex flex-col gap-sm">
