@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { buildCsp, createNonce } from "@/lib/csp";
 
 // kripax.inframiq.com is live and confirmed working (Google Sign-In tested
 // end to end on 2026-09-14) — resumebuilder.inframiq.com now 308-redirects
@@ -27,7 +28,21 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  let response = NextResponse.next({ request });
+  // A fresh nonce per request. Next reads it from the request's CSP header
+  // and stamps it on every script it renders; the root layout reads x-nonce
+  // for its own inline script.
+  const nonce = createNonce();
+  const csp = buildCsp(nonce, {
+    apiUrl: process.env.NEXT_PUBLIC_API_URL,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    isDev: process.env.NODE_ENV === "development",
+  });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
 
   // Skip Supabase when running with placeholder credentials (local preview)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";

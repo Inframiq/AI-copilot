@@ -100,3 +100,28 @@ async def test_the_deletion_form_has_a_ceiling_no_header_can_dodge(monkeypatch):
     finally:
         limiter.reset()
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_cors_answers_our_site_and_not_just_any_vercel_app():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        ours = await client.options(
+            "/plans",
+            headers={"origin": "https://kripax.inframiq.com", "access-control-request-method": "GET"},
+        )
+        theirs = await client.options(
+            "/plans",
+            headers={"origin": "https://evil-app.vercel.app", "access-control-request-method": "GET"},
+        )
+    assert ours.headers.get("access-control-allow-origin") == "https://kripax.inframiq.com"
+    assert "access-control-allow-credentials" not in ours.headers
+    assert theirs.headers.get("access-control-allow-origin") is None
+
+
+@pytest.mark.asyncio
+async def test_the_api_map_is_not_published_by_default():
+    if settings.enable_api_docs:
+        pytest.skip("ENABLE_API_DOCS is on in this environment")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert (await client.get(path)).status_code == 404

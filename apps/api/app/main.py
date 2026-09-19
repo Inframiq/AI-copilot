@@ -1,5 +1,4 @@
 import logging
-import re
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +12,13 @@ from app.core.security import get_optional_user_email, is_admin_only_email
 
 logger = logging.getLogger("app")
 
-app = FastAPI(title="KripaX API", version="1.0.0")
+app = FastAPI(
+    title="KripaX API",
+    version="1.0.0",
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
+)
 app.add_middleware(BodySizeLimitMiddleware)
 
 # Rate limiter
@@ -32,10 +37,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # CORS — explicit origins only; wildcard glob strings are not supported by
-# the CORSMiddleware and would silently allow all origins. Use allow_origin_regex
-# for dynamic Vercel preview URLs. Production custom domains (which don't match
-# the Vercel regex) go in CORS_EXTRA_ORIGINS so they don't require a code change.
-_VERCEL_ORIGIN_RE = re.compile(r"https://[\w-]+\.vercel\.app")
+# the CORSMiddleware and would silently allow all origins. Production custom
+# domains go in CORS_EXTRA_ORIGINS; preview deployments, if the API should
+# answer them, in CORS_ORIGIN_REGEX scoped to this project. It used to accept
+# every *.vercel.app origin, which is anyone's site.
 
 _extra_origins = [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
 
@@ -53,8 +58,10 @@ app.add_middleware(
         "https://resumebuilder.inframiq.com",
         *_extra_origins,
     ],
-    allow_origin_regex=r"https://[\w-]+\.vercel\.app",
-    allow_credentials=True,
+    allow_origin_regex=settings.cors_origin_regex or None,
+    # The web app authenticates with a bearer token and sends no cookies, so
+    # there is nothing a credentialed cross-site request should carry.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

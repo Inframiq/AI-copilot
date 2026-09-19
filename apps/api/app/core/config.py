@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     openai_model_fast: str = "gpt-5.6-luna"
     openai_model_premium: str = "gpt-5.6-sol"
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
+    # A regex for preview deployments' origins, e.g.
+    # https://kripax-[a-z0-9-]+-inframiq\.vercel\.app — empty allows none.
+    # Never a bare *.vercel.app: anyone can host a site there.
+    cors_origin_regex: str = ""
+    # /docs, /redoc and /openapi.json map every endpoint. Off unless asked for
+    # (set ENABLE_API_DOCS=true locally).
+    enable_api_docs: bool = False
     unlimited_credit_emails: str = ""  # comma-separated emails exempt from credit metering (QA/test accounts)
     admin_emails: str = "bharathrockz.k@gmail.com,tanishqkundrapu@gmail.com"  # comma-separated emails allowed to access admin endpoints
     # Subset of admin_emails with NO normal app access at all — see

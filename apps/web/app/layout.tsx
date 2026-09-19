@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -64,7 +65,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Set by middleware.ts. Reading it also makes every page render per
+  // request, which the nonce needs: a page built ahead of time has no
+  // request to take a nonce from, and its scripts would all be blocked.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
@@ -77,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             there is no injection surface here; SIDEBAR_OVERRIDE_KEY is
             inlined literally to keep the script dependency-free. */}
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html:
               'try{var v=localStorage.getItem("career-copilot-sidebar");' +

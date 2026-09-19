@@ -853,12 +853,11 @@ export default function NetworkingPage() {
                       </div>
                       <div className="flex gap-sm">
                         <button
-                          onClick={() =>
-                            contact.linkedin_url
-                              ? window.open(contact.linkedin_url, "_blank")
-                              : undefined
-                          }
-                          className={`w-8 h-8 rounded-full bg-surface-container flex items-center justify-center transition-colors ${contact.linkedin_url ? "text-on-surface-variant hover:text-primary cursor-pointer" : "text-outline-variant cursor-not-allowed opacity-50"}`}
+                          onClick={() => {
+                            const href = safeHref(contact.linkedin_url);
+                            if (href) window.open(href, "_blank", "noopener,noreferrer");
+                          }}
+                          className={`w-8 h-8 rounded-full bg-surface-container flex items-center justify-center transition-colors ${safeHref(contact.linkedin_url) ? "text-on-surface-variant hover:text-primary cursor-pointer" : "text-outline-variant cursor-not-allowed opacity-50"}`}
                         >
                           <LinkedinLogo size={16} />
                         </button>

@@ -47,7 +47,9 @@ async def test_admin_only_account_can_reach_health_and_docs():
         health = await c.get("/health", headers=auth_header(ADMIN_ONLY_EMAIL))
         docs = await c.get("/docs", headers=auth_header(ADMIN_ONLY_EMAIL))
     assert health.status_code == 200
-    assert docs.status_code == 200
+    # Not refused by the admin-only rule (403). The docs themselves exist
+    # only when ENABLE_API_DOCS is on.
+    assert docs.status_code == (200 if settings.enable_api_docs else 404)
 
 
 @pytest.mark.asyncio
