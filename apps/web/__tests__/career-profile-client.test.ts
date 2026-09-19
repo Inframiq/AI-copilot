@@ -330,6 +330,38 @@ describe("career-profile-client", () => {
     });
   });
 
+  describe("the project links round trip", () => {
+    it("keeps both links and their labels through résumé -> profile -> résumé", () => {
+      const content = {
+        contact: { name: "Jane Doe", email: "jane@example.com" },
+        experience: [],
+        projects: [{
+          name: "OdTect", link: "https://github.com/j/o", link_label: "GitHub",
+          live_link: "https://odtect.app", live_link_label: "Live", bullets: [],
+        }],
+        education: [],
+        skills: [],
+      } as any;
+      const back = profileToResumeContent(
+        resumeContentToCareerProfileInput(content, null)
+      ) as any;
+      expect(back.projects[0]).toMatchObject({
+        link: "https://github.com/j/o", link_label: "GitHub",
+        live_link: "https://odtect.app", live_link_label: "Live",
+      });
+    });
+
+    it("drops a label whose link was cleared", () => {
+      const back = profileToResumeContent({
+        ...SAMPLE_PROFILE,
+        projects: [{ ...SAMPLE_PROFILE.projects[0], link: "", linkLabel: "GitHub", liveLink: "", liveLinkLabel: "Live" }],
+      } as any) as any;
+      expect(back.projects[0].link_label).toBeUndefined();
+      expect(back.projects[0].live_link).toBeUndefined();
+      expect(back.projects[0].live_link_label).toBeUndefined();
+    });
+  });
+
   describe("sameCompany", () => {
     it("matches identical company names", () => {
       expect(sameCompany("Acme Corp", "Acme Corp")).toBe(true);

@@ -39,6 +39,11 @@ export interface ProjectEntry {
   name: string;
   techStack: string;
   link?: string;
+  /** What the link shows instead of its URL. Not edited here, only kept. */
+  linkLabel?: string;
+  /** Where the project runs, beside `link` (usually its source). */
+  liveLink?: string;
+  liveLinkLabel?: string;
   start: string;
   end: string;
   description: string;
@@ -180,6 +185,9 @@ export function resumeContentToCareerProfileInput(
           name: p.name,
           techStack: p.tech_stack ?? "",
           link: p.link ?? "",
+          linkLabel: p.link_label ?? "",
+          liveLink: p.live_link ?? "",
+          liveLinkLabel: p.live_link_label ?? "",
           start: p.start ?? "",
           end: p.end ?? "",
           description: (p.bullets ?? []).join("; "),
@@ -228,6 +236,9 @@ export function profileToResumeContent(profile: CareerProfileInput): ResumeConte
       name: p.name,
       tech_stack: p.techStack || undefined,
       link: p.link || undefined,
+      link_label: (p.link && p.linkLabel) || undefined,
+      live_link: p.liveLink || undefined,
+      live_link_label: (p.liveLink && p.liveLinkLabel) || undefined,
       start: p.start || undefined,
       end: p.end || undefined,
       bullets: p.description

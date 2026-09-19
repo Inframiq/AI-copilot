@@ -75,7 +75,7 @@ const emptyEdu = (): EducationEntry => ({
 const emptyCert = (): CertEntry => ({ id: newId(), name: "", issuer: "", year: "" });
 
 const emptyProject = (): ProjectEntry => ({
-  id: newId(), name: "", techStack: "", link: "", start: "", end: "", description: "",
+  id: newId(), name: "", techStack: "", link: "", liveLink: "", start: "", end: "", description: "",
 });
 
 // ── Section header ─────────────────────────────────────────────────────────────
@@ -338,8 +338,9 @@ export default function ProfilePage() {
           }))
         : [];
       const newProjects: ProjectEntry[] = Array.isArray(c.projects)
-        ? (c.projects as Array<{name:string;tech_stack?:string;link?:string;start?:string;end?:string;bullets?:string[]}>).map(p => ({
+        ? (c.projects as Array<{name:string;tech_stack?:string;link?:string;link_label?:string;live_link?:string;live_link_label?:string;start?:string;end?:string;bullets?:string[]}>).map(p => ({
             id: newId(), name: p.name, techStack: p.tech_stack ?? "", link: p.link ?? "",
+            linkLabel: p.link_label ?? "", liveLink: p.live_link ?? "", liveLinkLabel: p.live_link_label ?? "",
             start: p.start ?? "", end: p.end ?? "",
             description: (p.bullets ?? []).join("; "),
           }))
@@ -978,8 +979,8 @@ export default function ProfilePage() {
                       <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
                         {proj.description || proj.techStack || "No description yet — click to edit"}
                       </p>
-                      {proj.link && (
-                        <a href={proj.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                      {(proj.liveLink || proj.link) && (
+                        <a href={proj.liveLink || proj.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                           className={`mt-md w-fit flex items-center gap-xs text-label-sm font-semibold rounded-lg px-md py-xs transition-all ${
                             tint === "primary" ? "text-primary bg-primary/5 hover:bg-primary/10" : "text-secondary bg-secondary/5 hover:bg-secondary/10"
                           }`}>
@@ -1027,10 +1028,15 @@ export default function ProfilePage() {
                             <input value={proj.end ?? ""} onChange={e => updateProj(proj.id, "end", e.target.value)}
                               placeholder="May 2024 or Present" className={inputCls} />
                           </div>
-                          <div className="flex flex-col gap-xs col-span-2">
-                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Link (optional)</label>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Code link (optional)</label>
                             <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
                               placeholder="https://github.com/you/project" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Live link (optional)</label>
+                            <input type="url" value={proj.liveLink ?? ""} onChange={e => updateProj(proj.id, "liveLink", e.target.value)}
+                              placeholder="https://project.vercel.app" className={inputCls} />
                           </div>
                         </div>
                         <div className="flex flex-col gap-xs">
