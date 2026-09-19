@@ -3,9 +3,15 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Star, LockSimple, ArrowsClockwise } from "@phosphor-icons/react";
 import { apiClient, ApiError } from "@/lib/api-client";
-import type { FeedbackAdmin, AdminUser } from "@career-copilot/types";
+import type { FeedbackAdmin, AdminUser, DeletionRequestAdmin, DeletionRequestStatus } from "@career-copilot/types";
 
-type Tab = "users" | "feedback";
+type Tab = "users" | "feedback" | "deletion";
+
+const TAB_LABELS: Record<Tab, string> = {
+  users: "Users",
+  feedback: "Feedback",
+  deletion: "Deletion requests",
+};
 
 // Admin-only — every endpoint here returns 403 for any account not in the
 // backend's ADMIN_EMAILS allowlist, surfaced below as a plain "no access"
@@ -18,7 +24,7 @@ export default function AdminPage() {
       <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
 
       <div className="flex items-center gap-sm border-b border-outline-variant/20">
-        {(["users", "feedback"] as const).map((t) => (
+        {(["users", "feedback", "deletion"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -28,12 +34,12 @@ export default function AdminPage() {
                 : "border-transparent text-on-surface-variant hover:text-on-surface"
             }`}
           >
-            {t === "users" ? "Users" : "Feedback"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
-      {tab === "users" ? <UsersTab /> : <FeedbackTab />}
+      {tab === "users" ? <UsersTab /> : tab === "feedback" ? <FeedbackTab /> : <DeletionRequestsTab />}
     </div>
   );
 }
@@ -233,6 +239,137 @@ function FeedbackTab() {
                   </td>
                   <td className="px-md py-sm text-label-sm text-on-surface-variant whitespace-nowrap">
                     {new Date(f.created_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Requests from the public /data-deletion page. Anyone can send one, so
+ * nothing here deletes anything: confirm by email that the request came from
+ * the address given, delete the data (for an account, via Supabase or the
+ * user's own Account page), then record the outcome.
+ */
+function DeletionRequestsTab() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery<DeletionRequestAdmin[]>({
+    queryKey: ["deletion-requests-admin"],
+    queryFn: () => apiClient.getDeletionRequests(),
+    retry: false,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, status, note }: { id: string; status: DeletionRequestStatus; note: string | null }) =>
+      apiClient.updateDeletionRequest(id, status, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["deletion-requests-admin"] }),
+  });
+
+  if (error instanceof ApiError && error.status === 403) return <AccessDenied />;
+
+  function close(r: DeletionRequestAdmin, status: "completed" | "declined") {
+    const note = window.prompt(
+      status === "completed"
+        ? "What was deleted, and how was the requester verified?"
+        : "Why was this declined? (This is kept as the record.)",
+      r.resolution_note ?? "",
+    );
+    if (note === null) return;
+    update.mutate({ id: r.id, status, note: note.trim() || null });
+  }
+
+  const open = data?.filter((r) => r.status === "open").length ?? 0;
+
+  return (
+    <div className="flex flex-col gap-md">
+      <p className="text-body-sm text-on-surface-variant">
+        {isLoading
+          ? "Loading..."
+          : `${open} open of ${data?.length ?? 0}. Reply within 7 days to verify, and finish within 30 days of confirmation.`}
+      </p>
+
+      {data && data.length === 0 && (
+        <p className="text-body-sm text-on-surface-variant">No deletion requests yet.</p>
+      )}
+
+      {data && data.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-outline-variant/20">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container text-label-sm text-on-surface-variant">
+                <th className="px-md py-sm font-semibold">Received</th>
+                <th className="px-md py-sm font-semibold">Requester</th>
+                <th className="px-md py-sm font-semibold">Request</th>
+                <th className="px-md py-sm font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((r) => (
+                <tr key={r.id} className="border-t border-outline-variant/20 bg-surface-container-lowest align-top">
+                  <td className="px-md py-sm text-label-sm text-on-surface-variant whitespace-nowrap">
+                    {new Date(r.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-md py-sm text-body-sm text-on-surface max-w-[240px]">
+                    <div className="truncate">{r.email}</div>
+                    {r.name && <div className="text-label-sm text-on-surface-variant">{r.name}</div>}
+                    <div className="text-label-sm text-on-surface-variant mt-xs">
+                      {r.requester_type === "account_holder" ? "Says they have an account" : "Says they aren't a user"}
+                      {" · "}
+                      <span className={r.has_account ? "text-primary font-semibold" : ""}>
+                        {r.has_account ? "account found" : "no account with this email"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-md py-sm text-body-sm text-on-surface whitespace-pre-wrap max-w-[320px]">
+                    {r.details ?? "—"}
+                  </td>
+                  <td className="px-md py-sm text-body-sm text-on-surface min-w-[180px]">
+                    {r.status === "open" ? (
+                      <div className="flex flex-col gap-xs">
+                        <span className="text-label-sm font-semibold text-error">Open</span>
+                        <div className="flex gap-sm">
+                          <button
+                            onClick={() => close(r, "completed")}
+                            disabled={update.isPending}
+                            className="text-label-sm text-primary hover:underline disabled:opacity-50"
+                          >
+                            Mark completed
+                          </button>
+                          <button
+                            onClick={() => close(r, "declined")}
+                            disabled={update.isPending}
+                            className="text-label-sm text-on-surface-variant hover:underline disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-xs">
+                        <span className="text-label-sm font-semibold capitalize">{r.status}</span>
+                        {r.resolved_at && (
+                          <span className="text-label-sm text-on-surface-variant">
+                            {new Date(r.resolved_at).toLocaleDateString()}
+                          </span>
+                        )}
+                        {r.resolution_note && (
+                          <span className="text-label-sm text-on-surface-variant whitespace-pre-wrap">
+                            {r.resolution_note}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => update.mutate({ id: r.id, status: "open", note: r.resolution_note })}
+                          disabled={update.isPending}
+                          className="self-start text-label-sm text-on-surface-variant hover:underline disabled:opacity-50"
+                        >
+                          Reopen
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

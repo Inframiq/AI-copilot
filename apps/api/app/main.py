@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.routers import resumes, jd, ai, learning, contacts, cover_letters, me, plans, feedback, admin
+from app.routers import resumes, jd, ai, learning, contacts, cover_letters, me, plans, feedback, admin, data_requests
 from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.core.security import get_optional_user_email, is_admin_only_email
@@ -113,6 +113,8 @@ app.include_router(me.router)
 app.include_router(plans.router)
 app.include_router(feedback.router)
 app.include_router(admin.router)
+app.include_router(data_requests.router)
+app.include_router(data_requests.admin_router)
 
 
 @app.get("/health")

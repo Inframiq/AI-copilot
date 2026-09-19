@@ -68,6 +68,7 @@ export async function middleware(request: NextRequest) {
     "/terms",
     "/refunds",
     "/cookies",
+    "/data-deletion",
   ];
 
   const isPublic =

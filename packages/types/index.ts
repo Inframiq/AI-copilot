@@ -247,6 +247,23 @@ export interface FeedbackAdmin extends Feedback {
   email: string | null;
 }
 
+// A request to delete someone's data, from the public /data-deletion page.
+// Admin only (GET/PATCH /admin/deletion-requests).
+export type DeletionRequestStatus = "open" | "completed" | "declined";
+export interface DeletionRequestAdmin {
+  id: string;
+  email: string;
+  name: string | null;
+  requester_type: "account_holder" | "not_a_user";
+  details: string | null;
+  status: DeletionRequestStatus;
+  resolution_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  /** Whether an account with this email exists right now. */
+  has_account: boolean;
+}
+
 // GET /admin/users (admin only) — every signed-up user joined with their
 // plan/credit state, for the manual plan-override / credit-refresh tools.
 export interface AdminUser {

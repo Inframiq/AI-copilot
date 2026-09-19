@@ -295,6 +295,8 @@ export default function PrivacyPolicyPage() {
               <li>Support communications: retained for up to 24 months after your last contact, then deleted
                 or anonymized. Feedback sent through the in-app form is deleted with your account.</li>
               <li>Encrypted database backups: rolled over on a cycle of no more than 90 days.</li>
+              <li>Deletion requests: a record of the request (the email address, what was asked, and what we
+                did) for 3 years, to show it was handled. It never contains the data that was deleted.</li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
               When you delete your account, we remove your resumes, profile, job descriptions, generated
@@ -314,7 +316,9 @@ export default function PrivacyPolicyPage() {
             <p className="text-body-md text-on-surface-variant">
               You can access, edit, or delete your resumes, profile, and job descriptions at any time from
               within the app, and delete your account from the Account page (see Section 8 for what that does
-              and does not immediately erase). Depending on where you live, you may also have the following
+              and does not immediately erase). If you can&apos;t sign in, or you aren&apos;t a user but think a
+              user entered your details, you can ask us to delete your data on our{" "}
+              <Link href="/data-deletion" className="text-primary hover:underline">Delete your data</Link> page. Depending on where you live, you may also have the following
               rights, which you can exercise by contacting{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary hover:underline">{CONTACT_EMAIL}</a>{" "}
               — please tell us which right you are exercising and the email address on your account; we will

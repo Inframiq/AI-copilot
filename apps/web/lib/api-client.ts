@@ -19,6 +19,8 @@ import type {
   Feedback,
   FeedbackAdmin,
   AdminUser,
+  DeletionRequestAdmin,
+  DeletionRequestStatus,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -71,14 +73,14 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-/** Why one bullet was transformed: the JD responsibility the rewrite is meant
- * to demonstrate, and the JD keywords woven in to do it. */
 export interface PolicyAcceptance {
   terms_version: string | null;
   privacy_version: string | null;
   accepted_at: string | null;
 }
 
+/** Why one bullet was transformed: the JD responsibility the rewrite is meant
+ * to demonstrate, and the JD keywords woven in to do it. */
 export interface BulletRationale {
   responsibility: string;
   keywords: string[];
@@ -530,4 +532,38 @@ export const apiClient = {
   /** Tops the user's credits back up to their plan's full allotment. Admin only. */
   refreshUserCredits: (userId: string): Promise<AdminUser> =>
     request<AdminUser>("POST", `/admin/users/${userId}/credits/refresh`),
+
+  /** Requests to delete someone's data, open ones first. Admin only. */
+  getDeletionRequests: (): Promise<DeletionRequestAdmin[]> =>
+    request<DeletionRequestAdmin[]>("GET", "/admin/deletion-requests"),
+
+  updateDeletionRequest: (
+    id: string,
+    status: DeletionRequestStatus,
+    resolution_note: string | null,
+  ): Promise<DeletionRequestAdmin> =>
+    request<DeletionRequestAdmin>("PATCH", `/admin/deletion-requests/${id}`, { status, resolution_note }),
 };
+
+export interface DeletionRequestInput {
+  email: string;
+  name: string;
+  requester_type: "account_holder" | "not_a_user";
+  details: string;
+  /** Hidden from people; a bot that fills it is quietly ignored. */
+  website: string;
+}
+
+/** Sends a deletion request. No sign-in, so no token: the people this is
+ *  for often can't sign in. */
+export async function submitDeletionRequest(input: DeletionRequestInput): Promise<void> {
+  const res = await fetch(`${BASE}/data-requests/deletion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, typeof err.detail === "string" ? err.detail : "Request failed");
+  }
+}

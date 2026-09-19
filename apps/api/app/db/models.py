@@ -334,3 +334,29 @@ class ExternalContact(Base):
     linkedin_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     last_contact: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
+class DeletionRequest(Base):
+    """A request to delete someone's personal data, sent from the public
+    /data-deletion page. It's for people who can't use Account -> Delete
+    account: former users locked out of their Google account, and people
+    who aren't users but whose details someone else entered. Anyone can send
+    one, so nothing is deleted automatically: an admin verifies who is
+    asking, acts, and records the outcome here.
+
+    Kept as evidence that the request was handled. It holds only what the
+    requester wrote, never the data that was deleted."""
+
+    __tablename__ = "deletion_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # "account_holder" (has or had an account) or "not_a_user".
+    requester_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "open" -> "completed" or "declined".
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

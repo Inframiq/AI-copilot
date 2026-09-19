@@ -299,6 +299,10 @@ export default function AccountPage() {
         <Link href="/cookies" className="hover:text-on-surface hover:underline">
           Cookie Policy
         </Link>
+        <span className="mx-sm text-outline-variant">·</span>
+        <Link href="/data-deletion" className="hover:text-on-surface hover:underline">
+          Delete your data
+        </Link>
       </p>
     </div>
   );
