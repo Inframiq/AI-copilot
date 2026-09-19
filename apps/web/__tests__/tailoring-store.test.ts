@@ -1118,7 +1118,7 @@ describe("useTailoringStore", () => {
 
         // No pendingContent in this setup, so no merged content to send —
         // the server falls back to scoring tailored_content + these ids.
-        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"], undefined, undefined);
+        expect(apiClient.projectScore).toHaveBeenCalledWith("sess-1", ["skill:k8s"], undefined, undefined, {});
         expect(useTailoringStore.getState().projectedAtsScore).toBe(88);
       } finally {
         vi.useRealTimers();
@@ -1199,7 +1199,7 @@ describe("useTailoringStore", () => {
         await vi.advanceTimersByTimeAsync(400);
 
         expect(apiClient.projectScore).toHaveBeenCalledWith(
-          "sess-9", ["skill:k8s", "bullet:kubernetes"], undefined, undefined,
+          "sess-9", ["skill:k8s", "bullet:kubernetes"], undefined, undefined, {},
         );
         expect(useTailoringStore.getState().projectedAtsScore).toBe(91);
       } finally {

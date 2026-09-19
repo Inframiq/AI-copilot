@@ -391,12 +391,21 @@ export const apiClient = {
     // Review keys ("exp0_b2") of the rewrites being kept. The server credits
     // each with what it covered, so every tick moves the projected score.
     acceptedBulletIds?: string[],
-  ): Promise<{ projected_score: number; fix_deltas?: Record<string, number> }> =>
+    // The candidate's own text per rewritten bullet. The session stores only
+    // the tailored side, so without this the server cannot score a rewrite
+    // turned off, and its badge stays frozen at the pipeline value.
+    originalBullets?: Record<string, string>,
+  ): Promise<{
+    projected_score: number;
+    fix_deltas?: Record<string, number>;
+    bullet_deltas?: Record<string, number>;
+  }> =>
     request<{ projected_score: number }>("POST", "/ai/project-score", {
       session_id: sessionId,
       accepted_fix_ids: acceptedFixIds,
       ...(content ? { content } : {}),
       ...(acceptedBulletIds ? { accepted_bullet_ids: acceptedBulletIds } : {}),
+      ...(originalBullets ? { original_bullets: originalBullets } : {}),
     }),
 
   // Most recent completed session across every JD — resolves Interview

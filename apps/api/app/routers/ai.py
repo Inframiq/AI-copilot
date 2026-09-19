@@ -20,11 +20,11 @@ from app.schemas.ai import (
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import (
     run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
-    build_single_bullet_system, tailor_fingerprint,
+    build_single_bullet_system, tailor_fingerprint, _bullet_text,
 )
 from app.services.bullet_guard import guard_rewrite
 from app.services.ats import (
-    credited_fixes, fix_deltas,
+    credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
     verdicts_with_rewrites,
 )
@@ -523,12 +523,28 @@ async def project_score(
     # Only fixes whose text actually reached the merged résumé close their
     # gap. The cap can silently drop one, and crediting it anyway scored the
     # résumé for a keyword it does not contain.
+    # Every rewrite badge, measured against the selections on screen rather
+    # than the pipeline's all-accepted hypothetical.
+    rewrite_deltas: dict[str, int] = {}
+    if body.original_bullets and body.accepted_bullet_ids is not None and stored.get("before") is not None:
+        rationale = session.bullet_rationale or {}
+        tailored_by_id = {
+            bid: text
+            for bid in rationale
+            if (text := _bullet_text(session.tailored_content, bid)) is not None
+        }
+        rewrite_deltas = bullet_deltas(
+            merged, jd_analysis, stored.get("before") or {}, stored.get("after") or {},
+            rationale, body.accepted_bullet_ids, tailored_by_id, body.original_bullets, fixes,
+        )
+
     return ProjectScoreOut(
         projected_score=score_content(
             merged, jd_analysis,
             verdicts_with_fixes(verdicts, credited_fixes(merged, fixes)),
         ).ats_score,
         fix_deltas=fix_deltas(merged, jd_analysis, verdicts, all_fixes, fixes),
+        bullet_deltas=rewrite_deltas,
     )
 
 

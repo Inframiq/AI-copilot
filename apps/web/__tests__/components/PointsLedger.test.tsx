@@ -206,5 +206,38 @@ describe("PointsLedger", () => {
     const shown = screen.getAllByText(/pts$/).map((n) => n.textContent);
     expect(shown.indexOf("+9 pts")).toBeLessThan(shown.indexOf("+1 pts"));
   });
+
+  // The rewrite badges were the half left frozen: the pipeline measures each
+  // as a leave-one-out from the all-accepted state, so with other rewrites
+  // off it understates — a bullet badged +8 moved the score +18.
+  it("shows what a rewrite is worth now, not its leave-one-out value", () => {
+    setup({ liveBulletDeltas: { exp0_b1: 18 } });
+    expect(screen.getByText("+18 pts")).toBeTruthy();
+    expect(screen.queryByText("+4 pts")).toBeNull();
+  });
+
+  it("falls back to the pipeline value for a rewrite with no live figure", () => {
+    setup({ liveBulletDeltas: {} });
+    expect(screen.getByText("+4 pts")).toBeTruthy();
+  });
+
+  it("orders the rewrites by what they are worth now", () => {
+    // Both in the adds-a-term group: ordering only applies within a group,
+    // and the two default changes are classified into different ones.
+    setup({
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: ["Terraform"], score_delta: 9 },
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"], score_delta: 1 },
+      },
+      changes: [
+        { ...reworded, tailored: "Built Terraform modules." },
+        addsTerm,
+      ],
+      decisions: { exp0_b1: "accept", exp0_b0: "accept" },
+      liveBulletDeltas: { exp0_b1: 1, exp0_b0: 9 },
+    });
+    const shown = screen.getAllByText(/^\+\d+ pts$/).map((n) => n.textContent);
+    expect(shown.indexOf("+9 pts")).toBeLessThan(shown.indexOf("+1 pts"));
+  });
 });
 

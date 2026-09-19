@@ -626,6 +626,92 @@ def estimate_fix_delta(
     return max(0, after - base_score)
 
 
+def review_score(
+    content: dict,
+    jd_analysis,
+    before: dict[str, str],
+    after: dict[str, str],
+    rationale: dict[str, dict],
+    accepted_bullet_ids: "list[str] | set[str]",
+    fixes: "list[AtsFix]",
+) -> int:
+    """The score of the résumé exactly as the review screen currently shows it.
+
+    One place that knows the whole stack — kept rewrites earn their terms,
+    accepted fixes close their gaps, and only fixes whose text actually landed
+    are credited — so every number on that screen is measured the same way.
+    """
+    verdicts = verdicts_with_rewrites(before, after, rationale, accepted_bullet_ids)
+    return score_content(
+        content, jd_analysis, verdicts_with_fixes(verdicts, credited_fixes(content, fixes))
+    ).ats_score
+
+
+def bullet_deltas(
+    merged: dict,
+    jd_analysis,
+    before: dict[str, str],
+    after: dict[str, str],
+    rationale: dict[str, dict],
+    accepted_bullet_ids: "list[str]",
+    tailored_by_id: dict[str, str],
+    original_by_id: dict[str, str],
+    fixes: "list[AtsFix]",
+) -> dict[str, int]:
+    """What each rewritten bullet is worth **given what is already selected**.
+
+    The pipeline measures this once, as a leave-one-out from the all-accepted
+    state: what the rewrite adds when every other rewrite is also on. With the
+    others off it covers terms nothing else does, so it is worth more than the
+    badge claims — a bullet badged +38 moved the score +75.
+
+    A bullet whose original text was not supplied is omitted rather than
+    guessed at: an older client sends none, and a wrong number is worse than
+    no number.
+    """
+    accepted = list(accepted_bullet_ids)
+    accepted_set = set(accepted)
+    base = review_score(merged, jd_analysis, before, after, rationale, accepted, fixes)
+
+    out: dict[str, int] = {}
+    for bid in rationale:
+        original, tailored = original_by_id.get(bid), tailored_by_id.get(bid)
+        if original is None or tailored is None:
+            continue
+        if bid in accepted_set:
+            variant = _replace_bullet(merged, bid, original)
+            others = [b for b in accepted if b != bid]
+            out[bid] = max(0, base - review_score(
+                variant, jd_analysis, before, after, rationale, others, fixes))
+        else:
+            variant = _replace_bullet(merged, bid, tailored)
+            out[bid] = max(0, review_score(
+                variant, jd_analysis, before, after, rationale, accepted + [bid], fixes) - base)
+    return out
+
+
+_REVIEW_BULLET_ID = re.compile(r"^(exp|proj)(\d+)_b(\d+)$")
+_REVIEW_SECTION = {"exp": "experience", "proj": "projects"}
+
+
+def _replace_bullet(content: dict, bullet_id: str, text: str) -> dict:
+    """A copy of *content* with one review-keyed bullet set to *text*."""
+    m = _REVIEW_BULLET_ID.match(bullet_id)
+    if not m:
+        return content
+    section = _REVIEW_SECTION[m.group(1)]
+    entry_idx, bullet_idx = int(m.group(2)), int(m.group(3))
+    entries = content.get(section) or []
+    if entry_idx >= len(entries):
+        return content
+    bullets = entries[entry_idx].get("bullets") or []
+    if bullet_idx >= len(bullets):
+        return content
+    out = deepcopy(content)
+    out[section][entry_idx]["bullets"][bullet_idx] = text
+    return out
+
+
 def _title_parts(title: str) -> "tuple[str | None, frozenset[str]]":
     """Split a job title into (seniority_level, role_token_set).
 

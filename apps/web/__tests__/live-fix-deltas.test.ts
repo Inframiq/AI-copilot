@@ -8,6 +8,7 @@ vi.mock("@/lib/api-client", () => ({
     projectScore: vi.fn(async () => ({
       projected_score: 70,
       fix_deltas: { f1: 0, f2: 9 },
+      bullet_deltas: { exp0_b0: 18 },
     })),
   },
 }));
@@ -60,5 +61,25 @@ describe("live fix deltas", () => {
 
   it("starts empty, so the pipeline value is what shows until the first tick lands", () => {
     expect(useTailoringStore.getState().fixDeltas).toEqual({});
+  });
+
+  it("stores the live value for each rewritten bullet too", async () => {
+    useTailoringStore.getState().refreshProjectedScore();
+    await vi.waitFor(() =>
+      expect(useTailoringStore.getState().bulletDeltas).toEqual({ exp0_b0: 18 }),
+    );
+  });
+
+  // The session stores only the tailored side of each rewrite, so without the
+  // candidate's own text the server cannot score "this rewrite turned off"
+  // and the badge stays frozen at its pipeline value.
+  it("sends the candidate's own text for each rewritten bullet", async () => {
+    useTailoringStore.setState({
+      pendingContent: { ...CONTENT, experience: [{ title: "E", company: "X", bullets: ["rewritten"] }] },
+    } as never);
+    useTailoringStore.getState().refreshProjectedScore();
+    await vi.waitFor(() => expect(projectScore).toHaveBeenCalled());
+    const originals = projectScore.mock.calls[0][4];
+    expect(originals).toEqual({ exp0_b0: "b" });
   });
 });

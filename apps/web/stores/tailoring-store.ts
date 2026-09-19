@@ -300,6 +300,11 @@ interface TailoringState {
    * closing the same gap each advertised the full points and only the first
    * delivered. Empty until the first re-score lands. */
   fixDeltas: Record<string, number>;
+  /** The same, for each rewritten bullet, keyed by review id ("exp0_b2").
+   * The pipeline measures a rewrite as a leave-one-out from the all-accepted
+   * state, so with other rewrites off it understates what this one is worth —
+   * a bullet badged +8 moved the score +18. */
+  bulletDeltas: Record<string, number>;
   /** True from the moment a re-score is scheduled until it lands or fails —
    * the review shows the number as updating rather than settled. */
   isProjecting: boolean;
@@ -427,6 +432,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
+  bulletDeltas: {},
   projectedAtsScore: null,
   fixExperienceIndex: {},
   humanizeLevel: 50,
@@ -510,14 +516,21 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     _projectScoreTimer = setTimeout(async () => {
       const seq = ++_projectScoreSeq;
       try {
-        const acceptedBulletIds =
+        const changes =
           pendingContent && originalContent
             ? deriveBulletChanges(pendingContent, originalContent)
+            : [];
+        const acceptedBulletIds =
+          pendingContent && originalContent
+            ? changes
                 .filter((c) => (bulletDecisions[c.key] ?? "accept") !== "reject")
                 .map((c) => c.key)
             : undefined;
-        const { projected_score, fix_deltas } = await apiClient.projectScore(
-          sessionId, acceptedIds, merged, acceptedBulletIds,
+        // The candidate's own text per rewrite: the session keeps only the
+        // tailored side, so this is what lets the server price "turned off".
+        const originalBullets = Object.fromEntries(changes.map((c) => [c.key, c.original]));
+        const { projected_score, fix_deltas, bullet_deltas } = await apiClient.projectScore(
+          sessionId, acceptedIds, merged, acceptedBulletIds, originalBullets,
         );
         if (seq !== _projectScoreSeq) return;
         set({
@@ -527,6 +540,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           // Kept as they were if the server sent none (an older deploy), so
           // the badges fall back to the pipeline values rather than to zero.
           ...(fix_deltas ? { fixDeltas: fix_deltas } : {}),
+          ...(bullet_deltas ? { bulletDeltas: bullet_deltas } : {}),
         });
       } catch (e) {
         // Keep the last number (better than blanking the UI) but mark it stale
@@ -696,6 +710,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
+  bulletDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       sessionId: null,
@@ -1013,6 +1028,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
+  bulletDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       mergedContent: null,
@@ -1044,6 +1060,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
+  bulletDeltas: {},
       projectedAtsScore: null,
       fixExperienceIndex: {},
       humanizeLevel: 50,

@@ -70,6 +70,7 @@ export function PointsLedger({
   roles,
   fixExperienceIndex,
   liveDeltas,
+  liveBulletDeltas,
   reverted = [],
   busy,
   rewriteErrors,
@@ -100,6 +101,10 @@ export function PointsLedger({
    * user changes anything. Absent until the first live score lands, and the
    * pipeline value stands in until then. */
   liveDeltas?: Record<string, number>;
+  /** The same for each rewritten bullet, by review key. The pipeline measures
+   * a rewrite as a leave-one-out from the all-accepted state, so with other
+   * rewrites off it understates what this one is worth. */
+  liveBulletDeltas?: Record<string, number>;
   /** Rewrites the fact-lock refused during tailoring; those bullets kept
    * the candidate's own text. */
   reverted?: RevertedBullet[];
@@ -124,7 +129,8 @@ export function PointsLedger({
   const [vouched, setVouched] = useState<Record<string, boolean>>({});
 
   const { reworded, addsTerms } = useMemo(() => {
-    const pts = (c: BulletChange) => rationale[c.key]?.score_delta ?? 0;
+    const pts = (c: BulletChange) =>
+      liveBulletDeltas?.[c.key] ?? rationale[c.key]?.score_delta ?? 0;
     const reworded: BulletChange[] = [];
     const addsTerms: { change: BulletChange; newTerms: string[] }[] = [];
     for (const change of changes) {
@@ -177,7 +183,7 @@ export function PointsLedger({
       change={change}
       provenance={provenance}
       newTerms={newTerms}
-      points={rationale[change.key]?.score_delta}
+      points={liveBulletDeltas?.[change.key] ?? rationale[change.key]?.score_delta}
       // Same rule as buildMergedContent: a rewrite with no decision yet is
       // applied, so it must show as on (runTailoring seeds every key).
       on={decisions[change.key] !== "reject"}

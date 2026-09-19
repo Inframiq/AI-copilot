@@ -177,6 +177,12 @@ class ProjectScoreRequest(BaseModel):
     # Bullet ids ("exp0_b2") whose rewrite the user is keeping. Given, each
     # earns its after-tailoring verdicts; omitted, the old scoring applies.
     accepted_bullet_ids: list[str] | None = Field(default=None, max_length=500)
+    # The candidate's own text for each rewritten bullet, by the same id. The
+    # session stores only the tailored side, so without this the endpoint
+    # cannot score "this rewrite turned off" and the rewrite badges stay
+    # frozen at their pipeline values. Omitted by older clients, in which case
+    # no rewrite deltas come back.
+    original_bullets: dict[str, str] | None = Field(default=None)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -188,3 +194,5 @@ class ProjectScoreOut(BaseModel):
     # it would cost. Recomputed every tick, because a value measured once
     # against a state the user has left is not a value.
     fix_deltas: dict[str, int] = {}
+    # The same, for each rewritten bullet, keyed by review id ("exp0_b2").
+    bullet_deltas: dict[str, int] = {}
