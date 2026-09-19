@@ -8,6 +8,11 @@ export interface ResumeContent {
     location?: string;
     linkedin?: string;
     github?: string;
+    website?: string;
+    // What a link shows instead of its URL. Absent or blank shows the URL.
+    linkedin_label?: string;
+    github_label?: string;
+    website_label?: string;
     photo_url?: string;
   };
   headline?: string;
@@ -24,6 +29,8 @@ export interface ResumeContent {
     name: string;
     tech_stack?: string;
     link?: string;
+    /** What the link shows instead of its URL. Absent or blank shows the URL. */
+    link_label?: string;
     start?: string;
     end?: string;
     bullets: string[];

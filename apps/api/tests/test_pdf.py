@@ -770,3 +770,51 @@ def test_each_render_gets_its_own_fetcher():
     from app.services.pdf import _blocked_url_fetcher
 
     assert _blocked_url_fetcher() is not _blocked_url_fetcher()
+
+
+def test_url_link_shows_its_display_text_but_opens_the_url():
+    html = _url_link("linkedin.com/in/janedoe", "LinkedIn")
+    assert 'href="https://linkedin.com/in/janedoe"' in html
+    assert ">LinkedIn</a>" in html
+
+
+def test_url_link_blank_display_text_shows_the_url():
+    assert ">github.com/jane</a>" in _url_link("github.com/jane", "   ")
+
+
+def test_url_link_with_a_path_is_marked_for_the_studio_editor():
+    html = _url_link("github.com/jane", "My <GitHub>", "contact.github")
+    assert 'data-link="contact.github"' in html
+    assert 'data-link-url="github.com/jane"' in html
+    # Display text is escaped in both the attribute and the visible text.
+    assert 'data-link-text="My &lt;GitHub&gt;"' in html
+    assert ">My &lt;GitHub&gt;</a>" in html
+
+
+def test_url_link_marks_an_invalid_url_so_it_can_still_be_fixed():
+    html = _url_link("javascript:alert(1)", None, "projects.0.link")
+    assert "<a" not in html
+    assert 'data-link="projects.0.link"' in html
+
+
+@pytest.mark.parametrize(
+    "template", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
+)
+def test_templates_render_link_display_text_with_the_real_href(template, httpx_mock, trusted_settings):
+    from app.services.pdf import render_resume_html
+
+    content = {
+        "contact": {
+            "name": "Jane", "email": "j@x.com",
+            "linkedin": "linkedin.com/in/jane", "linkedin_label": "LinkedIn",
+            "website": "jane.dev", "website_label": "Portfolio",
+        },
+        "projects": [{"name": "P", "link": "github.com/jane/p", "link_label": "Source", "bullets": ["b"]}],
+        "experience": [], "education": [], "skills": [],
+    }
+    html = render_resume_html(_resume_for_template(template, content, httpx_mock), template)
+    assert 'href="https://linkedin.com/in/jane"' in html
+    assert ">LinkedIn</a>" in html
+    assert ">Portfolio</a>" in html
+    assert ">Source</a>" in html
+    assert 'data-link="projects.0.link"' in html

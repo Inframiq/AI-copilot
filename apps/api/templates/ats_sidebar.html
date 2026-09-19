@@ -95,8 +95,8 @@
   ('contact.location', contact.location),
   ('contact.phone', contact.phone | phone_link),
   ('contact.email', contact.email | email_link),
-  ('contact.linkedin', contact.linkedin | url_link),
-  ('contact.github', contact.github | url_link)
+  ('contact.linkedin', contact.linkedin | url_link(contact.linkedin_label, 'contact.linkedin')),
+  ('contact.github', contact.github | url_link(contact.github_label, 'contact.github'))
 ] %}
     <div class="contact-line">{% for path, value in contact_parts if value %}{% if not loop.first %}  ·  {% endif %}<span data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
   </div>
@@ -172,7 +172,7 @@
       {% for p in projects %}
       <div class="job">
         <div class="job-title-line"><span class="title" data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.start %} <span class="dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> – <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Current" }}</span></span>{% endif %}</div>
-        {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link | url_link }}</div>{% endif %}
+        {% if p.tech_stack or p.link %}<div class="job-company">{{ p.tech_stack }}{% if p.tech_stack and p.link %} · {% endif %}{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</div>{% endif %}
         <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       </div>
       {% endfor %}
@@ -268,7 +268,7 @@
   {% if contact.website %}
   <div class="section">
     <div class="section-label">Links</div>
-    <div class="section-body">{{ contact.website | url_link }}</div>
+    <div class="section-body">{{ contact.website | url_link(contact.website_label, 'contact.website') }}</div>
   </div>
   {% endif %}
 {% endmacro %}

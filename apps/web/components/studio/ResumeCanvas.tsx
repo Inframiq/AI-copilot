@@ -52,10 +52,32 @@ const AFFORDANCE_CSS = `
   background-color: rgba(59, 91, 219, 0.11);
   box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.11), inset 0 0 0 1px rgba(59, 91, 219, 0.4);
 }
+[data-link] {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+[data-link]:hover,
+[data-link]:focus-visible {
+  outline: none;
+  background-color: rgba(59, 91, 219, 0.11);
+  box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.11);
+}
 @media (prefers-reduced-motion: reduce) {
-  [data-field] { transition: none; }
+  [data-field], [data-link] { transition: none; }
 }
 `;
+
+/** A link in the document the user asked to edit: its URL and display text
+ *  live at `path` and `${path}_label` in the résumé. */
+export interface LinkTarget {
+  path: string;
+  url: string;
+  /** The display text as stored — empty when the link shows its URL. */
+  text: string;
+  /** Where the link is on screen, to anchor the editor to it. */
+  rect: { top: number; bottom: number; left: number };
+}
 
 /**
  * `plaintext-only` keeps pasted rich text from injecting markup into the
@@ -93,10 +115,15 @@ export function ResumeCanvas({
   onEdit,
   pageCount: pages,
   onPageCount,
+  onEditLink,
 }: {
   html: string;
   editable: boolean;
   onEdit: (path: string, value: string | string[]) => void;
+  /** A link was chosen for editing. Links are not typed into in place: the
+   *  text shown and the address it opens are two values, so they get an
+   *  editor of their own. */
+  onEditLink?: (link: LinkTarget) => void;
   /** Pages to mark boundaries for. Measured here when not supplied. */
   pageCount?: number;
   /** How many pages the document currently takes, reported as it changes. */
@@ -205,7 +232,46 @@ export function ResumeCanvas({
       cleanups.push(() => style.remove());
     }
 
+    for (const link of Array.from(root.querySelectorAll<HTMLElement>("[data-link]"))) {
+      if (!editable || !onEditLink) {
+        link.removeAttribute("tabindex");
+        link.removeAttribute("role");
+        continue;
+      }
+      link.setAttribute("tabindex", "0");
+      link.setAttribute("role", "button");
+      link.setAttribute("aria-label", `Edit link: ${link.textContent ?? ""}`);
+      const open = (event: Event) => {
+        // An <a> in the canvas would otherwise navigate the whole app away.
+        event.preventDefault();
+        event.stopPropagation();
+        const r = link.getBoundingClientRect();
+        onEditLink({
+          path: link.dataset.link ?? "",
+          url: link.dataset.linkUrl ?? "",
+          text: link.dataset.linkText ?? "",
+          rect: { top: r.top, bottom: r.bottom, left: r.left },
+        });
+      };
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") open(event);
+      };
+      link.addEventListener("click", open);
+      link.addEventListener("keydown", onKey);
+      cleanups.push(() => {
+        link.removeEventListener("click", open);
+        link.removeEventListener("keydown", onKey);
+      });
+    }
+
     for (const node of nodes) {
+      // A field that holds a link is edited through the link editor: typed
+      // into in place, the caret would land inside the <a> and change the
+      // text while leaving the address behind.
+      if (node.querySelector("[data-link]")) {
+        node.setAttribute("contenteditable", "false");
+        continue;
+      }
       // setAttribute, not the contentEditable property: the property is a
       // no-op under jsdom, and the attribute is what browsers read anyway.
       // A rich field must be fully editable: plaintext-only would make
@@ -261,7 +327,7 @@ export function ResumeCanvas({
       });
     }
     return () => cleanups.forEach((fn) => fn());
-  }, [html, editable, onEdit]);
+  }, [html, editable, onEdit, onEditLink]);
 
   return (
     <div

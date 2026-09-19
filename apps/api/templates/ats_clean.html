@@ -61,8 +61,8 @@
   ('contact.email', contact.email | email_link),
   ('contact.phone', contact.phone | phone_link),
   ('contact.location', contact.location),
-  ('contact.linkedin', contact.linkedin | url_link),
-  ('contact.github', contact.github | url_link)
+  ('contact.linkedin', contact.linkedin | url_link(contact.linkedin_label, 'contact.linkedin')),
+  ('contact.github', contact.github | url_link(contact.github_label, 'contact.github'))
 ] %}
 <div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %} | {% endif %}<span data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
 
@@ -101,7 +101,7 @@
   <h2>Projects</h2>
   {% for p in projects %}
   <div class="job-row"><span class="job-title" data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.tech_stack %} — <span data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</span>{% endif %}{% if p.start %} <span class="dates">&nbsp;|&nbsp; <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> – <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
-  {% if p.link %}<div class="company">{{ p.link | url_link }}</div>{% endif %}
+  {% if p.link %}<div class="company">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</div>{% endif %}
   {% set pidx = loop.index0 %}<table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="projects.{{ pidx }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
   {% endif %}
@@ -174,7 +174,7 @@
 {% macro render_links() %}
   {% if contact.website %}
   <h2>Links</h2>
-  <div class="skills" data-field="contact.website">{{ contact.website | url_link }}</div>
+  <div class="skills" data-field="contact.website">{{ contact.website | url_link(contact.website_label, 'contact.website') }}</div>
   {% endif %}
 {% endmacro %}
 

@@ -10,7 +10,8 @@ import { FOCUS_RING } from "@/lib/focus";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
-import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
+import { ResumeCanvas, type LinkTarget } from "@/components/studio/ResumeCanvas";
+import { LinkEditor } from "@/components/studio/LinkEditor";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { PageMeter } from "@/components/studio/PageMeter";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
@@ -135,6 +136,21 @@ export default function StudioPreviewPage({
     [updateContent],
   );
 
+  const [editingLink, setEditingLink] = useState<LinkTarget | null>(null);
+  const closeLinkEditor = useCallback(() => setEditingLink(null), []);
+
+  function handleSaveLink(url: string, text: string) {
+    const current = useResumeStore.getState().content;
+    if (editingLink && current) {
+      // Display text the same as the URL is no display text: stored blank,
+      // the link keeps following its URL when that is edited later.
+      const label = text === url ? "" : text;
+      const withUrl = writeField(current, editingLink.path, url);
+      updateContent(writeField(withUrl, `${editingLink.path}_label`, label, { createLeaf: true }));
+    }
+    setEditingLink(null);
+  }
+
   async function handleExport() {
     setIsExporting(true);
     setExportError(null);
@@ -244,6 +260,7 @@ export default function StudioPreviewPage({
         html={data?.html ?? ""}
         editable={mode === "edit"}
         onEdit={handleEdit}
+        onEditLink={setEditingLink}
         pageCount={pages}
         onPageCount={setPages}
       />
@@ -315,6 +332,14 @@ export default function StudioPreviewPage({
         </div>
         {body()}
       </div>
+      {editingLink && mode === "edit" && (
+        <LinkEditor
+          key={editingLink.path}
+          link={editingLink}
+          onSave={handleSaveLink}
+          onClose={closeLinkEditor}
+        />
+      )}
     </div>
   );
 }

@@ -129,18 +129,31 @@ def _phone_link(phone: str) -> Markup:
     return Markup(f'<a href="tel:{escape(digits)}">{escape(phone)}</a>')
 
 
-def _url_link(value: str) -> Markup:
+def _url_link(value: str, label: str | None = None, path: str | None = None) -> Markup:
     """https:// link for LinkedIn/GitHub/website/project-link fields —
-    accepts a bare domain or a full URL, always displays the original text.
-    Falls back to plain (escaped) text when the value isn't a safe http(s)
-    URL, so a malformed field degrades to unlinked text, not a broken link
-    or an unsafe href."""
+    accepts a bare domain or a full URL. Shows *label* when one is set (the
+    field's "<path>_label" sibling), otherwise the original text. Falls back
+    to plain (escaped) text when the value isn't a safe http(s) URL, so a
+    malformed field degrades to unlinked text, not a broken link or an
+    unsafe href.
+
+    *path* is the field's dot path. With it the element carries data-link,
+    which is how the Studio finds a link to offer its URL-and-text editor;
+    without it the output is exactly the plain link it always was."""
     if not value:
         return Markup("")
+    shown = label.strip() if isinstance(label, str) and label.strip() else value
     href = _as_http_url(value)
+    marker = (
+        f' data-link="{escape(path)}" data-link-url="{escape(value)}"'
+        f' data-link-text="{escape(label.strip() if isinstance(label, str) else "")}"'
+        if path
+        else ""
+    )
     if not href:
-        return Markup(escape(value))
-    return Markup(f'<a href="{escape(href)}">{escape(value)}</a>')
+        # Still marked, so a value that is not yet a valid URL can be fixed.
+        return Markup(f"<span{marker}>{escape(shown)}</span>") if path else Markup(escape(shown))
+    return Markup(f'<a href="{escape(href)}"{marker}>{escape(shown)}</a>')
 
 
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)

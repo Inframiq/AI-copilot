@@ -41,6 +41,10 @@ export function writeField(
   content: ResumeContent,
   path: string,
   value: string | string[],
+  /** Allow the final key to be new, on an object that already exists — for
+   *  optional fields such as a link's display text, which has no key until
+   *  it is first set. Never creates a parent, and never an array slot. */
+  { createLeaf = false }: { createLeaf?: boolean } = {},
 ): ResumeContent {
   const keys = segments(path);
   if (keys.length === 0) return content;
@@ -53,7 +57,8 @@ export function writeField(
     if (probe === undefined || probe === null) return content;
   }
   const last = keys[keys.length - 1];
-  if (get(probe, last) === undefined) return content;
+  const canCreate = createLeaf && typeof probe === "object" && !Array.isArray(probe);
+  if (get(probe, last) === undefined && !canCreate) return content;
 
   const clone = (node: Node): Node => (Array.isArray(node) ? [...node] : { ...node });
 
