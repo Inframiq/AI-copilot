@@ -35,8 +35,9 @@ export default function StudioPreviewPage({
   const templateId = useResumeStore((s) => s.templateId);
   const updateContent = useResumeStore((s) => s.updateContent);
   // The JD path reached the Studio through the review, not the Builder, so
-  // "Back" must retrace that route rather than dropping the user into six
-  // sections they deliberately skipped.
+  // "Back" must retrace that route. The Builder itself is not offered on this
+  // path at all: those six sections belong to a résumé built there, and this
+  // journey is about tailoring one that already exists.
   const jdId = useTailoringStore((s) => s.jdId);
   const jdText = useTailoringStore((s) => s.jdText);
   const fromJd = !!jdId || !!jdText.trim();
@@ -176,7 +177,6 @@ export default function StudioPreviewPage({
         onBack={() =>
           router.push(fromJd ? `/studio/${resumeId}/review` : `/studio/${resumeId}`)
         }
-        onEditFull={fromJd ? () => router.push(`/studio/${resumeId}`) : undefined}
         onExport={handleExport}
         isExporting={isExporting}
       />

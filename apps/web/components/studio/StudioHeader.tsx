@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CircleNotch, DownloadSimple, SlidersHorizontal } from "@phosphor-icons/react";
+import { ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
 import { FOCUS_RING } from "@/lib/focus";
 import { StudioControls } from "./StudioControls";
 
@@ -20,7 +20,6 @@ export function StudioHeader({
   onMode,
   onBack,
   backLabel,
-  onEditFull,
   onExport,
   isExporting,
 }: {
@@ -30,8 +29,6 @@ export function StudioHeader({
   onBack: () => void;
   /** Path-specific: the JD path came through the review, not the Builder. */
   backLabel: string;
-  /** The Builder's six sections, as an escape hatch rather than a step. */
-  onEditFull?: () => void;
   onExport: () => void;
   isExporting: boolean;
 }) {
@@ -90,18 +87,6 @@ export function StudioHeader({
       </div>
 
       <StudioControls />
-
-      {onEditFull && (
-        <button
-          type="button"
-          onClick={onEditFull}
-          aria-label="Edit full résumé"
-          className={`flex shrink-0 items-center gap-xs rounded-lg text-label-sm text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
-        >
-          <SlidersHorizontal size={16} />
-          <span className="hidden md:inline">Edit full résumé</span>
-        </button>
-      )}
 
       <button
         type="button"

@@ -207,11 +207,24 @@ describe("Studio preview page", () => {
     expect(push).toHaveBeenCalledWith("/studio/r1/review");
   });
 
-  it("offers the full editor as an escape hatch on the JD path", async () => {
+  // The six-section Builder belongs to résumés built there. Tailoring an
+  // existing résumé against a JD is a different journey, and the Builder was
+  // never part of it — offering it here invites a detour into work the user
+  // deliberately skipped. Everything on the page is editable in place anyway,
+  // contact details included, so nothing is out of reach without it.
+  it("does not offer the Builder on the JD path", async () => {
     useTailoringStore.setState({ jdId: "jd1" } as never);
     await renderPage();
-    fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /edit full/i })));
-    expect(push).toHaveBeenCalledWith("/studio/r1");
+    await waitFor(() => screen.getByRole("button", { name: /back to review/i }));
+    expect(screen.queryByRole("button", { name: /edit full/i })).toBeNull();
+  });
+
+  it("does not duplicate it on the builder path either", async () => {
+    // "Back to Builder" is already that control, to the same route.
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /back to builder/i }));
+    expect(screen.queryByRole("button", { name: /edit full/i })).toBeNull();
   });
 
   it("goes back to the builder when there is no JD", async () => {
