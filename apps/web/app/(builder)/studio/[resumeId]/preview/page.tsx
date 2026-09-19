@@ -34,6 +34,10 @@ export default function StudioPreviewPage({
   const { isLoading: isLoadingResume, isError: resumeFailed } = useHydratedResume(resumeId);
   const content = useResumeStore((s) => s.content);
   const templateId = useResumeStore((s) => s.templateId);
+  const lineSpacing = useResumeStore((s) => s.lineSpacing);
+  const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
+  const fontChoice = useResumeStore((s) => s.fontChoice);
+  const accentColor = useResumeStore((s) => s.accentColor);
   const updateContent = useResumeStore((s) => s.updateContent);
   // The JD path reached the Studio through the review, not the Builder, so
   // "Back" must retrace that route. The Builder itself is not offered on this
@@ -47,12 +51,26 @@ export default function StudioPreviewPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [pages, setPages] = useState(1);
 
-  // Keyed on the content so an inline edit re-renders the document it was
-  // made on. The server render is the only source — rendering client-side
-  // would reintroduce the template drift this whole design avoids.
+  // Keyed on everything the render depends on, and every one of them sent.
+  // Content and template alone meant the Type and Spacing panels changed
+  // nothing on screen: no key change, so no re-render, and nothing in the
+  // request either, so the server used the résumé row's saved values. The
+  // template only appeared to work because its autosave usually landed
+  // before the refetch its key change triggered — a race, not a design.
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ["resumeHtml", resumeId, templateId, content],
-    queryFn: () => apiClient.renderResumeHtml(resumeId, { content: content ?? undefined }),
+    queryKey: [
+      "resumeHtml", resumeId, templateId, lineSpacing, paragraphSpacing,
+      fontChoice, accentColor, content,
+    ],
+    queryFn: () =>
+      apiClient.renderResumeHtml(resumeId, {
+        content: content ?? undefined,
+        template_id: templateId,
+        line_spacing: lineSpacing,
+        paragraph_spacing: paragraphSpacing,
+        font_choice: fontChoice,
+        accent_color: accentColor,
+      }),
     enabled: !!content,
   });
 

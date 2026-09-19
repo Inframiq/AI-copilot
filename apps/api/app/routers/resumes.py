@@ -417,6 +417,13 @@ async def generate_resume_pdf(
     return {"signed_url": data_url, "expires_in": None, **page_meta}
 
 
+def _given(body, field: str, saved):
+    """The request's value for *field*, falling back to *saved* only when the
+    request omitted it. An explicit 0 or "" is a value, not an omission."""
+    value = getattr(body, field, None) if body else None
+    return saved if value is None else value
+
+
 @router.post("/{resume_id}/html")
 @limiter.limit("30/minute")
 async def render_resume_html_endpoint(
@@ -449,10 +456,13 @@ async def render_resume_html_endpoint(
             render_resume_html,
             content,
             template_id,
-            (body.line_spacing if body else None) or resume.line_spacing,
-            (body.paragraph_spacing if body else None) or resume.paragraph_spacing,
-            (body.font_choice if body else None) or resume.font_choice,
-            (body.accent_color if body else None) or resume.accent_color,
+            # `x or saved` would drop a paragraph_spacing of 0, which the
+            # Studio's Custom slider can produce: the user drags it to zero
+            # and the saved value silently comes back instead.
+            _given(body, "line_spacing", resume.line_spacing),
+            _given(body, "paragraph_spacing", resume.paragraph_spacing),
+            _given(body, "font_choice", resume.font_choice),
+            _given(body, "accent_color", resume.accent_color),
         )
     except PhotoRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

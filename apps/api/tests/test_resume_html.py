@@ -78,3 +78,40 @@ async def test_it_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post(f"/resumes/{RESUME_ID}/html", json={})
     assert r.status_code in (401, 403)
+
+
+# ── Presentation overrides ──────────────────────────────────────────────────
+# The Studio's Type and Spacing controls send these. They have to reach the
+# render, or the panel looks broken: the user moves a slider and the document
+# does not move.
+
+
+@pytest.mark.asyncio
+async def test_a_spacing_override_is_rendered_instead_of_the_saved_one():
+    r = await _post({"line_spacing": 1.6, "paragraph_spacing": 24})
+    assert "line-height: 1.6" in r.json()["html"]
+
+
+@pytest.mark.asyncio
+async def test_no_paragraph_spacing_at_all_is_honoured():
+    """Zero is a real value the Custom slider can produce.
+
+    `body.paragraph_spacing or resume.paragraph_spacing` silently swapped it
+    for the saved 12: the slider went to zero and nothing moved.
+    """
+    r = await _post({"paragraph_spacing": 0})
+    html = r.json()["html"]
+    assert "margin: 4px 0 0px" in html
+    assert "margin: 4px 0 12px" not in html
+
+
+@pytest.mark.asyncio
+async def test_a_font_override_is_rendered():
+    r = await _post({"font_choice": "serif"})
+    assert "Georgia" in r.json()["html"]
+
+
+@pytest.mark.asyncio
+async def test_the_saved_values_still_apply_when_nothing_is_overridden():
+    r = await _post()
+    assert "line-height: 1.25" in r.json()["html"]

@@ -332,6 +332,46 @@ describe("Studio preview page", () => {
     await waitFor(() => expect(screen.getByTestId("page-count").textContent).toMatch(/1 page/i));
   });
 
+
+  // The Type and Spacing panels write to resume-store. The render request
+  // carried only the content, so the server fell back to the résumé row's
+  // saved values: the user moved a slider and the document did not move.
+  it("renders with the spacing, font and accent currently chosen", async () => {
+    useResumeStore.setState({
+      templateId: "ats_minimal", lineSpacing: 1.6, paragraphSpacing: 0,
+      fontChoice: "serif", accentColor: "#112233",
+    } as never);
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+    expect(vi.mocked(apiClient.renderResumeHtml).mock.calls[0][1]).toMatchObject({
+      template_id: "ats_minimal",
+      line_spacing: 1.6,
+      paragraph_spacing: 0,
+      font_choice: "serif",
+      accent_color: "#112233",
+    });
+  });
+
+  it("re-renders when the spacing changes", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      useResumeStore.getState().setSpacing(1.6, 20);
+    });
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(apiClient.renderResumeHtml).mock.calls[1][1]).toMatchObject({
+      line_spacing: 1.6, paragraph_spacing: 20,
+    });
+  });
+
+  it("re-renders when the font changes", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      useResumeStore.getState().setFontChoice("serif");
+    });
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("Export when the file cannot be fetched", () => {
