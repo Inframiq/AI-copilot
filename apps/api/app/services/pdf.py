@@ -295,12 +295,13 @@ def _group_experience_by_company(experience: list) -> list[dict]:
 MAX_SIZE_DELTA = 1
 
 
-# Résumé guidance puts body text at 10–12pt; these templates sit at 10–10.5pt
-# with secondary lines (dates, contact) at 9–9.5pt. Nine is the floor — below
-# it a résumé stops being comfortably readable, and the small step used to take
-# secondary text to 8pt. Every template's own smallest size is already 9, so
-# the floor never engages at standard and no existing résumé reflows.
-MIN_FONT_PT = 9
+# Ten is the floor nothing may cross. Résumé guidance is consistent that body
+# text belongs in 10–12pt and that below 10 it stops being comfortably
+# readable; parser studies also report slightly better text extraction at 11pt
+# than at 10. The templates now sit at 11pt body, so the small step lands
+# exactly on 10 and the large step on 12 — the three steps span the
+# recommended band rather than straddling its bottom edge.
+MIN_FONT_PT = 10
 
 
 def _size_stepper(delta: int | None):

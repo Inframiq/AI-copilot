@@ -3,6 +3,7 @@
 Returns the same HTML string generate_pdf feeds to WeasyPrint, so what the
 user edits is by construction what exports. No second template path.
 """
+import re
 import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -123,6 +124,20 @@ async def test_the_saved_values_still_apply_when_nothing_is_overridden():
 # produces something different from one that silently falls back to the row.
 
 
+def _body_pt(html: str) -> float:
+    """The body rule's size — the one unambiguous signal of the step in force.
+
+    Anchored at the start of its line: the templates carry comments that
+    mention "body", and an unanchored search walks past them.
+    """
+    m = re.search(
+        r"^\s*body\s*\{[^}]*font-size:\s*([\d.]+)pt",
+        html.split("</style>")[0], re.M,
+    )
+    assert m, "no body font-size"
+    return float(m.group(1))
+
+
 @pytest.mark.asyncio
 async def test_the_requested_text_size_reaches_the_render():
     """Reported as: standard -> small works, small -> standard does not.
@@ -134,8 +149,7 @@ async def test_the_requested_text_size_reaches_the_render():
     first won.
     """
     r = await _post({"body_size_delta": 0})
-    assert "font-size: 10pt" in r.json()["html"]   # standard, as asked
-    assert "font-size: 9pt" not in r.json()["html"]  # not the row's small
+    assert _body_pt(r.json()["html"]) == 11  # standard, as asked — not the row's small
 
 
 @pytest.mark.asyncio
@@ -144,21 +158,20 @@ async def test_each_step_is_honoured_in_both_directions():
     standard = (await _post({"body_size_delta": 0})).json()["html"]
     large = (await _post({"body_size_delta": 1})).json()["html"]
     assert small != standard != large
-    assert "font-size: 9pt" in small
-    assert "font-size: 10pt" in standard
-    assert "font-size: 11pt" in large
+    # The recommended band, one step each: 10 / 11 / 12.
+    assert (_body_pt(small), _body_pt(standard), _body_pt(large)) == (10, 11, 12)
 
 
 @pytest.mark.asyncio
 async def test_headings_are_requested_separately_from_the_body():
     r = await _post({"heading_size_delta": 1, "body_size_delta": 0})
     html = r.json()["html"]
-    assert "font-size: 17pt" in html   # name 16 -> 17
-    assert "font-size: 10pt" in html   # body untouched
+    assert "font-size: 17pt" in html  # name 16 -> 17
+    assert _body_pt(html) == 11  # body untouched
 
 
 @pytest.mark.asyncio
 async def test_omitting_the_size_still_uses_the_saved_one():
     """Omission is not the same as standard: the résumé keeps its choice."""
     r = await _post({"line_spacing": 1.5})
-    assert "font-size: 9pt" in r.json()["html"]
+    assert _body_pt(r.json()["html"]) == 10  # the row's own small step

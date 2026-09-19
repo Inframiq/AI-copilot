@@ -48,29 +48,26 @@ def test_the_default_renders_the_templates_own_sizes(template):
 
 def test_larger_body_text_moves_the_body_up_a_point():
     html = render_resume_html(CONTENT, "ats_clean", body_size_delta=1)
-    assert "font-size: 11pt" in html   # body was 10
-    assert "font-size: 10.5pt" in html  # contact was 9.5
+    assert "font-size: 12pt" in html  # body 11 -> 12, the top of the band
+    assert "font-size: 11pt" in html  # metadata 10 -> 11
 
 
 def test_smaller_body_text_moves_it_down_a_point():
     html = render_resume_html(CONTENT, "ats_clean", body_size_delta=-1)
-    assert "font-size: 9pt" in html  # body was 10
-    # The contact line was 9.5 and stops at the 9pt floor rather than 8.5 —
-    # see test_nothing_shrinks_below_nine_point.
-    assert "font-size: 8.5pt" not in html
+    assert "font-size: 10pt" in html  # body 11 -> 10, the bottom of the band
+    assert "font-size: 9pt" not in html  # and no further
 
 
 def test_the_body_step_leaves_the_headings_where_they_are():
     html = render_resume_html(CONTENT, "ats_clean", body_size_delta=1)
     assert "font-size: 16pt" in html  # the name, untouched
-    assert "font-size: 12pt" not in html
+    assert "font-size: 13pt" in html  # the section heading, untouched
 
 
 def test_the_heading_step_leaves_the_body_where_it_is():
     html = render_resume_html(CONTENT, "ats_clean", heading_size_delta=-1)
-    assert "font-size: 15pt" in html  # name 16 → 15
-    assert "font-size: 10pt" in html  # body untouched
-    assert "font-size: 9pt" not in html
+    assert "font-size: 15pt" in html  # name 16 -> 15
+    assert "font-size: 11pt" in html  # body untouched
 
 
 @pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
@@ -125,28 +122,23 @@ def test_generate_pdf_accepts_the_sizes():
 
 
 @pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
-def test_nothing_shrinks_below_nine_point(template):
-    """Small took secondary text to 8pt, which no résumé should carry.
-
-    Every template's own smallest size is 9pt, so a 9pt floor never engages
-    at standard — existing résumés keep their exact layout — and only ever
-    catches the bottom of the small step.
-    """
+def test_nothing_shrinks_below_ten_point(template):
+    """Ten is the floor résumé guidance is consistent about."""
     html = render_resume_html(CONTENT, template,
                               heading_size_delta=-1, body_size_delta=-1)
-    assert min(sizes(html)) >= 9
+    assert min(sizes(html)) >= 10
 
 
 @pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
 def test_the_floor_does_not_touch_standard(template):
-    assert min(sizes(render_resume_html(CONTENT, template))) >= 9
+    assert min(sizes(render_resume_html(CONTENT, template))) >= 10
 
 
 def test_text_already_at_the_floor_stays_put_rather_than_going_under():
-    # ats_minimal's contact line is 9pt at standard: the smallest thing on it.
+    # The contact line is 10pt at standard: the smallest thing on the page.
     small = render_resume_html(CONTENT, "ats_minimal", body_size_delta=-1)
-    assert "font-size: 9pt" in small
-    assert "font-size: 8pt" not in small
+    assert "font-size: 10pt" in small
+    assert "font-size: 9pt" not in small
 
 
 def test_the_body_still_steps_down_where_there_is_room():
@@ -154,9 +146,69 @@ def test_the_body_still_steps_down_where_there_is_room():
     standard = sizes(render_resume_html(CONTENT, "ats_clean"))
     small = sizes(render_resume_html(CONTENT, "ats_clean", body_size_delta=-1))
     assert small != standard
-    assert max(small) < max(standard) or 9 in small
 
 
 def test_large_has_no_ceiling_to_trip_over():
     html = render_resume_html(CONTENT, "ats_clean", heading_size_delta=1, body_size_delta=1)
-    assert "font-size: 17pt" in html
+    assert "font-size: 17pt" in html  # name 16 -> 17
+
+
+# ── The researched standards, pinned ────────────────────────────────────────
+# Résumé guidance is consistent on these: body text 10–12pt with 11 the safest
+# default and 10 the floor; section headings two to three points above body;
+# the name 16–20pt. Sizes drift one template at a time, so each is asserted
+# against the rule rather than against a number someone can quietly edit.
+
+
+def _rule_size(html: str, selector: str) -> float:
+    """The size on a rule, matched at the start of its line.
+
+    Anchored: the templates carry comments that mention "body", and an
+    unanchored search skipped past them into whatever rule came next.
+    """
+    css = html.split("</style>")[0]
+    m = re.search(
+        r"^\s*" + re.escape(selector) + r"\s*\{[^}]*font-size:\s*([\d.]+)pt",
+        css, re.M,
+    )
+    assert m, f"no font-size on {selector!r}"
+    return float(m.group(1))
+
+
+def _body_pt(html: str) -> float:
+    return _rule_size(html, "body")
+
+
+def _heading_pt(html: str) -> float:
+    for selector in ("h2", ".section-label"):
+        try:
+            return _rule_size(html, selector)
+        except AssertionError:
+            continue
+    raise AssertionError("no section heading rule")
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+@pytest.mark.parametrize("step,expected", [(-1, 10), (0, 11), (1, 12)])
+def test_body_text_spans_the_recommended_band(template, step, expected):
+    """Small, Standard and Large land on 10, 11 and 12 — the band itself."""
+    assert _body_pt(render_resume_html(CONTENT, template, body_size_delta=step)) == expected
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+def test_section_headings_clear_the_body_by_at_least_two_points(template):
+    html = render_resume_html(CONTENT, template)
+    assert _heading_pt(html) - _body_pt(html) >= 2
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+def test_the_name_is_within_the_recommended_range(template):
+    assert 16 <= max(sizes(render_resume_html(CONTENT, template))) <= 20
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+@pytest.mark.parametrize("step", [-1, 0, 1])
+def test_no_text_anywhere_falls_below_the_floor(template, step):
+    html = render_resume_html(CONTENT, template,
+                              heading_size_delta=step, body_size_delta=step)
+    assert min(sizes(html)) >= 10
