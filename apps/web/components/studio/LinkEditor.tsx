@@ -18,12 +18,16 @@ const GUTTER = 16;
 export function LinkEditor({
   link,
   onSave,
+  onRemove,
   onClose,
 }: {
   link: LinkTarget;
   onSave: (url: string, text: string) => void;
+  /** Takes the link off the résumé. Offered only for a link that exists. */
+  onRemove?: () => void;
   onClose: () => void;
 }) {
+  const adding = !link.url;
   const [text, setText] = useState(link.text);
   const [url, setUrl] = useState(link.url);
   const panelRef = useRef<HTMLFormElement>(null);
@@ -58,7 +62,7 @@ export function LinkEditor({
     <form
       ref={panelRef}
       role="dialog"
-      aria-label="Edit link"
+      aria-label={adding ? "Add link" : "Edit link"}
       onSubmit={(event) => {
         event.preventDefault();
         if (!trimmedUrl) return;
@@ -87,13 +91,22 @@ export function LinkEditor({
         inputMode="url"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://linkedin.com/in/you"
+        placeholder="https://"
         className={`rounded-lg border border-outline-variant/50 bg-surface px-sm py-xs text-body-sm text-on-surface ${FOCUS_RING}`}
       />
       <p className="text-caption text-on-surface-variant">
         Leave the display text blank to show the URL itself.
       </p>
       <div className="flex justify-end gap-sm">
+        {!adding && onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className={`mr-auto rounded-xl px-md py-xs text-label-md text-error hover:bg-error-container/30 ${FOCUS_RING}`}
+          >
+            Remove
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -106,7 +119,7 @@ export function LinkEditor({
           disabled={!trimmedUrl}
           className={`rounded-xl bg-primary px-md py-xs text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
         >
-          Save
+          {adding ? "Add" : "Save"}
         </button>
       </div>
     </form>

@@ -3,12 +3,15 @@ import io
 import re
 import json
 import zipfile
+from typing import NamedTuple
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.tailoring import _looks_like_a_skill
 
 _MAX_PDF_PAGES = 50
 _MAX_TEXT_CHARS = 100_000
+# A host with a dot (github.com/x, odtect.app), or an explicit scheme.
+_URL_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*://|[a-z0-9-]\.[a-z]{2,}", re.IGNORECASE)
 
 # DOCX files are zip archives — a maliciously crafted archive can advertise a
 # tiny compressed size but expand to gigabytes ("zip bomb"), exhausting memory
@@ -45,13 +48,47 @@ class ParsedResume(BaseModel):
     certifications: list[str] | None = None
 
 
-def _extract_link_uris(page) -> list[str]:
+class _Link(NamedTuple):
+    """A hyperlink's destination, plus what the reader saw: the clickable
+    text ("GitHub", "Live") and the whole line it sat on. The URL alone
+    can't say which project a link belongs to, or whether it is the repo
+    or the running app."""
+    url: str
+    anchor: str = ""
+    line: str = ""
+
+
+def _page_fragments(page) -> list[tuple[float, float, str]]:
+    """Every run of text on the page with where it starts, in page space."""
+    fragments: list[tuple[float, float, str]] = []
+
+    def visit(text, cm, tm, _font, _size):
+        if not text or not text.strip():
+            return
+        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+        y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+        fragments.append((x, y, text.replace("\n", " ")))
+
+    try:
+        page.extract_text(visitor_text=visit)
+    except Exception:
+        return []
+    return fragments
+
+
+def _join(fragments) -> str:
+    return re.sub(r"\s+", " ", " ".join(t for _, _, t in sorted(fragments))).strip()
+
+
+def _extract_links(page) -> list[_Link]:
     """PDF hyperlinks (e.g. the word "GitHub" linking to a profile/repo URL)
     never show up in page.extract_text() — it only returns the visible
     anchor text, never the destination. Pulling the URIs straight from the
     page's link annotations lets the parser prompt see the real URL instead
-    of just the word "GitHub"/"LinkedIn"/"Portfolio"."""
-    urls = []
+    of just the word "GitHub"/"LinkedIn"/"Portfolio"; the text under each
+    link's rectangle, and the line around it, say what it was for."""
+    links: list[_Link] = []
+    fragments: list[tuple[float, float, str]] | None = None
     for annot_ref in page.get("/Annots") or []:
         try:
             annot = annot_ref.get_object()
@@ -59,25 +96,43 @@ def _extract_link_uris(page) -> list[str]:
                 continue
             action = annot.get("/A")
             uri = action.get("/URI") if action and action.get("/S") == "/URI" else None
-            if uri:
-                urls.append(str(uri))
+            if not uri:
+                continue
+            if fragments is None:
+                fragments = _page_fragments(page)
+            x0, y0, x1, y1 = (float(v) for v in annot.get("/Rect"))
+            x0, x1 = min(x0, x1), max(x0, x1)
+            y0, y1 = min(y0, y1), max(y0, y1)
+            # A run's origin sits on its baseline, just above the rect's
+            # bottom edge; a little slack keeps a tight rect from missing it.
+            anchor = _join(f for f in fragments if x0 - 2 <= f[0] < x1 - 1 and y0 - 2 <= f[1] <= y1)
+            line = _join(f for f in fragments if y0 - 2 <= f[1] <= y1)
+            links.append(_Link(str(uri), anchor, line))
         except Exception:
             continue
-    return urls
+    return links
 
 
-def _append_link_hints(text: str, link_urls: list[str]) -> str:
+def _append_link_hints(text: str, links: list[_Link]) -> str:
     """Same hint block for both PDF and DOCX extraction — see
-    _extract_link_uris' docstring for why this exists at all."""
-    if not link_urls:
+    _extract_links' docstring for why this exists at all."""
+    if not links:
         return text
     seen: set[str] = set()
-    unique_links = [u for u in link_urls if not (u in seen or seen.add(u))]
+    unique = [link for link in links if not (link.url in seen or seen.add(link.url))]
+
+    def hint(link: _Link) -> str:
+        out = f'- "{link.anchor}" -> {link.url}' if link.anchor and link.anchor != link.url else f"- {link.url}"
+        if link.line and link.line != link.anchor:
+            out += f' (on the line: "{link.line[:160]}")'
+        return out
+
     return (
         text
         + '\n\nHyperlinks found in this document (the real destination behind clickable '
-        + 'text like "GitHub" or "LinkedIn" — match each to the right field by its domain):\n'
-        + "\n".join(unique_links)
+        + 'text like "GitHub", "LinkedIn" or "Live", with the text it was shown as and the '
+        + "line it sat on — match each to the right field by its domain and that line):\n"
+        + "\n".join(hint(link) for link in unique)
     )
 
 
@@ -88,12 +143,12 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         if len(reader.pages) > _MAX_PDF_PAGES:
             raise ValueError(f"PDF exceeds maximum page count ({_MAX_PDF_PAGES} pages).")
         pages = []
-        link_uris: list[str] = []
+        links: list[_Link] = []
         for page in reader.pages:
             pages.append(page.extract_text() or "")
-            link_uris.extend(_extract_link_uris(page))
+            links.extend(_extract_links(page))
         text = "\n".join(pages).strip()
-        return _append_link_hints(text, link_uris)[:_MAX_TEXT_CHARS]
+        return _append_link_hints(text, links)[:_MAX_TEXT_CHARS]
     except ImportError:
         raise RuntimeError("pypdf is not installed. Add 'pypdf' to requirements.txt.")
 
@@ -105,15 +160,15 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         doc = docx.Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
         text = "\n".join(paragraphs).strip()
-        # Same issue as PDF's _extract_link_uris — a Word hyperlink's visible
+        # Same issue as PDF's _extract_links — a Word hyperlink's visible
         # run text (e.g. "GitHub") never includes the address it points at.
-        link_urls = [
-            h.address
+        links = [
+            _Link(h.address, h.text.strip(), p.text.strip())
             for p in doc.paragraphs
             for h in p.hyperlinks
             if h.address
         ]
-        return _append_link_hints(text, link_urls)[:_MAX_TEXT_CHARS]
+        return _append_link_hints(text, links)[:_MAX_TEXT_CHARS]
     except ImportError:
         raise RuntimeError("python-docx is not installed. Add 'python-docx' to requirements.txt.")
 
@@ -163,7 +218,10 @@ Return a JSON object with EXACTLY this shape:
     {
       "name": "Project Name",
       "tech_stack": "e.g. React, Node.js, PostgreSQL — if present",
-      "link": "GitHub/demo URL if present",
+      "link": "source/repo URL (e.g. GitHub) if present",
+      "link_label": "the clickable text the link was shown as (e.g. 'GitHub'), else null",
+      "live_link": "deployed/demo URL (e.g. a link shown as 'Live' or 'Demo') if present",
+      "live_link_label": "the clickable text the live link was shown as (e.g. 'Live'), else null",
       "start": "Mon YYYY or YYYY, if present",
       "end": "Mon YYYY, YYYY, or 'Present', if present",
       "bullets": ["bullet 1", "bullet 2"]
@@ -195,6 +253,13 @@ Rules:
   anchor text or leaving the field null when a real link exists. If a field
   already has a plain-text URL printed directly in the resume body, prefer
   that exact text over the hyperlink block.
+- PROJECT LINKS: a project can have two links. The source/repo (usually
+  github.com, gitlab.com, bitbucket.org) goes in "link"; the running app
+  (a deployed site, anything shown as "Live", "Demo", "Website", "App")
+  goes in "live_link". A project with a single link that isn't a repo puts
+  it in "link". Never drop a project's second link. Only a real URL goes in
+  a link field; the word it was shown as (e.g. "GitHub", "Live") goes in
+  its "_label" field, never in the URL field.
 - If a field is not found, use null for strings and [] for arrays.
 - languages: take these ONLY from an explicit Languages section. Never infer a
   language from the language the resume is written in, from a nationality, a
@@ -274,4 +339,19 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     # sentence into "skills" despite the prompt rule against it — same
     # prose-vs-skill-name filter tailoring.py applies to AI-suggested skills.
     data["skills"] = [s for s in data["skills"] if isinstance(s, str) and _looks_like_a_skill(s)]
+    for project in data["projects"] or []:
+        if isinstance(project, dict):
+            _keep_only_real_urls(project)
     return data
+
+
+def _keep_only_real_urls(project: dict) -> None:
+    """The model sometimes files a link's anchor word ("GitHub", "Live") as
+    its URL. That renders as a dead word on the résumé; the word belongs in
+    the label, and the URL stays empty for the user to fill in."""
+    for key in ("link", "live_link"):
+        value = project.get(key)
+        if isinstance(value, str) and value.strip() and not _URL_SHAPE.search(value):
+            if not project.get(f"{key}_label"):
+                project[f"{key}_label"] = value.strip()
+            project[key] = None

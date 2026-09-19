@@ -146,8 +146,20 @@ export default function StudioPreviewPage({
       // Display text the same as the URL is no display text: stored blank,
       // the link keeps following its URL when that is edited later.
       const label = text === url ? "" : text;
-      const withUrl = writeField(current, editingLink.path, url);
+      // createLeaf: a project that had no link yet has no key for it either.
+      const withUrl = writeField(current, editingLink.path, url, { createLeaf: true });
       updateContent(writeField(withUrl, `${editingLink.path}_label`, label, { createLeaf: true }));
+    }
+    setEditingLink(null);
+  }
+
+  function handleRemoveLink() {
+    const current = useResumeStore.getState().content;
+    if (editingLink && current) {
+      // Blank, not deleted: the templates show a link only when it has an
+      // address, and the key stays for writeField to find next time.
+      const withoutUrl = writeField(current, editingLink.path, "");
+      updateContent(writeField(withoutUrl, `${editingLink.path}_label`, "", { createLeaf: true }));
     }
     setEditingLink(null);
   }
@@ -353,6 +365,7 @@ export default function StudioPreviewPage({
           key={editingLink.path}
           link={editingLink}
           onSave={handleSaveLink}
+          onRemove={handleRemoveLink}
           onClose={closeLinkEditor}
         />
       )}

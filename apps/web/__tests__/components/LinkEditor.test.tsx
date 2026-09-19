@@ -75,6 +75,53 @@ describe("editing links in the Studio", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("offers to add each link a project is missing, beside its name", () => {
+    const onEditLink = vi.fn();
+    const html = `<div class="job-row"><span data-field="projects.0.name">OdTect</span> &middot;
+<span><a href="https://github.com/j/o" data-link="projects.0.link" data-link-url="github.com/j/o" data-link-text="GitHub">GitHub</a></span></div>
+<div class="job-row"><span data-field="projects.1.name">Disk Monitor</span></div>
+<div><span data-field="experience.0.name">Not a project</span></div>`;
+    const { container } = render(
+      <ResumeCanvas html={html} editable onEdit={() => {}} onEditLink={onEditLink} />,
+    );
+    const root = shadow(container);
+    const labels = (i: number) =>
+      Array.from(root.querySelector(`[data-field="projects.${i}.name"]`)!.nextElementSibling!.querySelectorAll("button"))
+        .map((b) => b.textContent);
+
+    expect(labels(0)).toEqual(["+ Live link"]);
+    expect(labels(1)).toEqual(["+ Link", "+ Live link"]);
+    expect(root.querySelectorAll("[data-studio-add-links]")).toHaveLength(2);
+
+    const add = root.querySelector('[data-field="projects.0.name"]')!.nextElementSibling!.querySelector("button")!;
+    add.click();
+    expect(onEditLink).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "projects.0.live_link", url: "", text: "" }),
+    );
+  });
+
+  it("offers no add-link buttons in preview mode", () => {
+    const html = `<div><span data-field="projects.0.name">Disk Monitor</span></div>`;
+    const { container } = render(
+      <ResumeCanvas html={html} editable={false} onEdit={() => {}} onEditLink={() => {}} />,
+    );
+    expect(shadow(container).querySelector("[data-studio-add-links]")).toBeNull();
+  });
+
+  it("removes an existing link, but offers no remove while adding one", () => {
+    const onRemove = vi.fn();
+    const { unmount } = render(<LinkEditor link={LINK} onSave={() => {}} onRemove={onRemove} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(onRemove).toHaveBeenCalled();
+    unmount();
+
+    render(
+      <LinkEditor link={{ ...LINK, url: "", text: "" }} onSave={() => {}} onRemove={onRemove} onClose={() => {}} />,
+    );
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
   it("closes on Escape", () => {
     const onClose = vi.fn();
     render(<LinkEditor link={LINK} onSave={() => {}} onClose={onClose} />);

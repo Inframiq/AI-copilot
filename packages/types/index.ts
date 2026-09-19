@@ -35,6 +35,9 @@ export interface ResumeContent {
     link?: string;
     /** What the link shows instead of its URL. Absent or blank shows the URL. */
     link_label?: string;
+    /** Where the project runs, beside `link` (usually its source). */
+    live_link?: string;
+    live_link_label?: string;
     start?: string;
     end?: string;
     bullets: string[];

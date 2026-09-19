@@ -63,10 +63,57 @@ const AFFORDANCE_CSS = `
   background-color: rgba(59, 91, 219, 0.11);
   box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.11);
 }
+[data-studio-add-links] {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: baseline;
+}
+[data-studio-add-links] > span {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+:hover > [data-studio-add-links] > span,
+[data-studio-add-links]:focus-within > span {
+  opacity: 1;
+  pointer-events: auto;
+}
+[data-studio-add-links] button {
+  font: 600 10.5px/1.4 system-ui, sans-serif;
+  color: rgb(59, 91, 219);
+  background: #fff;
+  border: 1px dashed rgba(59, 91, 219, 0.55);
+  border-radius: 999px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+[data-studio-add-links] button:hover,
+[data-studio-add-links] button:focus-visible {
+  outline: none;
+  background: rgba(59, 91, 219, 0.1);
+  border-style: solid;
+}
 @media (prefers-reduced-motion: reduce) {
-  [data-field], [data-link] { transition: none; }
+  [data-field], [data-link], [data-studio-add-links] > span { transition: none; }
 }
 `;
+
+/** The links a project can carry, in the order the templates show them. A
+ *  missing one has nothing in the document to click, so the canvas offers
+ *  to add it beside the project's name. */
+const PROJECT_LINKS = [
+  { key: "link", label: "Link" },
+  { key: "live_link", label: "Live link" },
+] as const;
 
 /** A link in the document the user asked to edit: its URL and display text
  *  live at `path` and `${path}_label` in the résumé. */
@@ -262,6 +309,45 @@ export function ResumeCanvas({
         link.removeEventListener("click", open);
         link.removeEventListener("keydown", onKey);
       });
+    }
+
+    // Floated over the page, never in its flow, so offering a link moves no
+    // line and costs no page. The export renders on the server and never
+    // sees these.
+    if (editable && onEditLink) {
+      for (const name of Array.from(root.querySelectorAll<HTMLElement>("[data-field$='.name']"))) {
+        const index = /^projects\.(\d+)\.name$/.exec(name.dataset.field ?? "")?.[1];
+        if (index === undefined) continue;
+        const missing = PROJECT_LINKS.filter(
+          ({ key }) => !root.querySelector(`[data-link="projects.${index}.${key}"]`),
+        );
+        if (missing.length === 0) continue;
+
+        const anchor = document.createElement("span");
+        anchor.setAttribute("data-studio-add-links", "");
+        const bar = document.createElement("span");
+        anchor.appendChild(bar);
+        for (const { key, label } of missing) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = `+ ${label}`;
+          button.setAttribute("aria-label", `Add ${label.toLowerCase()} to ${name.textContent ?? "project"}`);
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const r = button.getBoundingClientRect();
+            onEditLink({
+              path: `projects.${index}.${key}`,
+              url: "",
+              text: "",
+              rect: { top: r.top, bottom: r.bottom, left: r.left },
+            });
+          });
+          bar.appendChild(button);
+        }
+        name.after(anchor);
+        cleanups.push(() => anchor.remove());
+      }
     }
 
     for (const node of nodes) {
