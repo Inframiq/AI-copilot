@@ -118,8 +118,7 @@
   {% if projects %}
   <h2>Projects</h2>
   {% for p in projects %}
-  <div class="job-row"><span class="job-title"><span data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.tech_stack %}, <b data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</b>{% endif %}</span>{% if p.start %} <span class="job-dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> — <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
-  {% if p.link %}<div class="edu-institution">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</div>{% endif %}
+  <div class="job-row"><span class="job-title"><span data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.tech_stack %}, <b data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</b>{% endif %}</span>{% if p.link %} &middot; <span class="edu-institution">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</span>{% endif %}{% if p.start %} <span class="job-dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> — <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
   <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
   {% endif %}
