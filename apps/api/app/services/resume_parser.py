@@ -153,6 +153,7 @@ Return a JSON object with EXACTLY this shape:
     {
       "company": "Company Name",
       "title": "Job Title",
+      "location": "City, State/Country or 'Remote' if present, else null",
       "start": "Mon YYYY or YYYY",
       "end": "Mon YYYY or 'Present'",
       "bullets": ["bullet 1", "bullet 2"]
@@ -228,18 +229,24 @@ Rules:
   into another role's entry.
 
   Example — this resume text:
-      Northwind Traders
+      Northwind Traders — Chicago, IL
       Senior Data Analyst | Mar 2022 – Present
         - Owns the revenue forecasting models used by finance.
       Data Analyst | Jul 2019 – Feb 2022
         - Built the first self-serve reporting dashboards.
   MUST parse to TWO experience entries:
       {"company": "Northwind Traders", "title": "Senior Data Analyst",
-       "start": "Mar 2022", "end": "Present",
+       "location": "Chicago, IL", "start": "Mar 2022", "end": "Present",
        "bullets": ["Owns the revenue forecasting models used by finance."]},
       {"company": "Northwind Traders", "title": "Data Analyst",
-       "start": "Jul 2019", "end": "Feb 2022",
+       "location": "Chicago, IL", "start": "Jul 2019", "end": "Feb 2022",
        "bullets": ["Built the first self-serve reporting dashboards."]}
+
+- "location" is where the role was based, copied as written ("Chicago, IL",
+  "London, UK", "Remote"). A location stated once against the employer
+  applies to every role under it, as above. Omit the key entirely when the
+  resume does not say — never guess one from the candidate's own address,
+  and never invent "Remote".
 """
 
 

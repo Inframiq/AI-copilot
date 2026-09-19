@@ -21,6 +21,10 @@ export interface ResumeContent {
   experience: Array<{
     company: string;
     title: string;
+    /** Where the role was based, as it should print: "London, UK",
+     *  "Remote", "Austin, TX". Optional — plenty of résumés omit it,
+     *  and every template leaves the separator out when it is absent. */
+    location?: string;
     start: string;
     end?: string;
     bullets: string[];

@@ -21,6 +21,10 @@ export interface ExperienceEntry {
   type: ExpType;
   company: string;
   title: string;
+  /** Where the role was based. Carried through both mappings below —
+   *  they rebuild each entry field by field, so anything not named here
+   *  is dropped the first time a résumé passes through the profile. */
+  location: string;
   start: string;
   end: string;
   current: boolean;
@@ -160,6 +164,7 @@ export function resumeContentToCareerProfileInput(
           type: inferExpType(e.title, e.company),
           company: e.company,
           title: e.title,
+          location: e.location ?? "",
           start: e.start,
           end: e.end || "Present",
           current: !e.end || e.end === "Present",
@@ -209,6 +214,7 @@ export function profileToResumeContent(profile: CareerProfileInput): ResumeConte
     experience: profile.experience.map(e => ({
       company: `${e.company}${e.type === "internship" ? " (Internship)" : ""}`,
       title: e.title,
+      ...(e.location?.trim() ? { location: e.location.trim() } : {}),
       start: e.start,
       end: e.current ? "Present" : e.end || "Present",
       bullets: [
@@ -266,6 +272,7 @@ export function blankExperienceEntry(
     type: "full-time",
     company: "",
     title: "",
+    location: "",
     start: "",
     end: "",
     current: false,

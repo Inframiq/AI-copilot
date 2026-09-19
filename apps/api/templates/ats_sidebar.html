@@ -147,14 +147,14 @@
         <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
         {% for job in group.roles %}
         <div class="role-block">
-          <div class="job-title-line"><span class="title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Current" }}</span></span></div>
+          <div class="job-title-line"><span class="title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span>{% if job.location %} &middot; <span data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %} <span class="dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Current" }}</span></span></div>
           <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         </div>
         {% endfor %}
         {% else %}
         {% set job = group.roles[0] %}
         <div class="job-title-line"><span class="title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Current" }}</span></span></div>
-        <div class="job-company">{{ job.company }}</div>
+        <div class="job-company"><span data-field="experience.{{ job._index }}.company">{{ job.company }}</span>{% if job.location %} &middot; <span data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %}</div>
         <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
         {% endif %}
       </div>

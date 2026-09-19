@@ -327,9 +327,10 @@ export default function ProfilePage() {
       const newHeadline = (c.headline as string) ?? "";
       const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
       const newExperiences: ExperienceEntry[] = Array.isArray(c.experience)
-        ? (c.experience as Array<{company:string;title:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
+        ? (c.experience as Array<{company:string;title:string;location?:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
             id: newId(), type: inferExpType(e.title, e.company),
             company: e.company, title: e.title,
+            location: e.location ?? "",
             start: e.start, end: e.end || "Present",
             current: !e.end || e.end === "Present",
             responsibilities: (e.bullets ?? []).join("; "),
@@ -854,6 +855,11 @@ export default function ProfilePage() {
                           <label className="text-caption text-on-surface-variant">Role / Title *</label>
                           <input value={exp.title ?? ""} onChange={e => updateExp(exp.id, "title", e.target.value)}
                             placeholder="Software Engineer" className={inputCls} />
+                        </div>
+                        <div className="flex flex-col gap-xs">
+                          <label className="text-caption text-on-surface-variant">Location</label>
+                          <input value={exp.location ?? ""} onChange={e => updateExp(exp.id, "location", e.target.value)}
+                            placeholder="London, UK or Remote" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
                           <div className="flex items-center h-[18px]">

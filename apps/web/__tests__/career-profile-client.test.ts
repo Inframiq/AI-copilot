@@ -59,6 +59,7 @@ const SAMPLE_PROFILE: CareerProfile = {
       type: "internship",
       company: "Acme",
       title: "SWE Intern",
+      location: "Boston, MA",
       start: "2024-06",
       end: "2024-08",
       current: false,
@@ -271,6 +272,61 @@ describe("career-profile-client", () => {
       );
       expect(result.experience[0].type).toBe("internship");
       expect(result.experience[1].type).toBe("full-time");
+    });
+
+    // Both mappings rebuild each entry field by field, so anything they do
+    // not name is dropped the first time a résumé passes through the profile.
+    it("carries the role location in from a résumé", () => {
+      const result = resumeContentToCareerProfileInput(
+        {
+          contact: { name: "Jane Doe", email: "jane@example.com" },
+          experience: [
+            { company: "Acme", title: "Engineer", location: "Berlin, DE", start: "2022", bullets: [] },
+            { company: "Beta", title: "Analyst", start: "2020", end: "2022", bullets: [] },
+          ],
+          education: [],
+          skills: [],
+        } as any,
+        null
+      );
+      expect(result.experience[0].location).toBe("Berlin, DE");
+      // Absent upstream becomes blank here, not undefined — the form binds to it.
+      expect(result.experience[1].location).toBe("");
+    });
+  });
+
+  describe("the role location round trip", () => {
+    it("survives résumé -> profile -> résumé", () => {
+      const content = {
+        contact: { name: "Jane Doe", email: "jane@example.com" },
+        experience: [
+          { company: "Acme", title: "Engineer", location: "Berlin, DE", start: "2022", bullets: ["Did a thing."] },
+        ],
+        education: [],
+        skills: [],
+      } as any;
+      const back = profileToResumeContent(
+        resumeContentToCareerProfileInput(content, null)
+      ) as any;
+      expect(back.experience[0].location).toBe("Berlin, DE");
+    });
+
+    it("leaves the key off entirely when the profile has no location", () => {
+      // The templates render a separator whenever the key is truthy, so a
+      // blank string would print a middot with nothing after it.
+      const back = profileToResumeContent({
+        ...SAMPLE_PROFILE,
+        experience: [{ ...SAMPLE_PROFILE.experience[0], location: "   " }],
+      } as any) as any;
+      expect("location" in back.experience[0]).toBe(false);
+    });
+
+    it("trims a location the user padded", () => {
+      const back = profileToResumeContent({
+        ...SAMPLE_PROFILE,
+        experience: [{ ...SAMPLE_PROFILE.experience[0], location: "  Boston, MA  " }],
+      } as any) as any;
+      expect(back.experience[0].location).toBe("Boston, MA");
     });
   });
 

@@ -102,12 +102,12 @@
     {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
     <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
     {% for job in group.roles %}
-    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span> <span class="job-dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> — <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
+    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span>{% if job.location %} &middot; <span class="company" data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %} <span class="job-dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> — <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
     <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endfor %}
     {% else %}
     {% set job = group.roles[0] %}
-    <div class="job-row"><span class="job-title"><span data-field="experience.{{ job._index }}.title">{{ job.title }}</span>, <b data-field="experience.{{ job._index }}.company">{{ job.company }}</b></span> <span class="job-dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> — <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
+    <div class="job-row"><span class="job-title"><span data-field="experience.{{ job._index }}.title">{{ job.title }}</span>, <b data-field="experience.{{ job._index }}.company">{{ job.company }}</b>{% if job.location %} &middot; <span class="company" data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %}</span> <span class="job-dates">| <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> — <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
     <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {% endif %}
   {% endfor %}
