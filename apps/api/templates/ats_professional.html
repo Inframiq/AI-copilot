@@ -60,7 +60,7 @@
   .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: justify; }
   .kw { font-weight: 700; }
   .edu-degree { font-weight: 700; font-size: {{ body_size(11.5) }}pt; }
-  .edu-institution { font-size: {{ body_size(11) }}pt; color: #444; }
+  .edu-institution { font-size: {{ body_size(11) }}pt; font-weight: 400; color: #444; }
   .skills-list { font-size: {{ body_size(11) }}pt; margin: 4px 0 6px; line-height: 1.5; }
   ul.additional { margin: 4px 0 {{ paragraph_spacing }}px 18px; padding: 0; font-size: {{ body_size(11) }}pt; }
   ul.additional li { margin-bottom: 2px; }
@@ -118,7 +118,7 @@
   {% if projects %}
   <h2>Projects</h2>
   {% for p in projects %}
-  <div class="job-row"><span class="job-title"><span data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.tech_stack %}, <b data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</b>{% endif %}</span>{% if p.link %} &middot; <span class="edu-institution">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</span>{% endif %}{% if p.start %} <span class="job-dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> — <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
+  <div class="job-row"><span class="job-title"><span data-field="projects.{{ loop.index0 }}.name">{{ p.name }}</span>{% if p.link %} &middot; <span class="edu-institution">{{ p.link | url_link(p.link_label, 'projects.' ~ loop.index0 ~ '.link') }}</span>{% endif %}{% if p.tech_stack %}, <b data-field="projects.{{ loop.index0 }}.tech_stack">{{ p.tech_stack }}</b>{% endif %}</span>{% if p.start %} <span class="job-dates">| <span data-field="projects.{{ loop.index0 }}.start">{{ p.start }}</span> — <span data-field="projects.{{ loop.index0 }}.end">{{ p.end or "Present" }}</span></span>{% endif %}</div>
   <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt">{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
   {% endfor %}
   {% endif %}
