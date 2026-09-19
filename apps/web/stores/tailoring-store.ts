@@ -158,7 +158,9 @@ export function deriveBulletChanges(
 // Merge accepted bullet decisions into the original content — shared by
 // generatePreview (renders a PDF from this) and reanalyzePreview (scores
 // this against the JD). Never written to the resume store or backend.
-function buildMergedContent(
+// Exported for the review's wording checks, which must read exactly the
+// résumé the user's current picks would produce.
+export function buildMergedContent(
   pendingContent: ResumeContent,
   originalContent: ResumeContent,
   bulletDecisions: Record<string, BulletDecision>,
@@ -343,6 +345,10 @@ interface TailoringState {
   /** Why each bullet was transformed, keyed by bullet id. Shown per bullet in
    * review so a rewrite reads as a reasoned change rather than "trust me". */
   bulletRationale: Record<string, BulletRationale>;
+  /** For bullets that still carry no number: a question asking the user for
+   * one, keyed by bullet id. The AI may never invent a figure; this is how
+   * the résumé gets quantified with real ones. */
+  quantifyPrompts: Record<string, string>;
   // Running ATS score for the résumé with the currently-accepted fixes folded
   // in — pure server re-score (POST /ai/project-score), null until computed.
   projectedAtsScore: number | null;
@@ -445,6 +451,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   bulletImportance: {},
   revertedBullets: [],
   bulletRationale: {},
+  quantifyPrompts: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
@@ -744,6 +751,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       bulletImportance: {},
   revertedBullets: [],
   bulletRationale: {},
+  quantifyPrompts: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
@@ -870,6 +878,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           atsScoreBefore: session.ats_score_before ?? null,
           revertedBullets: session.reverted_bullets ?? [],
           bulletRationale: session.bullet_rationale ?? {},
+          quantifyPrompts: session.quantify_prompts ?? {},
           projectedAtsScore: session.ats_score ?? null,
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
@@ -1071,6 +1080,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       bulletImportance: {},
   revertedBullets: [],
   bulletRationale: {},
+  quantifyPrompts: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},
@@ -1104,6 +1114,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       bulletImportance: {},
   revertedBullets: [],
   bulletRationale: {},
+  quantifyPrompts: {},
   atsScoreBefore: null,
   projectedScoreStale: false,
   fixDeltas: {},

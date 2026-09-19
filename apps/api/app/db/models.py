@@ -142,6 +142,9 @@ class TailoringSession(Base):
     # account of why each bullet was transformed, shown on the review screen.
     # NULL for sessions tailored before this was persisted.
     bullet_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # {bullet_id: question} asking the candidate for a number each still
+    # unquantified bullet could carry. NULL for sessions from before it.
+    quantify_prompts: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # services/tailoring.tailor_fingerprint of this run's inputs. POST
     # /ai/tailor hands back a completed session with a matching fingerprint
     # instead of re-running — the model has no seed, so a re-run rewords.

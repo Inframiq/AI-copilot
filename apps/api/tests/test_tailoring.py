@@ -2029,3 +2029,51 @@ async def test_pipeline_records_before_after_verdicts_and_per_rewrite_deltas():
     delta = result.bullet_rationale["exp0_b0"]["score_delta"]
     assert delta > 0
     assert delta == result.ats_score - result.ats_score_before
+
+
+# ── Quantify questions ───────────────────────────────────────────────────────
+# The writer may never invent a number, so the review asks the candidate for
+# one instead. Only bullets with no digit are sent, and the answer is keyed by
+# bullet id so the review can put each question under its bullet.
+
+from app.services.tailoring import _agent_quantify_questions, _QuantifyOutput, _QuantifyQuestion
+
+
+@pytest.mark.asyncio
+async def test_quantify_asks_only_about_bullets_without_a_number():
+    content = {"experience": [{"title": "Eng", "bullets": [
+        "Built the checkout flow.", "Cut latency by 40%.", "Fixed audit issues.",
+    ]}], "projects": [{"name": "P", "bullets": ["Built a parser."]}]}
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(return_value=_QuantifyOutput(questions=[
+        _QuantifyQuestion(bullet_id="exp0_b0", question="How many orders a day went through it?"),
+        _QuantifyQuestion(bullet_id="exp0_b1", question="Should not appear — it has a number"),
+        _QuantifyQuestion(bullet_id="proj0_b0", question="How many files did it parse?"),
+        _QuantifyQuestion(bullet_id="exp9_b9", question="Unknown bullet"),
+    ]))
+
+    out = await _agent_quantify_questions(content, provider)
+
+    sent = json.loads(provider.complete_structured.call_args.args[1])["bullets"]
+    assert [b["bullet_id"] for b in sent] == ["exp0_b0", "exp0_b2", "proj0_b0"]
+    assert out == {
+        "exp0_b0": "How many orders a day went through it?",
+        "proj0_b0": "How many files did it parse?",
+    }
+
+
+@pytest.mark.asyncio
+async def test_quantify_makes_no_call_when_every_bullet_has_a_number():
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock()
+    content = {"experience": [{"title": "Eng", "bullets": ["Cut latency by 40%."]}]}
+    assert await _agent_quantify_questions(content, provider) == {}
+    provider.complete_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_quantify_failure_never_fails_the_tailor():
+    provider = MagicMock()
+    provider.complete_structured = AsyncMock(side_effect=RuntimeError("boom"))
+    content = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow."]}]}
+    assert await _agent_quantify_questions(content, provider) == {}

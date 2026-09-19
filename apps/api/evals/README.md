@@ -297,3 +297,31 @@ delivery for payment processing by migrating…"), stuffed more tools
 (Kubernetes, TypeScript) and more filler ("applying data pipeline concepts
 throughout the process"). More aggressive, not more obedient. Kept
 gpt-4.1-mini.
+
+
+## Numbers and repetition (`results/numbers-repetition-h50.json`)
+
+An external résumé checker flagged the downloaded résumé for repeated
+wording and too few numbers. Neither is measured by the ATS score.
+
+- **Numbers.** The writer may never invent a figure, so a separate fast-tier
+  call (`_agent_quantify_questions`) asks one question per bullet that still
+  has no digit ("How many accessibility issues did you fix in audits?"). The
+  review lists them in an "Add numbers" card; what the user types is their own
+  and is never flagged. First tried as a required field on Agent 3's output:
+  it came back empty for every bullet, even with a schema description — the
+  fact-locked writer steers away from numbers. Stored as
+  `tailoring_sessions.quantify_prompts` (migration 027). Cost: ~420-520
+  tokens per tailor when any bullet lacks a number, none otherwise.
+- **Repetition.** Agent 2 now puts each JD phrase in at most 2 bullets. The
+  review shows opening verbs and two-word phrases used in 3+ bullets of the
+  résumé as currently picked (`lib/wording-checks.ts`), live and at no token
+  cost. The runner records the same count (`repeated_phrase_count`); the
+  5 fixtures are too short (4-7 bullets) to trip it either before or after,
+  so this run cannot show an effect — the unit tests carry the logic.
+
+| metric | assertive h50 | this run |
+|---|---|---|
+| ats_delta | 15.2 | 13.4 (noise) |
+| tokens_total | 7364 | 7753 |
+| quantify_questions / fixture | — | 2.4 |

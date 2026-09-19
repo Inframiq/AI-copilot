@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
-import { useTailoringStore, deriveBulletChanges, type BulletChange } from "@/stores/tailoring-store";
+import {
+  useTailoringStore, deriveBulletChanges, buildMergedContent, type BulletChange,
+} from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import { SummaryCard } from "@/components/studio/review/SummaryCard";
@@ -13,6 +15,8 @@ import {
   countPointsOn,
 } from "@/components/studio/review/PointsLedger";
 import { SkillsCard } from "@/components/studio/review/SkillsCard";
+import { WordingChecks } from "@/components/studio/review/WordingChecks";
+import { findRepetition, listBullets, numberGaps, quantifiedShare } from "@/lib/wording-checks";
 import { ScoreRail, ScoreDock, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
 import { TailoringStar } from "./TailoringStar";
@@ -73,6 +77,7 @@ export function ReviewShell({
   const fixDeltas = useTailoringStore((s) => s.fixDeltas);
   const bulletDeltas = useTailoringStore((s) => s.bulletDeltas);
   const humanizeLevel = useTailoringStore((s) => s.humanizeLevel);
+  const quantifyPrompts = useTailoringStore((s) => s.quantifyPrompts);
   // Subscribed, not read via getState(): SourcePanel creates the JD row and
   // sets jdId, and this must re-render when it does.
   const jdText = useTailoringStore((s) => s.jdText);
@@ -109,6 +114,29 @@ export function ReviewShell({
       ),
     [pendingContent],
   );
+  // The résumé exactly as the current picks would produce it — what a
+  // checker would read — for the numbers and repetition checks.
+  const finalBullets = useMemo(
+    () =>
+      pendingContent && originalContent
+        ? listBullets(
+            buildMergedContent(
+              pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
+            ),
+          )
+        : [],
+    [pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex],
+  );
+  const repetition = useMemo(() => findRepetition(finalBullets), [finalBullets]);
+  const gaps = useMemo(() => numberGaps(finalBullets, quantifyPrompts), [finalBullets, quantifyPrompts]);
+
+  function handleSaveOwnBullet(key: string, text: string) {
+    // The user's own words: kept, switched on, and no longer flagged.
+    updatePendingBullet(key, text);
+    setBulletDecision(key, "accept");
+    setRewriteReverted((prev) => ({ ...prev, [key]: [] }));
+  }
+
   const dedupedSuggestedSkills = useMemo(() => {
     const taken = new Set(skillFixes.map((f) => f.text.toLowerCase()));
     return suggestedSkills.filter((s) => !taken.has(s.toLowerCase()));
@@ -302,9 +330,20 @@ export function ReviewShell({
                     onFixDecide={setFixDecision}
                     onFixRole={setFixExperienceIndex}
                     onRewrite={handleRewriteBullet}
-                    onEdit={(change, text) => updatePendingBullet(change.key, text)}
+                    onEdit={(change, text) => {
+                      // Hand-edited: the user's own words, so no longer flagged.
+                      updatePendingBullet(change.key, text);
+                      setRewriteReverted((prev) => ({ ...prev, [change.key]: [] }));
+                    }}
                   />
                 )}
+
+                <WordingChecks
+                  gaps={gaps}
+                  quantified={quantifiedShare(finalBullets)}
+                  repetition={repetition}
+                  onSaveBullet={handleSaveOwnBullet}
+                />
 
                 <SkillsCard
                   originalSkills={originalContent?.skills ?? []}

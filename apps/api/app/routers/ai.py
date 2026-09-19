@@ -198,6 +198,7 @@ async def _run_tailoring_background(
         row.bullet_importance = result.bullet_importance
         row.reverted_bullets = result.reverted_bullets
         row.bullet_rationale = result.bullet_rationale
+        row.quantify_prompts = result.quantify_prompts
         row.score_verdicts = result.score_verdicts or None
         row.status = "completed"
 
@@ -587,6 +588,7 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
         "bullet_importance": session.bullet_importance or {},
         "reverted_bullets": session.reverted_bullets or [],
         "bullet_rationale": session.bullet_rationale or {},
+        "quantify_prompts": session.quantify_prompts or {},
     }
 
 
@@ -622,6 +624,7 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         "bullet_importance": session.bullet_importance or {},
         "reverted_bullets": session.reverted_bullets or [],
         "bullet_rationale": session.bullet_rationale or {},
+        "quantify_prompts": session.quantify_prompts or {},
     }
 
 

@@ -1,0 +1,316 @@
+{
+  "generated_at": "2026-09-19T10:42:52.773570+00:00",
+  "aggregate": {
+    "fixtures_ok": 5,
+    "fixtures_failed": 0,
+    "ats_after": 49.6,
+    "ats_before": 36.2,
+    "ats_delta": 13.4,
+    "bullets_changed": 4.0,
+    "bullets_total": 4.8,
+    "max_bullet_words": 17.2,
+    "quantified_share": 0.4629,
+    "quantify_questions": 2.4,
+    "repeated_phrase_count": 0.0,
+    "revert_rate": 0.05,
+    "specificity_retention": 1.0,
+    "tokens_input": 6538.8,
+    "tokens_output": 1214.2,
+    "tokens_reasoning": 0.0,
+    "tokens_total": 7753.0,
+    "verb_diversity": 0.86,
+    "word_growth": 1.4219
+  },
+  "fixtures": [
+    {
+      "ats_before": 4,
+      "ats_after": 25,
+      "ats_delta": 21,
+      "bullets_total": 4,
+      "bullets_changed": 3,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 0.75,
+      "quantified_share": 0.0,
+      "word_growth": 1.5139,
+      "max_bullet_words": 15,
+      "keyword_overuse": {},
+      "tokens_input": 6361,
+      "tokens_output": 1061,
+      "tokens_reasoning": 0,
+      "tokens_total": 7422,
+      "token_calls": {
+        "agent2_semantic_map": 2689,
+        "agent3_write": 2639,
+        "verify_semantic_presence": 640,
+        "agent_gap_filler": 939,
+        "quantify_questions": 515
+      },
+      "quantify_questions": 4,
+      "repeated_phrase_count": 0,
+      "repeated_phrases": [],
+      "questions": {
+        "exp0_b0": "How many viewers accessed the Tableau dashboards each month?",
+        "exp0_b1": "How much revenue was forecasted using the Python models?",
+        "exp0_b2": "How many key insights were included in the quarterly reports?",
+        "exp0_b3": "How many projects did you coordinate with the design team?"
+      },
+      "name": "career_changer_thin_overlap",
+      "description": "Marketing to analytics. Genuine overlap is thin, so this is the fixture that catches a scorer inflating matches or a writer inventing experience to close the gap.",
+      "bullets": [
+        {
+          "original": "Ran monthly reporting on campaign performance across six channels",
+          "tailored": "Built monthly Tableau dashboards and reports on campaign performance across six channels for revenue stakeholders."
+        },
+        {
+          "original": "Built spreadsheet models that forecast quarterly campaign spend",
+          "tailored": "Built Python spreadsheet models for revenue forecasting of quarterly campaign spend."
+        },
+        {
+          "original": "Presented results to the leadership team each quarter",
+          "tailored": "Presented quarterly business intelligence reports to the leadership team for revenue stakeholders."
+        },
+        {
+          "original": "Coordinated with the design team on creative production schedules",
+          "tailored": "Coordinated with the design team on creative production schedules"
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 54,
+      "ats_after": 61,
+      "ats_delta": 7,
+      "bullets_total": 7,
+      "bullets_changed": 5,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.7143,
+      "word_growth": 1.2648,
+      "max_bullet_words": 19,
+      "keyword_overuse": {},
+      "tokens_input": 7302,
+      "tokens_output": 1787,
+      "tokens_reasoning": 0,
+      "tokens_total": 9089,
+      "token_calls": {
+        "agent2_semantic_map": 3392,
+        "agent3_write": 3123,
+        "verify_semantic_presence": 853,
+        "agent_gap_filler": 1299,
+        "quantify_questions": 422
+      },
+      "quantify_questions": 2,
+      "repeated_phrase_count": 0,
+      "repeated_phrases": [],
+      "questions": {
+        "exp0_b3": "How many engineering priorities did you plan each quarter?",
+        "exp0_b4": "How many newer engineers did you mentor during this time?"
+      },
+      "name": "experienced_backend_ic",
+      "description": "The common case: a mid-level backend engineer with real metrics, applying to an adjacent stack. Baseline for every other fixture.",
+      "bullets": [
+        {
+          "original": "Built the order fulfilment API in Python, cutting average order processing time from 800ms to 240ms",
+          "tailored": "Delivered the order fulfilment API in Python, reducing average order processing time from 800ms to 240ms."
+        },
+        {
+          "original": "Migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records",
+          "tailored": "Migrated the checkout database of 4M records from MySQL to PostgreSQL with zero downtime to scale the distributed system."
+        },
+        {
+          "original": "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+          "tailored": "Built CI/CD automated deployment pipelines that reduced release time from 2 hours to 15 minutes."
+        },
+        {
+          "original": "Worked with the product team to plan quarterly engineering priorities",
+          "tailored": "Partnered with the product team on roadmap prioritisation to plan quarterly engineering priorities."
+        },
+        {
+          "original": "Helped newer engineers with code reviews and design feedback",
+          "tailored": "Mentored newer engineers on system design and code quality through code reviews and design feedback."
+        },
+        {
+          "original": "Developed internal reporting tools used by 40 people across three departments",
+          "tailored": "Developed internal reporting tools used by 40 people across three departments"
+        },
+        {
+          "original": "Fixed a recurring data sync bug that had caused 12 incidents in six months",
+          "tailored": "Fixed a recurring data sync bug that had caused 12 incidents in six months"
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 63,
+      "ats_after": 73,
+      "ats_delta": 10,
+      "bullets_total": 5,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 0.8,
+      "quantified_share": 0.6,
+      "word_growth": 1.3048,
+      "max_bullet_words": 18,
+      "keyword_overuse": {},
+      "tokens_input": 6680,
+      "tokens_output": 1190,
+      "tokens_reasoning": 0,
+      "tokens_total": 7870,
+      "token_calls": {
+        "agent2_semantic_map": 2933,
+        "agent3_write": 2869,
+        "verify_semantic_presence": 700,
+        "agent_gap_filler": 942,
+        "quantify_questions": 426
+      },
+      "quantify_questions": 2,
+      "repeated_phrase_count": 0,
+      "repeated_phrases": [],
+      "questions": {
+        "proj0_b0": "How many enrolment records did you process weekly?",
+        "proj0_b1": "How many malformed records were flagged per week?"
+      },
+      "name": "fresher_projects_only",
+      "description": "The case that was entirely broken before projects were scored or rewritten: a new grad whose only technical evidence lives in Projects.",
+      "bullets": [
+        {
+          "original": "Built a pipeline pulling course enrolment data from three campus systems into a single warehouse",
+          "tailored": "Built and maintained ETL pipelines pulling course enrolment data from three campus systems into a cloud data warehouse."
+        },
+        {
+          "original": "Scheduled nightly refreshes with Airflow and added checks that flagged malformed records",
+          "tailored": "Scheduled nightly refreshes with Apache Airflow and automated data quality checks that flagged malformed records."
+        },
+        {
+          "original": "Created a dashboard that 200 students used to compare course workloads",
+          "tailored": "Created a dashboard that 200 students used to compare course workloads"
+        },
+        {
+          "original": "Collected live bus arrival data over 6 months and stored it in PostgreSQL",
+          "tailored": "Built ETL pipelines collecting live bus arrival data over 6 months and stored it in PostgreSQL using SQL."
+        },
+        {
+          "original": "Wrote SQL models that surfaced the 10 most delay-prone routes in the city",
+          "tailored": "Wrote SQL models to model data for reporting that surfaced the 10 most delay-prone routes in the city."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 18,
+      "ats_after": 45,
+      "ats_delta": 27,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 1.0,
+      "word_growth": 1.3754,
+      "max_bullet_words": 19,
+      "keyword_overuse": {},
+      "tokens_input": 6110,
+      "tokens_output": 1028,
+      "tokens_reasoning": 0,
+      "tokens_total": 7138,
+      "token_calls": {
+        "agent2_semantic_map": 2821,
+        "agent3_write": 2720,
+        "verify_semantic_presence": 692,
+        "agent_gap_filler": 905
+      },
+      "quantify_questions": 0,
+      "repeated_phrase_count": 0,
+      "repeated_phrases": [],
+      "questions": {},
+      "name": "management_seniority_signals",
+      "description": "A lead role. Exercises Agent 3 rule 12's seniority-aware emphasis \u2014 bullets should foreground team scope and outcomes through others, not hands-on depth.",
+      "bullets": [
+        {
+          "original": "Led a squad of 6 engineers delivering the internal platform used by every product team",
+          "tailored": "Led a team of 6 engineers in platform development, delivering the internal platform used by every product team."
+        },
+        {
+          "original": "Ran the quarterly planning process and cut missed delivery commitments from 40% to 10%",
+          "tailored": "Owned the platform roadmap and ran the quarterly planning process, cutting missed delivery commitments from 40% to 10%."
+        },
+        {
+          "original": "Coached two engineers to promotion within 18 months",
+          "tailored": "Grew engineers through coaching and career development by coaching two engineers to promotion within 18 months."
+        },
+        {
+          "original": "Rebuilt the service scaffolding so a new service took 2 days to stand up instead of 3 weeks",
+          "tailored": "Rebuilt platform development service scaffolding to reduce new service setup time from 3 weeks to 2 days."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 42,
+      "ats_after": 44,
+      "ats_delta": 2,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.25,
+      "specificity_retention": 1.0,
+      "verb_diversity": 0.75,
+      "quantified_share": 0.0,
+      "word_growth": 1.6508,
+      "max_bullet_words": 15,
+      "keyword_overuse": {},
+      "tokens_input": 6241,
+      "tokens_output": 1005,
+      "tokens_reasoning": 0,
+      "tokens_total": 7246,
+      "token_calls": {
+        "agent2_semantic_map": 2627,
+        "agent3_write": 2604,
+        "verify_semantic_presence": 652,
+        "agent_gap_filler": 840,
+        "quantify_questions": 523
+      },
+      "quantify_questions": 4,
+      "repeated_phrase_count": 0,
+      "repeated_phrases": [],
+      "questions": {
+        "exp0_b0": "How many marketing pages did you build for client campaigns?",
+        "exp0_b1": "How many teams used the shared component library?",
+        "exp0_b2": "How many accessibility issues did you fix from client audits?",
+        "exp0_b3": "How many mockups did you turn into working pages?"
+      },
+      "name": "sparse_unquantified",
+      "description": "Almost no numbers anywhere. The fixture that catches a prompt edit making the writer invent metrics to satisfy the quantify-impact instruction.",
+      "bullets": [
+        {
+          "original": "Built marketing pages for client campaigns",
+          "tailored": "Built accessible, responsive marketing pages in React for client campaigns."
+        },
+        {
+          "original": "Maintained the shared component library used across client projects",
+          "tailored": "Collaborated with cross-functional teams to maintain the shared component library used across client projects."
+        },
+        {
+          "original": "Fixed accessibility issues flagged in client audits",
+          "tailored": "Fixed web accessibility issues flagged in client audits to improve interface inclusiveness."
+        },
+        {
+          "original": "Worked with designers to turn mockups into working pages",
+          "tailored": "Collaborated with designers to turn mockups into working pages within the shared component library framework."
+        }
+      ],
+      "reverted": [
+        {
+          "bullet_id": "exp0_b2",
+          "reasons": [
+            "adds an ending your original doesn't say: \"to improve interface inclusiveness\""
+          ],
+          "original_text": "Fixed accessibility issues flagged in client audits",
+          "rejected_text": "Fixed web accessibility issues flagged in client audits to improve interface inclusiveness."
+        }
+      ]
+    }
+  ]
+}

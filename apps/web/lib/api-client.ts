@@ -384,6 +384,9 @@ export const apiClient = {
     /** {bullet_id: rationale} — Agent 2's account of why each bullet was
      * transformed. `{}` on sessions tailored before it was persisted. */
     bullet_rationale?: Record<string, BulletRationale>;
+    /** {bullet_id: question} asking the user for a number each still
+     * unquantified bullet could carry. `{}` on older sessions. */
+    quantify_prompts?: Record<string, string>;
     /** The score before tailoring ran; `ats_score` is the after. Null on
      * sessions tailored before it was recorded. */
     ats_score_before?: number | null;

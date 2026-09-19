@@ -121,6 +121,27 @@ def save_pinned_analysis(
     path.write_text(json.dumps(payload, indent=2))
 
 
+_STOP = set("""a an the and or of to in on for with by at from into over across per via as
+its their our my this that these those was were is are be been using used all each
+every both more most other new""".split())
+
+
+def repeated_phrases(bullets: list[str], threshold: int = 3) -> list[str]:
+    """Two-word phrases used in *threshold*+ bullets — the same check the
+    review screen runs (apps/web/lib/wording-checks.ts), so a prompt edit's
+    effect on repetition shows up here."""
+    counts: dict[str, int] = {}
+    for text in bullets:
+        ws = [w.rstrip(".,/'-") for w in re.findall(r"[a-z][a-z'+#./-]*", text.lower())]
+        seen = {
+            f"{ws[i]} {ws[i + 1]}" for i in range(1, len(ws) - 1)
+            if ws[i] not in _STOP and ws[i + 1] not in _STOP and len(ws[i]) > 2 and len(ws[i + 1]) > 2
+        }
+        for p in seen:
+            counts[p] = counts.get(p, 0) + 1
+    return sorted(p for p, n in counts.items() if n >= threshold)
+
+
 def token_totals(calls: list[dict]) -> dict:
     """Summed token counts for one fixture's pipeline calls."""
     out = {f"tokens_{k}": sum(c.get(f"{k}_tokens", 0) for c in calls)
@@ -194,6 +215,11 @@ async def evaluate_fixture(
         reverted_bullets=result.reverted_bullets,
     )
     report.update(token_totals(calls))
+    # Checker-style signals the ATS score does not see.
+    report["quantify_questions"] = len(result.quantify_prompts)
+    report["repeated_phrase_count"] = len(repeated_phrases(tailored_bullets))
+    report["repeated_phrases"] = repeated_phrases(tailored_bullets)
+    report["questions"] = result.quantify_prompts
     report["name"] = fixture.name
     report["description"] = fixture.description
     # The numbers can't tell you a rewrite reads badly. Keep the text so a
@@ -207,7 +233,10 @@ async def evaluate_fixture(
 
 
 # Keys that are per-fixture context, not metrics to average.
-_NON_METRIC_KEYS = {"name", "description", "bullets", "reverted", "error", "keyword_overuse", "token_calls"}
+_NON_METRIC_KEYS = {
+    "name", "description", "bullets", "reverted", "error", "keyword_overuse", "token_calls",
+    "repeated_phrases", "questions",
+}
 
 
 def aggregate(reports: list[dict]) -> dict:

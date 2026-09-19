@@ -780,6 +780,78 @@ async def _agent_gap_filler(
         return GapFillerOutput()
 
 
+# ── Quantify questions: ask the candidate for real numbers ───────────────────
+
+_MAX_TOKENS_QUANTIFY = 1500
+_MAX_QUANTIFY_BULLETS = 20
+
+
+class _QuantifyQuestion(BaseModel):
+    bullet_id: str
+    question: str
+
+
+class _QuantifyOutput(BaseModel):
+    questions: list[_QuantifyQuestion] = []
+
+
+_QUANTIFY_SYSTEM = """\
+<system_role>
+You help a candidate quantify their résumé. For each bullet you are given — \
+none of them contains a number — write ONE short question asking the \
+candidate for the real figure that bullet could carry.
+</system_role>
+
+<rules>
+1. Ask about something the bullet actually describes: how many (users, \
+people, pages, records), how much (time, money, size), how often, or how \
+much faster / smaller / fewer. Pick the figure that would impress most.
+2. Never suggest or guess a value, a range or an example number — the \
+candidate supplies it, or leaves the bullet as it is.
+3. At most 15 words, plain and friendly: "How many people used these \
+tools each week?", "How much faster did releases get after this?"
+4. If no honest number could belong to a bullet (e.g. "Presented results \
+to leadership"), leave it out.
+5. Output ONLY valid JSON matching the schema.
+</rules>"""
+
+
+async def _agent_quantify_questions(content: dict, provider: AIProvider) -> dict[str, str]:
+    """{bullet_id: question} for each bullet of *content* with no digit.
+
+    A separate small call on the fast tier, not a field on Agent 3's output:
+    the writer is fact-locked against numbers, and in the eval it returned an
+    empty question for every bullet even when the field was required. One job
+    per call is also what makes this cheap — only unquantified bullets go in.
+    Best-effort: a failure means no questions, never a failed tailor.
+    """
+    indexed, _ = _index_bullets(content)
+    bullets = [
+        {"bullet_id": b["bullet_id"], "text": b.get("text", "")}
+        for section, _prefix in _BULLET_SECTIONS
+        for entry in indexed.get(section) or []
+        for b in entry.get("bullets") or []
+        if isinstance(b, dict) and b.get("text") and not re.search(r"\d", b["text"])
+    ][:_MAX_QUANTIFY_BULLETS]
+    if not bullets:
+        return {}
+    try:
+        out = await provider.complete_structured(
+            _QUANTIFY_SYSTEM, json.dumps({"bullets": bullets}), _QuantifyOutput,
+            model_tier="fast", max_output_tokens=_MAX_TOKENS_QUANTIFY,
+            call_name="quantify_questions",
+        )
+    except Exception:
+        logger.warning("quantify questions failed", exc_info=True)
+        return {}
+    wanted = {b["bullet_id"] for b in bullets}
+    return {
+        q.bullet_id: q.question.strip()[:200]
+        for q in out.questions
+        if q.bullet_id in wanted and q.question.strip()
+    }
+
+
 # ── Agent 2: Semantic Mapper ──────────────────────────────────────────────────
 
 _AGENT2_SYSTEM = """\
@@ -838,8 +910,8 @@ phrase fits the bullet.
    - REFRAME: same facts, lead with the aspect the JD cares about.
    - REINFORCE: same content, sharper wording in the JD's vocabulary.
    - SKIP: only when the bullet has no honest connection to the JD at all.
-   Do not use the same phrase in more than 2-3 bullets unless the JD itself \
-repeats it 3+ times.
+   Use each JD phrase in at most 2 bullets: one match is all the ATS needs, \
+and résumé checkers flag repeated wording.
 6. SPECIFICITY: never make a bullet more generic. The JD's phrase is added \
 to the bullet's own specifics, never swapped in for them.
 7. strategic_instruction: one or two plain sentences — which phrases go \
@@ -1544,6 +1616,9 @@ class TailoringResult:
     # every run; kept so the review screen can show WHY a bullet changed,
     # not just that it did. Bullets with neither signal (a SKIP) are absent.
     bullet_rationale: dict[str, dict] = field(default_factory=dict)
+    # {bullet_id: question} — asks the candidate for a number each still
+    # unquantified bullet could carry. See RewrittenBullet.quantify_prompt.
+    quantify_prompts: dict[str, str] = field(default_factory=dict)
     # The score the résumé had BEFORE this run. ats_score above is the after.
     # The pipeline always computed both (it logs "ats %d -> %d"); returning
     # the pair makes the lift measurable instead of only greppable.
@@ -1871,6 +1946,10 @@ async def run_tailoring_pipeline(
             text=gap_out.headline.strip(), default_accept=False,
         ))
 
+    # One question per bullet that still has no number, for the candidate to
+    # answer in the review. Asked of the FINAL text, in its own small call.
+    quantify_prompts = await _agent_quantify_questions(tailored_content, provider)
+
     bullet_importance: dict[str, str] = {}
     bullet_rationale: dict[str, dict] = {}
     for m in mapping_plan.mapping_plan:
@@ -1937,6 +2016,7 @@ async def run_tailoring_pipeline(
         bullet_importance=bullet_importance,
         reverted_bullets=reverted_bullets,
         bullet_rationale=bullet_rationale,
+        quantify_prompts=quantify_prompts,
         ats_score_before=analysis.ats_score,
         jd_analysis=analysis.jd_analysis,
         # Everything project-score needs to re-score this run: the verdicts,
