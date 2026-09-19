@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { sanitizeInline } from "@/lib/rich-text";
+import { pageGeometry, pageCount } from "@/lib/page-geometry";
 
 /**
  * Editing affordance, injected into the shadow root rather than written into
@@ -10,6 +11,31 @@ import { sanitizeInline } from "@/lib/rich-text";
  * Only background and box-shadow change — a border or padding would reflow
  * the page and make the résumé shift under the cursor.
  */
+const PAGE_BREAK_CSS = `
+[data-page-break] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed rgba(154, 90, 30, 0.55);
+  pointer-events: none;
+  font: 600 9pt -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #9a5a1e;
+}
+[data-page-break] > span {
+  /* In the left margin gutter, centred on the rule. Anywhere inside the text
+     column it would sit on top of the résumé's own words. */
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  min-width: 18px;
+  text-align: center;
+  background: #f6e3cf;
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+`;
+
 const AFFORDANCE_CSS = `
 [data-field] {
   cursor: text;
@@ -29,20 +55,6 @@ const AFFORDANCE_CSS = `
   [data-field] { transition: none; }
 }
 `;
-
-/**
- * The page margin the document declares for print.
- *
- * `@page` is print-only — every browser ignores it — so without this the
- * document sits edge-to-edge on screen while the exported PDF carries half an
- * inch of margin, and the Studio stops being a preview of the PDF. Read from
- * the document's own rule rather than hardcoded, because the templates do not
- * agree on it (0.5in for résumés, 1in for the letter).
- */
-export function pageMargin(html: string): string | null {
-  const match = /@page[^{]*\{[^}]*\bmargin\s*:\s*([^;}]+)/i.exec(html);
-  return match ? match[1].trim() : null;
-}
 
 /**
  * `plaintext-only` keeps pasted rich text from injecting markup into the
@@ -78,10 +90,16 @@ export function ResumeCanvas({
   html,
   editable,
   onEdit,
+  pageCount: pages,
+  onPageCount,
 }: {
   html: string;
   editable: boolean;
   onEdit: (path: string, value: string | string[]) => void;
+  /** Pages to mark boundaries for. Measured here when not supplied. */
+  pageCount?: number;
+  /** How many pages the document currently takes, reported as it changes. */
+  onPageCount?: (pages: number) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<ShadowRoot | null>(null);
@@ -95,12 +113,77 @@ export function ResumeCanvas({
     rootRef.current.innerHTML = html;
 
     // On the host, not inside the shadow root: injecting a full document as
-    // innerHTML makes the parser drop <html>/<head>/<body>, so a `body`
-    // padding rule would have nothing to match.
-    const margin = pageMargin(html);
-    host.style.padding = margin ?? "";
-    host.style.boxSizing = margin ? "border-box" : "";
+    // innerHTML makes the parser drop <html>/<head>/<body>, so a `body` rule
+    // would have nothing to match. The width matters as much as the padding —
+    // laid out any wider or narrower, the document's line breaks stop being
+    // the ones the PDF will have.
+    const geometry = pageGeometry(html);
+    host.style.width = `${geometry.width}px`;
+    host.style.maxWidth = "100%";
+    host.style.padding = `${geometry.margin}px`;
+    host.style.boxSizing = "border-box";
+    host.style.position = "relative";
   }, [html]);
+
+  // Measure after layout, and again whenever the document reflows — a wider
+  // window rewraps the text and can drop a page.
+  useEffect(() => {
+    const host = hostRef.current;
+    const root = rootRef.current;
+    if (!host || !root || !onPageCount) return;
+    const { contentHeight } = pageGeometry(html);
+    const measure = () => {
+      // The boundary markers are children too, and they are positioned from
+      // the count this measurement produces — so including them makes the
+      // measurement depend on its own last output. It does not stick (a
+      // marker sits exactly on a page boundary, so it reads as one page
+      // fewer), but a document trimmed from three pages to one would report
+      // two before settling. Measure the document, not the annotations.
+      const flowed = Array.from(root.children)
+        .filter((n) => n.tagName !== "STYLE" && !n.hasAttribute("data-page-break"))
+        .reduce((bottom, n) => Math.max(bottom, n.getBoundingClientRect().bottom), 0);
+      const top = host.getBoundingClientRect().top + pageGeometry(html).margin;
+      onPageCount(pageCount(Math.max(0, flowed - top), contentHeight));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [html, onPageCount]);
+
+  // Boundary markers, overlaid rather than inserted: put in the flow they
+  // would shift the very content whose position they report.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    for (const stale of Array.from(root.querySelectorAll("[data-page-break]"))) stale.remove();
+    if (!pages || pages < 2) return;
+
+    const { margin, contentHeight } = pageGeometry(html);
+    const style = document.createElement("style");
+    style.setAttribute("data-page-break-style", "");
+    style.textContent = PAGE_BREAK_CSS;
+    root.appendChild(style);
+
+    for (let page = 2; page <= pages; page += 1) {
+      const mark = document.createElement("div");
+      mark.setAttribute("data-page-break", String(page));
+      mark.setAttribute("aria-hidden", "true");
+      mark.style.top = `${margin + contentHeight * (page - 1)}px`;
+      const label = document.createElement("span");
+      // The number alone: the gutter is only as wide as the page margin, and
+      // the meter above the sheet is what explains what the rule means.
+      label.textContent = String(page);
+      label.title = `Page ${page} starts here`;
+      mark.appendChild(label);
+      root.appendChild(mark);
+    }
+    return () => {
+      style.remove();
+      for (const mark of Array.from(root.querySelectorAll("[data-page-break]"))) mark.remove();
+    };
+  }, [html, pages]);
 
   useEffect(() => {
     const root = rootRef.current;

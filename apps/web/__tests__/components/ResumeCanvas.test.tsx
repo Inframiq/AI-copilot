@@ -120,22 +120,24 @@ describe("ResumeCanvas", () => {
   // @page is a print-only rule: browsers ignore it entirely, so the document
   // rendered edge-to-edge on screen while the exported PDF had half an inch
   // of margin. The Studio's whole premise is that they are the same document.
+  // Asserted in pixels because the canvas now resolves the rule rather than
+  // passing it through: the page-boundary maths needs a number.
   it("gives the page the margin its own @page rule declares", () => {
     const html = `<style>@page { margin: 0.5in; }</style><p data-field="summary">x</p>`;
     const { container } = render(<ResumeCanvas html={html} editable={false} onEdit={() => {}} />);
     const host = container.querySelector("[data-canvas]") as HTMLElement;
-    expect(host.style.padding).toBe("0.5in");
+    expect(host.style.padding).toBe("48px");
   });
 
   it("reads the margin past other @page descriptors", () => {
     const html = `<style>@page { size: Letter; margin: 1in; }</style><p data-field="summary">x</p>`;
     const { container } = render(<ResumeCanvas html={html} editable={false} onEdit={() => {}} />);
-    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("1in");
+    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("96px");
   });
 
   it("leaves the page unpadded when it declares no page margin", () => {
     const { container } = render(<ResumeCanvas html={HTML} editable={false} onEdit={() => {}} />);
-    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("");
+    expect((container.querySelector("[data-canvas]") as HTMLElement).style.padding).toBe("0px");
   });
 
   // Skills render as one comma-joined line, so the whole line is the field and
@@ -216,6 +218,56 @@ describe("ResumeCanvas", () => {
     const { container } = render(<ResumeCanvas html={html} editable onEdit={onEdit} />);
     fireEvent.blur(fields(container)[0]);
     expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  const PAGED = `<style>@page { margin: 0.5in; }</style><p data-field="summary">x</p>`;
+
+  // A browser ignores @page entirely: no margin, no page breaks. The canvas
+  // has to be the page's real shape, or its line breaks are not the PDF's.
+  it("sizes the page from the document's own rule, not a guess", () => {
+    const { container } = render(<ResumeCanvas html={PAGED} editable={false} onEdit={() => {}} />);
+    const host = container.querySelector("[data-canvas]") as HTMLElement;
+    // A4 — what WeasyPrint uses when @page names no size, as ours do not.
+    expect(host.style.width).toBe("793.7007874015749px");
+    expect(host.style.padding).toBe("48px");
+  });
+
+  it("marks where each page ends so an overflow is visible", () => {
+    const { container } = render(
+      <ResumeCanvas html={PAGED} editable={false} onEdit={() => {}} pageCount={3} />,
+    );
+    const marks = shadow(container).querySelectorAll("[data-page-break]");
+    // Two boundaries for three pages: the end of the last needs no marker.
+    expect(marks.length).toBe(2);
+    // Numbered in the gutter; the meter above the sheet carries the wording.
+    expect([...marks].map((m) => m.getAttribute("data-page-break"))).toEqual(["2", "3"]);
+    expect(marks[0].textContent).toBe("2");
+  });
+
+  it("marks nothing on a résumé that fits one page", () => {
+    const { container } = render(
+      <ResumeCanvas html={PAGED} editable={false} onEdit={() => {}} pageCount={1} />,
+    );
+    expect(shadow(container).querySelectorAll("[data-page-break]").length).toBe(0);
+  });
+
+  it("puts each mark at the page boundary it names", () => {
+    const { container } = render(
+      <ResumeCanvas html={PAGED} editable={false} onEdit={() => {}} pageCount={2} />,
+    );
+    const mark = shadow(container).querySelector("[data-page-break]") as HTMLElement;
+    // Content starts below the top margin, so the first page ends one
+    // content-height further down: 48 + (1122.52 - 96).
+    expect(Math.round(parseFloat(mark.style.top))).toBe(Math.round(48 + 1122.5196850393702 - 96));
+  });
+
+  it("reports how many pages the document takes", async () => {
+    const onPageCount = vi.fn();
+    render(
+      <ResumeCanvas html={PAGED} editable={false} onEdit={() => {}} onPageCount={onPageCount} />,
+    );
+    // jsdom lays nothing out, so every measurement is 0 — one page.
+    await vi.waitFor(() => expect(onPageCount).toHaveBeenCalledWith(1));
   });
 });
 

@@ -323,6 +323,15 @@ describe("Studio preview page", () => {
     const heading = screen.getByRole("heading", { name: /laying out/i });
     expect(heading.className).toContain("text-body-lg");
   });
+
+  // The whole point of the preview is knowing what will export. A résumé
+  // spilling onto a second page is the thing most worth knowing, and the
+  // remedy — go back and turn points off — is on the previous screen.
+  it("says how many pages the résumé takes", async () => {
+    await renderPage();
+    await waitFor(() => expect(screen.getByTestId("page-count").textContent).toMatch(/1 page/i));
+  });
+
 });
 
 describe("Export when the file cannot be fetched", () => {

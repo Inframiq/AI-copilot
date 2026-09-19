@@ -12,6 +12,7 @@ import { writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
+import { PageMeter } from "@/components/studio/PageMeter";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
 
@@ -44,6 +45,7 @@ export default function StudioPreviewPage({
   const [mode, setMode] = useState<StudioMode>("edit");
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [pages, setPages] = useState(1);
 
   // Keyed on the content so an inline edit re-renders the document it was
   // made on. The server render is the only source — rendering client-side
@@ -163,6 +165,8 @@ export default function StudioPreviewPage({
         html={data?.html ?? ""}
         editable={mode === "edit"}
         onEdit={handleEdit}
+        pageCount={pages}
+        onPageCount={setPages}
       />
     );
   }
@@ -196,6 +200,9 @@ export default function StudioPreviewPage({
         {mode === "edit" && content && (
           <FormatToolbar className="sticky top-0 float-left -ml-xs hidden xl:flex" />
         )}
+        <div className="mx-auto mb-sm w-full max-w-[793.7px]">
+          <PageMeter pages={pages} />
+        </div>
         {body()}
       </div>
     </div>
