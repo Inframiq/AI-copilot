@@ -1,5 +1,5 @@
 "use client";
-import { ArrowCounterClockwise, Check, ListNumbers } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Check, ListNumbers, Plus } from "@phosphor-icons/react";
 import type { AtsFix } from "@/lib/api-client";
 import { MAX_MERGED_SKILLS, defaultSkillKeepDecision } from "@/stores/tailoring-store";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
@@ -81,6 +81,18 @@ export function SkillsCard({
   // Every candidate to add, best ATS gain first. A fix carries its own
   // estimate; a plain suggestion has none and goes last.
   const liveDelta = (f: AtsFix) => liveDeltas?.[f.id] ?? f.score_delta;
+  // Nothing already on the résumé is an "addition", and a name arriving from
+  // both a fix and a plain suggestion is still one skill. The server filters
+  // the same way; this is the belt to its braces, and it also covers sessions
+  // whose fixes were built before that filter existed.
+  const onResume = new Set(originalSkills.map((k) => k.trim().toLowerCase()));
+  const offered = new Set<string>();
+  const unseen = (name: string) => {
+    const key = name.trim().toLowerCase();
+    if (!key || onResume.has(key) || offered.has(key)) return false;
+    offered.add(key);
+    return true;
+  };
   const toAdd = [
     ...[...skillFixes]
       .sort(
@@ -90,8 +102,11 @@ export function SkillsCard({
           Number(b.default_accept) - Number(a.default_accept) ||
           a.text.localeCompare(b.text),
       )
+      .filter((f) => unseen(f.text))
       .map((f) => ({ name: f.text, key: `fix:${f.id}`, fix: f as AtsFix | null, delta: liveDelta(f) })),
-    ...suggestedSkills.map((s) => ({ name: s, key: `skill_add:${s}`, fix: null as AtsFix | null, delta: 0 })),
+    ...suggestedSkills
+      .filter(unseen)
+      .map((k) => ({ name: k, key: `skill_add:${k}`, fix: null as AtsFix | null, delta: 0 })),
   ];
 
   const isMatched = new Set(matchedSkills.map((m) => m.toLowerCase()));
@@ -137,55 +152,7 @@ export function SkillsCard({
               Ranked by how much each raises your ATS score. Tap to add or remove.
             </p>
           </div>
-          {current.length > 0 && (
-        <section className="flex flex-col gap-sm">
-          <h4 className="text-label-caps text-on-surface-variant">On your résumé now ({current.length})</h4>
-          <ul aria-label="Already on your résumé" className="flex flex-wrap gap-xs">
-            {current.map((skill) => {
-              const kept = isKept(skill);
-              const matches = isMatched.has(skill.toLowerCase());
-              // Removing always frees a slot; only bringing one back can be
-              // blocked once the budget is spent.
-              const blocked = !kept && atCap;
-              return (
-                <li key={skill}>
-                  <button
-                    type="button"
-                    aria-pressed={kept}
-                    disabled={blocked}
-                    title={
-                      blocked
-                        ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first`
-                        : kept
-                          ? `${matches ? "Matches the job. " : ""}Tap to leave it off`
-                          : "Left off — tap to keep it"
-                    }
-                    onClick={() => onDecide(`skill_keep:${skill}`, kept ? "reject" : "accept")}
-                    className={`flex items-center gap-xs rounded-full border px-sm py-xs text-label-sm ${PRESS} ${FOCUS_RING} ${
-                      kept
-                        ? matches
-                          ? "border-success/40 bg-success-container/40 text-on-surface hover:border-error/50"
-                          : "border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:border-error/50"
-                        : blocked
-                          ? "cursor-not-allowed border-dashed border-outline-variant/40 text-on-surface-variant/50"
-                          : "border-dashed border-outline-variant text-on-surface-variant line-through hover:border-primary/50 hover:text-primary"
-                    }`}
-                  >
-                    {kept ? (
-                      <Check size={11} weight="bold" className={matches ? "text-success" : "text-on-surface-variant"} />
-                    ) : (
-                      <ArrowCounterClockwise size={11} weight="bold" />
-                    )}
-                    {skill}
-                    {matches && kept && <span className="sr-only"> — matches the job</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-      {toAdd.length > 0 && (
+          {toAdd.length > 0 && (
             <button
               type="button"
               onClick={addInAtsOrder}
@@ -221,65 +188,125 @@ export function SkillsCard({
           </p>
         )}
       </header>
-
+      {current.length > 0 && (
+        <section className="flex flex-col gap-sm">
+          <h4 className="text-label-caps text-on-surface-variant">On your résumé now ({current.length})</h4>
+          <ul aria-label="On your résumé now" className="flex flex-wrap gap-xs">
+            {current.map((skill) => {
+              const kept = isKept(skill);
+              const matches = isMatched.has(skill.toLowerCase());
+              // Removing always frees a slot; only bringing one back can be
+              // blocked once the budget is spent.
+              const blocked = !kept && atCap;
+              return (
+                <li key={skill}>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={kept}
+                    aria-label={`Keep ${skill}${matches ? " — matches the job" : ""}`}
+                    data-origin="yours"
+                    disabled={blocked}
+                    title={
+                      blocked
+                        ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first`
+                        : kept
+                          ? `${matches ? "Matches the job. " : ""}Tap to leave it off`
+                          : "Left off — tap to keep it"
+                    }
+                    onClick={() => onDecide(`skill_keep:${skill}`, kept ? "reject" : "accept")}
+                    className={`flex items-center gap-xs rounded-full border px-sm py-xs text-label-sm ${PRESS} ${FOCUS_RING} ${
+                      kept
+                        ? matches
+                          ? "border-success/40 bg-success-container/40 text-on-surface"
+                          : "border-outline-variant/60 bg-surface-container-lowest text-on-surface"
+                        : blocked
+                          ? "cursor-not-allowed border-dashed border-outline-variant/40 text-on-surface-variant/50"
+                          : "border-dashed border-outline-variant text-on-surface-variant line-through"
+                    }`}
+                  >
+                    {kept ? (
+                      <Check size={11} weight="bold" className={matches ? "text-success" : "text-on-surface-variant"} />
+                    ) : (
+                      <ArrowCounterClockwise size={11} weight="bold" />
+                    )}
+                    {skill}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {toAdd.length > 0 && (
         <section className="flex flex-col gap-sm">
           <h4 className="text-label-caps text-on-surface-variant">
             Suggested additions ({toAdd.length}) — biggest gain first
           </h4>
-          <ol aria-label="Skills to add" className="flex flex-col gap-xs">
-            {toAdd.map((c, i) => {
+          <p className="text-caption text-on-surface-variant">
+            Add only what is genuinely true of you. Ones your bullets already evidence are marked.
+          </p>
+          {/* The same chip as above, differing only in what tells them apart:
+              a dotted edge and a + for something not yours yet, against a
+              solid edge and a tick for something that already is. One budget,
+              one control, two states. */}
+          <ul aria-label="Suggested additions" className="flex flex-wrap gap-xs">
+            {toAdd.map((c) => {
               const on = isAdded(c.key);
               const blocked = !on && atCap;
+              const evidenced = c.fix?.default_accept;
               return (
-                <li
-                  key={c.key}
-                  className={`flex items-center gap-sm rounded-2xl border px-sm py-xs transition-colors duration-200 ${
-                    on ? "border-primary/30 bg-primary/5" : "border-outline-variant/30 bg-surface"
-                  }`}
-                >
-                  <span className="tabular w-5 shrink-0 text-center text-label-sm text-on-surface-variant">{i + 1}</span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <div className="flex flex-wrap items-baseline gap-x-sm">
-                      <span className="text-label-md font-semibold text-on-surface">{c.name}</span>
-                      {c.fix ? (
-                        c.fix.default_accept ? (
-                          <span className="text-caption text-success">in your experience</span>
-                        ) : (
-                          <span className="text-caption text-on-surface-variant">only if you have it</span>
-                        )
-                      ) : null}
-                    </div>
-                  </div>
-                  <span className={`tabular w-14 shrink-0 text-right text-label-sm font-semibold ${c.delta > 0 ? "text-primary" : "text-on-surface-variant"}`}>
-                    {c.delta > 0 ? `+${c.delta} pts` : "±0"}
-                  </span>
+                <li key={c.key}>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={on}
                     aria-label={`Add ${c.name}${c.delta > 0 ? ` (+${c.delta} pts)` : ""}`}
+                    data-origin="suggested"
                     disabled={blocked}
-                    title={blocked ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first` : undefined}
+                    title={
+                      blocked
+                        ? `All ${MAX_MERGED_SKILLS} skill slots are used — turn one off first`
+                        : !evidenced
+                          ? `Only if you have it. ${c.delta > 0 ? `Adds ${c.delta} points.` : "Already covered."}`
+                          : c.delta > 0
+                            ? `Adds ${c.delta} points to your match for this job`
+                            : "Already covered — adding it changes nothing"
+                    }
                     onClick={() => toggleAdd(c)}
-                    className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${FOCUS_RING} ${
-                      on ? "bg-primary hover:bg-primary/90" : "bg-outline-variant hover:bg-outline"
+                    className={`flex items-center gap-xs rounded-full border px-sm py-xs text-label-sm ${PRESS} ${FOCUS_RING} ${
+                      on
+                        ? "border-primary/50 bg-primary/10 text-on-surface"
+                        : blocked
+                          ? "cursor-not-allowed border-dashed border-outline-variant/40 text-on-surface-variant/50"
+                          : "border-dashed border-outline-variant text-on-surface-variant"
                     }`}
                   >
-                    <span
-                      aria-hidden
-                      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface-container-lowest shadow transition-transform duration-200 motion-reduce:transition-none ${
-                        on ? "translate-x-4" : ""
-                      }`}
-                    />
+                    {on ? <Check size={11} weight="bold" className="text-primary" /> : <Plus size={11} weight="bold" />}
+                    {c.name}
+                    {/* "in your experience" earns its space — it says the
+                        résumé already evidences this one. The converse
+                        applies to every other chip in this group, so it is
+                        said once in the caption and kept here for the tooltip
+                        and for screen readers rather than repeated in ink. */}
+                    {c.fix &&
+                      (evidenced ? (
+                        <span className="text-caption text-success">in your experience</span>
+                      ) : (
+                        <span className="sr-only">only if you have it</span>
+                      ))}
+                    {c.delta > 0 && (
+                      <span className={`tabular text-caption font-semibold ${on ? "text-primary" : "text-on-surface-variant"}`}>
+                        +{c.delta} pts
+                      </span>
+                    )}
                   </button>
                 </li>
               );
             })}
-          </ol>
+          </ul>
         </section>
       )}
-
     </article>
   );
 }

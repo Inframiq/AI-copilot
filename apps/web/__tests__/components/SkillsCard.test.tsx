@@ -28,7 +28,7 @@ function setup(over: Partial<Parameters<typeof SkillsCard>[0]> = {}) {
 describe("SkillsCard", () => {
   it("lists the skills to add biggest ATS gain first", () => {
     setup();
-    const list = screen.getByRole("list", { name: /skills to add/i });
+    const list = screen.getByRole("list", { name: /suggested additions/i });
     const names = within(list).getAllByRole("switch").map((s) => s.getAttribute("aria-label"));
     expect(names).toEqual(["Add Kubernetes (+7 pts)", "Add Terraform (+5 pts)", "Add Go (+3 pts)"]);
   });
@@ -49,8 +49,9 @@ describe("SkillsCard", () => {
 
   it("puts job-matching skills you already have first", () => {
     setup();
-    const current = screen.getByRole("list", { name: /already on your résumé/i });
-    const chips = within(current).getAllByRole("button").map((b) => b.textContent);
+    const current = screen.getByRole("list", { name: /on your résumé now/i });
+    // Both halves are switches now — the unified control.
+    const chips = within(current).getAllByRole("switch").map((b) => b.textContent);
     expect(chips[0]).toMatch(/Python/);
   });
 
@@ -78,7 +79,7 @@ describe("SkillsCard", () => {
       skillFixes: [fix("Kubernetes", 9, "high"), fix("Go", 1, "high")],
       liveDeltas: { "skill:kubernetes": 1, "skill:go": 9 },
     });
-    const list = screen.getByRole("list", { name: /skills to add/i });
+    const list = screen.getByRole("list", { name: /suggested additions/i });
     const names = within(list).getAllByRole("switch").map((s) => s.getAttribute("aria-label"));
     expect(names[0]).toMatch(/^Add Go/);
   });
@@ -112,6 +113,48 @@ describe("SkillsCard", () => {
     container.remove();
     setup();
     expect(screen.queryByTestId("skill-gain-bar")).toBeNull();
+  });
+  // One decision, one control. The two halves used different idioms — chips
+  // for what you have, switches for what you might add — so they read as
+  // unrelated widgets rather than two sides of one 20-slot budget.
+  it("uses the same control for both halves", () => {
+    setup();
+    const current = within(screen.getByRole("list", { name: /on your résumé now/i }));
+    const adds = within(screen.getByRole("list", { name: /suggested additions/i }));
+    expect(current.getAllByRole("switch").length).toBe(2);
+    expect(adds.getAllByRole("switch").length).toBe(3);
+  });
+
+  it("tells the two halves apart without changing the control", () => {
+    setup();
+    const mine = screen.getByRole("switch", { name: /keep Git/i });
+    const theirs = screen.getByRole("switch", { name: /add Go/i });
+    expect(mine.dataset.origin).toBe("yours");
+    expect(theirs.dataset.origin).toBe("suggested");
+  });
+
+  it("still toggles an existing skill off", () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("switch", { name: /keep Git/i }));
+    expect(props.onDecide).toHaveBeenCalledWith("skill_keep:Git", "reject");
+  });
+
+  it("never offers a skill the résumé already lists", () => {
+    setup({ originalSkills: ["Git", "Kubernetes"] });
+    const adds = within(screen.getByRole("list", { name: /suggested additions/i }));
+    expect(adds.queryByRole("switch", { name: /add kubernetes/i })).toBeNull();
+  });
+
+  it("matches on name regardless of case", () => {
+    setup({ originalSkills: ["kubernetes"] });
+    const adds = within(screen.getByRole("list", { name: /suggested additions/i }));
+    expect(adds.queryByRole("switch", { name: /add kubernetes/i })).toBeNull();
+  });
+
+  it("offers a suggestion only once when a fix and a plain suggestion share a name", () => {
+    setup({ suggestedSkills: ["Terraform", "Airflow"] });
+    const adds = within(screen.getByRole("list", { name: /suggested additions/i }));
+    expect(adds.getAllByRole("switch", { name: /add terraform/i }).length).toBe(1);
   });
 });
 

@@ -241,7 +241,10 @@ def _looks_like_a_skill(s: str) -> bool:
     skill itself. Real skill names are short noun phrases; sentences and
     bullet fragments are not."""
     words = s.split()
-    if len(words) == 0 or len(words) > 6:
+    # Four, not six: the parse prompt has always told the model "1 to 4 words",
+    # and the extra two let JD phrases through as skill chips reading like
+    # sentences. "Google Cloud Platform" and "Stakeholder Management" fit.
+    if len(words) == 0 or len(words) > 4:
         return False
     if ". " in s or s.count(",") > 1 or ";" in s:
         return False
@@ -250,6 +253,32 @@ def _looks_like_a_skill(s: str) -> bool:
     if _SKILL_PROSE_MARKERS.search(s):
         return False
     return True
+
+
+def skill_candidates(
+    missing: list[str], plausible: list[str], existing: list[str]
+) -> list[str]:
+    """The skills worth offering to add, in the order they should be offered.
+
+    Two things the review screen used to get wrong. `missing` comes straight
+    from the ATS analysis, which draws on Agent 1's responsibilities and filter
+    phrases — prose by nature — and only `plausible` was ever shape-checked, so
+    whole clauses arrived as skill chips. And nothing compared either list
+    against the skills the résumé already carries, so a skill could be offered
+    as an addition while sitting in "on your résumé now".
+
+    Missing first: a gap the JD names outranks one the mapper merely thinks
+    plausible.
+    """
+    seen = {str(e).strip().lower() for e in existing}
+    out: list[str] = []
+    for name in list(missing) + list(plausible):
+        key = str(name).strip().lower()
+        if not key or key in seen or not _looks_like_a_skill(str(name).strip()):
+            continue
+        seen.add(key)
+        out.append(str(name).strip())
+    return out
 
 
 def _sanitize_skill_list(skills: list[str]) -> list[str]:
@@ -1785,13 +1814,16 @@ async def run_tailoring_pipeline(
     # rewording alone. A skill that is merely missing still waits for a yes.
     plausible = _sanitize_skill_list(mapping_plan.plausible_skills_to_add)
     vouched = {s.strip().lower() for s in plausible + _sanitize_skill_list(priority_skills or [])}
-    skill_names: list[str] = list(post.missing_skills) + plausible
-    seen_skill = set()
+    # Shape-checked and de-duplicated against the résumé together: missing_skills
+    # is raw JD phrasing, and offering a skill the résumé already lists put the
+    # same name in both halves of the Skills card.
+    skill_names = skill_candidates(
+        missing=list(post.missing_skills),
+        plausible=plausible,
+        existing=list(tailored_content.get("skills") or []),
+    )
     for name in skill_names:
         k = name.strip().lower()
-        if not k or k in seen_skill:
-            continue
-        seen_skill.add(k)
         fixes.append(AtsFix(
             id=fix_slug("skill", name), type="skill", gap=name,
             importance=_imp(name), grounded=True, text=name,
