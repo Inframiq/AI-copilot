@@ -19,8 +19,11 @@ from app.services.pdf import (  # noqa: E402
     UNDERFILL_PAGE_FILL_THRESHOLD,
     PhotoRequiredError,
     TEMPLATES_REQUIRING_PHOTO,
+    _PLACEHOLDER_AVATAR,
+    _blocked_url_fetcher,
     _email_link,
     _phone_link,
+    _render_document,
     _render_html,
     _render_letter_html,
     _url_link,
@@ -29,26 +32,43 @@ from app.services.pdf import (  # noqa: E402
     generate_pdf_with_meta,
     get_signed_url,
     measure_pdf,
+    render_resume_html_with_meta,
     upload_pdf,
 )
 
 # ---------------------------------------------------------------------------
-# ats_sidebar/ats_professional now refuse to render at all without a real,
-# successfully-fetched photo (see PhotoRequiredError) — their whole layout
-# is built around the photo banner, so silently omitting it produced a
-# resume that looked nothing like what the user picked. Tests that need one
-# of these two templates to actually succeed use this helper to attach a
-# trusted, mocked-fetchable photo_url; tests exercising the "no valid photo"
-# path (absent/untrusted/fetch-failed) now assert PhotoRequiredError instead
-# of a degraded-but-successful render.
+# ats_sidebar/ats_professional are built around a photo banner, so a photo
+# matters to them in a way it does not to the other three. Two different
+# things can go wrong, and they get opposite treatment:
+#
+#   no photo_url at all      -> PhotoRequiredError, because the user is the
+#                               only one who can fix it and the Studio turns
+#                               the refusal into a prompt.
+#   photo_url we cannot use  -> render anyway with _PLACEHOLDER_AVATAR. An
+#     (untrusted host, 404,     untrusted host is still never fetched; the
+#      timeout, oversized)      point is that our failure is not the user's,
+#                               and must not kill a render they expect.
+#
+# Tests that need one of these templates to succeed attach a trusted,
+# mocked-fetchable photo_url with the helper below.
 # ---------------------------------------------------------------------------
 TRUSTED_HOST = "https://test-project.supabase.co"
+
+# A real (1x1, transparent) PNG, not a stub carrying the PNG magic number.
+# The renderer has to actually decode this: the tests that assert a photo
+# reaches the PDF measure WeasyPrint's laid-out image box, and bytes that
+# merely look like a PNG get dropped at decode time — indistinguishable from
+# the fetcher bug those tests exist to catch.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c6360606060000000050001a5f645ee0000000049454e44ae426082"
+)
 
 
 def _with_trusted_photo(resume: dict, httpx_mock, path: str = "/storage/v1/object/public/avatars/u/r.png") -> dict:
     photo_url = f"{TRUSTED_HOST}{path}"
     httpx_mock.add_response(
-        url=photo_url, content=b"\x89PNG\r\n\x1a\nfake-png-bytes", headers={"content-type": "image/png"}
+        url=photo_url, content=_ONE_PIXEL_PNG, headers={"content-type": "image/png"}
     )
     return {**resume, "contact": {**resume["contact"], "photo_url": photo_url}}
 
@@ -357,26 +377,32 @@ def test_generate_pdf_with_meta_returns_bytes_and_page_fit():
 # ---------------------------------------------------------------------------
 
 
-def test_generate_pdf_strips_untrusted_photo_url_and_refuses_to_render():
-    """A photo_url pointing at an internal/metadata host must not be
-    fetched — and since that leaves ats_sidebar with no real photo, it must
-    now refuse to render (PhotoRequiredError) rather than silently produce
-    a photo-less resume that doesn't match what the user picked."""
+def test_untrusted_photo_url_is_never_fetched_and_falls_back_to_placeholder():
+    """A photo_url aimed at an internal/metadata host must not be fetched.
+
+    httpx_mock is deliberately absent: pytest-httpx fails the test on any
+    unmocked request, so a fetch here would show up as an error rather than
+    pass quietly. The render still succeeds — with the silhouette, not the
+    attacker's URL, and certainly not the response body."""
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "http://169.254.169.254/secret"},
     }
-    with pytest.raises(PhotoRequiredError):
-        generate_pdf(malicious_resume, "ats_sidebar")
+    html = _render_html(malicious_resume, "ats_sidebar")
+    assert "169.254.169.254" not in html
+    assert _PLACEHOLDER_AVATAR in html
+    assert generate_pdf(malicious_resume, "ats_sidebar")[:4] == b"%PDF"
 
 
-def test_generate_pdf_strips_file_scheme_photo_url_and_refuses_to_render():
+def test_file_scheme_photo_url_is_never_read_and_falls_back_to_placeholder():
     malicious_resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": "file:///etc/passwd"},
     }
-    with pytest.raises(PhotoRequiredError):
-        generate_pdf(malicious_resume, "ats_professional")
+    html = _render_html(malicious_resume, "ats_professional")
+    assert "/etc/passwd" not in html
+    assert _PLACEHOLDER_AVATAR in html
+    assert generate_pdf(malicious_resume, "ats_professional")[:4] == b"%PDF"
 
 
 # ---------------------------------------------------------------------------
@@ -418,18 +444,93 @@ def test_sidebar_template_embeds_photo_when_trusted(httpx_mock, trusted_settings
     assert photo_url not in html
 
 
-def test_sidebar_template_raises_when_fetch_fails(httpx_mock, trusted_settings):
-    """A trusted URL that 404s (deleted avatar, etc.) leaves no real photo
-    to render — same as one never being set, so this now refuses to render
-    rather than silently degrading."""
+def test_sidebar_template_uses_placeholder_when_fetch_fails(httpx_mock, trusted_settings):
+    """A trusted URL that 404s (a deleted avatar) is our failure, not the
+    user's. The template they picked still renders, standing the silhouette
+    in for the portrait, and the caller is told so it can warn them."""
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
     httpx_mock.add_response(url=photo_url, status_code=404)
     resume = {
         **SAMPLE_RESUME,
         "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
     }
-    with pytest.raises(PhotoRequiredError):
-        _render_html(resume, "ats_sidebar")
+    html, meta = render_resume_html_with_meta(resume, "ats_sidebar")
+    assert _PLACEHOLDER_AVATAR in html
+    assert meta["photo_placeholder"] is True
+
+
+def test_oversized_photo_falls_back_to_placeholder(httpx_mock, trusted_settings):
+    """Over _MAX_PHOTO_BYTES the fetch returns None. Same reasoning: the
+    resume renders, with the stand-in."""
+    photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/big.png"
+    httpx_mock.add_response(
+        url=photo_url, content=b"x" * (5 * 1024 * 1024 + 1),
+        headers={"content-type": "image/png"},
+    )
+    resume = {
+        **SAMPLE_RESUME,
+        "contact": {**SAMPLE_RESUME["contact"], "photo_url": photo_url},
+    }
+    html, meta = render_resume_html_with_meta(resume, "ats_professional")
+    assert _PLACEHOLDER_AVATAR in html
+    assert meta["photo_placeholder"] is True
+
+
+def test_a_usable_photo_reports_no_placeholder(httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    html, meta = render_resume_html_with_meta(resume, "ats_sidebar")
+    assert _PLACEHOLDER_AVATAR not in html
+    assert meta["photo_placeholder"] is False
+
+
+# ---------------------------------------------------------------------------
+# The photo has to survive all the way into the PDF, not just into the HTML.
+# WeasyPrint's own allowed_protocols check compares url.split('://')[0]
+# against the allowlist; a data: URI has no '//', so the entire URI was
+# compared, never matched, and every inlined portrait was silently dropped
+# from the rendered document. Asserting on the HTML alone cannot see that —
+# these go through WeasyPrint.
+# ---------------------------------------------------------------------------
+
+
+def _pdf_draws_an_image(resume: dict, template_id: str) -> bool:
+    """True when WeasyPrint laid out an actual image box for the photo."""
+    document = _render_document(resume, template_id)
+
+    def boxes(box):
+        yield box
+        for child in getattr(box, "children", None) or ():
+            yield from boxes(child)
+
+    # Any *ReplacedBox: an image the renderer actually decoded and gave a box
+    # to. Which flavour depends on the template's CSS — the two photo
+    # templates lay theirs out as a flex item, so it is a BlockReplacedBox,
+    # not the InlineReplacedBox a bare <img> in flow would produce.
+    return any(
+        type(b).__name__.endswith("ReplacedBox")
+        for page in document.pages
+        for b in boxes(page._page_box)
+    )
+
+
+@pytest.mark.parametrize("template_id", sorted(TEMPLATES_REQUIRING_PHOTO))
+def test_a_trusted_photo_actually_reaches_the_pdf(template_id, httpx_mock, trusted_settings):
+    resume = _with_trusted_photo(SAMPLE_RESUME, httpx_mock)
+    assert _pdf_draws_an_image(resume, template_id)
+
+
+def test_the_data_only_fetcher_still_refuses_every_other_scheme():
+    """The scheme check that replaced allowed_protocols must not have
+    widened what the renderer can reach."""
+    fetcher = _blocked_url_fetcher()
+    for blocked in (
+        "http://169.254.169.254/latest/meta-data/",
+        "https://example.test/a.png",
+        "file:///etc/passwd",
+        "ftp://example.test/a.png",
+    ):
+        with pytest.raises(ValueError, match="disallowed protocol"):
+            fetcher.fetch(blocked)
 
 
 # ---------------------------------------------------------------------------

@@ -186,7 +186,7 @@ async def test_generate_pdf_returns_signed_url():
 
 
 @pytest.mark.asyncio
-async def test_generate_pdf_returns_422_when_photo_template_has_no_photo():
+async def test_generate_pdf_returns_409_when_photo_template_has_no_photo():
     from app.services.pdf import PhotoRequiredError
 
     override, mock_session = make_mock_db()
@@ -207,7 +207,9 @@ async def test_generate_pdf_returns_422_when_photo_template_has_no_photo():
                     json={"template_id": "ats_sidebar"},
                     headers=make_auth_header(),
                 )
-        assert r.status_code == 422
+        # 409, the same status the /html route uses — the Studio keys its
+        # "add a photo" prompt off it, so the two routes must agree.
+        assert r.status_code == 409
         assert "profile photo" in r.json()["detail"]
     finally:
         app.dependency_overrides.pop(get_db, None)

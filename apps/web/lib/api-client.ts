@@ -152,7 +152,11 @@ export const apiClient = {
    *
    * Same template path as generatePdf — the server returns the exact HTML it
    * would hand to WeasyPrint — so what the user edits is what exports. Pure
-   * render: it persists and uploads nothing. */
+   * render: it persists and uploads nothing.
+   *
+   * photo_placeholder: the résumé carries a photo the server could not fetch,
+   * so a grey silhouette stands in. The document still renders — the Studio
+   * says so rather than let a stand-in reach an export unnoticed. */
   renderResumeHtml: (
     resumeId: string,
     opts?: {
@@ -165,8 +169,12 @@ export const apiClient = {
       heading_size_delta?: number;
       body_size_delta?: number;
     },
-  ): Promise<{ html: string }> =>
-    request<{ html: string }>("POST", `/resumes/${resumeId}/html`, opts ?? {}),
+  ): Promise<{ html: string; photo_placeholder?: boolean }> =>
+    request<{ html: string; photo_placeholder?: boolean }>(
+      "POST",
+      `/resumes/${resumeId}/html`,
+      opts ?? {},
+    ),
 
   generatePdf: (
     id: string,

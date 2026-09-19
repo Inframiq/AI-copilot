@@ -15,6 +15,7 @@ import { LinkEditor } from "@/components/studio/LinkEditor";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { PageMeter } from "@/components/studio/PageMeter";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
+import { PhotoPrompt } from "@/components/resume/PhotoPrompt";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
 import { SaveToJd } from "@/components/studio/SaveToJd";
 
@@ -106,7 +107,7 @@ export default function StudioPreviewPage({
   // request either, so the server used the résumé row's saved values. The
   // template only appeared to work because its autosave usually landed
   // before the refetch its key change triggered — a race, not a design.
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: [
       "resumeHtml", resumeId, templateId, lineSpacing, paragraphSpacing,
       fontChoice, accentColor, headingSizeDelta, bodySizeDelta, content,
@@ -287,6 +288,8 @@ export default function StudioPreviewPage({
         }
         onExport={handleExport}
         isExporting={isExporting}
+        onRefresh={() => refetch()}
+        isRefreshing={isFetching}
         saveSlot={
           linkedJdId && (draftJdId || savedToJd) ? (
             <SaveToJd saved={savedToJd} isSaving={isSavingDraft} onSave={handleSaveToJd} />
@@ -309,6 +312,19 @@ export default function StudioPreviewPage({
         >
           <WarningCircle size={14} weight="fill" />
           Couldn&apos;t save: {saveError}
+        </p>
+      )}
+      {/* The server rendered a stand-in because it could not fetch the photo
+          on this résumé. Saying nothing is how a grey silhouette ends up in
+          a PDF somebody sends to an employer. */}
+      {data?.photo_placeholder && (
+        <p
+          role="status"
+          className="flex shrink-0 items-center gap-xs border-b border-tertiary/30 bg-tertiary-container/60 px-lg py-sm text-caption text-on-tertiary-container"
+        >
+          <WarningCircle size={14} weight="fill" />
+          We couldn&apos;t load your photo, so this shows a placeholder. Re-upload it before you
+          export.
         </p>
       )}
       {exportError && (
@@ -340,6 +356,10 @@ export default function StudioPreviewPage({
           onClose={closeLinkEditor}
         />
       )}
+      {/* The template gallery is in this page's header, so switching onto a
+          photo template happens here. Without this the switch rendered a
+          refusal instead of asking for the photo. */}
+      <PhotoPrompt resumeId={resumeId} />
     </div>
   );
 }

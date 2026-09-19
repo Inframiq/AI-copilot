@@ -20,6 +20,14 @@ vi.mock("@/lib/api-client", async (importOriginal) => ({
   },
 }));
 
+// <PhotoPrompt> looks the user's profile photo up to offer "use the one you
+// already have". Stubbed to "no photo on file" by default; the tests that
+// care override it.
+vi.mock("@/lib/career-profile-client", () => ({
+  getCareerProfile: vi.fn(async () => null),
+  upsertCareerProfile: vi.fn(async () => ({})),
+}));
+
 import StudioPreviewPage from "../app/(builder)/studio/[resumeId]/preview/page";
 import { useResumeStore } from "../stores/resume-store";
 import { useTailoringStore } from "../stores/tailoring-store";
@@ -476,5 +484,117 @@ describe("resumeFileName", () => {
     expect(resumeFileName('Jane\\Doe/: "QA"')).toBe("JaneDoe QA - Resume.pdf");
     expect(resumeFileName("  ")).toBe("Resume.pdf");
     expect(resumeFileName(undefined)).toBe("Resume.pdf");
+  });
+});
+
+/**
+ * The template gallery lives in this page's header, so the Studio preview is
+ * where a résumé actually moves from one template to another. Everything that
+ * has to happen on that switch has to happen here.
+ */
+describe("switching template in the Studio preview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+    useResumeStore.setState({
+      resumeId: "r1",
+      templateId: "ats_clean",
+      content: {
+        contact: {}, summary: "Old summary.", experience: [], education: [], skills: [],
+      },
+    } as never);
+  });
+
+  // The prompt was wired into the Builder only — the one route where the
+  // template cannot be changed. Moving onto a photo template here used to
+  // render the server's refusal instead of asking for a photo.
+  it("asks for a photo when the new template needs one", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+
+    await act(async () => {
+      useResumeStore.getState().setTemplateId("ats_sidebar");
+    });
+
+    await waitFor(() => expect(useResumeStore.getState().photoModalOpen).toBe(true));
+    expect(screen.getByText(/requires a profile photo/i)).toBeTruthy();
+  });
+
+  it("remembers the template to fall back to if the prompt is dismissed", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+
+    await act(async () => {
+      useResumeStore.getState().setTemplateId("ats_professional");
+    });
+    await waitFor(() => expect(useResumeStore.getState().photoModalOpen).toBe(true));
+    expect(useResumeStore.getState().photoModalRevertTo).toBe("ats_clean");
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => expect(useResumeStore.getState().templateId).toBe("ats_clean"));
+  });
+
+  it("leaves a photo template alone when the résumé already has a photo", async () => {
+    useResumeStore.setState({
+      content: {
+        contact: { photo_url: "https://example.test/me.png" },
+        summary: "", experience: [], education: [], skills: [],
+      },
+    } as never);
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+
+    await act(async () => {
+      useResumeStore.getState().setTemplateId("ats_sidebar");
+    });
+    await waitFor(() => expect(useResumeStore.getState().templateId).toBe("ats_sidebar"));
+    expect(useResumeStore.getState().photoModalOpen).toBe(false);
+  });
+
+  it("re-renders the document on demand", async () => {
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh preview/i }));
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("a photo the server could not load", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useResumeStore.getState().resetStore();
+    useTailoringStore.getState().resetStore();
+    useResumeStore.setState({
+      resumeId: "r1",
+      templateId: "ats_sidebar",
+      content: {
+        contact: { photo_url: "https://example.test/gone.png" },
+        summary: "", experience: [], education: [], skills: [],
+      },
+    } as never);
+  });
+
+  // The placeholder is deliberate, but silent is how a grey silhouette ends
+  // up in a PDF somebody sends to an employer.
+  it("says the portrait on screen is a stand-in", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockResolvedValueOnce({
+      html: "<p>doc</p>",
+      photo_placeholder: true,
+    });
+    await renderPage();
+    await waitFor(() => screen.getByText(/couldn.t load your photo/i));
+    expect(screen.getByText(/re-upload it before you export/i)).toBeTruthy();
+  });
+
+  it("stays quiet when the real photo made it in", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockResolvedValueOnce({
+      html: "<p>doc</p>",
+      photo_placeholder: false,
+    });
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+    expect(screen.queryByText(/couldn.t load your photo/i)).toBeNull();
   });
 });

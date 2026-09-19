@@ -13,7 +13,7 @@ from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerat
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
-    render_resume_html, PhotoRequiredError,
+    render_resume_html_with_meta, PhotoRequiredError,
 )
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
@@ -420,11 +420,15 @@ async def generate_resume_pdf(
             _given(body, "heading_size_delta", resume.heading_size_delta) or 0,
             _given(body, "body_size_delta", resume.body_size_delta) or 0,
         )
-    except PhotoRequiredError:
+    except PhotoRequiredError as exc:
+        # 409, matching the /html route. The Studio keys the "add a photo"
+        # prompt off this status, and the two routes disagreeing meant the
+        # same refusal raised the prompt on one path and a generic error on
+        # the other.
         raise HTTPException(
-            status_code=422,
+            status_code=409,
             detail="This template requires a profile photo. Add one before previewing or downloading.",
-        )
+        ) from exc
     # Hand the bytes straight back as a data URI so the browser can render the
     # preview immediately — the client no longer waits on a Supabase upload +
     # signed-URL round trip before it can show anything. Storage persistence
@@ -476,8 +480,8 @@ async def render_resume_html_endpoint(
 
     content = (body.content if body and body.content is not None else resume.content) or {}
     try:
-        html = await asyncio.to_thread(
-            render_resume_html,
+        html, meta = await asyncio.to_thread(
+            render_resume_html_with_meta,
             content,
             template_id,
             # `x or saved` would drop a paragraph_spacing of 0, which the
@@ -492,7 +496,9 @@ async def render_resume_html_endpoint(
         )
     except PhotoRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"html": html}
+    # photo_placeholder rides along so the Studio can say the portrait on
+    # screen is a stand-in. Silence here is what would let it reach a PDF.
+    return {"html": html, "photo_placeholder": meta["photo_placeholder"]}
 
 
 @router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)

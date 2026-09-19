@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
 import { FOCUS_RING } from "@/lib/focus";
 import { StudioControls } from "./StudioControls";
 
@@ -22,6 +22,8 @@ export function StudioHeader({
   backLabel,
   onExport,
   isExporting,
+  onRefresh,
+  isRefreshing,
   saveSlot,
 }: {
   title: string;
@@ -32,6 +34,12 @@ export function StudioHeader({
   backLabel: string;
   onExport: () => void;
   isExporting: boolean;
+  /** Re-render the document from the server. The preview already refetches
+   *  on every change that affects it, so this is for the times the user
+   *  wants to see the new template land rather than trust that it did —
+   *  most of all right after switching templates. */
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   /** The JD path's "Save to JD" control, beside Export. */
   saveSlot?: React.ReactNode;
 }) {
@@ -90,6 +98,20 @@ export function StudioHeader({
       </div>
 
       <StudioControls />
+
+      {onRefresh && (
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          aria-label="Refresh preview"
+          title="Refresh preview"
+          className={`flex h-9 shrink-0 items-center gap-xs rounded-xl px-sm text-label-sm text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+        >
+          <ArrowClockwise size={16} className={isRefreshing ? "animate-spin" : undefined} />
+          <span className="hidden lg:inline">Refresh</span>
+        </button>
+      )}
 
       {saveSlot}
 

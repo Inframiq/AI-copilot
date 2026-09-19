@@ -64,7 +64,7 @@ def test_an_unknown_level_draws_no_proficiency_bar(monkeypatch):
     # a bar for a level nobody stated invents the claim in picture form.
     import app.services.pdf as pdf
 
-    monkeypatch.setattr(pdf, "_sanitize_resume_content", lambda c: c)
+    monkeypatch.setattr(pdf, "_sanitize_resume_content", lambda c: (c, pdf.PHOTO_EMBEDDED))
     content = {**_CONTENT, "contact": {"name": "A", "photo_url": "data:image/gif;base64,R0lGODlhAQABAAAAACw="}}
     html = pdf.render_resume_html(content, "ats_sidebar")
     # The class name also appears in the <style> block, so look at the body.

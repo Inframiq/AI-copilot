@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { AuthBackLink } from "@/components/auth/AuthBackLink";
 import { createBrowserClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
@@ -29,6 +30,10 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-gutter">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl w-full max-w-[28rem]">
+        <div className="mb-lg">
+          <AuthBackLink />
+        </div>
+
         {/* Logo */}
         <div className="mb-xl">
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={172} height={38} priority />

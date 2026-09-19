@@ -19,7 +19,9 @@ def _keep_the_photo(monkeypatch):
     """The photo templates refuse to render without one, and the sanitiser
     only keeps a photo it can fetch from storage. Neither is what these tests
     are about."""
-    monkeypatch.setattr(pdf_service, "_sanitize_resume_content", lambda c: c)
+    monkeypatch.setattr(
+        pdf_service, "_sanitize_resume_content", lambda c: (c, pdf_service.PHOTO_EMBEDDED)
+    )
 
 CONTENT = {
     "contact": {"name": "Jane Doe", "email": "j@x.com", "phone": "+1 555",

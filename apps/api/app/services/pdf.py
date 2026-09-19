@@ -16,14 +16,43 @@ ALLOWED_TEMPLATES = {"ats_clean", "ats_modern", "ats_sidebar", "ats_professional
 
 # Mirrors apps/web/lib/resume-templates.ts's templateRequiresPhoto — these
 # two templates' whole layout (banner/sidebar photo block) only shows up
-# when a photo is present; without one they silently degrade to a plain
-# single-column resume that looks nothing like what the user picked. Refuse
-# to render rather than produce that misleading result.
+# when a photo is present; without one they degrade to a plain single-column
+# resume that looks nothing like what the user picked.
 TEMPLATES_REQUIRING_PHOTO = {"ats_sidebar", "ats_professional"}
+
+# What became of contact.photo_url on its way into the template.
+#
+# The distinction is the whole point: "you never gave us a photo" is a
+# question only the user can answer, so it stops the render and raises the
+# prompt. "You gave us one and we could not use it" is our problem, not
+# theirs — a deleted avatar or a timeout must not make a template the user
+# picked refuse to render at all.
+PHOTO_NONE = "none"                # nothing on the resume to work with
+PHOTO_EMBEDDED = "embedded"        # fetched from the trusted host and inlined
+PHOTO_UNAVAILABLE = "unavailable"  # supplied, but untrusted host or fetch failed
+
+# Stands in for a photo we were handed but could not use, so a photo template
+# still lays out the way it was chosen. Deliberately a flat grey silhouette
+# rather than anything that could pass for a real portrait: the Studio warns
+# whenever it is on screen, and it has to read as "photo missing" at a glance
+# on the chance it ever reaches an exported PDF.
+_PLACEHOLDER_AVATAR = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5"
+    "NiA5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjZGZlM2U4Ii8+PGNp"
+    "cmNsZSBjeD0iNDgiIGN5PSIzNyIgcj0iMTYiIGZpbGw9IiNhYWIzYmYiLz48cGF0aCBkPSJN"
+    "MTcgODljMC0xNy4xIDEzLjktMzEgMzEtMzFzMzEgMTMuOSAzMSAzMXoiIGZpbGw9IiNhYWIz"
+    "YmYiLz48L3N2Zz4="
+)
 
 
 class PhotoRequiredError(ValueError):
-    """Raised by _render_html when a photo-required template has no photo."""
+    """Raised when a photo-required template is given no photo at all.
+
+    Only for PHOTO_NONE. A photo that was supplied but could not be fetched
+    renders with _PLACEHOLDER_AVATAR instead of failing the whole document —
+    the user did their part, and the export should not die on our fetch.
+    """
 
 
 def _sub_outside_tags(pattern: str, repl: str, html: str) -> str:
@@ -169,9 +198,15 @@ _jinja_env.filters["url_link"] = _url_link
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB — a portrait photo has no business being bigger
 
 
-def _sanitize_resume_content(resume_content: dict) -> dict:
+def _sanitize_resume_content(resume_content: dict) -> tuple[dict, str]:
     """Strip contact.photo_url unless it points at the trusted Supabase Storage host,
     and inline whatever survives as a data: URI.
+
+    Returns the cleaned content and one of PHOTO_NONE / PHOTO_EMBEDDED /
+    PHOTO_UNAVAILABLE. The caller needs that verdict because a blanked
+    photo_url cannot by itself say whether the user never added a photo or
+    whether we failed to fetch the one they did add — and those two want
+    opposite outcomes.
 
     Some templates render photo_url into an <img src="..."> tag, which WeasyPrint
     fetches server-side via _blocked_url_fetcher — a default-deny fetcher that only
@@ -183,15 +218,20 @@ def _sanitize_resume_content(resume_content: dict) -> dict:
     contact = resume_content.get("contact")
     photo_url = contact.get("photo_url") if isinstance(contact, dict) else None
     if not photo_url:
-        return resume_content
+        return resume_content, PHOTO_NONE
 
     allowed_host = urlparse(settings.supabase_url).hostname
     parsed = urlparse(photo_url)
     if parsed.scheme != "https" or not allowed_host or parsed.hostname != allowed_host:
-        return {**resume_content, "contact": {**contact, "photo_url": None}}
+        return {**resume_content, "contact": {**contact, "photo_url": None}}, PHOTO_UNAVAILABLE
 
     data_uri = _fetch_photo_as_data_uri(photo_url)
-    return {**resume_content, "contact": {**contact, "photo_url": data_uri}}
+    if not data_uri:
+        return {**resume_content, "contact": {**contact, "photo_url": None}}, PHOTO_UNAVAILABLE
+    return (
+        {**resume_content, "contact": {**contact, "photo_url": data_uri}},
+        PHOTO_EMBEDDED,
+    )
 
 
 def _fetch_photo_as_data_uri(photo_url: str) -> str | None:
@@ -340,7 +380,7 @@ def _clamp_size_delta(delta: int | None) -> int:
         return 0
 
 
-def _render_html(
+def _render_html_meta(
     resume_content: dict,
     template_id: str,
     line_spacing: float = 1.25,
@@ -349,8 +389,12 @@ def _render_html(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """Validate template_id and render resume_content to an HTML string.
+
+    Returns the HTML and {"photo_placeholder": bool} — true when the resume
+    carried a photo we could not fetch and the silhouette stood in for it, so
+    the Studio can say so rather than let it slip into an export unnoticed.
 
     Shared by generate_pdf (→ bytes) and count_pdf_pages (→ int), so both
     always render from the exact same template + sanitization path.
@@ -362,17 +406,29 @@ def _render_html(
         raise ValueError(
             f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
         )
-    resume_content = _sanitize_resume_content(resume_content)
-    if template_id in TEMPLATES_REQUIRING_PHOTO and not resume_content.get("contact", {}).get("photo_url"):
-        raise PhotoRequiredError(
-            f"Template {template_id!r} requires a profile photo, but none was provided."
-        )
+    resume_content, photo_status = _sanitize_resume_content(resume_content)
+    used_placeholder = False
+    if template_id in TEMPLATES_REQUIRING_PHOTO:
+        if photo_status == PHOTO_NONE:
+            # The one case the user can actually act on, so the only one
+            # worth refusing over: the Studio turns this into the "use your
+            # profile photo or upload one" prompt.
+            raise PhotoRequiredError(
+                f"Template {template_id!r} requires a profile photo, but none was provided."
+            )
+        if photo_status == PHOTO_UNAVAILABLE:
+            contact = resume_content.get("contact") or {}
+            resume_content = {
+                **resume_content,
+                "contact": {**contact, "photo_url": _PLACEHOLDER_AVATAR},
+            }
+            used_placeholder = True
     template = _jinja_env.get_template(f"{template_id}.html")
     if accent_color and re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color):
         resolved_accent = accent_color
     else:
         resolved_accent = TEMPLATE_DEFAULT_ACCENT[template_id]
-    return template.render(
+    html = template.render(
         **resume_content,
         line_spacing=line_spacing,
         paragraph_spacing=paragraph_spacing,
@@ -389,6 +445,24 @@ def _render_html(
         body_size=_size_stepper(body_size_delta),
         **_derived_spacing(line_spacing, paragraph_spacing),
     )
+    return html, {"photo_placeholder": used_placeholder}
+
+
+def _render_html(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
+) -> str:
+    """_render_html_meta for the callers that only want the document."""
+    return _render_html_meta(
+        resume_content, template_id, line_spacing, paragraph_spacing, font_choice,
+        accent_color, heading_size_delta, body_size_delta,
+    )[0]
 
 
 # Below this fraction of the page's content area filled, a single-page resume
@@ -417,6 +491,30 @@ def render_resume_html(
     count_pdf_pages are untouched.
     """
     return _render_html(
+        resume_content,
+        template_id,
+        line_spacing,
+        paragraph_spacing,
+        font_choice,
+        accent_color,
+        heading_size_delta,
+        body_size_delta,
+    )
+
+
+def render_resume_html_with_meta(
+    resume_content: dict,
+    template_id: str,
+    line_spacing: float = 1.25,
+    paragraph_spacing: int = 12,
+    font_choice: str = "sans",
+    accent_color: str | None = None,
+    heading_size_delta: int = 0,
+    body_size_delta: int = 0,
+) -> tuple[str, dict]:
+    """render_resume_html plus {"photo_placeholder": bool} for the Studio,
+    which has to tell the user when the portrait on screen is a stand-in."""
+    return _render_html_meta(
         resume_content,
         template_id,
         line_spacing,
@@ -622,10 +720,27 @@ def _blocked_url_fetcher():
     `_fail_on_errors` off the fetcher, and `urls.default_url_fetcher` is gone,
     so the old function broke every photo template's render. A new instance
     per render, because URLFetcher keeps per-request state between calls.
+
+    `allowed_protocols={"data"}` cannot be used, and this is not cosmetic:
+    WeasyPrint tests it with `url.split('://', 1)[0]`, and a data: URI has no
+    '//' at all, so the whole URI gets compared against the allowlist, never
+    matches, and every inlined photo is dropped from the document. That is
+    why a resume's portrait never reached an exported PDF even on the trusted
+    host. Do the scheme check the way RFC 3986 writes it instead, then let
+    WeasyPrint's own DataHandler do the read.
     """
     from weasyprint.urls import URLFetcher
 
-    return URLFetcher(allowed_protocols={"data"})
+    class _DataOnlyURLFetcher(URLFetcher):
+        def __init__(self):
+            super().__init__(allowed_protocols=None)
+
+        def fetch(self, url, headers=None):
+            if url.split(":", 1)[0].lower() != "data":
+                raise ValueError(f"URI uses disallowed protocol: {url}")
+            return super().fetch(url, headers)
+
+    return _DataOnlyURLFetcher()
 
 
 async def upload_pdf(
