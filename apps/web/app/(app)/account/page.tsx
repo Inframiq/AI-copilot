@@ -291,6 +291,14 @@ export default function AccountPage() {
         <Link href="/privacy" className="hover:text-on-surface hover:underline">
           Privacy Policy
         </Link>
+        <span className="mx-sm text-outline-variant">·</span>
+        <Link href="/refunds" className="hover:text-on-surface hover:underline">
+          Refund Policy
+        </Link>
+        <span className="mx-sm text-outline-variant">·</span>
+        <Link href="/cookies" className="hover:text-on-surface hover:underline">
+          Cookie Policy
+        </Link>
       </p>
     </div>
   );

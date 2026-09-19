@@ -5,10 +5,13 @@ import { track } from "@vercel/analytics";
 import { apiClient } from "@/lib/api-client";
 import type { Subscription } from "@career-copilot/types";
 
-const SESSION_FLAG = "kripax_plan_tracked";
+// Kept in memory, never in browser storage: storage used only for
+// analytics is the kind that would need a consent banner, and the site sets
+// nothing that isn't strictly necessary (see /cookies).
+let trackedPlan: string | null = null;
 
 /**
- * Fires one Vercel Analytics custom event per browser session carrying the
+ * Fires one Vercel Analytics custom event per page load carrying the
  * signed-in user's plan, so Free vs Premium shows up as a breakdown on the
  * "plan_seen" event in the Vercel Analytics dashboard. Renders nothing.
  */
@@ -21,9 +24,9 @@ export function PlanTracker() {
 
   useEffect(() => {
     if (!data) return;
-    if (sessionStorage.getItem(SESSION_FLAG) === data.plan) return;
+    if (trackedPlan === data.plan) return;
     track("plan_seen", { plan: data.plan });
-    sessionStorage.setItem(SESSION_FLAG, data.plan);
+    trackedPlan = data.plan;
   }, [data]);
 
   return null;

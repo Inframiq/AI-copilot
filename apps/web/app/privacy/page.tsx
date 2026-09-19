@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RocketLaunch } from "@phosphor-icons/react/dist/ssr";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "September 19, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const JURISDICTION = "Visakhapatnam, Andhra Pradesh, India";
@@ -217,7 +217,8 @@ export default function PrivacyPolicyPage() {
             <p className="text-body-md text-on-surface-variant">
               Other subprocessors that handle personal data on our behalf, used solely to provide the
               Service: our cloud database and file storage provider (Supabase), a PCI-compliant payment
-              processor (used only for paid-plan transactions), and our cloud hosting provider. We do not
+              processor (used only for paid-plan transactions), and our cloud hosting provider (Vercel), which
+              also provides the cookieless page-view and performance measurement described in Section 7. We do not
               permit any subprocessor to use your data for its own purposes, and we take reasonable
               contractual steps with each of them to protect your data, consistent with their standard terms
               of service.
@@ -240,24 +241,24 @@ export default function PrivacyPolicyPage() {
           <section className="flex flex-col gap-sm">
             <h2 className="text-headline-md text-on-surface font-semibold">7. Cookies and local storage</h2>
             <p className="text-body-md text-on-surface-variant">
-              We use only the following storage technologies, all strictly necessary for the Service to
-              function — none are used for advertising, cross-site tracking, or analytics profiling:
+              We use cookies only to keep you signed in (Supabase Auth session cookies), and browser local
+              storage only to remember choices you make in the app: whether the side menu is collapsed,
+              whether you have seen the guided tour, and your in-progress target role on the Career Path page.
+              None of these are used for advertising or cross-site tracking. Our{" "}
+              <Link href="/cookies" className="text-primary hover:underline">Cookie Policy</Link> lists each
+              one by name, with its purpose and duration.
             </p>
-            <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
-              <li><strong className="text-on-surface">Supabase Auth session cookies</strong> — keep you
-                signed in after Google authentication; expire on sign-out or session refresh per Supabase&apos;s
-                default session lifetime.</li>
-              <li><strong className="text-on-surface">Local storage: onboarding state</strong> (
-                <code>career-copilot-onboarding-dismissed</code>) — remembers that you dismissed the
-                onboarding prompt; persists until you clear browser storage.</li>
-              <li><strong className="text-on-surface">Local storage: career-path draft</strong> (
-                <code>career-copilot-target-role</code>) — remembers your in-progress target-role input on the
-                Career Path page; persists until you clear browser storage.</li>
-            </ul>
             <p className="text-body-md text-on-surface-variant">
-              These are exempt from opt-out/consent requirements under GDPR&apos;s ePrivacy rules and similar
-              laws because they are strictly necessary. If we ever add non-essential cookies (analytics,
-              advertising), we will update this section and request your consent first, where required.
+              We measure page views and page-load performance with Vercel Web Analytics and Speed Insights.
+              These set no cookies and store nothing on your device. They work from the request itself and do
+              not identify you or follow you across websites.
+            </p>
+            <p className="text-body-md text-on-surface-variant">
+              Because everything we store on your device is strictly necessary or remembers a setting you
+              chose, it is exempt from consent requirements under the ePrivacy rules and similar laws, so we
+              do not show a cookie banner. If we ever add non-essential cookies or storage (analytics that
+              identify you, advertising), we will update the Cookie Policy and ask for your consent first,
+              where required.
             </p>
           </section>
 

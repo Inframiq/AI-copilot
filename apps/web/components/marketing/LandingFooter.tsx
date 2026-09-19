@@ -14,6 +14,8 @@ export function LandingFooter() {
         <nav aria-label="Footer" className="flex flex-wrap gap-x-lg gap-y-xs text-label-sm text-on-surface-variant">
           <Link href="/privacy" className="transition-colors hover:text-on-surface">Privacy</Link>
           <Link href="/terms" className="transition-colors hover:text-on-surface">Terms</Link>
+          <Link href="/refunds" className="transition-colors hover:text-on-surface">Refunds</Link>
+          <Link href="/cookies" className="transition-colors hover:text-on-surface">Cookies</Link>
           <Link href="/login" className="transition-colors hover:text-on-surface">Sign in</Link>
           <Link href="/register" className="transition-colors hover:text-on-surface">Create account</Link>
         </nav>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RocketLaunch } from "@phosphor-icons/react/dist/ssr";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "September 19, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
 const CONTACT_EMAIL = "support@inframiq.com";
 const SEAT_CITY = "Visakhapatnam, Andhra Pradesh, India";
@@ -132,7 +132,9 @@ export default function TermsOfServicePage() {
               payment succeeds; we will notify you first where practical. Fees are non-refundable except
               where required by applicable law (including consumer-protection and cancellation-right law in
               your country of residence) or expressly stated at checkout. Unused credits do not entitle you
-              to a cash refund unless required by law or stated at checkout.
+              to a cash refund unless required by law or stated at checkout. Our{" "}
+              <Link href="/refunds" className="text-primary hover:underline">Refund and Cancellation Policy</Link>{" "}
+              sets out how to cancel, the cases in which we do refund, and how long a refund takes.
             </p>
           </section>
 

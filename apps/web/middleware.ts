@@ -66,6 +66,8 @@ export async function middleware(request: NextRequest) {
     "/callback",
     "/privacy",
     "/terms",
+    "/refunds",
+    "/cookies",
   ];
 
   const isPublic =
