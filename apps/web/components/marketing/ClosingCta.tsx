@@ -4,7 +4,7 @@ import { Reveal } from "./Reveal";
 
 export function ClosingCta() {
   return (
-    <section className="px-gutter pb-[64px] pt-sm">
+    <section className="px-gutter pb-[80px] pt-md">
       <Reveal className="relative mx-auto max-w-[1200px] overflow-hidden rounded-[2rem] border border-white/70 bg-white/60 px-lg py-[56px] text-center shadow-[0_30px_80px_-40px_rgba(27,58,143,0.45)] backdrop-blur-xl sm:py-[72px]">
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_120%,rgba(42,79,181,0.22),transparent_70%)]" />
         <h2 className="relative mx-auto max-w-[40rem] text-[34px] font-bold leading-[1.08] tracking-[-0.03em] text-on-surface sm:text-[52px]">

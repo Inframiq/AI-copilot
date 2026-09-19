@@ -5,7 +5,7 @@ import { TailorDemo } from "./TailorDemo";
 
 export function LandingHero() {
   return (
-    <section className="mx-auto grid max-w-[1200px] items-center gap-xxl lg:items-start px-gutter pb-[56px] pt-xl lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-[72px] lg:pt-xxl">
+    <section className="mx-auto grid max-w-[1200px] items-center gap-xxl lg:items-start px-gutter pb-[72px] pt-xl lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-[72px] lg:pt-xxl">
       <div className="max-w-[36rem] lg:pt-xl">
         <p className="mb-lg inline-flex items-center gap-xs rounded-full border border-primary/15 bg-white/70 px-md py-1 text-caption font-medium text-primary backdrop-blur">
           <ShieldCheck size={14} weight="fill" />

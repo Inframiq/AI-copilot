@@ -573,3 +573,12 @@ html, body {
     animation: none !important;
   }
 }
+
+/* Landing page only: the nav's section links glide instead of jumping.
+   Scoped with :has() so the app's own routes keep instant scrolling, and
+   skipped entirely for visitors who ask for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has([data-smooth-scroll]) {
+    scroll-behavior: smooth;
+  }
+}

@@ -13,7 +13,7 @@ const CHECKS = [
  */
 export function HonestByDesign() {
   return (
-    <section id="honest" className="scroll-mt-28 px-gutter py-sm">
+    <section id="honest" className="scroll-mt-28 px-gutter py-md">
       <div className="relative mx-auto max-w-[1200px] overflow-hidden rounded-[2rem] bg-[#0f1220] px-lg py-[56px] text-white sm:px-xxl sm:py-[72px]">
         {/* Light from above, and a faint engineering grid. */}
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_-10%,rgba(58,96,214,0.45),transparent_70%)]" />

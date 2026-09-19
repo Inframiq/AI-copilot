@@ -34,7 +34,7 @@ export default function LandingPage() {
   return (
     // overflow-x-clip: the demo's glow and the staggered panels reach past
     // their boxes on purpose; on a phone that widened the page sideways.
-    <div className="relative z-[1] flex min-h-screen flex-col overflow-x-clip">
+    <div data-smooth-scroll className="relative z-[1] flex min-h-screen flex-col overflow-x-clip">
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger -- static, hardcoded JSON-LD, not user input

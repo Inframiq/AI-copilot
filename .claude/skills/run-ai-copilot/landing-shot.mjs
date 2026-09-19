@@ -10,10 +10,10 @@ for (const [name, viewport] of [["desktop", { width: 1440, height: 900 }], ["pho
   // capture shows them, then return to the top.
   await page.evaluate(async () => {
     for (let y = 0; y < document.body.scrollHeight; y += 400) {
-      window.scrollTo(0, y);
+      window.scrollTo({ top: y, behavior: "instant" });
       await new Promise((r) => setTimeout(r, 120));
     }
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: "instant" });
   });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}${tag}-${name}.png`, fullPage: true });

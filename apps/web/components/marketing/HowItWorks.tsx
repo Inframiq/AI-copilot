@@ -7,7 +7,7 @@ import { Reveal } from "./Reveal";
  */
 export function HowItWorks() {
   return (
-    <section id="how" className="mx-auto max-w-[1200px] scroll-mt-28 px-gutter py-[56px]">
+    <section id="how" className="mx-auto max-w-[1200px] scroll-mt-28 px-gutter py-[72px]">
       <Reveal className="mb-xl max-w-[40rem]">
         <p className="mb-sm text-caption font-semibold uppercase tracking-[0.14em] text-primary">How it works</p>
         <h2 className="text-[34px] font-bold leading-[1.1] tracking-[-0.025em] text-on-surface sm:text-[44px]">

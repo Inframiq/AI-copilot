@@ -5,7 +5,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 await page.goto("http://localhost:3000", { waitUntil: "networkidle" });
 await page.evaluate(async () => {
-  for (let y = 0; y < document.body.scrollHeight; y += 300) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 100)); }
+  for (let y = 0; y < document.body.scrollHeight; y += 300) { window.scrollTo({ top: y, behavior: "instant" }); await new Promise((r) => setTimeout(r, 100)); }
 });
 await page.waitForTimeout(1200);
 console.log("scrollWidth", await page.evaluate(() => document.documentElement.scrollWidth));

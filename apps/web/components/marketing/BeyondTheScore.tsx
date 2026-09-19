@@ -7,7 +7,7 @@ import { Reveal } from "./Reveal";
  */
 export function BeyondTheScore() {
   return (
-    <section id="beyond" className="mx-auto grid max-w-[1200px] scroll-mt-28 items-center gap-xxl px-gutter py-[56px] lg:grid-cols-2 lg:gap-[72px]">
+    <section id="beyond" className="mx-auto grid max-w-[1200px] scroll-mt-28 items-center gap-xxl px-gutter py-[72px] lg:grid-cols-2 lg:gap-[72px]">
       {/* Two panels, staggered in depth. */}
       <Reveal className="relative order-2 flex flex-col gap-md lg:order-1 lg:block lg:min-h-[26rem]">
         <div className="rounded-3xl lg:absolute lg:left-0 lg:top-0 lg:w-[88%] border border-outline-variant/40 bg-white p-lg shadow-[0_24px_60px_-28px_rgba(23,24,29,0.35)]">
