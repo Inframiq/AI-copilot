@@ -5,37 +5,15 @@ import { useRouter } from "next/navigation";
 import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
+import { useHydratedResume } from "@/lib/use-hydrated-resume";
+import { FOCUS_RING } from "@/lib/focus";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
 import { ResumeCanvas } from "@/components/studio/ResumeCanvas";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader";
-
-/**
- * The quiet states, held to the same width as the document so the page does
- * not jump when the résumé arrives.
- */
-function CanvasNotice({
-  icon,
-  title,
-  detail,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  detail: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="mx-auto flex w-full max-w-[8.5in] flex-col items-center gap-sm rounded-2xl border border-dashed border-outline-variant/40 px-lg py-xxl text-center">
-      <span className="text-on-surface-variant/70">{icon}</span>
-      <p className="text-label-md font-semibold text-on-surface">{title}</p>
-      <p className="max-w-sm text-caption text-on-surface-variant">{detail}</p>
-      {action}
-    </div>
-  );
-}
+import { CanvasNotice } from "@/components/studio/CanvasNotice";
 
 /**
  * The Resume Studio: the document is the interface.
@@ -50,6 +28,9 @@ export default function StudioPreviewPage({
 }) {
   const { resumeId } = use(params);
   const router = useRouter();
+  // The store is shared with the Builder but only the Builder used to fill
+  // it, so opening this link directly showed an empty page.
+  const { isLoading: isLoadingResume, isError: resumeFailed } = useHydratedResume(resumeId);
   const content = useResumeStore((s) => s.content);
   const templateId = useResumeStore((s) => s.templateId);
   const updateContent = useResumeStore((s) => s.updateContent);
@@ -105,6 +86,35 @@ export default function StudioPreviewPage({
   }
 
   function body() {
+    if (!content && isLoadingResume) {
+      return (
+        <CanvasNotice
+          tone="working"
+          icon={<CircleNotch size={28} className="animate-spin" />}
+          title="Opening your résumé"
+          detail="Fetching the version you last saved."
+        />
+      );
+    }
+    if (!content && resumeFailed) {
+      return (
+        <CanvasNotice
+          tone="problem"
+          icon={<WarningCircle size={28} />}
+          title="We couldn't open this résumé"
+          detail="It may have been deleted, or the connection dropped on the way."
+          action={
+            <button
+              type="button"
+              onClick={() => router.push(`/studio/${resumeId}`)}
+              className={`mt-xs rounded-xl bg-primary px-lg py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 ${FOCUS_RING}`}
+            >
+              Back to the Builder
+            </button>
+          }
+        />
+      );
+    }
     if (!content) {
       return (
         <CanvasNotice
@@ -121,6 +131,7 @@ export default function StudioPreviewPage({
       const refusal = error instanceof ApiError && error.status === 409 ? error.message : null;
       return (
         <CanvasNotice
+          tone="problem"
           icon={<WarningCircle size={28} />}
           title={refusal ? "This template needs something more" : "We couldn't render your résumé"}
           detail={refusal ?? "Your work is saved. This is usually temporary."}
@@ -139,6 +150,7 @@ export default function StudioPreviewPage({
     if (isPending) {
       return (
         <CanvasNotice
+          tone="working"
           icon={<CircleNotch size={28} className="animate-spin" />}
           title="Laying out your résumé"
           detail="Rendering the same document your PDF will contain."

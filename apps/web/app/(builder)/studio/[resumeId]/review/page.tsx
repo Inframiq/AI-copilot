@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ReviewShell } from "@/components/builder/ReviewShell";
 import { useResumeStore } from "@/stores/resume-store";
+import { useHydratedResume } from "@/lib/use-hydrated-resume";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import type { Resume } from "@career-copilot/types";
@@ -31,26 +32,10 @@ export default function StudioReviewPage({
   // usually the first that needs it. The review diffs tailored bullets
   // against it, and runTailoring seeds its decisions from it — without it the
   // review lists nothing and Apply has nothing to merge into.
+  useHydratedResume(resumeId);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const hasContent = useResumeStore((s) => s.content !== null);
   const resumeLoaded = storeResumeId === resumeId && hasContent;
-  const { data: resume } = useQuery<Resume>({
-    queryKey: ["resume", resumeId],
-    queryFn: () => apiClient.getResume(resumeId),
-    enabled: !resumeLoaded,
-  });
-  useEffect(() => {
-    if (!resume || resume.id !== resumeId || resumeLoaded) return;
-    useResumeStore.getState().setResume(
-      resume.id,
-      resume.content,
-      resume.template_id,
-      resume.line_spacing,
-      resume.paragraph_spacing,
-      resume.font_choice,
-      resume.accent_color,
-    );
-  }, [resume, resumeId, resumeLoaded]);
 
   // One run per mount. Without the ref a re-render mid-flight — or React's
   // development double-invoke — would spend a second credit.

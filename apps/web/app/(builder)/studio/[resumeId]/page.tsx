@@ -1,10 +1,11 @@
 "use client";
 import { use, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { BuilderShell } from "@/components/builder/BuilderShell";
 import { PhotoRequirementModal } from "@/components/resume/PhotoRequirementModal";
 import { useResumeStore } from "@/stores/resume-store";
+import { useHydratedResume } from "@/lib/use-hydrated-resume";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
@@ -18,8 +19,6 @@ export default function StudioPage({
 }) {
   const { resumeId } = use(params);
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const setResume = useResumeStore((s) => s.setResume);
   const setPdfSignedUrl = useResumeStore((s) => s.setPdfSignedUrl);
   const pdfSignedUrl = useResumeStore((s) => s.pdfSignedUrl);
   const storeResumeId = useResumeStore((s) => s.resumeId);
@@ -29,18 +28,7 @@ export default function StudioPage({
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
   const jdId = useTailoringStore((s) => s.jdId);
 
-  const { data: resume, isLoading, isError } = useQuery<Resume>({
-    queryKey: ["resume", resumeId],
-    queryFn: () => apiClient.getResume(resumeId),
-    enabled: !!resumeId,
-    // Serve immediately from the resumes list cache (populated by dashboard/studio index)
-    initialData: () => {
-      const list = queryClient.getQueryData<Resume[]>(["resumes"]);
-      return list?.find((r) => r.id === resumeId);
-    },
-    // Keep cache fresh for 2 minutes — avoids redundant refetches on tab switch
-    staleTime: 2 * 60 * 1000,
-  });
+  const { resume, isLoading, isError } = useHydratedResume(resumeId);
 
   // Shared ["careerProfile"] cache key — the same one profile/page.tsx and
   // <PhotoRequirementModal> ("also save to profile") invalidate.
@@ -66,25 +54,6 @@ export default function StudioPage({
       }
     : null;
 
-  useEffect(() => {
-    // Skip if the store is already hydrated for this exact resume — e.g. we
-    // just navigated here right after AI tailoring, which already wrote the
-    // tailored content and a fresh PDF preview into the store. Re-applying
-    // the (possibly stale, since tailoring's save doesn't invalidate this
-    // query) fetched copy would blow away that preview, including resetting
-    // pdfSignedUrl to null.
-    if (resume && resume.id !== storeResumeId) {
-      setResume(
-        resume.id,
-        resume.content,
-        resume.template_id,
-        resume.line_spacing,
-        resume.paragraph_spacing,
-        resume.font_choice,
-        resume.accent_color
-      );
-    }
-  }, [resume, storeResumeId, setResume]);
 
   // A saved resume that's already had a PDF generated (e.g. opened via
   // "Open" from a JD's "Generated for This JD" card) should show that PDF

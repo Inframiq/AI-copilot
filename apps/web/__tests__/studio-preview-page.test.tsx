@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const push = vi.fn();
@@ -12,6 +12,11 @@ vi.mock("@/lib/api-client", async (importOriginal) => ({
       html: '<p data-field="summary">Old summary.</p>',
     })),
     generatePdf: vi.fn(async () => ({ signed_url: "u", underfilled: false })),
+    getResume: vi.fn(async () => ({
+      id: "r1", content: { contact: {}, summary: "Fetched.", experience: [], education: [], skills: [] },
+      template_id: "ats_clean", line_spacing: 1.25, paragraph_spacing: 12,
+      font_choice: "sans", accent_color: null,
+    })),
   },
 }));
 
@@ -164,10 +169,17 @@ describe("Studio preview page", () => {
     await waitFor(() => expect(screen.queryByText(/couldn.t render/i)).toBeNull());
   });
 
-  it("says so when there is no résumé to preview", async () => {
-    useResumeStore.setState({ content: null } as never);
+  it("says so when the résumé loads but has nothing in it", async () => {
+    // A null store no longer means "nothing to preview" — it means "not
+    // fetched yet", and the page fetches. The empty notice is now for a
+    // résumé that really is empty.
+    useResumeStore.getState().resetStore();
+    vi.mocked(apiClient.getResume).mockResolvedValueOnce({
+      id: "r1", content: null, template_id: "ats_clean", line_spacing: 1.25,
+      paragraph_spacing: 12, font_choice: "sans", accent_color: null,
+    } as never);
     await renderPage();
-    expect(screen.getByText(/nothing to preview/i)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/nothing to preview/i)).toBeTruthy());
     expect(apiClient.renderResumeHtml).not.toHaveBeenCalled();
   });
 
@@ -249,6 +261,54 @@ describe("Studio preview page", () => {
     );
     await renderPage();
     await waitFor(() => screen.getByText(/requires a profile photo/i));
+  });
+
+  // Opening this link directly, or refreshing on it, left the store empty and
+  // the page saying there was nothing to preview — the Builder was the only
+  // route that fetched. Going back and forward again was the workaround.
+  it("fetches the résumé when opened cold", async () => {
+    useResumeStore.getState().resetStore();
+    await renderPage();
+    await waitFor(() => expect(apiClient.getResume).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(useResumeStore.getState().content?.summary).toBe("Fetched."));
+  });
+
+  it("renders the document it just fetched, rather than the empty notice", async () => {
+    useResumeStore.getState().resetStore();
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+    expect(screen.queryByText(/nothing to preview/i)).toBeNull();
+  });
+
+  // The notice gave a failure, a wait and an empty résumé the same flat
+  // treatment: a dashed drop-zone frame, a 13px "title" barely larger than
+  // its 11px detail, and no semantics at all.
+  it("announces a failure as an alert, and names it as a heading", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockRejectedValueOnce(new Error("boom"));
+    await renderPage();
+    const alert = await waitFor(() => screen.getByRole("alert"));
+    expect(within(alert).getByRole("heading").textContent).toMatch(/couldn.t render/i);
+  });
+
+  it("announces a wait politely, not as an alert", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockImplementationOnce(() => new Promise(() => {}));
+    await renderPage();
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("gives a failure its own tone rather than the neutral one", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockRejectedValueOnce(new Error("boom"));
+    await renderPage();
+    const alert = await waitFor(() => screen.getByRole("alert"));
+    expect(alert.className).toMatch(/error/);
+  });
+
+  it("outranks the detail with the title", async () => {
+    vi.mocked(apiClient.renderResumeHtml).mockImplementationOnce(() => new Promise(() => {}));
+    await renderPage();
+    const heading = screen.getByRole("heading", { name: /laying out/i });
+    expect(heading.className).toContain("text-body-lg");
   });
 });
 
