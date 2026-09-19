@@ -27,6 +27,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from app.core import usage
 from app.services.eval_metrics import build_report, compare_reports
 from app.services.ats import build_resume_text, score_content
 from app.services.tailoring import (
@@ -120,6 +121,18 @@ def save_pinned_analysis(
     path.write_text(json.dumps(payload, indent=2))
 
 
+def token_totals(calls: list[dict]) -> dict:
+    """Summed token counts for one fixture's pipeline calls."""
+    out = {f"tokens_{k}": sum(c.get(f"{k}_tokens", 0) for c in calls)
+           for k in ("input", "output", "reasoning", "total")}
+    # Per agent, summed: a split or retried call appears more than once.
+    per_call: dict[str, int] = {}
+    for c in calls:
+        per_call[c["call_name"]] = per_call.get(c["call_name"], 0) + c.get("total_tokens", 0)
+    out["token_calls"] = per_call
+    return out
+
+
 async def evaluate_fixture(
     fixture: Fixture,
     provider,
@@ -150,11 +163,19 @@ async def evaluate_fixture(
                 save_pinned_analysis(fixture, cached, pin_dir, verdicts)
             else:
                 cached, verdicts = pinned
-        result = await run_tailoring_pipeline(
-            fixture.resume_content, fixture.jd_text, humanize_level, provider, db=None,
-            cached_jd_analysis=cached,
-            cached_semantic_verdicts=verdicts,
-        )
+        # Token cost of the tailoring run itself (the one-off pinning calls
+        # above are excluded): prompt edits trade quality against spend, so a
+        # run records both. Same sink the routers persist from.
+        sink_token = usage._sink.set([])
+        try:
+            result = await run_tailoring_pipeline(
+                fixture.resume_content, fixture.jd_text, humanize_level, provider, db=None,
+                cached_jd_analysis=cached,
+                cached_semantic_verdicts=verdicts,
+            )
+            calls = usage._sink.get() or []
+        finally:
+            usage._sink.reset(sink_token)
     except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
         logger.warning("eval fixture %s failed", fixture.name, exc_info=True)
         return {"name": fixture.name, "description": fixture.description, "error": str(exc)}
@@ -172,6 +193,7 @@ async def evaluate_fixture(
         ats_after=result.ats_score,
         reverted_bullets=result.reverted_bullets,
     )
+    report.update(token_totals(calls))
     report["name"] = fixture.name
     report["description"] = fixture.description
     # The numbers can't tell you a rewrite reads badly. Keep the text so a
@@ -185,7 +207,7 @@ async def evaluate_fixture(
 
 
 # Keys that are per-fixture context, not metrics to average.
-_NON_METRIC_KEYS = {"name", "description", "bullets", "reverted", "error", "keyword_overuse"}
+_NON_METRIC_KEYS = {"name", "description", "bullets", "reverted", "error", "keyword_overuse", "token_calls"}
 
 
 def aggregate(reports: list[dict]) -> dict:
@@ -240,6 +262,7 @@ def _cmd_run(args) -> int:
                 f"  spec {row['specificity_retention']:.2f}"
                 f"  verbs {row['verb_diversity']:.2f}"
                 f"  reverts {row['revert_rate']:.2f}"
+                f"  tokens in/out {row.get('tokens_input', 0)}/{row.get('tokens_output', 0)}"
             )
     print("\naggregate:", json.dumps(out["aggregate"], indent=2))
     return 0

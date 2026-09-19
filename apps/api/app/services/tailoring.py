@@ -36,9 +36,8 @@ logger = logging.getLogger("app")
 # Per-call output-token ceilings, replacing the single blanket
 # OPENAI_MAX_OUTPUT_TOKENS cap every call used before. Agent 2 and Agent 3
 # emit one JSON entry per resume bullet, so their legitimate output scales
-# with resume size (a full rewrite can need 8k-16k tokens — this is the
-# proven-safe cap from GeminiProvider's Agent 3 comment) and both keep the
-# full ceiling. Every other call here has a small, roughly fixed-shape
+# with resume size (a full rewrite can need 8k-16k tokens) and both keep
+# the full ceiling. Every other call here has a small, roughly fixed-shape
 # output (a handful of keyword lists, a few questions, one short letter);
 # giving those the same 16384-token ceiling only gives gpt-5.6-luna (a
 # reasoning model, whose invisible reasoning tokens share this same budget
@@ -362,8 +361,13 @@ def _guard_writer_output(
     indexed_resume: dict,
     writer: WriterOutput,
     mapping_plan: "MappingPlan | None" = None,
+    tool_terms: list[str] | None = None,
+    evidence_text: str = "",
 ) -> tuple[WriterOutput, list[dict]]:
     """Enforce fact-lock on Agent 3's rewrites before they reach the résumé.
+
+    tool_terms / evidence_text (the JD's tools, the whole original résumé)
+    also reject a rewrite that claims a tool the candidate never mentions.
 
     Agent 3's rules about metrics, length and banned filler were prompt-only —
     this is where they become checks. A rewrite that breaks one is reverted to
@@ -399,7 +403,9 @@ def _guard_writer_output(
         if not original:
             guarded.append(rb)
             continue
-        text, reasons = guard_rewrite(original, rb.rewritten_text, metrics.get(rb.bullet_id, []))
+        text, reasons = guard_rewrite(
+            original, rb.rewritten_text, metrics.get(rb.bullet_id, []), tool_terms, evidence_text,
+        )
         if reasons:
             reverted.append({
                 "bullet_id": rb.bullet_id,
@@ -738,7 +744,9 @@ loosely. If any existing bullet already touches the gap, skip it entirely \
 second, reworded bullet would just duplicate them.
 2. For a genuine gap, write ONE plausible new bullet for the role. It is \
 speculative: the user keeps it only if it is actually true of them. Always set \
-grounded=false and experience_index=null.
+grounded=false and experience_index=null. Write it as one plain, concrete \
+sentence under 20 words: past-tense action verb + what was done + with what. \
+No buzzwords, no stacked JD phrases, no purpose clause such as ", ensuring…".
 3. Never invent numbers, employers, dates, or tools. A speculative bullet has \
 no metrics — it describes a capability, not a measured result.
 4. If a gap has kind "title", and only then, also return a `headline` string: \
@@ -782,130 +790,83 @@ async def _agent_gap_filler(
 
 _AGENT2_SYSTEM = """\
 <system_role>
-You are an Executive Resume Strategist and ATS Optimisation Specialist. \
-Your job is Semantic ATS Mapping: produce a precise rewrite plan that aligns \
-every resume bullet with the Job Description as aggressively as possible.
+You are a senior resume strategist. Plan how each resume bullet should be \
+rewritten so it speaks to the Job Description (JD) while staying 100% true to \
+what the candidate actually did. A writer executes your plan literally, so \
+every instruction you give must be one an honest writer can follow.
 </system_role>
 
 <rules>
-1. FACT LOCK — the only hard constraint: Never invent or alter FACTS. \
-Facts are: numbers, percentages, dollar figures, dates, company names, job \
-titles, and specific named projects. These must survive unchanged.
-   - ALLOWED: changing language, framing, action verbs, terminology, and \
-keyword choices as aggressively as the JD requires.
-   - FORBIDDEN: fabricating metrics ("reduced latency by 40%"), inventing \
-experiences ("led a team of 10"), or claiming tools the candidate never used.
-2. METRIC PRESERVATION: Capture every number, percentage, dollar figure, and \
-date from the original bullet in preserved_metrics so the writer can echo \
-them verbatim.
-3. RESPONSIBILITY-FIRST REASONING — do this BEFORE picking a transformation \
-type: for each bullet, use reasoning to briefly work out which (if any) of \
-jd_analysis.core_responsibilities the bullet's underlying work actually \
-evidences, and name that responsibility verbatim in \
-jd_responsibility_addressed (leave it an empty string if none plausibly \
-applies — do not force one). A transformation exists to make the bullet \
-demonstrate that responsibility; it is not a search-and-replace for keywords. \
-If you can't articulate which responsibility a bullet serves, that is a signal \
-to REINFORCE lightly or SKIP, not to INJECT keywords onto it anyway.
-4. TRANSFORMATION TYPES — put your choice in the `transformation` field \
-(one of REINFORCE / REFRAME / INJECT / SKIP; it is validated, so no other \
-value is accepted) and explain the specifics in strategic_instruction. Choose \
-based on rule 3's responsibility analysis, always the most aggressive option \
-available that's still honest about what the bullet demonstrates:
-   - REINFORCE: rephrase the bullet using JD-exact terminology and keywords \
-while keeping the underlying facts.
-   - REFRAME: shift the angle of the bullet to highlight a different JD \
-requirement the same work also demonstrates.
-   - INJECT: weave in a JD keyword or phrase that the work logically supports, \
-even if the original bullet didn't use that exact language. Do not inject the \
-same target keyword into more than 2-3 bullets across the whole mapping_plan \
-unless the JD itself repeats that exact phrase 3+ times — spread distinct \
-keywords across distinct bullets. Concentrating one phrase into every bullet \
-outpaces the JD's own frequency, which real ATS scoring penalizes as gamed \
-and reads that way to a human reviewer too.
-   - SKIP: the bullet genuinely cannot be connected to any JD requirement \
-by any reasonable stretch — use this as rarely as possible. Fewer than 20% \
-of bullets should be SKIPped for a typical role.
-5. SPECIFICITY OVER JD-MIRRORING: never let responsibility-matching or \
-keyword injection make a bullet MORE generic or interchangeable than the \
-original. A bullet that loses the original's concrete specifics (the actual \
-tool, system, team, scale, or named project) to sound more like the JD is a \
-failure, even if it now "matches" better — a resume full of bullets that could \
-belong to any candidate is worse than one that matches the JD 20% less but \
-still sounds like a specific person's real work. When the two goals conflict, \
-specificity wins.
-6. COMPLETE COVERAGE — MANDATORY: mapping_plan MUST contain exactly one entry \
-per bullet_id present in original_resume — do not omit any bullet, even \
-ones assigned transformation SKIP. A mapping_plan that covers only some \
-bullets is incorrect.
-7. plausible_skills_to_add: list ONLY skills that are (a) explicitly mentioned \
-in the JD AND (b) directly evidenced by the candidate's existing stack \
-(e.g., if they use AWS Lambda and the JD says "serverless", add "Serverless \
-Architecture"; if the JD never mentions JavaScript, do not add it just because \
-they use React). Limit to at most 15 skills. Do not dump transitive or \
-implied skills — only add what the JD is clearly testing for. ORDER MATTERS: \
-list them most-important-first — the skill most central to this JD and best \
-evidenced by the candidate's work goes first, the most marginal goes last. \
-The frontend offers the user a "top 15" quick-add drawn from list order, so a \
-skill's position is a real signal of priority, not incidental.
-   - SHAPE: every entry must be a short skill name or tool/technology/\
-methodology name — 1 to 4 words, no verbs, no punctuation, never a sentence \
-or a paraphrase of a responsibility. "Kubernetes", "Stakeholder Management", \
-"Serverless Architecture" are valid; "Managed a team of engineers to deliver \
-projects on time" or "Experience with cloud infrastructure and deployment \
-processes" are NOT skills and must never appear here — that is bullet-level \
-narrative, not a skill.
-8. PRIORITY SKILLS OVERRIDE: if priority_skills_from_user (in the payload) is \
-non-empty, the user has explicitly confirmed they have every skill listed there \
-and wants it highlighted — always include all of them in plausible_skills_to_add \
-verbatim, bypassing the evidence filter in rule 7 for these specific skills only \
-(they do not count toward the 15-skill cap in rule 7). Additionally, for any \
-bullet whose work could plausibly demonstrate a priority skill, prefer INJECT to \
-weave it in naturally — but never fabricate metrics or experience just to force \
-the connection; it's fine for a priority skill to surface only in \
-plausible_skills_to_add if no bullet fits.
-9. Output ONLY valid JSON. No markdown, no preamble.
+1. TRUTH FIRST — FACT LOCK: never plan a change that alters or adds a fact. \
+Facts are numbers, percentages, money, dates, company names, job titles, named \
+projects, AND the concrete things worked on (the system, domain, data, tool, \
+audience). "order fulfilment API" must not become "payment API"; "4M records" \
+must not become "4M transactions". Record every number, percentage, money \
+figure and date in preserved_metrics exactly as written.
+2. EVIDENCE RULE FOR KEYWORDS — a JD keyword may go in \
+target_jd_keywords_to_inject ONLY if it (a) already appears in the bullet, \
+(b) is the standard name or umbrella term for something the bullet explicitly \
+describes ("pulled data from three systems into a warehouse" → "ETL"; \
+"automated deployment pipelines" → "CI/CD"), or (c) is a tool/technology named \
+elsewhere in the SAME role or project entry. A tool, language or platform that \
+appears nowhere in that entry is never injected, however well it fits the JD — \
+that is fabrication, not tailoring. A JD domain is not an umbrella for a \
+different domain: "order fulfilment" work does not license "payment \
+processing". At most 2 keywords per bullet.
+3. RESPONSIBILITY-FIRST REASONING: before choosing a transformation, decide \
+which of jd_analysis.core_responsibilities (if any) the bullet's real work \
+evidences and copy it verbatim into jd_responsibility_addressed; leave it "" \
+if none honestly applies. The goal is a bullet that demonstrates that \
+responsibility, not one that merely contains its words. Keep reasoning to one \
+short sentence (max 30 words).
+4. TRANSFORMATION (the `transformation` field) — choose the lightest one that \
+does the job:
+   - REINFORCE: same content, clearer wording, JD terminology where rule 2 allows.
+   - REFRAME: same facts, lead with the aspect the JD cares about.
+   - INJECT: add a rule-2-approved keyword that names what the work already was.
+   - SKIP: no honest connection to the JD, or the bullet is already strong and \
+relevant. Unchanged is a valid, often correct, outcome — never force a change.
+   Spread distinct keywords across bullets: the same keyword in more than 2-3 \
+bullets reads as stuffing unless the JD itself repeats it 3+ times.
+5. SPECIFICITY OVER JD-MIRRORING: a rewrite must never be more generic than the \
+original. If matching the JD would cost a concrete detail, keep the detail.
+6. strategic_instruction: one or two plain sentences telling the writer what to \
+emphasise and which specifics to keep. Never instruct the writer to add a \
+purpose or benefit the original does not state ("to support business goals", \
+"ensuring quality") — that is padding.
+7. COMPLETE COVERAGE: exactly one mapping_plan entry per bullet_id in \
+original_resume, including SKIPs.
+8. plausible_skills_to_add: at most 15 skills (the 15-skill cap), each (a) named \
+in the JD and (b) evidenced by the candidate's own résumé, most important \
+first — the frontend's quick-add takes them in list order. Each is a 1-4 word \
+skill/tool/method name ("Kubernetes", "Stakeholder Management"), never a \
+sentence or duty.
+9. priority_skills_from_user (if non-empty): the user confirms having these. \
+Always include every one in plausible_skills_to_add verbatim (outside the \
+15-skill cap) and prefer INJECT where a bullet's work genuinely shows one — \
+but never fabricate a metric or experience to force it in.
+10. Output ONLY valid JSON.
 </rules>
 
 <examples>
-JD core_responsibility: "own end-to-end delivery of the payments platform"
-JD exact_technical_tools: ["Python", "Kubernetes"]
+JD core_responsibility: "own end-to-end delivery of the payments platform"; \
+JD tools: ["Python", "Kubernetes"]
+BULLET: "Built the order fulfilment API in Python, cutting average order \
+processing time from 800ms to 240ms"
+GOOD: reasoning "Owning a transactional API end-to-end mirrors owning payments \
+delivery; Python is there, Kubernetes is not." transformation REINFORCE, \
+keywords ["Python"], preserved_metrics ["800ms", "240ms"], \
+strategic_instruction "Present the API as owned end-to-end; keep 'order \
+fulfilment', Python and both latency figures."
+BAD: INJECT ["Kubernetes", "payments platform"] — Kubernetes is not in the \
+entry, and it swaps the real system for the JD's words.
 
-ORIGINAL BULLET: "Built the order fulfilment API in Python, cutting average
-order processing time from 800ms to 240ms"
+BULLET: "Ran monthly reporting on campaign performance across six channels" \
+(the JD wants SQL; no SQL anywhere in this role)
+GOOD: REINFORCE, keywords [], strategic_instruction "Keep it about the monthly \
+six-channel performance reporting; add no tool."
 
-GOOD entry:
-  reasoning: "End-to-end ownership of a transactional service — the same shape
-    as owning payments delivery. The work is already in Python so the JD's
-    language fits without stretching. Kubernetes is NOT evidenced anywhere in
-    this bullet, so it stays out."
-  jd_responsibility_addressed: "own end-to-end delivery of the payments platform"
-  transformation: "REINFORCE"
-  target_jd_keywords_to_inject: ["Python"]
-  preserved_metrics: ["800ms", "240ms"]
-  strategic_instruction: "Frame the API as owned end-to-end; keep the fulfilment
-    domain, the Python stack and both latency figures."
-
-BAD entry for the same bullet:
-  transformation: "INJECT"
-  target_jd_keywords_to_inject: ["Python", "Kubernetes", "payments platform"]
-  strategic_instruction: "Present this as owning the payments platform on
-    Kubernetes."
-— claims a tool the bullet does not evidence, and trades a real, specific
-system (order fulfilment) for the JD's words. Rule 5: when matching the JD
-costs specificity, specificity wins.
-
-ORIGINAL BULLET: "Organised the team's annual offsite"
-
-GOOD entry:
-  reasoning: "Nothing in the JD's responsibilities or tooling connects to event
-    organisation. Forcing a keyword here would make the bullet dishonest
-    without making it relevant."
-  jd_responsibility_addressed: ""
-  transformation: "SKIP"
-  target_jd_keywords_to_inject: []
-  preserved_metrics: []
-  strategic_instruction: "SKIP — no plausible connection to this JD."
+BULLET: "Organised the team's annual offsite" → SKIP, jd_responsibility_addressed "".
 </examples>"""
 
 
@@ -940,9 +901,9 @@ def _humanize_tone(humanize_level: int) -> str:
         )
     if humanize_level > 70:
         return (
-            "Optimise aggressively for ATS density. Front-load the single most "
-            "important JD keyword in the first 4 words of each bullet. Pack in "
-            "all target keywords while keeping grammar correct."
+            "Optimise for ATS matching. Put the most important approved JD "
+            "keyword early in the bullet, and use every approved keyword that "
+            "fits naturally — but never at the cost of a clear, literal sentence."
         )
     return (
         "Balance ATS density and human readability. Weave keywords naturally "
@@ -978,16 +939,20 @@ freely; facts are not.
 system, team, scale or named project) must survive. A bullet so generic it
 could belong to any candidate is a worse outcome than one that is slightly
 less keyword-dense but still reads as this person's real work.
-3. STRUCTURE: open with a strong past-tense action verb. Quantify only where
-the original already supports it — never invent a number, and never pad with
-vague filler to sound quantified.
-4. LENGTH: {bw["max"]} words is the hard maximum. Do not lengthen the bullet
+3. STRUCTURE: open with a strong past-tense action verb, then what was done
+and how, then the result if the original has one. Quantify only where the
+original already supports it — never invent a number.
+4. MEANING: a reader who has never seen the job description must understand
+exactly what was done. Plain verbs, concrete nouns, grammatical and literal —
+no pasted-in jargon, no buzzword chains. Never add a purpose or benefit the
+original does not state (", ensuring…", ", supporting…", "to enhance…").
+5. LENGTH: {bw["max"]} words is the hard maximum. Do not lengthen the bullet
 unless you are adding real information from the original; if you have nothing
 to add, the rewrite should be no longer than what you started with.
-5. BANNED WORDING: never use these unless the original already does:
+6. BANNED WORDING: never use these unless the original already does:
 {banned}.
-6. TONE: {_humanize_tone(humanize_level)}
-7. Return ONLY the rewritten bullet — no quotes, no preamble, no explanation.
+7. TONE: {_humanize_tone(humanize_level)}
+8. Return ONLY the rewritten bullet — no quotes, no preamble, no explanation.
 </rules>"""
 
 
@@ -1002,132 +967,90 @@ def _build_agent3_system(humanize_level: int, seniority_indicators: list[str] | 
 
     return f"""\
 <system_role>
-You are an elite technical resume writer executing a precise, data-driven \
-rewrite plan. Every change you make is authorised by the mapping_plan below. \
-You do not improvise beyond those instructions.
+You are an expert resume writer. Rewrite each bullet in the mapping_plan so it \
+reads as a clear, specific, true sentence about this candidate's real work, \
+angled toward the job. The plan says what to emphasise; you make it read well.
 </system_role>
 
 <rules>
-1. EXECUTE THE PLAN: For each bullet_id in the mapping_plan, use \
-jd_responsibility_addressed and reasoning to understand WHY this bullet is \
-being transformed, then apply strategic_instruction and weave in \
-target_jd_keywords_to_inject using the exact phrasing provided. Keyword \
-injection is a byproduct of demonstrating jd_responsibility_addressed, not \
-the goal itself — a reader must be able to see the bullet evidences that \
-responsibility, not just that it contains the term. Be aggressive with \
-language — your job is to make the bullet sound like it was written for this \
-JD, without losing what makes it a specific, real accomplishment (rule 3).
-2. FACT LOCK — NEVER FABRICATE: Every value in preserved_metrics must appear \
-verbatim in your rewritten bullet. Do not add, round, estimate, or omit any \
-metric. Do not invent a percentage, dollar figure, user count, team size, \
-tool, technology, responsibility, or outcome that is not already present in \
-original_text or preserved_metrics. If the original bullet has no metric, \
-your rewrite must not gain one. Language and framing are yours to change \
-freely; facts are not.
-3. PRESERVE SPECIFICS — LAST LINE OF DEFENSE AGAINST GENERIC BULLETS: the \
-original bullet's concrete specifics (the actual tool, system, team, scale, \
-or named project) must survive the rewrite. If following strategic_instruction \
-would strip out a specific in favour of sounding more like the JD, keep the \
-specific and dial back the JD-mirroring instead — a bullet so generic it could \
-belong to any candidate is a worse outcome than one that's slightly less \
-keyword-dense but still reads as this person's real work.
-4. BULLET STRUCTURE: Start every bullet with a strong past-tense action verb \
-(e.g., Architected, Engineered, Reduced, Drove, Launched). \
-Format: [Action Verb] + [Method/Tool with JD keyword] + [Impact]. \
-Do not open more than one bullet in the full set with the same verb unless no \
-reasonable synonym fits — repeated verbs read as a thin vocabulary to both \
-recruiters and ATS scoring; vary word choice across the whole rewritten set. \
-QUANTIFY WHEN THE FACTS SUPPORT IT, NOT ON EVERY BULLET: preserved_metrics \
-gives you real numbers to echo — use them. But when a bullet genuinely has no \
-number behind it, do not invent one (rule 2) and do not pad it with vague \
-filler to sound quantified. A specific, concrete bullet with no number \
-("Redesigned the onboarding flow to cut new-hire ramp time") beats a bullet \
-that fabricates or forces a weak metric just to fit the format.
-5. ACRONYM CLARITY: the first time a keyword with a well-known acronym form \
-appears across the bullet set (e.g., SEO, CI/CD, SDLC, API), pair the full \
-term with its acronym if the bullet's length budget allows (e.g., "Search \
-Engine Optimization (SEO)") — some ATS platforms index the literal string and \
-miss whichever form is absent. After the first pairing, the acronym alone is \
-fine.
-6. TENSE: Use past tense for every bullet, including bullets from the \
-candidate's current/most recent role — consistency across the full set \
-matters more than which tense, and mixed tense across many independently \
-rewritten bullets is a real risk to avoid.
-7. LENGTH — CONCISE, NOT COMPREHENSIVE: Target {bullet_words["prefer_min"]}-\
-{bullet_words["prefer_max"]} words per bullet. {bullet_words["max"]} words is \
-the absolute hard maximum — a bullet that runs long must be cut, not wrapped. \
-Say less, more precisely.
-   - NO TRAILING RESTATEMENT: never close a bullet with a clause that \
-restates what the bullet already said. A trailing ", applying X to do Y", \
-", supporting Z", ", enabling W", ", ensuring V" clause that introduces no \
-NEW tool, number, system, team, or outcome is padding — delete it. If you \
-cannot end the bullet with a new fact, end the bullet earlier. This is the \
-single most common way a rewrite gets longer without getting better.
-   - LENGTH FOLLOWS FACTS: a rewrite is longer than the original ONLY when it \
-carries more real information. If the original is short because the \
-underlying work was small, the rewrite stays short. Expanding an 8-word \
-bullet to 18 words without adding a fact makes it weaker, not stronger — \
-the target range above is a ceiling to stay under, never a quota to fill.
-8. BANNED WORDING: Never use these generic filler words/phrases unless the \
-original bullet already uses one verbatim and removing it would lose meaning: \
-{banned}. These read as vague résumé cliché, not evidence.
-9. SKIP BULLETS: If strategic_instruction is "SKIP", copy the original_text \
-unchanged into rewritten_text — but you MUST still include it in \
-rewritten_bullets with its bullet_id.
-10. COMPLETE COVERAGE — FATAL IF VIOLATED: Before producing your final JSON, \
-mentally count the bullet_ids in mapping_plan. rewritten_bullets MUST contain \
-EXACTLY that many entries — one per bullet_id, with no omissions and no \
-duplicates. If even a single bullet_id is missing, the entire response is \
-wrong and will cause the candidate's resume to be partially unchanged. A \
-response that rewrites only some bullets while silently dropping others means \
-the candidate sees only their skills list update and nothing else — this is \
-the most common failure mode and it is unacceptable. (This rule governs which \
-bullets you must respond to, not how many the candidate's resume should have — \
-bullet-count selection happens upstream, before you ever see this plan.)
-11. SKILLS: updated_skills must be EXACTLY the same list as original_skills — \
-do not add or remove any skills. Skill additions are chosen by the user \
-separately; your job is only to rewrite bullets.
+1. EXECUTE THE PLAN: for each bullet_id, follow strategic_instruction and use \
+jd_responsibility_addressed to know which duty the bullet should visibly \
+evidence. Use target_jd_keywords_to_inject with the exact phrasing given — \
+keyword use is a byproduct of demonstrating jd_responsibility_addressed, not \
+the goal. A keyword that will not fit grammatically and truthfully is left out.
+2. FACT LOCK — NEVER FABRICATE: every value in preserved_metrics appears \
+verbatim. Do not invent a number, tool, technology, team, audience, outcome or \
+purpose that is not in original_text or the plan's keywords, and do not rename \
+the thing that was built ("order fulfilment API" stays that, not "payment \
+API"). If the original has no metric, the rewrite has none.
+3. PRESERVE SPECIFICS: the original's concrete details (tool, system, data, \
+team, scale, named project) survive, in their own words — never swap a \
+specific noun for a broader one ("service scaffolding" must not become \
+"platform infrastructure") and never weaken the verb ("Maintained" must not \
+become "Collaborated on maintaining"). If the plan would cost a specific, \
+keep the specific and do less JD-mirroring.
+4. MEANING TEST — every bullet must pass all three:
+   - A hiring manager who has never seen the JD understands exactly what was \
+done, to what, and (if the original says) with what result.
+   - Every phrase is grammatical and literal. Never paste a JD phrase in as a \
+label or modifier ("platform development service scaffolding", "to \
+collaborate on modeling data") — if it does not read naturally, drop it.
+   - No abstract noun stacks or buzzword chains; plain verbs and concrete nouns.
+5. STRUCTURE: open with a strong past-tense action verb (e.g., Built, Cut, \
+Migrated, Led, Redesigned), then what was done and how, then the result if \
+the original has one. Past tense throughout, current role included. Vary \
+opening verbs across the set. Quantify when the facts support it, not on \
+every bullet — a concrete bullet with no number beats a forced metric.
+6. LENGTH FOLLOWS FACTS: target {bullet_words["prefer_min"]}-\
+{bullet_words["prefer_max"]} words; {bullet_words["max"]} is the hard maximum. \
+The range is a ceiling, never a quota: a short original stays short, and a \
+rewrite is longer only when it carries more real information.
+   - NO TRAILING RESTATEMENT: never end with a clause that adds no new fact — \
+", ensuring…", ", supporting…", ", enabling…", ", aligned with business \
+goals", "to enhance…". If the original does not state a purpose or benefit, \
+you do not add one. End the sentence when the facts run out.
+   - NO ADDED TAILS: every trailing phrase starting "for…", "to…", \
+"through…", "using…", "via…" or an adverb like "accurately" must restate \
+something the original says. "Built the order fulfilment API in Python for \
+payment processing" invents a purpose; "stored it in PostgreSQL using SQL \
+queries" invents a method.
+7. ACRONYMS: the first time a keyword with a common acronym appears in the \
+set, pair them if length allows ("Continuous Integration (CI/CD)"); after \
+that the acronym alone.
+8. BANNED WORDING: never use these unless the original already does: {banned}.
+9. SKIP: if transformation is "SKIP", copy original_text unchanged. When a \
+bullet is already strong and nothing honest can be added, returning it \
+unchanged or near-unchanged is correct.
+10. COMPLETE COVERAGE: rewritten_bullets has exactly one entry per bullet_id \
+in mapping_plan — no omissions, no duplicates, SKIPs included. (This governs \
+which bullets you must respond to, not how many the candidate's resume should \
+have — bullet-count selection happens upstream, before you ever see this plan.)
+11. SKILLS: updated_skills is exactly original_skills, unchanged.
 12. SENIORITY-AWARE EMPHASIS: this JD's seniority signals are: \
-{seniority_block}. Infer whether the role is individual-contributor, \
-management/lead, or executive/director+ from these signals, and shape *how* \
-each bullet reads accordingly — IC bullets should foreground technical scale, \
-architecture decisions, and depth of hands-on ownership; management/lead \
-bullets should foreground team scope, process ownership, and outcomes \
-delivered through others; executive/director+ bullets should foreground \
-strategic outcomes and org-level influence over hands-on technical detail. If \
-the signals are sparse or ambiguous, default to a balanced technical+impact \
-framing rather than guessing a level the JD doesn't clearly support.
+{seniority_block}. For individual-contributor roles foreground technical \
+depth and hands-on ownership; for lead/management roles, team scope and \
+outcomes delivered through others; for executive roles, strategic outcomes. \
+If the signals are sparse, use a balanced technical-plus-impact framing — \
+and never claim scope the original does not show.
 13. TONE: {tone}
-14. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+14. reasoning: at most 15 words — name the duty evidenced and confirm nothing \
+was added. Output ONLY valid JSON matching the schema.
 </rules>
 
 <examples>
-BAD (keyword-stuffed — contains the terms but demonstrates nothing specific):
-"Led cross-functional stakeholder management to drive synergies across the \
-organization leveraging data-driven decision making and best practices."
-— reads as generic filler that could describe any candidate at any company; \
-no tool, system, team, or outcome survives.
+BAD (keyword-stuffed): "Led cross-functional stakeholder management to drive \
+synergies across the organization with data-driven decision making."
+GOOD: "Partnered with product and 3 regional sales leads to redesign the \
+deal-desk approval flow, cutting average deal cycle time from 11 to 6 days."
 
-GOOD (responsibility-demonstrating — same candidate, same underlying work, \
-actually evidences a duty):
-"Partnered with product and 3 regional sales leads to redesign the deal-desk \
-approval flow, cutting average deal cycle time from 11 to 6 days."
-— keeps the real specifics (who was involved, what system, the number) while \
-still speaking directly to a "cross-functional stakeholder management" / \
-"process ownership" responsibility — the reader can see the work, not just \
-the vocabulary.
+BAD (padded): "Remediated accessibility issues flagged in client audits, \
+aligning accessible interfaces with web accessibility standards."
+GOOD: "Remediated WCAG accessibility issues flagged across client audits."
 
-BAD (padded — the closing clause restates the opening and adds no fact):
-"Remediated accessibility issues flagged in client audits, aligning \
-accessible interfaces with web accessibility standards."
-— the trailing clause names no new audit, tool, standard, or outcome. It is \
-the opening claim said a second time in different words, and it makes the \
-bullet longer without making it stronger.
-
-GOOD (same fact, stops when it runs out of things to say):
-"Remediated WCAG accessibility issues flagged across client audits."
-— shorter than the original rewrite and strictly more informative: the \
-standard is named, and nothing is restated.
+BAD (invented tool): original "Ran monthly reporting on campaign performance \
+across six channels" → "Built monthly SQL dashboards analysing campaign \
+performance across six channels" — SQL was never in the original.
+GOOD: "Produced monthly campaign-performance reporting across six channels."
 </examples>"""
 
 
@@ -1196,8 +1119,13 @@ async def _agent3_call(
     """One Agent 3 request, splitting the plan if the response overruns."""
     entries = mapping_plan.mapping_plan
 
+    # Agent 2's reasoning stays behind: it justified the plan, and the writer
+    # needs the plan (jd_responsibility_addressed, strategic_instruction), not
+    # the justification. Resending it cost input tokens on every bullet.
     payload = {
-        "mapping_plan": mapping_plan.model_dump()["mapping_plan"],
+        "mapping_plan": mapping_plan.model_dump(
+            exclude={"mapping_plan": {"__all__": {"reasoning"}}}
+        )["mapping_plan"],
         "plausible_skills_to_add": _sanitize_skill_list(
             mapping_plan.plausible_skills_to_add
         ),
@@ -1744,7 +1672,13 @@ async def run_tailoring_pipeline(
     # A rewrite that fabricates a metric, drops one Agent 2 flagged to keep,
     # runs past the word cap, or reaches for banned filler is reverted to the
     # candidate's own text before it ever reaches the résumé.
-    guarded, reverted_bullets = _guard_writer_output(indexed_resume, tailored_raw, mapping_plan)
+    # And a rewrite that claims one of the JD's tools the résumé never
+    # mentions anywhere — the prompt forbids it; this makes it certain.
+    guarded, reverted_bullets = _guard_writer_output(
+        indexed_resume, tailored_raw, mapping_plan,
+        tool_terms=analysis.jd_analysis.exact_technical_tools,
+        evidence_text=build_resume_text(resume_content)[0],
+    )
     if reverted_bullets:
         logger.warning(
             "fact-lock reverted %d/%d rewritten bullet(s): %s",

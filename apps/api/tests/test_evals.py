@@ -52,18 +52,22 @@ def test_load_fixtures_rejects_a_fixture_missing_a_required_field(tmp_path):
 
 def _provider():
     return make_provider_dispatching_by_schema({
-        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        # Methodologies, not tools: an unevidenced JD tool is reverted by the
+        # fact-lock, and these tests are about scoring, not fabrication.
+        _JDAnalysisWire: make_jd_analysis(
+            exact_technical_tools=[], methodologies_and_frameworks=["Microservices", "CI/CD"],
+        ),
         MappingPlan: MappingPlan(
             mapping_plan=[BulletMapping(
                 original_bullet_id="exp0_b0", original_text="Built services",
-                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                target_jd_keywords_to_inject=["Microservices"], preserved_metrics=[],
                 strategic_instruction="REINFORCE",
             )],
             plausible_skills_to_add=[],
         ),
         WriterOutput: WriterOutput(
             rewritten_bullets=[RewrittenBullet(
-                bullet_id="exp0_b0", rewritten_text="Engineered Python services on Kubernetes",
+                bullet_id="exp0_b0", rewritten_text="Engineered microservices with CI/CD",
             )],
             updated_skills=[],
         ),
@@ -96,7 +100,7 @@ async def test_evaluate_fixture_records_the_tailored_bullets_for_eyeballing():
     """Numbers alone can't tell you a rewrite reads badly — the harness keeps
     the text so a human can skim what actually changed."""
     out = await evaluate_fixture(_fixture(), _provider())
-    assert out["bullets"][0]["tailored"] == "Engineered Python services on Kubernetes"
+    assert out["bullets"][0]["tailored"] == "Engineered microservices with CI/CD"
     assert out["bullets"][0]["original"] == "Built services"
 
 

@@ -90,3 +90,100 @@ def test_guard_leaves_an_unchanged_bullet_alone():
     text, reasons = guard_rewrite(ORIG, ORIG, ["40%", "2M"])
     assert text == ORIG
     assert reasons == []
+
+
+# ── Invented tools ──────────────────────────────────────────────────────────
+# The live eval caught a marketer's "Ran monthly reporting" rewritten as
+# "Built monthly dashboards and reports using SQL" — SQL appears nowhere in
+# that résumé. No number changed, so every metric check passed.
+
+MARKETER = "Ran monthly reporting on campaign performance. Skills: Excel, Google Analytics"
+
+
+def test_rejects_a_jd_tool_the_resume_never_mentions():
+    v = rewrite_violations(
+        "Ran monthly reporting on campaign performance",
+        "Built monthly SQL reports on campaign performance",
+        [], tool_terms=["SQL", "Tableau"], evidence_text=MARKETER,
+    )
+    assert any("SQL" in r for r in v)
+
+
+def test_allows_a_tool_named_elsewhere_in_the_resume():
+    assert rewrite_violations(
+        "Built marketing pages for client campaigns",
+        "Built marketing pages in React for client campaigns",
+        [], tool_terms=["React"], evidence_text="Skills: JavaScript, React, CSS",
+    ) == []
+
+
+def test_matches_whole_terms_only():
+    # "Java" is not claimed by a bullet that says JavaScript.
+    assert rewrite_violations(
+        "Built pages", "Built JavaScript pages", [],
+        tool_terms=["Java"], evidence_text="Skills: JavaScript",
+    ) == []
+
+
+def test_tool_check_is_off_without_the_resume():
+    # The single-bullet Rewrite endpoint has no JD tool list; unchanged there.
+    assert rewrite_violations("Built reports", "Built SQL reports", [], tool_terms=["SQL"]) == []
+
+
+def test_guard_reverts_an_invented_tool():
+    text, reasons = guard_rewrite(
+        "Ran monthly reporting", "Ran monthly SQL reporting", [],
+        tool_terms=["SQL"], evidence_text=MARKETER,
+    )
+    assert text == "Ran monthly reporting"
+    assert reasons
+
+
+# ── Invented purpose clauses are cut, not reverted ──────────────────────────
+# Each pair is real gpt-4.1-mini output from the eval run that motivated this.
+
+from app.services.bullet_guard import strip_invented_tail
+
+
+def test_cuts_an_invented_purpose_clause():
+    assert strip_invented_tail(
+        "Maintained the shared component library used across client projects",
+        "Maintained the shared component library used across client projects to ensure consistency and reuse of UI elements.",
+    ) == "Maintained the shared component library used across client projects."
+    assert strip_invented_tail(
+        "Fixed accessibility issues flagged in client audits",
+        "Fixed web accessibility issues identified in client audits to improve compliance with accessibility standards.",
+    ) == "Fixed web accessibility issues identified in client audits."
+    assert strip_invented_tail(
+        "Built marketing pages for client campaigns",
+        "Built marketing pages for client campaigns, creating responsive interfaces that supported campaign goals.",
+    ) == "Built marketing pages for client campaigns, creating responsive interfaces."
+
+
+def test_keeps_a_purpose_the_original_states():
+    original = "Rewrote the importer to improve reliability"
+    assert strip_invented_tail(original, "Rewrote the CSV importer to improve reliability.") == \
+        "Rewrote the CSV importer to improve reliability."
+
+
+def test_keeps_result_clauses_that_are_not_padding():
+    text = "Rebuilt the service scaffolding, cutting new service setup from 3 weeks to 2 days."
+    assert strip_invented_tail("Rebuilt the service scaffolding", text) == text
+
+
+def test_guard_applies_the_cut():
+    text, reasons = guard_rewrite(
+        "Fixed accessibility issues flagged in client audits",
+        "Fixed accessibility issues flagged in client audits, ensuring compliance.", [],
+    )
+    assert text == "Fixed accessibility issues flagged in client audits."
+    assert reasons == []
+
+
+def test_a_practice_name_is_not_an_invented_tool():
+    # "automated deployment pipelines" is CI/CD: the eval run reverted this.
+    assert rewrite_violations(
+        "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+        "Set up CI/CD pipelines that cut release time from 2 hours to 15 minutes",
+        [], tool_terms=["CI/CD", "Kubernetes"], evidence_text="Python, PostgreSQL",
+    ) == []

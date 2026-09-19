@@ -39,10 +39,65 @@ def _word_count(text: str) -> int:
     return len(_WORD_RE.findall(text or ""))
 
 
+# Practices, not products: each is the standard name for work a bullet can
+# describe in plain words ("automated deployment pipelines" is CI/CD), so the
+# prompt's umbrella-term rule governs them, not the invented-tool check. A
+# product (SQL, React, Kubernetes) has no such plain-words form to point to.
+_PRACTICE_TERMS = {
+    "ci/cd", "ci", "cd", "etl", "elt", "api", "apis", "rest", "restful",
+    "agile", "scrum", "kanban", "tdd", "devops", "sdlc", "qa", "a/b testing",
+    "microservices", "oop", "seo", "ux", "ui",
+}
+
+# A closing purpose or benefit clause: ", ensuring consistency", "to improve
+# compliance", "that supported campaign goals". When the original states no
+# such purpose, the clause is invented padding. Cutting it only removes words
+# the original does not support, so it is safe to do rather than revert.
+_TAIL_RE = re.compile(
+    r"(?:,\s*|\s+)(?:(?:in order )?to (?:ensure|improve|enhance|support|drive|enable|"
+    r"boost|increase|optimi[sz]e|streamline|facilitate)|ensuring|supporting|enabling|"
+    r"driving|enhancing|improving|aligned with|aligning with|that supported|"
+    r"that improved|that enhanced|for (?:improved|enhanced|better))\b[^.;]*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_invented_tail(original: str, rewritten: str) -> str:
+    """Drop a closing purpose clause the original never stated.
+
+    Kept when the original has its own tail of that kind (or the clause's
+    lead words), and when cutting would leave too little to be a bullet."""
+    match = _TAIL_RE.search(rewritten or "")
+    if not match:
+        return rewritten
+    lead = match.group(0).strip(" ,").split()[:2]
+    if _TAIL_RE.search(original or "") or all(w.lower() in (original or "").lower() for w in lead):
+        return rewritten
+    head = rewritten[: match.start()].rstrip(" ,;")
+    if _word_count(head) < 4:
+        return rewritten
+    return head + "."
+
+
+def _mentions(text: str, term: str) -> bool:
+    """Whole-term, case-insensitive: "Java" is not found in "JavaScript", and
+    terms with punctuation ("C++", "Node.js") still match."""
+    pattern = rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])"
+    return re.search(pattern, text or "", re.IGNORECASE) is not None
+
+
 def rewrite_violations(
-    original: str, rewritten: str, preserved_metrics: list[str] | None = None
+    original: str,
+    rewritten: str,
+    preserved_metrics: list[str] | None = None,
+    tool_terms: list[str] | None = None,
+    evidence_text: str = "",
 ) -> list[str]:
-    """Every rule *rewritten* breaks relative to *original*. Empty == clean."""
+    """Every rule *rewritten* breaks relative to *original*. Empty == clean.
+
+    *tool_terms* are the JD's named tools; *evidence_text* is the candidate's
+    whole résumé. A tool the rewrite adds that the résumé never mentions is a
+    fabricated claim — the "used SQL" a marketer never did."""
     reasons: list[str] = []
 
     # 1. Fabricated specifics — a number the original never contained.
@@ -75,11 +130,26 @@ def rewrite_violations(
         if phrase in low_rewritten and phrase not in low_original:
             reasons.append(f'uses banned filler phrase "{phrase}"')
 
+    # 5. Invented tools — a JD tool the rewrite claims that appears nowhere in
+    #    the candidate's résumé. Checked only when the caller has the résumé:
+    #    a tool named elsewhere in it (skills, another role) is evidence, and
+    #    stays the prompt's judgement call rather than this check's.
+    if evidence_text:
+        for term in tool_terms or []:
+            t = (term or "").strip()
+            if t and t.lower() not in _PRACTICE_TERMS and _mentions(rewritten, t) \
+                    and not _mentions(original, t) and not _mentions(evidence_text, t):
+                reasons.append(f"claims a tool the résumé never mentions: {t}")
+
     return reasons
 
 
 def guard_rewrite(
-    original: str, rewritten: str, preserved_metrics: list[str] | None = None
+    original: str,
+    rewritten: str,
+    preserved_metrics: list[str] | None = None,
+    tool_terms: list[str] | None = None,
+    evidence_text: str = "",
 ) -> tuple[str, list[str]]:
     """Return (text_to_use, reasons_it_was_rejected).
 
@@ -87,5 +157,6 @@ def guard_rewrite(
     """
     if rewritten.strip() == original.strip():
         return original, []
-    reasons = rewrite_violations(original, rewritten, preserved_metrics)
+    rewritten = strip_invented_tail(original, rewritten)
+    reasons = rewrite_violations(original, rewritten, preserved_metrics, tool_terms, evidence_text)
     return (original, reasons) if reasons else (rewritten, [])

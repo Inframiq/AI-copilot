@@ -202,3 +202,46 @@ metrics; the improvement is suggestive, not established.
 This run wrote the first pins that carry semantic verdicts as well as the
 Agent 1 parse, so from here both halves of the scoring denominator are frozen
 and A/B comparisons are finally controlled.
+
+
+## Meaning-first rewrite of Agents 2 and 3 (`results/refine-before.json` → `results/refine-final.json`)
+
+Reading the bullets, not the metrics, showed the rewrites were often not
+true: a marketer who never used SQL got "using SQL", "order fulfilment API"
+became "payment processing API", "4M records" became "4M high-volume
+transactions", and most bullets ended in an invented purpose clause
+("…to enhance revenue forecasting and financial planning"). No metric caught
+any of it — no number changed and no named specific was dropped. The cause was
+Agent 2's own wording: "as aggressively as possible", INJECT keywords "even if
+the original bullet didn't use that exact language", and a cap of 20% SKIPs.
+
+Changes:
+1. Agent 2 rewritten around an evidence rule — a keyword is planned only if it
+   is already in the bullet, is the standard name for what the bullet
+   describes ("automated deployment pipelines" → CI/CD), or is named in the
+   same role. Unchanged is now an allowed outcome. ~1300 → ~700 words.
+2. Agent 3 rewritten around a meaning test (a reader who never saw the JD
+   understands it; literal, grammatical, no pasted JD phrases) and a rule
+   against added tails. ~1400 → ~800 words. Both reasoning fields capped.
+3. Agent 3 no longer receives Agent 2's reasoning.
+4. `bullet_guard` gained two deterministic checks: a JD tool the résumé never
+   mentions reverts the bullet (practice names like CI/CD are exempt), and an
+   invented closing purpose clause is cut.
+5. The runner records token usage per fixture (`tokens_*`, `token_calls`).
+
+| metric | before | after |
+|---|---|---|
+| tokens_total | 7922 | 6621 (−16%) |
+| tokens_input / tokens_output | 6624 / 1298 | 5439 / 1181 |
+| word_growth | 1.61 | 1.11 |
+| specificity_retention | 1.00 | 1.00 |
+| verb_diversity | 0.95 | 1.00 |
+| ats_delta | 9.6 | 0.8 |
+
+Pins were shared, so `ats_before` is identical in both runs. **`ats_delta`
+fell, and most of that is intended**: the old lift came largely from terms the
+candidate could not claim (SQL, payment processing, distributed systems, "owned
+the platform roadmap"). It is also noisy — two intermediate runs of the new
+prompts scored +3.2 and +3.4. Known leftovers: a tool named elsewhere in the
+résumé (React in skills, SQL in another project) can still be attached to a
+bullet that did not use it; the guard cannot tell, by design.

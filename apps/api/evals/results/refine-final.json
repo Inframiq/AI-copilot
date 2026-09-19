@@ -1,0 +1,265 @@
+{
+  "generated_at": "2026-09-19T09:38:06.659169+00:00",
+  "aggregate": {
+    "fixtures_ok": 5,
+    "fixtures_failed": 0,
+    "ats_after": 36.6,
+    "ats_before": 36.2,
+    "ats_delta": 0.4,
+    "bullets_changed": 4.0,
+    "bullets_total": 4.8,
+    "max_bullet_words": 14.4,
+    "quantified_share": 0.4629,
+    "revert_rate": 0.0,
+    "specificity_retention": 1.0,
+    "tokens_input": 5439.2,
+    "tokens_output": 1181.4,
+    "tokens_reasoning": 0.0,
+    "tokens_total": 6620.6,
+    "verb_diversity": 1.0,
+    "word_growth": 1.1111
+  },
+  "fixtures": [
+    {
+      "ats_before": 4,
+      "ats_after": 4,
+      "ats_delta": 0,
+      "bullets_total": 4,
+      "bullets_changed": 3,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.0,
+      "word_growth": 1.0,
+      "max_bullet_words": 9,
+      "keyword_overuse": {},
+      "tokens_input": 5127,
+      "tokens_output": 967,
+      "tokens_reasoning": 0,
+      "tokens_total": 6094,
+      "token_calls": {
+        "agent2_semantic_map": 2301,
+        "agent3_write": 2071,
+        "verify_semantic_presence": 643,
+        "agent_gap_filler": 1079
+      },
+      "name": "career_changer_thin_overlap",
+      "description": "Marketing to analytics. Genuine overlap is thin, so this is the fixture that catches a scorer inflating matches or a writer inventing experience to close the gap.",
+      "bullets": [
+        {
+          "original": "Ran monthly reporting on campaign performance across six channels",
+          "tailored": "Ran monthly reports on campaign performance across six channels."
+        },
+        {
+          "original": "Built spreadsheet models that forecast quarterly campaign spend",
+          "tailored": "Built spreadsheet models that forecasted quarterly campaign spend."
+        },
+        {
+          "original": "Presented results to the leadership team each quarter",
+          "tailored": "Presented results to the leadership team each quarter."
+        },
+        {
+          "original": "Coordinated with the design team on creative production schedules",
+          "tailored": "Coordinated with the design team on creative production schedules"
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 54,
+      "ats_after": 56,
+      "ats_delta": 2,
+      "bullets_total": 7,
+      "bullets_changed": 5,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.7143,
+      "word_growth": 1.0578,
+      "max_bullet_words": 16,
+      "keyword_overuse": {},
+      "tokens_input": 6168,
+      "tokens_output": 1704,
+      "tokens_reasoning": 0,
+      "tokens_total": 7872,
+      "token_calls": {
+        "agent2_semantic_map": 3003,
+        "agent3_write": 2647,
+        "verify_semantic_presence": 877,
+        "agent_gap_filler": 1345
+      },
+      "name": "experienced_backend_ic",
+      "description": "The common case: a mid-level backend engineer with real metrics, applying to an adjacent stack. Baseline for every other fixture.",
+      "bullets": [
+        {
+          "original": "Built the order fulfilment API in Python, cutting average order processing time from 800ms to 240ms",
+          "tailored": "Built the order fulfilment API in Python, reducing average order processing time from 800ms to 240ms."
+        },
+        {
+          "original": "Migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records",
+          "tailored": "Migrated the checkout database of 4M records from MySQL to PostgreSQL with zero downtime."
+        },
+        {
+          "original": "Set up automated deployment pipelines that reduced release time from 2 hours to 15 minutes",
+          "tailored": "Set up CI/CD pipelines that cut automated deployment release time from 2 hours to 15 minutes."
+        },
+        {
+          "original": "Worked with the product team to plan quarterly engineering priorities",
+          "tailored": "Partnered with the product team to plan quarterly engineering priorities."
+        },
+        {
+          "original": "Helped newer engineers with code reviews and design feedback",
+          "tailored": "Mentored newer engineers by providing code reviews and system design feedback."
+        },
+        {
+          "original": "Developed internal reporting tools used by 40 people across three departments",
+          "tailored": "Developed internal reporting tools used by 40 people across three departments"
+        },
+        {
+          "original": "Fixed a recurring data sync bug that had caused 12 incidents in six months",
+          "tailored": "Fixed a recurring data sync bug that had caused 12 incidents in six months"
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 63,
+      "ats_after": 63,
+      "ats_delta": 0,
+      "bullets_total": 5,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.6,
+      "word_growth": 1.1702,
+      "max_bullet_words": 18,
+      "keyword_overuse": {},
+      "tokens_input": 5525,
+      "tokens_output": 1293,
+      "tokens_reasoning": 0,
+      "tokens_total": 6818,
+      "token_calls": {
+        "agent2_semantic_map": 2652,
+        "agent3_write": 2356,
+        "verify_semantic_presence": 759,
+        "agent_gap_filler": 1051
+      },
+      "name": "fresher_projects_only",
+      "description": "The case that was entirely broken before projects were scored or rewritten: a new grad whose only technical evidence lives in Projects.",
+      "bullets": [
+        {
+          "original": "Built a pipeline pulling course enrolment data from three campus systems into a single warehouse",
+          "tailored": "Built an ETL pipeline that pulled course enrolment data from three campus systems into a single data warehouse."
+        },
+        {
+          "original": "Scheduled nightly refreshes with Airflow and added checks that flagged malformed records",
+          "tailored": "Scheduled nightly data refreshes using Apache Airflow and added quality checks that flagged malformed records."
+        },
+        {
+          "original": "Created a dashboard that 200 students used to compare course workloads",
+          "tailored": "Created a dashboard that 200 students used to compare course workloads"
+        },
+        {
+          "original": "Collected live bus arrival data over 6 months and stored it in PostgreSQL",
+          "tailored": "Collected live bus arrival data over 6 months and stored it in PostgreSQL using SQL."
+        },
+        {
+          "original": "Wrote SQL models that surfaced the 10 most delay-prone routes in the city",
+          "tailored": "Wrote SQL models that identified the 10 most delay-prone bus routes in the city."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 18,
+      "ats_after": 18,
+      "ats_delta": 0,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 1.0,
+      "word_growth": 1.147,
+      "max_bullet_words": 19,
+      "keyword_overuse": {},
+      "tokens_input": 5337,
+      "tokens_output": 1043,
+      "tokens_reasoning": 0,
+      "tokens_total": 6380,
+      "token_calls": {
+        "agent2_semantic_map": 2450,
+        "agent3_write": 2201,
+        "verify_semantic_presence": 691,
+        "agent_gap_filler": 1038
+      },
+      "name": "management_seniority_signals",
+      "description": "A lead role. Exercises Agent 3 rule 12's seniority-aware emphasis \u2014 bullets should foreground team scope and outcomes through others, not hands-on depth.",
+      "bullets": [
+        {
+          "original": "Led a squad of 6 engineers delivering the internal platform used by every product team",
+          "tailored": "Led a squad of 6 engineers in developing and maintaining the internal platform used by every product team company-wide."
+        },
+        {
+          "original": "Ran the quarterly planning process and cut missed delivery commitments from 40% to 10%",
+          "tailored": "Managed the quarterly planning process and reduced missed delivery commitments from 40% to 10%."
+        },
+        {
+          "original": "Coached two engineers to promotion within 18 months",
+          "tailored": "Coached two engineers, guiding them to promotion within 18 months."
+        },
+        {
+          "original": "Rebuilt the service scaffolding so a new service took 2 days to stand up instead of 3 weeks",
+          "tailored": "Rebuilt platform service scaffolding to reduce setup time for a new service from 3 weeks to 2 days."
+        }
+      ],
+      "reverted": []
+    },
+    {
+      "ats_before": 42,
+      "ats_after": 42,
+      "ats_delta": 0,
+      "bullets_total": 4,
+      "bullets_changed": 4,
+      "revert_rate": 0.0,
+      "specificity_retention": 1.0,
+      "verb_diversity": 1.0,
+      "quantified_share": 0.0,
+      "word_growth": 1.1806,
+      "max_bullet_words": 10,
+      "keyword_overuse": {},
+      "tokens_input": 5039,
+      "tokens_output": 900,
+      "tokens_reasoning": 0,
+      "tokens_total": 5939,
+      "token_calls": {
+        "agent2_semantic_map": 2251,
+        "agent3_write": 2095,
+        "verify_semantic_presence": 614,
+        "agent_gap_filler": 979
+      },
+      "name": "sparse_unquantified",
+      "description": "Almost no numbers anywhere. The fixture that catches a prompt edit making the writer invent metrics to satisfy the quantify-impact instruction.",
+      "bullets": [
+        {
+          "original": "Built marketing pages for client campaigns",
+          "tailored": "Built responsive marketing pages for client campaigns using React."
+        },
+        {
+          "original": "Maintained the shared component library used across client projects",
+          "tailored": "Maintained the shared component library used across multiple client projects."
+        },
+        {
+          "original": "Fixed accessibility issues flagged in client audits",
+          "tailored": "Fixed accessibility issues flagged in client audits."
+        },
+        {
+          "original": "Worked with designers to turn mockups into working pages",
+          "tailored": "Collaborated with designers to implement mockups as working React pages."
+        }
+      ],
+      "reverted": []
+    }
+  ]
+}

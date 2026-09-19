@@ -769,7 +769,7 @@ async def test_run_tailoring_pipeline_scores_the_tailored_resume_not_the_origina
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
     provider = make_provider_dispatching_by_schema(responses)
-    resume = {"experience": [{"title": "Eng", "bullets": ["Managed deployments"]}], "skills": []}
+    resume = {"experience": [{"title": "Eng", "bullets": ["Managed deployments"]}], "skills": ["Python", "Kubernetes"]}  # the rewrite's tools are the candidate's own
     db = make_mock_db_with_rows([])
 
     result = await run_tailoring_pipeline(resume, "Need Python and Kubernetes.", 50, provider, db)
@@ -1361,7 +1361,7 @@ async def test_pipeline_reports_no_reverts_for_an_honest_rewrite():
         ),
     }
     provider = make_provider_dispatching_by_schema(responses)
-    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": []}
+    resume = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow"]}], "skills": ["Python"]}  # the rewrite's tools are the candidate's own
 
     result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
 
@@ -1441,18 +1441,22 @@ async def test_pipeline_returns_the_pre_tailoring_score_alongside_the_post_one()
     already logs "ats %d -> %d"; returning it makes that measurable rather
     than only greppable."""
     responses = {
-        _JDAnalysisWire: make_jd_analysis(exact_technical_tools=["Python", "Kubernetes"]),
+        # Methodologies, not tools: a rewrite claiming a JD *tool* the résumé
+        # never mentions is reverted by the fact-lock (bullet_guard rule 5).
+        _JDAnalysisWire: make_jd_analysis(
+            exact_technical_tools=[], methodologies_and_frameworks=["Microservices", "CI/CD"],
+        ),
         MappingPlan: MappingPlan(
             mapping_plan=[BulletMapping(
                 original_bullet_id="exp0_b0", original_text="Built services",
-                target_jd_keywords_to_inject=["Python"], preserved_metrics=[],
+                target_jd_keywords_to_inject=["Microservices"], preserved_metrics=[],
                 strategic_instruction="REINFORCE",
             )],
             plausible_skills_to_add=[],
         ),
         WriterOutput: WriterOutput(
             rewritten_bullets=[RewrittenBullet(
-                bullet_id="exp0_b0", rewritten_text="Built Python services on Kubernetes",
+                bullet_id="exp0_b0", rewritten_text="Built microservices with CI/CD",
             )],
             updated_skills=[],
         ),
@@ -1460,9 +1464,11 @@ async def test_pipeline_returns_the_pre_tailoring_score_alongside_the_post_one()
     provider = make_provider_dispatching_by_schema(responses)
     resume = {"experience": [{"title": "Eng", "bullets": ["Built services"]}], "skills": []}
 
-    result = await run_tailoring_pipeline(resume, "Need Python.", 50, provider, make_mock_db_with_rows([]))
+    result = await run_tailoring_pipeline(
+        resume, "Need microservices and CI/CD.", 50, provider, make_mock_db_with_rows([]),
+    )
 
-    assert result.ats_score_before == 0        # neither tool present to start
+    assert result.ats_score_before == 0        # neither term present to start
     assert result.ats_score > result.ats_score_before
 
 
