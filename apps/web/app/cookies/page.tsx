@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-import { RocketLaunch } from "@phosphor-icons/react/dist/ssr";
 
 const LAST_UPDATED = "September 19, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
@@ -15,11 +15,8 @@ export default function CookiePolicyPage() {
   return (
     <div className="relative z-[1] min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full">
-        <Link href="/" className="flex items-center gap-md">
-          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
-            <RocketLaunch size={18} weight="fill" className="text-on-primary" />
-          </div>
-          <span className="text-headline-md font-black text-on-background tracking-tight">KripaX</span>
+        <Link href="/" aria-label="KripaX home" className="flex shrink-0 items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={128} height={28} priority />
         </Link>
         <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
           Back to home
