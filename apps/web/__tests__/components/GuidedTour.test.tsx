@@ -103,6 +103,22 @@ describe("GuidedTour", () => {
     expect(localStorage.getItem(SEEN_KEY)).toBe("1");
   });
 
+  // The bubble used to open with a generic rocket glyph in a primary circle,
+  // left over from before the brand had a mark of its own.
+  it("wears the brand mark in the bubble", async () => {
+    renderTargets();
+    const { container } = render(<GuidedTour />);
+    act(() => useTourStore.getState().start());
+    expect(await screen.findByText(TOUR_STEPS[0].title)).toBeInTheDocument();
+
+    const bubble = container.querySelector<HTMLElement>("[data-tour-bubble]")!;
+    const mark = bubble.querySelector("img")!;
+    expect(decodeURIComponent(mark.getAttribute("src")!)).toContain("/brand/logo-mark-light.png");
+    // Decorative: the step title next to it already carries the meaning.
+    expect(mark).toHaveAttribute("alt", "");
+    expect(mark).toHaveAttribute("aria-hidden");
+  });
+
   it("skips on Escape", async () => {
     renderTargets();
     render(<GuidedTour />);

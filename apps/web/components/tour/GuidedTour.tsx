@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { RocketLaunch, ArrowLeft, ArrowRight } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { useTourStore } from "@/stores/tour-store";
 import { currentSidebarWidth } from "@/lib/sidebar";
 import { TOUR_STEPS } from "./tour-steps";
@@ -91,9 +92,14 @@ export function GuidedTour() {
         style={{ top: bubbleTop, left: bubbleLeft }}
       >
         <div className="flex items-start gap-md">
-          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 animate-tour-float">
-            <RocketLaunch size={20} weight="fill" className="text-on-primary" />
-          </div>
+          <Image
+            src="/brand/logo-mark-light.png"
+            alt=""
+            aria-hidden
+            width={40}
+            height={40}
+            className="w-10 h-10 shrink-0 animate-tour-float"
+          />
           <div className="flex-1 min-w-0">
             <p className="text-label-md text-on-surface font-bold">{step.title}</p>
             <p className="text-body-sm text-on-surface-variant mt-xs">{step.body}</p>

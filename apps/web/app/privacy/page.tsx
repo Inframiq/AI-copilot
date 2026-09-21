@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage() {
     <div className="relative z-[1] min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full">
         <Link href="/" aria-label="KripaX home" className="flex shrink-0 items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={128} height={28} priority />
+          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={128} height={28} loading="eager" />
         </Link>
         <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
           Back to home
