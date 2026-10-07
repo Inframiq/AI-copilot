@@ -310,11 +310,27 @@ export default function DashboardPage() {
       {/* Key Metrics Bento Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
         {metrics.map(({ label, tooltip, value, badge, icon: Icon, barWidth, action }) => {
-          const Card = action ? "button" : "div";
+          // A clickable card is a div with role="button", never a <button>:
+          // it holds the InfoTooltip's own <button>, and the HTML parser
+          // won't nest buttons. The server-rendered page came apart at that
+          // point, hydration failed, and a stray copy of the dashboard was
+          // left above the real one.
           return (
-            <Card
+            <div
               key={label}
-              onClick={action}
+              {...(action && {
+                role: "button",
+                tabIndex: 0,
+                onClick: action,
+                onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                  // Keys pressed on the info icon inside are its own.
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    action();
+                  }
+                },
+              })}
               className={`bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden flex flex-col justify-between h-32 w-full text-left${action ? " cursor-pointer active:scale-[0.98]" : ""}`}
             >
               <div className="flex justify-between items-start">
@@ -337,7 +353,7 @@ export default function DashboardPage() {
                   <div className="h-full bg-primary rounded-r-full transition-all duration-700" style={{ width: barWidth }} />
                 </div>
               )}
-            </Card>
+            </div>
           );
         })}
       </section>
