@@ -71,7 +71,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // request to take a nonce from, and its scripts would all be blocked.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    // suppressHydrationWarning: the script below sets data-sidebar on <html>
+    // before React hydrates, so the attribute is there in the browser but
+    // was never in the server's HTML. It covers <html>'s own attributes
+    // only, not anything inside it.
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         {/* Applies the user's saved sidebar choice before first paint.
             localStorage can't be read during SSR, so without this a user who
