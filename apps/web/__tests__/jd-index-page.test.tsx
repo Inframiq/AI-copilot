@@ -109,10 +109,11 @@ describe("JDIndexPage — Tailor Resume", () => {
 
     const { unmount } = renderWithQueryClient(<JDIndexPage />);
 
-    await user.type(
-      screen.getByPlaceholderText(/Paste the full job description here/),
-      "Backend Engineer role needing Python and AWS."
-    );
+    // Pasted, as the placeholder asks — not typed. Typing re-renders the
+    // whole page once per keystroke, which pushed this test past vitest's
+    // 5s limit when the full suite ran in parallel.
+    await user.click(screen.getByPlaceholderText(/Paste the full job description here/));
+    await user.paste("Backend Engineer role needing Python and AWS.");
     await user.click(screen.getByText("Analyze Description"));
 
     // Save-As modal — brand-new JD text, so it must be named before analysis runs.
@@ -153,7 +154,8 @@ describe("JDIndexPage — Tailor Resume", () => {
 
     const jdTextarea = screen.getByPlaceholderText(/Paste the full job description here/);
     await user.clear(jdTextarea);
-    await user.type(jdTextarea, "Frontend Engineer role needing React and TypeScript.");
+    await user.click(jdTextarea);
+    await user.paste("Frontend Engineer role needing React and TypeScript.");
     await user.click(screen.getByText("Analyze Description"));
     await user.click(await screen.findByRole("button", { name: /save/i }));
 
