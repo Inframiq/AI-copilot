@@ -76,6 +76,26 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review");
   });
 
+  // "55% · Needs Work" read as the score or the JD needing work. The verdict
+  // is about the résumé against this job, and the fix is the Tailor button.
+  it.each([
+    [45, "Needs tailoring"],
+    [65, "Good fit"],
+    [85, "Strong fit"],
+  ])("labels a %i%% score as the résumé's match: %s", async (score, verdict) => {
+    useTailoringStore.getState().setJd("jd-1", "We need a senior engineer with Python.");
+    useTailoringStore.setState({
+      profileAnalysis: { atsScore: score, matchedSkills: ["Python"], missingSkills: ["AWS"] },
+    });
+
+    renderWithQueryClient(<JDIndexPage />);
+
+    expect(await screen.findByText(`${score}%`)).toBeInTheDocument();
+    expect(screen.getByText("Résumé match")).toBeInTheDocument();
+    expect(screen.getByText(verdict)).toBeInTheDocument();
+    expect(screen.queryByText(/needs work/i)).toBeNull();
+  });
+
   // End-to-end human flow, driven entirely through the real UI (not by
   // pre-seeding the store): paste JD1, Analyze, confirm the Save-As modal,
   // Tailor Resume, navigate back to JD Analyzer (component unmount+remount

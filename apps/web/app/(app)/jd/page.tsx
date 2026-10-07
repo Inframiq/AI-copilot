@@ -594,15 +594,19 @@ export default function JDIndexPage() {
                   </span>
                 </div>
               </div>
-              <span className="text-caption text-on-surface-variant uppercase tracking-wider text-center leading-tight">
-                {hasResults
-                  ? atsScore >= 80
-                    ? "Strong Fit"
-                    : atsScore >= 60
-                    ? "Good Fit"
-                    : "Needs Work"
-                  : "Paste JD"}
-              </span>
+              {/* Says what the number measures (the résumé against this JD)
+                  and, below 60, what to do about it. A bare "Needs Work"
+                  read as the score or the JD needing work. */}
+              <div className="flex flex-col items-center gap-0.5 text-center leading-tight">
+                <span className="text-caption text-on-surface-variant uppercase tracking-wider">
+                  {hasResults ? "Résumé match" : "Paste JD"}
+                </span>
+                {hasResults && (
+                  <span className="text-label-sm font-semibold text-on-surface">
+                    {atsScore >= 80 ? "Strong fit" : atsScore >= 60 ? "Good fit" : "Needs tailoring"}
+                  </span>
+                )}
+              </div>
             </div>
 
             {!hasResults ? (
