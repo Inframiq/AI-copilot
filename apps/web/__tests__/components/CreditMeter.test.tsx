@@ -43,20 +43,23 @@ describe("CreditMeter", () => {
     await screen.findByRole("link");
   });
 
-  it("shows remaining / allotment and links to /account (compact)", async () => {
+  // "34 / 50" didn't say whether 34 had been used or was left.
+  it("says the balance is what's left, out of the allotment (compact)", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     renderMeter("compact");
     const link = await screen.findByRole("link");
     expect(link).toHaveAttribute("href", "/account");
-    expect(link).toHaveTextContent("34");
-    expect(link).toHaveTextContent("/ 50");
+    expect(link).toHaveTextContent("34 of 50 left");
+    expect(link).toHaveAttribute("title", "34 of 50 credits left");
+    expect(link).toHaveAttribute("aria-label", "34 of 50 credits left");
   });
 
-  it("shows the plan and a progress bar (full)", async () => {
+  it("says the balance is what's left, with the plan and a progress bar (full)", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     renderMeter("full");
     expect(await screen.findByText(/free plan/i)).toBeInTheDocument();
-    expect(screen.getByText("Credits")).toBeInTheDocument();
+    expect(screen.getByText("Credits left")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveTextContent("34 of 50");
   });
 
   it("flags a low balance (below the tailor cost)", async () => {
@@ -86,15 +89,15 @@ describe("CreditMeter rail variant", () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     renderMeter("rail");
     await screen.findByText("34");
-    expect(screen.queryByText(/\/\s*50/)).toBeNull();
+    expect(screen.queryByText(/50/)).toBeNull();
   });
 
-  it("keeps the full balance in its accessible name and tooltip", async () => {
+  it("keeps the full balance, and that it's what's left, in its accessible name and tooltip", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     renderMeter("rail");
     const link = await screen.findByRole("link");
-    expect(link.getAttribute("aria-label")).toContain("34");
-    expect(link.getAttribute("title")).toContain("50");
+    expect(link).toHaveAttribute("aria-label", "34 of 50 credits left");
+    expect(link).toHaveAttribute("title", "34 of 50 credits left");
   });
 
   it("still links to /account", async () => {

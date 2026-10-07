@@ -29,6 +29,8 @@ export function CreditMeter({
   const { credits_remaining, credits_allotment, plan } = data;
   const tailorCost = data.costs?.tailor ?? 10;
   const low = credits_remaining < tailorCost;
+  // Always "left": a bare "34 / 50" reads as either used or remaining.
+  const summary = `${credits_remaining} of ${credits_allotment} credits left`;
   const pct =
     credits_allotment > 0
       ? Math.max(0, Math.min(100, (credits_remaining / credits_allotment) * 100))
@@ -38,8 +40,8 @@ export function CreditMeter({
     return (
       <Link
         href="/account"
-        title={`${credits_remaining} of ${credits_allotment} credits`}
-        aria-label={`${credits_remaining} credits remaining`}
+        title={summary}
+        aria-label={summary}
         className={`flex flex-col items-center justify-center gap-0.5 px-0 py-xs rounded-lg border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
@@ -58,8 +60,8 @@ export function CreditMeter({
     return (
       <Link
         href="/account"
-        title={`${credits_remaining} of ${credits_allotment} credits`}
-        aria-label={`${credits_remaining} credits remaining`}
+        title={summary}
+        aria-label={summary}
         className={`flex items-center gap-xs px-md py-xs pill pill-interactive rounded-full border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
@@ -67,9 +69,12 @@ export function CreditMeter({
         }`}
       >
         <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
-        {credits_remaining}
-        <span className="hidden lg:inline text-on-surface-variant/60 font-normal">
-          / {credits_allotment}
+        <span>
+          {credits_remaining}
+          <span className="hidden lg:inline text-on-surface-variant/60 font-normal">
+            {" "}of {credits_allotment}
+          </span>{" "}
+          <span className="font-normal">left</span>
         </span>
       </Link>
     );
@@ -83,11 +88,11 @@ export function CreditMeter({
       <div className="flex items-center justify-between mb-xs">
         <span className="text-label-sm text-on-surface-variant flex items-center gap-xs">
           <Lightning size={14} weight="fill" className={low ? "text-error" : "text-primary"} />
-          Credits
+          Credits left
         </span>
         <span className={`text-label-sm font-bold ${low ? "text-error" : "text-on-surface"}`}>
           {credits_remaining}
-          <span className="text-on-surface-variant/60 font-normal"> / {credits_allotment}</span>
+          <span className="text-on-surface-variant/60 font-normal"> of {credits_allotment}</span>
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-surface-container-high overflow-hidden">

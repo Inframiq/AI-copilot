@@ -103,7 +103,7 @@ function UsersTab() {
                 <th className="px-md py-sm font-semibold">Email</th>
                 <th className="px-md py-sm font-semibold">Plan</th>
                 <th className="px-md py-sm font-semibold">Status</th>
-                <th className="px-md py-sm font-semibold">Credits</th>
+                <th className="px-md py-sm font-semibold">Credits left</th>
                 <th className="px-md py-sm font-semibold"></th>
               </tr>
             </thead>
@@ -140,7 +140,7 @@ function UsersTab() {
                       </span>
                     </td>
                     <td className="px-md py-sm text-body-sm text-on-surface-variant whitespace-nowrap">
-                      {u.credits_remaining}/{u.credits_allotment}
+                      {u.credits_remaining} of {u.credits_allotment}
                     </td>
                     <td className="px-md py-sm">
                       <div className="flex items-center justify-end gap-sm">

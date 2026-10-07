@@ -171,7 +171,7 @@ export default function AccountPage() {
                 {sub.credits_remaining}
                 <span className="text-headline-md text-on-surface-variant/60 font-normal">
                   {" "}
-                  / {sub.credits_allotment}
+                  of {sub.credits_allotment}
                 </span>
               </span>
             </div>
