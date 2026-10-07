@@ -43,8 +43,12 @@ const STATUS_COLOR: Record<LearningItem["status"], string> = {
 // so a stub "Untitled Resume" created from this dashboard would peg it at 0%
 // even with a fully filled profile.) Ten equally-weighted signals; each
 // present one is 10 points.
+//
+// The score is how complete the profile is, so the label says that, and
+// below 50 says what to do: the card opens My Profile. "Needs work" didn't
+// say what needed it, and "Good" at 50% overstated half a profile.
 function computeProfileHealth(profile: CareerProfile | null): { score: number; label: string } {
-  if (!profile) return { score: 0, label: "Needs work" };
+  if (!profile) return { score: 0, label: "Finish your profile" };
   const contact = profile.contact ?? { name: "", email: "" };
   const checks = [
     !!contact.name?.trim(),
@@ -60,7 +64,14 @@ function computeProfileHealth(profile: CareerProfile | null): { score: number; l
   ];
   const filled = checks.filter(Boolean).length;
   const score = Math.round((filled / checks.length) * 100);
-  const label = score >= 80 ? "Excellent" : score >= 50 ? "Good" : "Needs work";
+  const label =
+    score === 100
+      ? "Complete"
+      : score >= 80
+      ? "Almost complete"
+      : score >= 50
+      ? "Partly filled in"
+      : "Finish your profile";
   return { score, label };
 }
 
