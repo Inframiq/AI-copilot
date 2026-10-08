@@ -37,6 +37,10 @@ def _numbers(text: str) -> set[str]:
     return {m.group(0).rstrip(".,").replace(",", "") for m in _NUMBER_RE.finditer(text or "")}
 
 
+# Public name for callers outside the fact-lock (services/misc_notes.py).
+numbers = _numbers
+
+
 def _word_count(text: str) -> int:
     return len(_WORD_RE.findall(text or ""))
 

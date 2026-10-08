@@ -112,6 +112,25 @@ class RewriteBulletOut(BaseModel):
     reverted_reasons: list[str] = []
 
 
+class RestructureNotesRequest(BaseModel):
+    # What the user typed into the notes canvas. Whitespace-only text is
+    # refused in the handler — Field can't say "not just spaces".
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class MiscPointOut(BaseModel):
+    text: str
+    # One of services/misc_notes.MISC_SECTIONS.
+    section: str
+    # Fact-lock flags, e.g. a number the user never wrote. Shown in the
+    # preview; the user decides whether to keep the point.
+    flags: list[str] = []
+
+
+class RestructureNotesOut(BaseModel):
+    points: list[MiscPointOut]
+
+
 class TailorStartOut(BaseModel):
     session_id: uuid.UUID
     status: str

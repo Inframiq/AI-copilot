@@ -34,6 +34,9 @@ CREDIT_COSTS: dict[str, int] = {
     "tailor": 10,
     "cover_letter": 3,
     "rewrite_bullet": 1,
+    # The notes canvas: one fast call that tidies what the user typed into
+    # points for the profile's Miscellaneous section.
+    "restructure_notes": 1,
     "analyze": 0,
     "prep_questions": 0,
 }
@@ -80,7 +83,7 @@ BILLING_PERIOD = timedelta(days=30)
 
 # Actions currently enforced. Others have a cost defined above for the
 # future but aren't gated yet (one-line change to add them).
-ENFORCED_ACTIONS = {"tailor", "cover_letter", "rewrite_bullet"}
+ENFORCED_ACTIONS = {"tailor", "cover_letter", "rewrite_bullet", "restructure_notes"}
 
 
 async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:

@@ -15,6 +15,7 @@ from app.core.credits import spend_credits, refund_credits
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
+    RestructureNotesRequest, RestructureNotesOut,
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
@@ -23,6 +24,7 @@ from app.services.tailoring import (
     build_single_bullet_system, tailor_fingerprint, _bullet_text,
 )
 from app.services.bullet_guard import guard_rewrite
+from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
@@ -446,6 +448,49 @@ async def rewrite_bullet(
         if len(words) > max_words:
             rewritten = " ".join(words[:max_words]).rstrip(",;:") + "."
     return RewriteBulletOut(rewritten_text=rewritten, reverted_reasons=reverted_reasons)
+
+
+@router.post("/restructure-notes", response_model=RestructureNotesOut)
+@limiter.limit("20/minute")
+async def restructure_notes(
+    request: Request,
+    body: RestructureNotesRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tidy what the user typed into the notes canvas into résumé-ready
+    points, each tagged with the section it fits. Saves nothing: the browser
+    shows the points, the user edits and confirms, and only then are they
+    written to the profile's Miscellaneous section."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Write something to save first.")
+
+    uid = uuid.UUID(user["sub"])
+    await spend_credits(db, uid, "restructure_notes", email=user.get("email"))
+    await db.commit()
+
+    provider = get_ai_provider()
+    try:
+        async with record_ai_usage(uid, "restructure_notes"):
+            draft = await provider.complete_structured(
+                NOTES_SYSTEM, f"<notes>\n{text}\n</notes>", NotesDraft,
+                model_tier="fast", max_output_tokens=2000, call_name="restructure_notes",
+            )
+        points = clean_points(draft.points, text)
+    except Exception:
+        # Charged above — give it back, nothing was delivered.
+        await refund_credits(db, uid, "restructure_notes", email=user.get("email"))
+        await db.commit()
+        raise
+    if not points:
+        await refund_credits(db, uid, "restructure_notes", email=user.get("email"))
+        await db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't find a point to save in that — your credit was returned.",
+        )
+    return RestructureNotesOut(points=points)
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)
