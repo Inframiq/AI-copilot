@@ -30,6 +30,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { SaveAnalysisModal } from "@/components/jd/SaveAnalysisModal";
+import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
@@ -761,6 +762,10 @@ export default function JDIndexPage() {
           </div>
         )}
       </div>
+
+      {/* Notes canvas — something about yourself this analysis reminded
+          you of, kept in the profile's Miscellaneous for any tailoring. */}
+      {hasResults && <MiscNotesCanvas />}
 
       {/* Previous Analyses — always shown below bento grid */}
       {jds.length > 0 && (

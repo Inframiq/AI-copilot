@@ -373,6 +373,14 @@ export const apiClient = {
       "POST", "/ai/rewrite-bullet", payload,
     ),
 
+  /** The notes canvas: tidies what the user typed into résumé points, each
+   * tagged with a section (see lib/misc-points). Spends a credit; saves
+   * nothing — the canvas writes the points the user confirms. `flags` say
+   * what the fact-lock caught, e.g. a number they never wrote. */
+  restructureNotes: (text: string): Promise<{
+    points: Array<{ text: string; section: string; flags: string[] }>;
+  }> => request("POST", "/ai/restructure-notes", { text }),
+
   getSession: (sessionId: string): Promise<{
     session_id: string;
     // Null once the input resume this was tailored against has since been

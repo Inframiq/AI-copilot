@@ -1,6 +1,7 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
 import type { ResumeContent } from "@career-copilot/types";
+import { MAX_MISC_POINTS, type MiscPoint } from "@/lib/misc-points";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -85,11 +86,20 @@ export interface CareerProfile {
   /** Storage object key for photo_url ("<uid>/profile.<ext>") — kept so a
    *  later replace/remove knows the exact object. null iff photo_url is null. */
   photo_path: string | null;
+  /** Points saved from the notes canvas. Absent until migration 009 has
+   *  run on the database, which callers read as "not available yet". */
+  miscellaneous?: MiscPoint[];
   created_at: string;
   updated_at: string;
 }
 
-export type CareerProfileInput = Omit<CareerProfile, "user_id" | "created_at" | "updated_at">;
+/** What "Save Profile" writes. Never `miscellaneous`: that column is written
+ * only by appendMiscPoints / setMiscPoints, so a save from a stale tab can't
+ * drop points saved elsewhere, and a database without migration 009 still
+ * saves. */
+export type CareerProfileInput = Omit<
+  CareerProfile, "user_id" | "created_at" | "updated_at" | "miscellaneous"
+>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,13 +127,62 @@ export async function getCareerProfile(): Promise<CareerProfile | null> {
 export async function upsertCareerProfile(input: CareerProfileInput): Promise<CareerProfile> {
   const sb = createBrowserClient();
   const me = await uid();
+  // Callers often pass a whole loaded CareerProfile, which TypeScript accepts
+  // as an input. Stripped here so its (possibly stale) Miscellaneous never
+  // rides along — see CareerProfileInput.
+  const { miscellaneous: _misc, ...fields } = input as CareerProfileInput & { miscellaneous?: unknown };
   const { data, error } = await sb
     .from("career_profiles")
-    .upsert({ user_id: me, ...input }, { onConflict: "user_id" })
+    .upsert({ user_id: me, ...fields }, { onConflict: "user_id" })
     .select()
     .single();
   if (error) throw new Error(error.message);
   return data as CareerProfile;
+}
+
+/** Raised when there is no profile row to save Miscellaneous points to. */
+export class NoProfileError extends Error {
+  constructor() {
+    super("Save your profile once first, then your notes can be kept in it.");
+    this.name = "NoProfileError";
+  }
+}
+
+/** Raised when the database has no `miscellaneous` column yet (migration 009). */
+export class MiscUnavailableError extends Error {
+  constructor() {
+    super("Saving notes to your profile isn't available yet.");
+    this.name = "MiscUnavailableError";
+  }
+}
+
+/** Replace the profile's Miscellaneous points. Touches nothing else. */
+export async function setMiscPoints(points: MiscPoint[]): Promise<CareerProfile> {
+  const sb = createBrowserClient();
+  const me = await uid();
+  const { data, error } = await sb
+    .from("career_profiles")
+    .update({ miscellaneous: points })
+    .eq("user_id", me)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CareerProfile;
+}
+
+/** Add points to the profile's Miscellaneous, read fresh so points saved in
+ * another tab are kept. Throws rather than dropping any that don't fit. */
+export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfile> {
+  const current = await getCareerProfile();
+  if (!current) throw new NoProfileError();
+  if (!Array.isArray(current.miscellaneous)) throw new MiscUnavailableError();
+  const next = [...current.miscellaneous, ...points];
+  if (next.length > MAX_MISC_POINTS) {
+    throw new Error(
+      `Your profile keeps at most ${MAX_MISC_POINTS} points — remove some from Miscellaneous on your profile first.`,
+    );
+  }
+  return setMiscPoints(next);
 }
 
 export async function setProfileMasterResume(resumeId: string): Promise<void> {

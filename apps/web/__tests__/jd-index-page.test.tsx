@@ -21,6 +21,7 @@ vi.mock("@/lib/api-client", () => ({
 
 vi.mock("@/lib/career-profile-client", () => ({
   getCareerProfile: vi.fn().mockResolvedValue(null),
+  appendMiscPoints: vi.fn(),
 }));
 
 import JDIndexPage from "../app/(app)/jd/page";

@@ -57,6 +57,7 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
+import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 
@@ -1213,6 +1214,15 @@ export default function ProfilePage() {
             })}
           </div>
         )}
+      </section>
+
+      {/* ── Miscellaneous ── */}
+      <section id="miscellaneous" className={cardCls}>
+        <SectionHeader
+          title="Miscellaneous"
+          info="Things you saved from the notes box while analysing a job or tailoring a résumé. Each is offered in every tailoring review, off until you add it. Changes here save straight away."
+        />
+        <MiscellaneousPoints />
       </section>
 
       {/* Floating save */}

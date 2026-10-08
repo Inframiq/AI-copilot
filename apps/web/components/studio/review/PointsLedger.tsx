@@ -18,7 +18,7 @@ import { BulletDiff } from "./BulletDiff";
 
 type Decision = "accept" | "reject";
 type Filter = "all" | "reworded" | "adds_terms" | "ai";
-type Provenance = "reworded" | "adds_terms" | "ai";
+type Provenance = "reworded" | "adds_terms" | "ai" | "profile";
 
 /** Auto-select: every point built on the user's own bullets. AI-written
  * points are left alone — they need the user's word, not a click. */
@@ -33,11 +33,17 @@ export function autoSelectDecisions(
   );
 }
 
-/** Clear all: every point off, AI-written included. */
-export function clearDecisions(changes: BulletChange[], aiFixes: AtsFix[]): Record<string, Decision> {
+/** Clear all: every point off, AI-written and the profile's Miscellaneous
+ * points included. */
+export function clearDecisions(
+  changes: BulletChange[],
+  aiFixes: AtsFix[],
+  miscIds: string[] = [],
+): Record<string, Decision> {
   return {
     ...Object.fromEntries(changes.map((c) => [c.key, "reject" as const])),
     ...Object.fromEntries(aiFixes.map((f) => [`fix:${f.id}`, "reject" as const])),
+    ...Object.fromEntries(miscIds.map((id) => [`misc:${id}`, "reject" as const])),
   };
 }
 
@@ -81,6 +87,7 @@ export function PointsLedger({
   busy,
   rewriteErrors,
   revertedReasons,
+  miscIds = [],
   bulkActionsClassName = "",
   onDecide,
   onBulk,
@@ -120,6 +127,9 @@ export function PointsLedger({
   rewriteErrors?: Record<string, string>;
   /** Fact-lock flags from an inline Rewrite/Humanize, by change key. */
   revertedReasons?: Record<string, string[]>;
+  /** The profile's Miscellaneous points shown beside the ledger, so its
+   * "Clear all" turns them off too. */
+  miscIds?: string[];
   /** e.g. "lg:hidden" when a rail elsewhere carries the same actions. */
   bulkActionsClassName?: string;
   onDecide: (key: string, d: Decision) => void;
@@ -243,7 +253,7 @@ export function PointsLedger({
           </button>
           <button
             type="button"
-            onClick={() => onBulk(clearDecisions(changes, aiFixes))}
+            onClick={() => onBulk(clearDecisions(changes, aiFixes, miscIds))}
             className={`flex items-center gap-1 rounded-xl px-md py-xs text-label-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high ${PRESS} ${FOCUS_RING}`}
           >
             <X size={14} /> Clear all
@@ -297,7 +307,7 @@ export function PointsLedger({
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+export function Group({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
   return (
     <section aria-label={title} className="flex flex-col gap-md">
       <header className="flex flex-wrap items-baseline justify-between gap-x-md gap-y-xs px-xs">
@@ -318,6 +328,7 @@ const PROVENANCE: Record<Provenance, { label: string; dot: string; bar: string }
     bar: "bg-[repeating-linear-gradient(to_bottom,var(--color-tertiary)_0_4px,transparent_4px_8px)]",
   },
   ai: { label: "Written by AI", dot: "bg-outline", bar: "" },
+  profile: { label: "From your profile", dot: "bg-secondary", bar: "bg-secondary" },
 };
 
 /** True for a moment after `on` changes — the card's switch flash. */
@@ -338,7 +349,7 @@ function useFlash(on: boolean): boolean {
 
 /** The card shell: lifted with a primary ring when on, flat and faded when
  * off. `draft` gives the dashed outline of an unconfirmed AI point. */
-function Card({
+export function Card({
   on,
   provenance,
   draft = false,
@@ -372,7 +383,7 @@ function Card({
   );
 }
 
-function CardHeader({
+export function CardHeader({
   provenance,
   where,
   points,
@@ -419,7 +430,7 @@ function CardHeader({
   );
 }
 
-function Switch({
+export function Switch({
   on,
   disabled,
   label,

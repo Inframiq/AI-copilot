@@ -12,6 +12,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: unknown }> {
     upsertCalls.push({ payload, opts });
     return this;
   }
+  update(payload: unknown) {
+    updateCalls.push(payload);
+    return this;
+  }
   maybeSingle() { return Promise.resolve(this.result); }
   single() { return Promise.resolve(this.result); }
   then<TResult1, TResult2 = never>(
@@ -23,6 +27,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: unknown }> {
 
 let queryResult: { data: unknown; error: unknown } = { data: null, error: null };
 let upsertCalls: Array<{ payload: unknown; opts: unknown }> = [];
+let updateCalls: unknown[] = [];
 const getUserMock = vi.fn();
 
 vi.mock("@/lib/supabase", () => ({
@@ -35,6 +40,9 @@ vi.mock("@/lib/supabase", () => ({
 import {
   getCareerProfile,
   upsertCareerProfile,
+  appendMiscPoints,
+  NoProfileError,
+  MiscUnavailableError,
   setProfileMasterResume,
   profileToResumeContent,
   resumeContentToCareerProfileInput,
@@ -99,6 +107,7 @@ describe("career-profile-client", () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "user-1" } } });
     queryResult = { data: null, error: null };
     upsertCalls = [];
+    updateCalls = [];
   });
 
   describe("getCareerProfile", () => {
@@ -159,6 +168,47 @@ describe("career-profile-client", () => {
         photo_url: "https://sb.example/avatars/user-1/profile.png",
         photo_path: "user-1/profile.png",
       });
+    });
+  });
+
+  describe("Miscellaneous", () => {
+    const point = (id: string) => ({
+      id, text: `Point ${id}`, section: "awards" as const, created_at: "2026-10-08T00:00:00Z",
+    });
+
+    it("never sends miscellaneous with the main profile save, even from a whole loaded profile", async () => {
+      queryResult = { data: SAMPLE_PROFILE, error: null };
+      const { user_id: _uid, created_at: _c, updated_at: _u, ...input } = {
+        ...SAMPLE_PROFILE, miscellaneous: [point("stale")],
+      };
+      await upsertCareerProfile(input);
+      expect(upsertCalls[0].payload).not.toHaveProperty("miscellaneous");
+    });
+
+    it("appends to the points already saved and writes only that column", async () => {
+      queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [point("a")] }, error: null };
+      await appendMiscPoints([point("b")]);
+      expect(updateCalls).toEqual([{ miscellaneous: [point("a"), point("b")] }]);
+      expect(upsertCalls).toEqual([]);
+    });
+
+    it("refuses when there is no profile row yet", async () => {
+      queryResult = { data: null, error: null };
+      await expect(appendMiscPoints([point("a")])).rejects.toBeInstanceOf(NoProfileError);
+      expect(updateCalls).toEqual([]);
+    });
+
+    it("refuses when the database has no miscellaneous column yet", async () => {
+      queryResult = { data: SAMPLE_PROFILE, error: null };
+      await expect(appendMiscPoints([point("a")])).rejects.toBeInstanceOf(MiscUnavailableError);
+      expect(updateCalls).toEqual([]);
+    });
+
+    it("refuses rather than dropping points past the 50 cap", async () => {
+      const full = Array.from({ length: 50 }, (_, i) => point(String(i)));
+      queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: full }, error: null };
+      await expect(appendMiscPoints([point("x")])).rejects.toThrow(/at most 50/);
+      expect(updateCalls).toEqual([]);
     });
   });
 

@@ -5,6 +5,9 @@ import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent } from "@career-copilot/types";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
 import { classifyChange } from "@/lib/point-kind";
+import {
+  LIST_SECTIONS, defaultDestination, type ListSection, type MiscDestination, type MiscPoint,
+} from "@/lib/misc-points";
 
 // Bullet-per-role ceiling — mirrors HARD_LIMITS["experience_bullets_per_role"]
 // ["max"] on the backend (resume_spec.py). A gap-filler bullet fix past this
@@ -167,6 +170,7 @@ export function buildMergedContent(
   suggestedSkills: string[],
   atsFixes: AtsFix[] = [],
   fixExperienceIndex: Record<string, number> = {},
+  misc: MiscMerge = NO_MISC,
 ): ResumeContent {
   // Merge: use tailored bullet unless user rejected it. The bullet_id prefixes
   // ("exp"/"proj") mirror _BULLET_SECTIONS in apps/api/app/services/tailoring.py
@@ -266,7 +270,7 @@ export function buildMergedContent(
     }
   }
 
-  return {
+  const merged: ResumeContent = {
     ...pendingContent,
     headline,
     experience: expWithFixes,
@@ -277,6 +281,63 @@ export function buildMergedContent(
     skills: skillsWithFixes,
     summary: mergedSummary,
   };
+  // The profile's Miscellaneous points go in last, and only the ones ticked.
+  return applyMiscPoints(merged, misc, bulletDecisions);
+}
+
+/** The profile's Miscellaneous points as buildMergedContent takes them. */
+export interface MiscMerge {
+  points: MiscPoint[];
+  /** This review's destination picks by point id; absent = defaultDestination. */
+  destinations: Record<string, MiscDestination>;
+}
+const NO_MISC: MiscMerge = { points: [], destinations: {} };
+
+/** Folds the ticked (`misc:<id>` = "accept") Miscellaneous points into
+ * `content` where each is headed: a bullet under its role or project (under
+ * the per-role cap, and not if that entry already says it), an item in its
+ * list section, or a skill (under the skills cap, no duplicates). A point
+ * with no destination chosen goes nowhere. Returns `content` itself when
+ * nothing is ticked, so a review that ignores them changes nothing. */
+export function applyMiscPoints(
+  content: ResumeContent,
+  misc: MiscMerge,
+  decisions: Record<string, BulletDecision>,
+): ResumeContent {
+  const ticked = misc.points.filter((p) => decisions[`misc:${p.id}`] === "accept");
+  if (ticked.length === 0) return content;
+  const out: ResumeContent = {
+    ...content,
+    experience: content.experience.map((e) => ({ ...e, bullets: [...e.bullets] })),
+    ...(content.projects ? { projects: content.projects.map((p) => ({ ...p, bullets: [...p.bullets] })) } : {}),
+    skills: [...content.skills],
+  };
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  for (const point of ticked) {
+    const text = point.text.trim();
+    const dest = misc.destinations[point.id] ?? defaultDestination(point, content);
+    if (!text || !dest) continue;
+    if (dest.startsWith("exp:") || dest.startsWith("proj:")) {
+      const [kind, idx] = dest.split(":");
+      const entry = (kind === "exp" ? out.experience : out.projects)?.[Number(idx)];
+      if (entry && entry.bullets.length < MAX_BULLETS_PER_ROLE && !bulletAlreadyPresent(entry.bullets, text)) {
+        entry.bullets.push(text);
+      }
+    } else if (dest === "skills") {
+      if (out.skills.length < MAX_MERGED_SKILLS && !out.skills.some((s) => same(s, text))) out.skills.push(text);
+    } else if ((LIST_SECTIONS as readonly string[]).includes(dest)) {
+      const key = dest as ListSection;
+      const list = [...(out[key] ?? [])];
+      if (!list.some((x) => same(x, text))) list.push(text);
+      out[key] = list;
+    }
+  }
+  return out;
+}
+
+/** The current review's Miscellaneous state, for buildMergedContent. */
+function miscMerge(s: { miscPoints: MiscPoint[]; miscDestinations: Record<string, MiscDestination> }): MiscMerge {
+  return { points: s.miscPoints, destinations: s.miscDestinations };
 }
 
 interface TailoringState {
@@ -365,6 +426,12 @@ interface TailoringState {
   // Pending review state — populated after tailoring, cleared after save/discard
   pendingContent: ResumeContent | null;
   bulletDecisions: Record<string, BulletDecision>;
+  /** The profile's Miscellaneous points, offered in the review under
+   * `misc:<id>` decisions that start off. ReviewShell keeps this in step
+   * with the career profile; it outlives a review, since it is profile data. */
+  miscPoints: MiscPoint[];
+  /** This review's destination picks for those points, by id. */
+  miscDestinations: Record<string, MiscDestination>;
   // The merged (accepted-bullets-applied) content behind the current preview —
   // this is what a later "Save" would persist. Never written to the resume
   // store or backend until the user explicitly saves.
@@ -384,6 +451,9 @@ interface TailoringState {
   }) => void;
   setHumanizeLevel: (n: number) => void;
   setBulletDecision: (key: string, decision: BulletDecision) => void;
+  setMiscPoints: (points: MiscPoint[]) => void;
+  /** Where a Miscellaneous point goes on this résumé. */
+  setMiscDestination: (id: string, destination: MiscDestination) => void;
   /** Accept/reject a single "gap → fix" item (stored under `fix:${id}`) and
    * kick off a debounced projected-score re-score. */
   setFixDecision: (id: string, decision: BulletDecision) => void;
@@ -466,6 +536,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   error: null,
   pendingContent: null,
   bulletDecisions: {},
+  miscPoints: [],
+  miscDestinations: {},
   mergedContent: null,
   previewPdfUrl: null,
 
@@ -491,6 +563,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent: null,
       sessionId: isDifferentJd ? null : current.sessionId,
       bulletDecisions: {},
+      miscDestinations: {},
       mergedContent: null,
       previewPdfUrl: null,
       error: null,
@@ -525,6 +598,18 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     // the projected number has to move with it — not only with fix toggles.
     get().refreshProjectedScore();
   },
+  setMiscPoints: (points) => {
+    const { miscPoints, bulletDecisions } = get();
+    if (JSON.stringify(points) === JSON.stringify(miscPoints)) return;
+    set({ miscPoints: points });
+    // Only a ticked point being edited or removed changes the résumé scored.
+    if (miscPoints.some((p) => bulletDecisions[`misc:${p.id}`] === "accept")) get().refreshProjectedScore();
+  },
+  setMiscDestination: (id, destination) => {
+    set((s) => ({ miscDestinations: { ...s.miscDestinations, [id]: destination }, previewPdfUrl: null }));
+    useResumeStore.getState().setPdfSignedUrl(null);
+    if (get().bulletDecisions[`misc:${id}`] === "accept") get().refreshProjectedScore();
+  },
   refreshProjectedScore: () => {
     const {
       sessionId, atsFixes, bulletDecisions, pendingContent,
@@ -543,7 +628,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent && originalContent
         ? buildMergedContent(
             pendingContent, originalContent, bulletDecisions,
-            suggestedSkills, atsFixes, fixExperienceIndex,
+            suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()),
           )
         : undefined;
     if (_projectScoreTimer) clearTimeout(_projectScoreTimer);
@@ -762,6 +847,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent: null,
       reusedRun: false,
       bulletDecisions: {},
+      miscDestinations: {},
       mergedContent: null,
       previewPdfUrl: null,
     });
@@ -882,6 +968,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           projectedAtsScore: session.ats_score ?? null,
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
+          miscDestinations: {},
           reusedRun: started.reused ?? false,
           isLoading: false,
         });
@@ -918,6 +1005,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     if (!pendingContent || !originalContent || !jdId) return false;
     const mergedContent = buildMergedContent(
       pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
+      miscMerge(get()),
     );
     set({ mergedContent });
     // A draft, not updateContent: the store's résumé is the one tailoring ran
@@ -936,7 +1024,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex);
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()));
 
     set({ isApplying: true, error: null, mergedContent });
     try {
@@ -977,7 +1065,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent || !jdId) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex);
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()));
 
     set({ isReanalyzing: true, error: null });
     try {
@@ -1058,6 +1146,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       set({
         pendingContent: null,
         bulletDecisions: {},
+        miscDestinations: {},
         mergedContent: null,
         previewPdfUrl: null,
         isApplying: false,
@@ -1075,6 +1164,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent: null,
       reusedRun: false,
       bulletDecisions: {},
+      miscDestinations: {},
       suggestedSkills: [],
       atsFixes: [],
       bulletImportance: {},
@@ -1129,6 +1219,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent: null,
       reusedRun: false,
       bulletDecisions: {},
+      miscDestinations: {},
       mergedContent: null,
       previewPdfUrl: null,
     }),

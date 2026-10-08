@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { useResumeStore } from "@/stores/resume-store";
 import {
   useTailoringStore, deriveBulletChanges, buildMergedContent, type BulletChange,
 } from "@/stores/tailoring-store";
 import { apiClient } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
+import { getCareerProfile } from "@/lib/career-profile-client";
 import { SummaryCard } from "@/components/studio/review/SummaryCard";
 import {
   PointsLedger,
@@ -15,6 +17,8 @@ import {
   countPointsOn,
 } from "@/components/studio/review/PointsLedger";
 import { SkillsCard } from "@/components/studio/review/SkillsCard";
+import { ProfilePoints } from "@/components/studio/review/ProfilePoints";
+import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { WordingChecks } from "@/components/studio/review/WordingChecks";
 import { findRepetition, listBullets, numberGaps, quantifiedShare } from "@/lib/wording-checks";
 import { ScoreRail, ScoreDock, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
@@ -85,6 +89,19 @@ export function ReviewShell({
   const isLoading = useTailoringStore((s) => s.isLoading);
   const hasJd = !!jdId || !!jdText.trim();
   const error = useTailoringStore((s) => s.error);
+  const miscPoints = useTailoringStore((s) => s.miscPoints);
+  const miscDestinations = useTailoringStore((s) => s.miscDestinations);
+  const setMiscPoints = useTailoringStore((s) => s.setMiscPoints);
+  const setMiscDestination = useTailoringStore((s) => s.setMiscDestination);
+
+  // The profile's Miscellaneous points, kept in step with the career profile
+  // — including a point saved from the notes canvas below, which writes the
+  // fresh profile into this same query.
+  const { data: careerProfile } = useQuery({ queryKey: ["careerProfile"], queryFn: getCareerProfile });
+  useEffect(() => {
+    setMiscPoints(careerProfile?.miscellaneous ?? []);
+  }, [careerProfile, setMiscPoints]);
+  const miscIds = useMemo(() => miscPoints.map((p) => p.id), [miscPoints]);
 
   const [bulletLoading, setBulletLoading] = useState<Record<string, "rewrite" | "humanize" | null>>({});
   const [rewriteReverted, setRewriteReverted] = useState<Record<string, string[]>>({});
@@ -122,10 +139,11 @@ export function ReviewShell({
         ? listBullets(
             buildMergedContent(
               pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
+              { points: miscPoints, destinations: miscDestinations },
             ),
           )
         : [],
-    [pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex],
+    [pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscPoints, miscDestinations],
   );
   const repetition = useMemo(() => findRepetition(finalBullets), [finalBullets]);
   const gaps = useMemo(() => numberGaps(finalBullets, quantifyPrompts), [finalBullets, quantifyPrompts]);
@@ -234,11 +252,13 @@ export function ReviewShell({
     updating: isProjecting,
     stale: projectedScoreStale,
     onRetryScore: refreshProjectedScore,
-    pointsOn: countPointsOn(bulletChanges, aiFixes, bulletDecisions),
-    pointsTotal: bulletChanges.length + aiFixes.length,
+    pointsOn:
+      countPointsOn(bulletChanges, aiFixes, bulletDecisions) +
+      miscIds.filter((id) => bulletDecisions[`misc:${id}`] === "accept").length,
+    pointsTotal: bulletChanges.length + aiFixes.length + miscIds.length,
     skillsAdded,
     onAutoSelect: () => applyBulletDecisions(autoSelectDecisions(bulletChanges, flaggedKeys)),
-    onClear: () => applyBulletDecisions(clearDecisions(bulletChanges, aiFixes)),
+    onClear: () => applyBulletDecisions(clearDecisions(bulletChanges, aiFixes, miscIds)),
     onApply: handleApply,
     canApply: !!pendingContent && !!originalContent,
     onTryAnother,
@@ -324,6 +344,7 @@ export function ReviewShell({
                     busy={bulletLoading}
                     rewriteErrors={rewriteErrors}
                     revertedReasons={rewriteReverted}
+                    miscIds={miscIds}
                     bulkActionsClassName="lg:hidden"
                     onDecide={setBulletDecision}
                     onBulk={applyBulletDecisions}
@@ -335,6 +356,17 @@ export function ReviewShell({
                       updatePendingBullet(change.key, text);
                       setRewriteReverted((prev) => ({ ...prev, [change.key]: [] }));
                     }}
+                  />
+                )}
+
+                {originalContent && (
+                  <ProfilePoints
+                    points={miscPoints}
+                    content={originalContent}
+                    decisions={bulletDecisions}
+                    destinations={miscDestinations}
+                    onDecide={(id, d) => setBulletDecision(`misc:${id}`, d)}
+                    onDestination={setMiscDestination}
                   />
                 )}
 
@@ -368,6 +400,8 @@ export function ReviewShell({
                   onDecide={(d) => setBulletDecision("summary", d)}
                   onRewrite={handleRewriteSummary}
                 />
+
+                <MiscNotesCanvas />
               </>
             )}
           </main>
