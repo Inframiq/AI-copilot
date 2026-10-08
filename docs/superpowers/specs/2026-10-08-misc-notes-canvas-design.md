@@ -58,10 +58,12 @@ disabled with a message when full — the user deletes some on the profile
 page). A `skills` point's text is the skill name alone.
 
 **Migration safety.** The migration is run by hand in the Supabase SQL editor,
-like 002–008. Until it is, writing `miscellaneous` would make every profile
-save fail. So the client reads a missing column as `[]`, and the profile
-upsert includes `miscellaneous` only when the loaded row already has the key.
-Before the migration runs, the canvas reports "Miscellaneous isn't available
+like 002–008. Until it is, writing `miscellaneous` would fail. So the
+profile page's main "Save Profile" never sends `miscellaneous` at all
+(`CareerProfileInput` omits it); the column is written only by its own
+`update` calls (`appendMiscPoints`, `setMiscPoints`), which check that the
+loaded row has the key first. This also means a main Save from a stale tab
+can't overwrite points saved from the canvas elsewhere. Before the migration runs, the canvas reports "Miscellaneous isn't available
 yet" instead of charging a credit. A user with no profile row yet gets
 "Save your profile once first" with a link, also before any credit is spent.
 
@@ -129,14 +131,17 @@ using the existing `SectionHeader` / card styles:
 - Lists saved points, grouped by section label.
 - Each point: inline-editable text, section dropdown, delete. Free — no AI.
 - An empty state pointing to where points are captured.
-- Saved with the rest of the profile through the existing save flow (subject
-  to the migration-safety rule above).
+- Each change saves at once through `setMiscPoints` (like the profile photo),
+  not through "Save Profile" — see the migration-safety rule above.
 
 ## Tailoring review — "From your profile"
 
-A fourth group in `PointsLedger`, after "Written by AI": **From your profile**,
-hint "Things you saved about yourself — add the ones that fit this job".
-Shown only when the profile has Miscellaneous points.
+A group of its own, **From your profile**, rendered directly below
+`PointsLedger` (not inside its filter tabs, so it still shows when no bullet
+was rewritten and `PointsLedger` shows its empty state). Hint: "Things you
+saved about yourself — add the ones that fit this job". Shown only when the
+profile has Miscellaneous points. Cards reuse `PointsLedger`'s `Card`,
+`CardHeader`, `Switch` and `Group` with a new "From your profile" provenance.
 
 - Every point starts **off** (decision key `misc:<id>`, default reject). A
   review where nothing is ticked produces exactly today's résumé.
@@ -154,9 +159,9 @@ Shown only when the profile has Miscellaneous points.
   skipped if `bulletAlreadyPresent`; a list item appends to its list if not
   already there; a skill appends under `MAX_MERGED_SKILLS` without dupes.
 - Ticking, unticking or changing destination calls `refreshProjectedScore`, so
-  the live score reacts. A point unrelated to the JD may move it by 0 — the
-  card shows the live delta the same way other points do, and says "no
-  change to the match" rather than hiding it.
+  the live score in the rail reacts. Cards carry no per-point "+N pts" badge:
+  `project-score` prices fixes and rewrites, not these, and it stays
+  unchanged. A point unrelated to the JD may leave the score where it is.
 - `countPointsOn` / `pointsTotal` include misc points so the rail's tally
   stays truthful. "Turn on safe points" (`autoSelectDecisions`) does **not**
   touch misc points; "Clear" turns them off.
