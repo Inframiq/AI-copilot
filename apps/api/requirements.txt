@@ -9,7 +9,10 @@ pydantic-settings==2.3.0
 PyJWT[crypto]==2.15.0
 httpx==0.27.0
 openai==2.53.0
-supabase==2.5.0
+supabase==2.32.0
+# realtime (via supabase) needs websockets.asyncio, added in 13 — though it
+# declares >=11. Below 14, which warns about the legacy API uvicorn 0.30 uses.
+websockets==13.1
 weasyprint==70.0
 pydyf==0.11.0
 jinja2==3.1.6

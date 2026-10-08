@@ -8,13 +8,16 @@ on:
 jobs:
   web:
     name: Web (typecheck + test)
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the label moves to a new image on its own
+    # schedule, which is a change to CI nobody chose.
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # Supabase, jest-dom and others declare node >=22; 20 warned on install.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -33,7 +36,7 @@ jobs:
 
   api:
     name: API (test)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       SUPABASE_URL: https://ci-placeholder.supabase.co
       SUPABASE_ANON_KEY: ci-placeholder
@@ -42,9 +45,9 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci_placeholder
       OPENAI_API_KEY: ci-placeholder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip

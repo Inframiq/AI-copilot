@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     supabase_url: str
@@ -30,11 +30,9 @@ class Settings(BaseSettings):
     # list would keep full normal-user access alongside the dashboard.
     admin_only_emails: str = "bharathrockz.k@gmail.com,tanishqkundrapu@gmail.com"
 
-    class Config:
-        env_file = ".env"
-        # A key this class no longer declares (AI_PROVIDER, GEMINI_API_KEY —
-        # Gemini was removed) must not fail startup on a deploy whose .env
-        # still carries it.
-        extra = "ignore"
+    # A key this class no longer declares (AI_PROVIDER, GEMINI_API_KEY —
+    # Gemini was removed) must not fail startup on a deploy whose .env still
+    # carries it.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

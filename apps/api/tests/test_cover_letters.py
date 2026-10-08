@@ -13,6 +13,17 @@ from app.db.models import Subscription
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
+
+
+def _provider():
+    """An AI provider whose calls return plain values, as the real one's do.
+    A bare AsyncMock returns AsyncMocks, and the code's .model_dump() on one
+    left a coroutine no one awaited."""
+    provider = AsyncMock()
+    provider.complete.return_value = ""
+    provider.complete_structured.return_value = MagicMock()
+    return provider
+
 def credit_sub_result(credits=9999):
     """A MagicMock execute-result yielding a well-funded subscription, so
     spend_credits() in POST /cover-letters passes without touching a real DB."""
@@ -95,7 +106,7 @@ async def test_generate_creates_pending_row_and_returns_202():
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.cover_letters.get_ai_provider", return_value=AsyncMock()), patch(
+        with patch("app.routers.cover_letters.get_ai_provider", return_value=_provider()), patch(
             "app.routers.cover_letters.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -159,7 +170,7 @@ async def test_generate_deducts_three_credits():
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.cover_letters.get_ai_provider", return_value=AsyncMock()), patch(
+        with patch("app.routers.cover_letters.get_ai_provider", return_value=_provider()), patch(
             "app.routers.cover_letters.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -236,7 +247,7 @@ async def test_generate_refunds_credits_when_pipeline_fails():
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.cover_letters.get_ai_provider", return_value=AsyncMock()), patch(
+        with patch("app.routers.cover_letters.get_ai_provider", return_value=_provider()), patch(
             "app.routers.cover_letters.analyze_jd_match", new=pipeline_mock
         ), patch(
             "app.routers.cover_letters.AsyncSessionLocal", new=lambda: _FakeSessionContextManager()

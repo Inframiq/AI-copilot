@@ -2,13 +2,18 @@
   "name": "ai-resume-hub",
   "private": true,
   "packageManager": "npm@11.12.1",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },
   "devDependencies": {
-    "turbo": "^2.0.0"
+    "@vitest/coverage-v8": "^5.0.3",
+    "turbo": "^2.0.0",
+    "vitest": "^5.0.3"
   }
 }

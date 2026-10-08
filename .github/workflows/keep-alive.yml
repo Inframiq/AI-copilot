@@ -11,7 +11,7 @@ on:
 
 jobs:
   ping:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Ping API health endpoint
         # Cold starts on Render's free tier take 50+ seconds, so allow a long

@@ -27,7 +27,10 @@ def make_auth_header():
 def make_mock_db():
     """Return an async generator that yields a mock AsyncSession."""
     mock_session = MagicMock()
-    mock_session.execute = AsyncMock()
+    # A real Result is synchronous: .all() / .scalar_one_or_none() return
+    # values, not coroutines. The bare AsyncMock default handed back another
+    # AsyncMock, whose methods made coroutines no one awaited.
+    mock_session.execute = AsyncMock(return_value=MagicMock())
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock()
     mock_session.flush = AsyncMock()
