@@ -170,8 +170,18 @@ export default function InterviewIndexPage() {
     }
   }
 
+  // Shared by the laptop's right rail and the phone's strip.
+  const milestones = [
+    { label: "Resume created", done: resumes.length > 0 },
+    { label: "JD analyzed", done: jds.length > 0 },
+    { label: "Session started", done: !!sessionId },
+    { label: "Questions practiced", done: answeredCount > 0 },
+  ];
+  const strengths = (hasAnyQuestions && answeredTopics.length > 0 ? answeredTopics : matchedSkills).slice(0, 3);
+  const focus = (hasAnyQuestions && unansweredTopics.length > 0 ? unansweredTopics : missingSkills).slice(0, 3);
+
   return (
-    <div className="p-lg md:p-xl max-w-[1440px] mx-auto w-full flex flex-col lg:flex-row gap-lg">
+    <div className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col lg:flex-row gap-lg">
 
       {/* ── Left Column ───────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col gap-lg min-w-0">
@@ -184,18 +194,56 @@ export default function InterviewIndexPage() {
         />
 
         {/* Header */}
-        <div>
+        <div className="pt-xs sm:pt-0">
           <h2 className="text-headline-xl text-on-surface font-bold" style={{ letterSpacing: "-0.02em" }}>
             Interview Center
           </h2>
-          <p className="text-body-md text-on-surface-variant mt-sm" style={{ maxWidth: "42rem" }}>
+          <p className="hidden sm:block text-body-md text-on-surface-variant mt-sm" style={{ maxWidth: "42rem" }}>
             Prepare, practice, and perfect your interview skills across technical, behavioral, and HR disciplines.
           </p>
         </div>
 
+        {/* Phones: the laptop's right-hand rail, as a strip under the title —
+            below the questions it was out of sight. */}
+        <div className="lg:hidden grid grid-cols-2 gap-sm">
+          <div className="bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center gap-sm">
+            <ReadinessGauge score={readinessScore} className="w-14 h-14 shrink-0" labelClassName="text-label-md" />
+            <div className="min-w-0">
+              <p className="text-label-md text-on-surface font-semibold flex items-center gap-xs">
+                Readiness
+                <InfoTooltip text="20% each for analyzing a JD, generating questions, and starting a practice session, plus up to 40% based on how many of your questions you've marked practiced." />
+              </p>
+              <p className="text-caption text-on-surface-variant">
+                {milestones.filter((m) => m.done).length} of {milestones.length} steps
+              </p>
+            </div>
+          </div>
+          <NextMockCard
+            sessionId={sessionId}
+            ready={myQuestions.filter((q) => q.session_id === sessionId).length}
+            practiced={answeredCount}
+            onGo={() => (sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd"))}
+            compact
+          />
+          {(strengths.length > 0 || focus.length > 0) && (
+            <div className="col-span-2 flex flex-wrap items-center gap-xs text-caption">
+              {strengths.map((t) => (
+                <span key={`s-${t}`} className="px-sm py-0.5 bg-surface-container-high text-on-surface-variant rounded-md border border-outline-variant/30">
+                  <ThumbsUp size={11} weight="fill" className="inline -mt-0.5 mr-1 text-success-accent" />{t}
+                </span>
+              ))}
+              {focus.map((t) => (
+                <span key={`f-${t}`} className="px-sm py-0.5 bg-error-container/50 text-error rounded-md border border-error/20">
+                  <TrendDown size={11} weight="fill" className="inline -mt-0.5 mr-1" />{t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Tab Navigation + JD filter */}
         <div className="flex items-center justify-between gap-md border-b border-outline-variant/30 flex-wrap">
-          <div className="flex gap-lg">
+          <div className="flex gap-md sm:gap-lg">
             {TABS.map((tab) => {
               const count = hasAnyQuestions && tabCounts[tab] > 0 ? ` (${tabCounts[tab]})` : "";
               return (
@@ -271,11 +319,11 @@ export default function InterviewIndexPage() {
                       return (
                         <div
                           key={q.id}
-                          className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
+                          className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
                         >
-                          <div className="flex justify-between items-start mb-md">
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
-                              <MicrophoneStage size={24} />
+                          <div className="flex justify-between items-start mb-sm sm:mb-md">
+                            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
+                              <MicrophoneStage size={20} />
                             </div>
                             <span className="bg-surface-container text-caption text-primary px-sm py-xs pill rounded-full">
                               {q.topic}
@@ -293,7 +341,7 @@ export default function InterviewIndexPage() {
                               <span className="text-on-surface-variant">{q.basis}</span>
                             </p>
                           )}
-                          <div className="flex items-center gap-sm mb-lg">
+                          <div className="flex items-center gap-sm mb-md sm:mb-lg">
                             <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-primary rounded-full transition-all duration-500"
@@ -307,16 +355,20 @@ export default function InterviewIndexPage() {
                           <div className="flex gap-sm">
                             <button
                               onClick={() => router.push(`/interview/${q.session_id}?q=${q.id}`)}
-                              className="flex-1 py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
+                              className="flex-1 py-sm sm:py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
                             >
-                              <Play size={16} weight="fill" /> Practice This Question
+                              <Play size={16} weight="fill" />
+                              <span className="sm:hidden">Practice</span>
+                              <span className="hidden sm:inline">Practice This Question</span>
                             </button>
                             {!isPracticed && (
                               <button
                                 onClick={() => handleMarkAnswered(q.id)}
-                                className="py-md px-md rounded-xl border border-outline-variant/30 text-label-md text-on-surface hover:bg-surface-container transition-all flex items-center gap-sm"
+                                className="py-sm sm:py-md px-md rounded-xl border border-outline-variant/30 text-label-md text-on-surface hover:bg-surface-container transition-all flex items-center gap-sm"
                               >
-                                <Check size={16} /> Mark as Practiced
+                                <Check size={16} />
+                                <span className="sm:hidden">Done</span>
+                                <span className="hidden sm:inline">Mark as Practiced</span>
                               </button>
                             )}
                           </div>
@@ -356,7 +408,7 @@ export default function InterviewIndexPage() {
       </div>
 
       {/* ── Right Column ──────────────────────────────────────────────────── */}
-      <aside className="w-full lg:w-80 flex flex-col gap-md shrink-0">
+      <aside className="hidden lg:flex w-80 flex-col gap-md shrink-0">
 
         {/* Overall Readiness */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
@@ -366,35 +418,11 @@ export default function InterviewIndexPage() {
           </h3>
 
           {/* Circular gauge */}
-          <div className="relative w-32 h-32 mx-auto mb-lg flex items-center justify-center">
-            <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 36 36">
-              <path
-                className="text-surface-variant"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none" stroke="currentColor" strokeWidth="3"
-              />
-              <path
-                className="text-primary"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none" stroke="currentColor"
-                strokeDasharray={`${readinessScore}, 100`}
-                strokeLinecap="round" strokeWidth="3"
-                style={{ transition: "stroke-dasharray 1s ease-out" }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-headline-lg text-primary font-bold">{readinessScore}%</span>
-            </div>
-          </div>
+          <ReadinessGauge score={readinessScore} className="w-32 h-32 mx-auto mb-lg" labelClassName="text-headline-lg" />
 
           {/* Milestone breakdown */}
           <div className="flex flex-col gap-xs mb-lg text-caption text-on-surface-variant">
-            {[
-              { label: "Resume created",     done: resumes.length > 0 },
-              { label: "JD analyzed",        done: jds.length > 0 },
-              { label: "Session started",    done: !!sessionId },
-              { label: "Questions practiced",done: answeredCount > 0 },
-            ].map(({ label, done }) => (
+            {milestones.map(({ label, done }) => (
               <div key={label} className="flex items-center gap-sm">
                 <div className={`w-3 h-3 rounded-full flex items-center justify-center shrink-0 ${done ? "bg-primary" : "bg-surface-variant"}`}>
                   {done && <Check size={8} weight="bold" className="text-on-primary" />}
@@ -418,13 +446,9 @@ export default function InterviewIndexPage() {
                 <InfoTooltip text="Topics from questions you've practiced, or skills your resume already matched in the JD — whichever you have." />
               </h4>
               <div className="flex flex-wrap gap-sm">
-                {hasAnyQuestions && answeredTopics.length > 0 ? (
-                  answeredTopics.slice(0, 3).map((t) => (
+                {strengths.length > 0 ? (
+                  strengths.map((t) => (
                     <span key={t} className="px-sm py-xs bg-surface-container-high text-on-surface-variant text-caption rounded-md border border-outline-variant/30">{t}</span>
-                  ))
-                ) : matchedSkills.length > 0 ? (
-                  matchedSkills.slice(0, 3).map((s) => (
-                    <span key={s} className="px-sm py-xs bg-surface-container-high text-on-surface-variant text-caption rounded-md border border-outline-variant/30">{s}</span>
                   ))
                 ) : (
                   <span className="text-caption text-on-surface-variant italic">
@@ -441,13 +465,9 @@ export default function InterviewIndexPage() {
                 <InfoTooltip text="Topics from questions you haven't practiced yet, or skills the JD wanted that your resume was missing." />
               </h4>
               <div className="flex flex-wrap gap-sm">
-                {hasAnyQuestions && unansweredTopics.length > 0 ? (
-                  unansweredTopics.slice(0, 3).map((t) => (
+                {focus.length > 0 ? (
+                  focus.map((t) => (
                     <span key={t} className="px-sm py-xs bg-error-container/50 text-error text-caption rounded-md border border-error/20">{t}</span>
-                  ))
-                ) : missingSkills.length > 0 ? (
-                  missingSkills.slice(0, 3).map((s) => (
-                    <span key={s} className="px-sm py-xs bg-error-container/50 text-error text-caption rounded-md border border-error/20">{s}</span>
                   ))
                 ) : (
                   <span className="text-caption text-on-surface-variant italic">
@@ -459,26 +479,85 @@ export default function InterviewIndexPage() {
           </div>
         </div>
 
-        {/* Next Mock Interview */}
-        <div className="bg-primary text-on-primary rounded-2xl p-md shadow-lg shadow-primary/10 relative overflow-hidden">
-          <div
-            className="absolute top-0 right-0 w-32 h-32 bg-primary-container/50 rounded-full blur-2xl pointer-events-none"
-            style={{ marginRight: "-2.5rem", marginTop: "-2.5rem" }}
-          />
-          <h4 className="text-label-md font-bold mb-xs relative z-10">Next Mock Interview</h4>
-          <p className="text-body-sm mb-md relative z-10 opacity-90">
-            {sessionId
-              ? `${myQuestions.filter((q) => q.session_id === sessionId).length} questions ready · ${answeredCount} practiced`
-              : "Analyze a JD to generate personalized questions"}
-          </p>
-          <button
-            onClick={() => sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd")}
-            className="w-full bg-surface-container-lowest text-primary text-label-md py-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10"
-          >
-            {sessionId ? "Join Session" : "Analyze a JD First"}
-          </button>
-        </div>
+        <NextMockCard
+          sessionId={sessionId}
+          ready={myQuestions.filter((q) => q.session_id === sessionId).length}
+          practiced={answeredCount}
+          onGo={() => (sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd"))}
+        />
       </aside>
+    </div>
+  );
+}
+
+function ReadinessGauge({
+  score,
+  className,
+  labelClassName,
+}: {
+  score: number;
+  className: string;
+  labelClassName: string;
+}) {
+  return (
+    <div className={`relative flex items-center justify-center ${className}`}>
+      <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 36 36">
+        <path
+          className="text-surface-variant"
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none" stroke="currentColor" strokeWidth="3"
+        />
+        <path
+          className="text-primary"
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none" stroke="currentColor"
+          strokeDasharray={`${score}, 100`}
+          strokeLinecap="round" strokeWidth="3"
+          style={{ transition: "stroke-dasharray 1s ease-out" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`${labelClassName} text-primary font-bold`}>{score}%</span>
+      </div>
+    </div>
+  );
+}
+
+function NextMockCard({
+  sessionId,
+  ready,
+  practiced,
+  onGo,
+  compact = false,
+}: {
+  sessionId: string | null;
+  ready: number;
+  practiced: number;
+  onGo: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`bg-primary text-on-primary rounded-2xl shadow-lg shadow-primary/10 relative overflow-hidden ${compact ? "p-md flex flex-col justify-between gap-xs" : "p-md"}`}>
+      <div
+        className="absolute top-0 right-0 w-32 h-32 bg-primary-container/50 rounded-full blur-2xl pointer-events-none"
+        style={{ marginRight: "-2.5rem", marginTop: "-2.5rem" }}
+      />
+      <h4 className="text-label-md font-bold mb-xs relative z-10">{compact ? "Next mock" : "Next Mock Interview"}</h4>
+      <p className={`relative z-10 opacity-90 ${compact ? "text-caption" : "text-body-sm mb-md"}`}>
+        {sessionId
+          ? compact
+            ? `${ready} ready · ${practiced} done`
+            : `${ready} questions ready · ${practiced} practiced`
+          : compact
+            ? "Analyze a JD first"
+            : "Analyze a JD to generate personalized questions"}
+      </p>
+      <button
+        onClick={onGo}
+        className={`w-full bg-surface-container-lowest text-primary text-label-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10 ${compact ? "py-xs" : "py-md"}`}
+      >
+        {sessionId ? (compact ? "Join" : "Join Session") : compact ? "Go" : "Analyze a JD First"}
+      </button>
     </div>
   );
 }

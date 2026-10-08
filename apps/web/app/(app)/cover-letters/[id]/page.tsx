@@ -131,7 +131,7 @@ export default function CoverLetterEditorPage({
 
   if (isError) {
     return (
-      <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
         <p className="text-body-md text-error font-medium">
           Could not load this cover letter. It may have been deleted, or you may not have access to it.
         </p>
@@ -144,7 +144,7 @@ export default function CoverLetterEditorPage({
 
   if (!letter || letter.status === "pending") {
     return (
-      <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
         <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         <p className="text-body-md text-on-surface-variant">Generating your cover letter…</p>
         {pollingStalled && (
@@ -166,14 +166,14 @@ export default function CoverLetterEditorPage({
 
   if (letter.status === "failed") {
     return (
-      <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
         <p className="text-body-md text-error font-medium">Generation failed. Try regenerating from the Cover Letters list.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <section className="pb-md">
         <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
           Cover Letter

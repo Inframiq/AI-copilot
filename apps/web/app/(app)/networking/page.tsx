@@ -333,7 +333,7 @@ export default function NetworkingPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
       <section className="pt-lg pb-md">
         <h1

@@ -14,15 +14,15 @@ export default function PlansPage() {
   });
 
   return (
-    <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
-      <section className="pt-lg pb-md">
+    <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+      <section className="pt-xs sm:pt-lg sm:pb-md">
         <h1
           className="text-headline-xl text-on-surface font-bold mb-sm"
           style={{ letterSpacing: "-0.02em" }}
         >
           Plans
         </h1>
-        <p className="text-body-lg text-on-surface-variant">
+        <p className="text-body-md sm:text-body-lg text-on-surface-variant">
           Pick the plan that fits how much you tailor.
         </p>
       </section>

@@ -350,7 +350,7 @@ export default function JDIndexPage() {
   const insights = hasResults && storedJdText ? extractInsights(storedJdText) : null;
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <ConnectionErrorBanner
         show={jdsQuery.isError}
         onRetry={() => jdsQuery.refetch()}

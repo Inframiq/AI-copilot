@@ -152,20 +152,20 @@ export default function JDPage({
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page Header */}
-      <section className="pt-lg pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
-        <div>
+      <section className="pt-xs sm:pt-lg sm:pb-md flex flex-row items-end justify-between gap-md">
+        <div className="min-w-0">
           <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
             JD Analysis
           </h1>
-          <p className="text-body-lg text-on-surface-variant">
+          <p className="text-body-md sm:text-body-lg text-on-surface-variant truncate">
             {jd?.title ?? "Loading…"}
           </p>
         </div>
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
+          className="shrink-0 flex items-center gap-xs sm:gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <ArrowLeft size={16} />
           Back
@@ -173,10 +173,10 @@ export default function JDPage({
       </section>
 
       {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter">
         {/* Parsed Skills — spans 2 cols */}
-        <Card className="lg:col-span-2 flex flex-col gap-md">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
+        <Card className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold">
             Skills from JD
             <InfoTooltip text="Every skill our parser found in this job description's text." />
           </h2>
@@ -201,10 +201,11 @@ export default function JDPage({
 
         {/* Matched / Not Matched — same color convention as the JD Analyzer
             index page (success = matched, error = not matched). */}
-        <Card className="lg:col-span-2 flex flex-col gap-md">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
-            <Target size={20} className="text-primary" />
-            Keywords — Matched &amp; Not Matched
+        <Card className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold">
+            <Target size={20} className="hidden sm:block text-primary" />
+            <span className="sm:hidden">Keywords</span>
+            <span className="hidden sm:inline">Keywords — Matched &amp; Not Matched</span>
             <InfoTooltip text="Which of this JD's skills your resume already covers, and which are missing. Tailor ranks the missing ones by how much each would raise your ATS score." />
           </h2>
 
@@ -281,10 +282,10 @@ export default function JDPage({
         </Card>
 
         {/* Re-run Resume Builder panel */}
-        <Card className="lg:col-span-2 flex flex-col gap-md">
+        <Card className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md">
           <div>
             <h2 className="text-headline-md text-on-surface font-semibold">Resume Builder</h2>
-            <p className="text-caption text-on-surface-variant mt-xs">
+            <p className="hidden sm:block text-caption text-on-surface-variant mt-xs">
               Tailor your resume to this job description, or open it as-is in the studio.
             </p>
           </div>
@@ -294,7 +295,7 @@ export default function JDPage({
           ) : (
             <div className="flex flex-col gap-sm flex-1">
               {/* Resume row */}
-              <div className="px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+              <div className="px-sm sm:px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
                 <p className="text-label-md text-on-surface font-semibold truncate">{masterResume.title}</p>
                 <p className="text-caption text-on-surface-variant mt-xs">
                   Updated {new Date(masterResume.updated_at).toLocaleDateString()}
@@ -324,9 +325,10 @@ export default function JDPage({
             progress from the latest completed tailoring run, if any. Reads
             from jd_id-linked TailoringSession/PrepQuestion rows so this
             stays accurate even after navigating away and back. */}
-        <Card className="lg:col-span-2 flex flex-col gap-md">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
-            Generated for This JD
+        <Card className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold">
+            <span className="sm:hidden">For this JD</span>
+            <span className="hidden sm:inline">Generated for This JD</span>
             <InfoTooltip text="Your latest tailored resume, interview prep progress, and cover letter for this specific job — from your most recent Tailor run." />
           </h2>
 
@@ -337,8 +339,8 @@ export default function JDPage({
           ) : (
             <div className="flex flex-col gap-sm">
               {/* Tailored resume */}
-              <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <div className="flex flex-col items-stretch gap-xs sm:flex-row sm:items-center sm:gap-md px-sm sm:px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+                <div className="hidden sm:flex w-9 h-9 rounded-lg bg-primary/10 text-primary items-center justify-center shrink-0">
                   <FileText size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -354,7 +356,7 @@ export default function JDPage({
                 <button
                   onClick={handleOpen}
                   disabled={isOpening}
-                  className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+                  className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
                 >
                   <FolderOpen size={14} />
                   Open
@@ -362,8 +364,8 @@ export default function JDPage({
               </div>
 
               {/* Interview prep progress */}
-              <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <div className="flex flex-col items-stretch gap-xs sm:flex-row sm:items-center sm:gap-md px-sm sm:px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+                <div className="hidden sm:flex w-9 h-9 rounded-lg bg-primary/10 text-primary items-center justify-center shrink-0">
                   <Microphone size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -376,7 +378,7 @@ export default function JDPage({
                 </div>
                 <button
                   onClick={() => router.push(`/interview/${jdDetails.session_id}`)}
-                  className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                  className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
                 >
                   Practice
                 </button>
@@ -387,8 +389,8 @@ export default function JDPage({
           {/* Cover letter — unconditional, unlike the two rows above: a
               letter can be generated standalone before any tailoring
               session exists for this JD. */}
-          <div className="flex items-center gap-md px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <div className="flex flex-col items-stretch gap-xs sm:flex-row sm:items-center sm:gap-md px-sm sm:px-md py-sm rounded-xl border border-outline-variant/20 bg-surface-container/40">
+            <div className="hidden sm:flex w-9 h-9 rounded-lg bg-primary/10 text-primary items-center justify-center shrink-0">
               <EnvelopeSimple size={18} />
             </div>
             <div className="flex-1 min-w-0">
@@ -406,16 +408,17 @@ export default function JDPage({
             {coverLetter?.status === "completed" && coverLetter.cover_letter_id ? (
               <button
                 onClick={() => router.push(`/cover-letters/${coverLetter.cover_letter_id}`)}
-                className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
               >
                 <FolderOpen size={14} />
-                Open Letter
+                <span className="sm:hidden">Open</span>
+                <span className="hidden sm:inline">Open Letter</span>
               </button>
             ) : (
               <button
                 onClick={handleGenerateCoverLetter}
                 disabled={isGeneratingLetter || !masterResume || coverLetter?.status === "pending"}
-                className="shrink-0 flex items-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+                className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
               >
                 <Sparkle size={14} className={isGeneratingLetter || coverLetter?.status === "pending" ? "animate-pulse" : ""} />
                 {isGeneratingLetter || coverLetter?.status === "pending" ? "Generating…" : "Generate"}
@@ -426,8 +429,8 @@ export default function JDPage({
         </Card>
 
         {/* Raw JD text preview — full width */}
-        <Card className="lg:col-span-4">
-          <h2 className="text-headline-md text-on-surface mb-md font-semibold">
+        <Card className="col-span-2 lg:col-span-4">
+          <h2 className="text-headline-md text-on-surface mb-sm sm:mb-md font-semibold">
             Job Description
           </h2>
           <pre className="text-body-sm text-on-surface-variant whitespace-pre-wrap font-sans leading-relaxed max-h-64 overflow-y-auto">

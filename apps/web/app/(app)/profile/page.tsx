@@ -85,7 +85,7 @@ function SectionHeader({ title, info, onAdd, addLabel }: {
   title: string; info?: string; onAdd?: () => void; addLabel?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-lg">
+    <div className="flex items-center justify-between gap-sm mb-md sm:mb-lg">
       <h2 className="text-headline-md text-on-surface font-bold tracking-tight flex items-center gap-sm">
         {title}
         {info && <InfoTooltip text={info} />}
@@ -94,9 +94,11 @@ function SectionHeader({ title, info, onAdd, addLabel }: {
         <button
           type="button"
           onClick={onAdd}
-          className="flex items-center gap-xs px-md py-xs pill pill-interactive rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
+          className="shrink-0 flex items-center gap-xs px-sm sm:px-md py-xs pill pill-interactive rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
         >
-          <Plus size={14} weight="bold" /> {addLabel ?? "Add"}
+          <Plus size={14} weight="bold" />
+          <span className="sm:hidden">Add</span>
+          <span className="hidden sm:inline">{addLabel ?? "Add"}</span>
         </button>
       )}
     </div>
@@ -107,7 +109,7 @@ function SectionHeader({ title, info, onAdd, addLabel }: {
 const cardCls = "bg-surface-container-lowest/80 backdrop-blur-xl rounded-2xl p-lg border border-outline-variant/30 shadow-lg shadow-primary/5";
 
 // ── Input / Textarea helpers ───────────────────────────────────────────────────
-const inputCls = "w-full px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
+const inputCls = "w-full px-sm sm:px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
 const textareaCls = `${inputCls} resize-none`;
 const fieldLabelCls = "text-label-sm text-on-surface-variant/90 flex items-center gap-xs font-semibold tracking-wide";
 
@@ -534,13 +536,13 @@ export default function ProfilePage() {
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
   return (
-    <div className="max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page header */}
-      <div className="pt-lg flex flex-col gap-xs">
+      <div className="pt-xs sm:pt-lg flex flex-col gap-xs">
         <h1 className="text-headline-xl text-on-surface font-extrabold" style={{ letterSpacing: "-0.02em" }}>
           My Profile
         </h1>
-        <p className="text-body-md text-on-surface-variant max-w-2xl leading-relaxed">
+        <p className="hidden sm:block text-body-md text-on-surface-variant max-w-2xl leading-relaxed">
           Source of truth for your career — used by JD Analyzer and Resume Builder.
         </p>
       </div>
@@ -574,45 +576,45 @@ export default function ProfilePage() {
         )}
 
         {masterResumeId && masterResumeTitle ? (
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-md p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-sm sm:gap-md p-sm sm:p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
             <div className="flex items-start gap-md min-w-0 md:flex-1">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-error-container to-error-container/60 text-error flex items-center justify-center shrink-0 border border-error-container/50">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-error-container to-error-container/60 text-error flex items-center justify-center shrink-0 border border-error-container/50">
                 <FilePdf size={22} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-label-md text-on-surface font-semibold truncate">{masterResumeTitle}</p>
-                <p className="text-caption text-on-surface-variant mt-xs">Active resume · fields auto-populated from this file</p>
+                <p className="text-caption text-on-surface-variant mt-xs"><span className="sm:hidden">Active resume</span><span className="hidden sm:inline">Active resume · fields auto-populated from this file</span></p>
               </div>
             </div>
-            <div className="flex items-center gap-sm flex-wrap md:justify-end">
+            <div className="grid grid-cols-5 gap-xs sm:flex sm:items-center sm:gap-sm sm:flex-wrap md:justify-end">
               <button
                 onClick={() => setShowPreview(true)}
-                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
+                className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
                 <Eye size={14} /> View
               </button>
               <button
                 onClick={handleDownloadResume}
                 disabled={downloading}
-                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
+                className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
                 {downloading ? <Spinner size={14} className="animate-spin" /> : <DownloadSimple size={14} />}
-                {downloading ? "Downloading…" : "Download"}
+                {downloading ? "Saving…" : "Download"}
               </button>
               <button onClick={() => router.push(`/studio/${masterResumeId}`)}
-                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
+                className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
                 <ArrowSquareOut size={14} /> Open
               </button>
               <button
                 onClick={handleReparse}
                 disabled={uploading || reparsing}
                 title="Re-run AI extraction on the stored file"
-                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
+                className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
                 <ArrowsClockwise size={14} className={reparsing ? "animate-spin" : ""} />
-                {reparsing ? "Re-parsing…" : "Re-parse"}
+                {reparsing ? "Parsing…" : "Re-parse"}
               </button>
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || reparsing}
-                className="flex items-center gap-xs text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
+                className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50">
                 {uploading && !reparsing && <Spinner size={14} className="animate-spin" />}
                 {uploading && !reparsing ? "Replacing…" : "Replace"}
               </button>
@@ -655,7 +657,7 @@ export default function ProfilePage() {
       {/* ── Contact information ───────────────────────────────────────────── */}
       <section className={cardCls}>
         <SectionHeader title="Contact Information" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-lg gap-y-md">
+        <div className="grid grid-cols-2 gap-x-sm sm:gap-x-lg gap-y-sm sm:gap-y-md">
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>
             <input value={contact.name ?? ""} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
@@ -670,7 +672,7 @@ export default function ProfilePage() {
               <option value="student">Student</option>
             </select>
           </div>
-          <div className="flex flex-col gap-xs md:col-span-2">
+          <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}>Professional Headline</label>
             <input value={headline} onChange={e => setHeadline(e.target.value)}
               placeholder="Senior Software Engineer · Open to Work" className={inputCls} />
@@ -685,14 +687,14 @@ export default function ProfilePage() {
             <input value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
               placeholder="+1 (555) 000-0000" className={inputCls} />
           </div>
-          <div className="flex flex-col gap-xs md:col-span-2">
+          <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}><MapPin size={14} className="text-primary/70" /> Location</label>
             <input value={contact.location ?? ""} onChange={e => setContact(p => ({ ...p, location: e.target.value }))}
               placeholder="San Francisco, CA" className={inputCls} />
           </div>
-          <div className="flex flex-col gap-sm md:col-span-2 mt-xs">
+          <div className="flex flex-col gap-sm col-span-2 mt-xs">
             <label className={fieldLabelCls}><LinkIcon size={14} className="text-primary/70" /> Social Links</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <div className="grid grid-cols-2 gap-sm sm:gap-md">
               <div className="relative">
                 <LinkedinLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
                 <input type="url" value={contact.linkedin ?? ""} onChange={e => setContact(p => ({ ...p, linkedin: e.target.value }))}
@@ -705,7 +707,7 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-          <div className="flex flex-col gap-xs md:col-span-2">
+          <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}><Globe size={14} className="text-primary/70" /> Website / Portfolio</label>
             <input type="url" value={contact.website ?? ""} onChange={e => setContact(p => ({ ...p, website: e.target.value }))}
               placeholder="https://yoursite.com" className={inputCls} />
@@ -797,16 +799,16 @@ export default function ProfilePage() {
                   )}
                   <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
                   {/* Header */}
-                  <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
-                    <div className="flex rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
+                  <div className="flex items-center gap-xs sm:gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
+                    <div className="flex flex-col sm:flex-row rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
                       {(["full-time", "internship"] as const).map(t => (
                         <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
-                          className={`px-sm py-xs font-medium transition-colors ${
+                          className={`px-xs sm:px-sm py-0.5 sm:py-xs font-medium transition-colors ${
                             exp.type === t
                               ? t === "internship" ? "bg-secondary-container text-on-secondary-container" : "bg-primary text-on-primary"
                               : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"
                           }`}>
-                          {t === "full-time" ? "Full-time" : "Internship"}
+                          {t === "full-time" ? "Full-time" : <><span className="sm:hidden">Intern</span><span className="hidden sm:inline">Internship</span></>}
                         </button>
                       ))}
                     </div>
@@ -814,8 +816,8 @@ export default function ProfilePage() {
                       {exp.company || exp.title ? (
                         <>
                           <p className="text-label-md text-on-surface font-bold truncate">{exp.title || "Untitled Role"}</p>
-                          <p className="text-caption text-on-surface-variant flex items-center gap-xs mt-0.5">
-                            <Buildings size={12} className="text-primary/60" />
+                          <p className="text-caption text-on-surface-variant mt-0.5 truncate">
+                            <Buildings size={12} className="inline -mt-0.5 mr-xs text-primary/60" />
                             {exp.company}{(exp.start || exp.end) ? ` · ${exp.start}${exp.current ? " - Present" : exp.end ? ` - ${exp.end}` : ""}` : ""}
                             {roleDuration ? ` · ${roleDuration}` : ""}
                           </p>
@@ -824,7 +826,7 @@ export default function ProfilePage() {
                         <span className="text-caption text-on-surface-variant">#{idx + 1} — new entry</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-xs ml-auto shrink-0">
+                    <div className="flex items-center gap-0.5 sm:gap-xs ml-auto shrink-0">
                       <button type="button" onClick={() => moveExp(idx, "up")} disabled={idx === 0}
                         title="Move up"
                         className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
@@ -847,8 +849,8 @@ export default function ProfilePage() {
                   </div>
                   {/* Fields */}
                   {!collapsed && (
-                    <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+                    <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
+                      <div className="grid grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Company *</label>
                           <input value={exp.company ?? ""} onChange={e => updateExp(exp.id, "company", e.target.value)}
@@ -907,7 +909,7 @@ export default function ProfilePage() {
                         <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
                           rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+                      <div className="grid grid-cols-2 gap-sm">
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Projects completed</label>
                           <textarea value={exp.projects ?? ""} onChange={e => updateExp(exp.id, "projects", e.target.value)}
@@ -939,7 +941,7 @@ export default function ProfilePage() {
       {/* ── Projects ───────────────────────────────────────────────────────── */}
       <section className={cardCls}>
         <SectionHeader title="Projects" onAdd={addProj} addLabel="Add Project" />
-        <p className="text-caption text-on-surface-variant -mt-sm mb-md">
+        <p className="hidden sm:block text-caption text-on-surface-variant -mt-sm mb-md">
           {roleStatus === "student"
             ? "Since you may not have work experience yet, this is often the most important section on your resume."
             : "Personal, open-source, or side projects worth showing alongside your work experience."}
@@ -951,22 +953,22 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add your first project</span>
           </button>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+          <div className="grid grid-cols-2 gap-sm sm:gap-md">
             {projects.map((proj, idx) => {
               const collapsed = collapsedProj[proj.id] ?? false;
               const tint = idx % 2 === 0 ? "primary" : "secondary";
               return (
-                <div key={proj.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "" : "md:col-span-2"}`}>
+                <div key={proj.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
                   {collapsed ? (
                     <div onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: false }))}
-                      className="p-lg flex flex-col h-full cursor-pointer group">
-                      <div className="flex items-start justify-between mb-md">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                      className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
+                      <div className="flex items-start justify-between mb-sm sm:mb-md">
+                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
                           tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
                         }`}>
                           <Code size={22} />
                         </div>
-                        <div className="flex items-center gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button type="button" onClick={e => { e.stopPropagation(); setCollapsedProj(p => ({ ...p, [proj.id]: false })); }}
                             className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                             <PencilSimple size={14} />
@@ -993,7 +995,7 @@ export default function ProfilePage() {
                   ) : (
                     <>
                       {/* Header */}
-                      <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
+                      <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
                         <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
                         {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
                         <div className="flex items-center gap-xs ml-auto shrink-0">
@@ -1008,8 +1010,8 @@ export default function ProfilePage() {
                         </div>
                       </div>
                       {/* Fields */}
-                      <div className="p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+                      <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
+                        <div className="grid grid-cols-2 gap-sm">
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant">Project Name *</label>
                             <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
@@ -1090,7 +1092,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                   {!collapsed && (
-                    <div className="p-md grid grid-cols-1 sm:grid-cols-2 gap-sm bg-surface-container-lowest">
+                    <div className="p-sm sm:p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
                       <div className="flex flex-col gap-xs col-span-2">
                         <label className="text-caption text-on-surface-variant">Institution *</label>
                         <input value={edu.institution ?? ""} onChange={e => updateEdu(edu.id, "institution", e.target.value)}
@@ -1140,22 +1142,22 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add a certification</span>
           </button>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+          <div className="grid grid-cols-2 gap-sm sm:gap-md">
             {certifications.map((cert, idx) => {
               const collapsed = collapsedCert[cert.id] ?? false;
               const tint = idx % 2 === 0 ? "primary" : "secondary";
               return (
-                <div key={cert.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "" : "md:col-span-2"}`}>
+                <div key={cert.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
                   {collapsed ? (
                     <div onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: false }))}
-                      className="p-lg flex flex-col h-full cursor-pointer group">
-                      <div className="flex items-start justify-between mb-md">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                      className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
+                      <div className="flex items-start justify-between mb-sm sm:mb-md">
+                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
                           tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
                         }`}>
                           <Certificate size={22} />
                         </div>
-                        <div className="flex items-center gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button type="button" onClick={e => { e.stopPropagation(); setCollapsedCert(p => ({ ...p, [cert.id]: false })); }}
                             className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                             <PencilSimple size={14} />
@@ -1176,7 +1178,7 @@ export default function ProfilePage() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-sm px-lg py-md bg-surface-container/60">
+                      <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
                         <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
                         {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
                         <div className="flex items-center gap-xs ml-auto shrink-0">
@@ -1190,7 +1192,7 @@ export default function ProfilePage() {
                           </button>
                         </div>
                       </div>
-                      <div className="p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
+                      <div className="p-sm sm:p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
                         <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
                           <label className="text-caption text-on-surface-variant">Certification Name *</label>
                           <input value={cert.name ?? ""} onChange={e => updateCert(cert.id, "name", e.target.value)}

@@ -71,32 +71,33 @@ export default function AccountPage() {
   const tailorsLeft = sub ? Math.floor(sub.credits_remaining / tailorCost) : 0;
 
   return (
-    <div className="max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
-      <section className="pt-lg pb-md">
+    <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+      <section className="pt-xs sm:pt-lg sm:pb-md">
         <h1
           className="text-headline-xl text-on-surface font-bold mb-sm"
           style={{ letterSpacing: "-0.02em" }}
         >
           Account
         </h1>
-        <p className="text-body-lg text-on-surface-variant">
+        <p className="hidden sm:block text-body-lg text-on-surface-variant">
           Your details, plan, and credit balance.
         </p>
       </section>
 
       {/* Your details */}
       <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-        <div className="flex items-center justify-between mb-md">
-          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
-            <User size={20} weight="fill" className="text-primary" />
+        <div className="flex items-center justify-between gap-sm mb-sm sm:mb-md">
+          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-xs sm:gap-sm">
+            <User size={20} weight="fill" className="text-primary shrink-0" />
             Your details
             <InfoTooltip text="Pulled from My Profile — edit it there and it updates everywhere, including every resume and cover letter Copilot generates." />
           </h2>
           <Link
             href="/profile"
-            className="text-label-md text-primary font-semibold flex items-center gap-xs hover:underline"
+            className="shrink-0 text-label-md text-primary font-semibold flex items-center gap-xs hover:underline"
           >
-            Edit in My Profile
+            <span className="sm:hidden">Edit</span>
+            <span className="hidden sm:inline">Edit in My Profile</span>
             <ArrowRight size={16} />
           </Link>
         </div>
@@ -132,10 +133,11 @@ export default function AccountPage() {
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 h-40 animate-pulse" />
       ) : (
         <>
-          {/* Plan */}
-          <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center justify-between gap-md">
-            <div>
-              <div className="flex items-center gap-sm">
+          {/* Plan beside Credits — on a phone too */}
+          <div className="grid grid-cols-2 gap-gutter">
+          <div className="min-w-0 bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center justify-between gap-md">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-sm gap-y-xs">
                 <span className="text-headline-md text-on-surface font-semibold capitalize">
                   {sub.plan} plan
                 </span>
@@ -156,15 +158,16 @@ export default function AccountPage() {
                   : "One-time credit grant — it does not refill each month."}
               </p>
             </div>
-            <Sparkle size={32} weight="fill" className="text-primary shrink-0" />
+            <Sparkle size={32} weight="fill" className="hidden sm:block text-primary shrink-0" />
           </div>
 
           {/* Credits */}
-          <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-            <div className="flex items-baseline justify-between mb-md">
+          <div className="min-w-0 bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+            <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-xs mb-sm sm:mb-md">
               <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
                 <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
-                Credits remaining
+                <span className="sm:hidden">Credits</span>
+                <span className="hidden sm:inline">Credits remaining</span>
                 <InfoTooltip text="Most actions (tailoring, cover letters, bullet rewrites) spend credits — see the table below for exact costs. Interview prep questions are free." />
               </span>
               <span className={`text-headline-xl font-bold ${low ? "text-error" : "text-on-surface"}`}>
@@ -186,6 +189,7 @@ export default function AccountPage() {
                 ? "Not enough for another resume tailor."
                 : `Enough for about ${tailorsLeft} more resume ${tailorsLeft === 1 ? "tailor" : "tailors"}.`}
             </p>
+          </div>
           </div>
 
           {/* Costs */}
@@ -215,41 +219,48 @@ export default function AccountPage() {
             </p>
           </div>
 
-          {/* Upgrade */}
+        </>
+      )}
+
+      {/* Upgrade beside Help */}
+      <div className="grid grid-cols-2 gap-gutter">
+        {sub && !subError && (
           <Link
             href="/plans"
-            className="bg-surface-container-low rounded-2xl p-lg border border-outline-variant/20 flex items-center justify-between gap-md hover:bg-surface-container transition-colors"
+            className="min-w-0 bg-surface-container-low rounded-2xl p-md sm:p-lg border border-outline-variant/20 flex items-center justify-between gap-sm sm:gap-md hover:bg-surface-container active:bg-surface-container transition-colors"
           >
-            <div className="flex items-start gap-md">
-              <Info size={20} className="text-on-surface-variant shrink-0 mt-[2px]" />
-              <div>
+            <div className="flex items-start gap-sm sm:gap-md min-w-0">
+              <Info size={20} className="hidden sm:block text-on-surface-variant shrink-0 mt-[2px]" />
+              <div className="min-w-0">
                 <p className="text-body-md text-on-surface font-medium">Need more credits?</p>
                 <p className="text-body-sm text-on-surface-variant mt-xs">
-                  See plans — Premium refills your credits every month.
+                  <span className="sm:hidden">See plans</span>
+                  <span className="hidden sm:inline">See plans — Premium refills your credits every month.</span>
                 </p>
               </div>
             </div>
             <ArrowRight size={18} className="text-on-surface-variant shrink-0" />
           </Link>
-        </>
-      )}
+        )}
 
-      {/* Help */}
-      <Link
-        href="/dashboard?tour=1"
-        className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center justify-between gap-md hover:bg-surface-container-low transition-colors self-start w-full"
-      >
-        <div className="flex items-center gap-md">
-          <Compass size={20} weight="fill" className="text-primary shrink-0" />
-          <div>
-            <p className="text-body-md text-on-surface font-medium">Replay guide</p>
-            <p className="text-body-sm text-on-surface-variant mt-xs">
-              See the quick tour of what each section does, again.
-            </p>
+        {/* Help */}
+        <Link
+          href="/dashboard?tour=1"
+          className={`min-w-0 bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center justify-between gap-sm sm:gap-md hover:bg-surface-container-low active:bg-surface-container-low transition-colors w-full ${sub && !subError ? "" : "col-span-2"}`}
+        >
+          <div className="flex items-center gap-sm sm:gap-md min-w-0">
+            <Compass size={20} weight="fill" className="hidden sm:block text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-body-md text-on-surface font-medium">Replay guide</p>
+              <p className="text-body-sm text-on-surface-variant mt-xs">
+                <span className="sm:hidden">Quick tour</span>
+                <span className="hidden sm:inline">See the quick tour of what each section does, again.</span>
+              </p>
+            </div>
           </div>
-        </div>
-        <ArrowRight size={18} className="text-on-surface-variant shrink-0" />
-      </Link>
+          <ArrowRight size={18} className="text-on-surface-variant shrink-0" />
+        </Link>
+      </div>
 
       {/* Sign out */}
       <button

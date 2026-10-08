@@ -95,7 +95,7 @@ export default function CareerPathPage() {
   const hasTailoringData = missingSkills.length > 0 || matchedSkills.length > 0;
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
       <section className="pt-lg pb-md">
         <h1 className="text-headline-xl text-on-surface font-bold mb-sm" style={{ letterSpacing: "-0.02em" }}>

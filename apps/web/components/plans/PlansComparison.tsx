@@ -19,7 +19,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
 
   if (!data) {
     return (
-      <div className="grid gap-gutter sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-gutter">
         <div className="h-72 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest animate-pulse" />
         <div className="h-72 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest animate-pulse" />
       </div>
@@ -29,7 +29,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
   const compact = variant === "compact";
 
   return (
-    <div className="grid gap-gutter sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-gutter">
       {data.plans.map((plan) => {
         const isCurrent = currentPlan === plan.id;
         const isPremium = plan.id === "premium";
@@ -43,7 +43,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
         return (
           <div
             key={plan.id}
-            className={`rounded-2xl border p-lg flex flex-col ${
+            className={`min-w-0 rounded-2xl border p-md sm:p-lg flex flex-col ${
               isPremium
                 ? "border-primary/40 bg-primary/[0.03] shadow-lg shadow-primary/5"
                 : "border-outline-variant/20 bg-surface-container-lowest"
@@ -52,13 +52,14 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             <div className="flex items-center justify-between gap-sm">
               <h3 className="text-headline-md text-on-surface font-semibold">{plan.name}</h3>
               {isCurrent && (
-                <span className="text-caption font-semibold px-sm py-[2px] pill rounded-full bg-secondary-container text-on-secondary-container">
-                  Current plan
+                <span className="shrink-0 text-caption font-semibold px-sm py-[2px] pill rounded-full bg-secondary-container text-on-secondary-container">
+                  <span className="sm:hidden">Current</span>
+                  <span className="hidden sm:inline">Current plan</span>
                 </span>
               )}
             </div>
 
-            <div className="mt-sm flex items-baseline gap-xs">
+            <div className="mt-xs sm:mt-sm flex flex-wrap items-baseline gap-x-xs">
               <span className="text-headline-xl text-on-surface font-bold">
                 {plan.price_usd === 0 ? "Free" : `$${plan.price_usd}`}
               </span>
@@ -66,15 +67,15 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
                 <span className="text-body-md text-on-surface-variant">/ {plan.period}</span>
               )}
             </div>
-            <p className="text-body-sm text-on-surface-variant mt-xs flex items-center gap-xs">
-              <Lightning size={14} weight="fill" className="text-primary" />
+            <p className="text-body-sm text-on-surface-variant mt-xs flex items-start sm:items-center gap-xs leading-tight">
+              <Lightning size={14} weight="fill" className="text-primary shrink-0" />
               {plan.credits} credits{plan.refills ? " every month" : ", one-time"}
             </p>
 
-            <ul className="mt-md flex flex-col gap-sm flex-1">
+            <ul className="mt-sm sm:mt-md flex flex-col gap-xs sm:gap-sm flex-1">
               {features.map((f) => (
-                <li key={f} className="flex items-start gap-sm text-body-sm text-on-surface">
-                  <Check size={16} weight="bold" className="text-success-accent shrink-0 mt-[2px]" />
+                <li key={f} className="flex items-start gap-xs sm:gap-sm text-body-sm text-on-surface leading-snug">
+                  <Check size={14} weight="bold" className="text-success-accent shrink-0 mt-[2px]" />
                   {f}
                 </li>
               ))}
@@ -83,7 +84,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             <button
               onClick={() => !isCurrent && onChoosePlan(plan.id)}
               disabled={isCurrent}
-              className={`mt-lg py-md rounded-xl text-label-md font-semibold transition-colors ${
+              className={`mt-md sm:mt-lg py-sm sm:py-md rounded-xl text-label-md font-semibold transition-colors ${
                 isCurrent
                   ? "bg-surface-container text-on-surface-variant cursor-default"
                   : isPremium

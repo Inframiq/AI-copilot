@@ -96,25 +96,26 @@ export default function AnalyticsPage() {
   const funnelMax = funnel[0].count > 0 ? funnel[0].count : 1;
 
   return (
-    <div className="max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
-      <section className="pt-lg pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
-        <div>
+      <section className="pt-xs sm:pt-lg sm:pb-md flex flex-row items-end justify-between gap-md">
+        <div className="min-w-0">
           <h1 className="text-headline-xl text-on-surface font-bold mb-sm" style={{ letterSpacing: "-0.02em" }}>
             Analytics
           </h1>
-          <p className="text-body-lg text-on-surface-variant">
+          <p className="hidden sm:block text-body-lg text-on-surface-variant">
             Track your career search performance and optimize your strategy.
           </p>
         </div>
-        <div className="flex items-center gap-sm text-label-sm text-on-surface-variant bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-md py-sm">
+        <div className="shrink-0 flex items-center gap-xs sm:gap-sm text-label-sm text-on-surface-variant bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-sm sm:px-md py-xs sm:py-sm">
           <Calendar size={16} />
-          Last 6 weeks
+          <span className="sm:hidden">6 weeks</span>
+          <span className="hidden sm:inline">Last 6 weeks</span>
         </div>
       </section>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-gutter">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
         {[
           {
             label: "Resumes Created",
@@ -145,14 +146,14 @@ export default function AnalyticsPage() {
             icon: Briefcase,
           },
         ].map(({ label, tooltip, value, trend, icon: Icon }) => (
-          <div key={label} className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col justify-between h-32 relative overflow-hidden">
-            <div className="flex justify-between items-start">
-              <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+          <div key={label} className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col justify-between gap-sm min-h-24 sm:h-32 relative overflow-hidden">
+            <div className="flex justify-between items-start gap-xs">
+              <span className="text-label-md text-on-surface-variant flex items-center gap-xs leading-tight">
                 {label}
                 <InfoTooltip text={tooltip} />
               </span>
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <Icon size={18} weight="fill" className="text-primary" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
+                <Icon size={16} weight="fill" className="text-primary" />
               </div>
             </div>
             <div className="flex items-baseline gap-sm">
@@ -164,15 +165,15 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+      <div className="grid grid-cols-2 gap-gutter">
         {/* ATS Score Trend */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+          <h2 className="text-headline-md text-on-surface font-semibold mb-sm sm:mb-lg flex items-center gap-xs sm:gap-sm">
             ATS Score Trend
             <InfoTooltip text="Your best ATS score per month, from job descriptions you've tailored a resume against — the last 6 months with data." />
           </h2>
           {atsTrend.length > 0 ? (
-            <div className="flex items-end gap-md h-40">
+            <div className="flex items-end gap-xs sm:gap-md h-40">
               {atsTrend.map(({ label, score }) => (
                 <div key={label} className="flex-1 flex flex-col items-center gap-sm">
                   <span className="text-caption text-primary font-semibold">{score}</span>
@@ -198,12 +199,12 @@ export default function AnalyticsPage() {
 
         {/* Weekly Applications */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+          <h2 className="text-headline-md text-on-surface font-semibold mb-sm sm:mb-lg flex items-center gap-xs sm:gap-sm">
             Applications per Week
             <InfoTooltip text="How many job descriptions you analyzed each week, over the last 6 weeks." />
           </h2>
           {jds.length > 0 ? (
-            <div className="flex items-end gap-md h-40">
+            <div className="flex items-end gap-xs sm:gap-md h-40">
               {weeklyApps.map(({ week, count }) => (
                 <div key={week} className="flex-1 flex flex-col items-center gap-sm">
                   <span className="text-caption text-on-surface-variant font-semibold">{count}</span>
@@ -213,7 +214,7 @@ export default function AnalyticsPage() {
                       style={{ height: `${(count / maxApps) * 100}%` }}
                     />
                   </div>
-                  <span className="text-caption text-on-surface-variant">{week}</span>
+                  <span className="text-caption text-on-surface-variant text-center leading-tight">{week}</span>
                 </div>
               ))}
             </div>
@@ -230,7 +231,7 @@ export default function AnalyticsPage() {
 
       {/* Application Funnel */}
       <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-        <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+        <h2 className="text-headline-md text-on-surface font-semibold mb-sm sm:mb-lg flex items-center gap-xs sm:gap-sm">
           Application Funnel
           <InfoTooltip text="How your applications progress: Applied is every JD analyzed, Strong match is those our match score rates 70% or higher (an estimate, not an employer's screening result), and Interview/Final Round/Offer reflect the status you've set on each JD." />
         </h2>
@@ -239,9 +240,9 @@ export default function AnalyticsPage() {
             {funnel.map(({ stage, count, color }) => {
               const pct = Math.round((count / funnelMax) * 100);
               return (
-                <div key={stage} className="flex items-center gap-md">
-                  <span className="text-label-md text-on-surface w-28 shrink-0">{stage}</span>
-                  <div className="flex-1 h-8 bg-surface-container rounded-lg overflow-hidden">
+                <div key={stage} className="flex items-center gap-sm sm:gap-md">
+                  <span className="text-label-md text-on-surface w-24 sm:w-28 shrink-0">{stage}</span>
+                  <div className="flex-1 h-6 sm:h-8 bg-surface-container rounded-lg overflow-hidden">
                     <div
                       className={`h-full ${color} rounded-lg flex items-center px-sm transition-all duration-700`}
                       style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
@@ -268,7 +269,7 @@ export default function AnalyticsPage() {
           property of "this resume against that job", not of a resume file. */}
       {jds.length > 0 && (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h2 className="text-headline-md text-on-surface font-semibold mb-lg flex items-center gap-sm">
+          <h2 className="text-headline-md text-on-surface font-semibold mb-sm sm:mb-lg flex items-center gap-xs sm:gap-sm">
             JD Match Scores
             <InfoTooltip text="Every job description you've analyzed, with its ATS score — the match between your tailored resume and that specific job." />
           </h2>
@@ -277,9 +278,9 @@ export default function AnalyticsPage() {
               <div
                 key={jd.id}
                 onClick={() => router.push(`/jd/${jd.id}`)}
-                className="flex items-center gap-md p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-sm transition-all cursor-pointer"
+                className="flex items-center gap-sm sm:gap-md p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-sm active:bg-surface-container transition-all cursor-pointer"
               >
-                <div className="w-10 h-10 bg-surface-container rounded-lg flex items-center justify-center text-primary shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-surface-container rounded-lg flex items-center justify-center text-primary shrink-0">
                   <FileDashed size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -293,7 +294,7 @@ export default function AnalyticsPage() {
                     <p className="text-label-md text-primary font-bold">
                       {jd.ats_score != null ? `${jd.ats_score}%` : "—"}
                     </p>
-                    <p className="text-caption text-on-surface-variant">ATS Score</p>
+                    <p className="hidden sm:block text-caption text-on-surface-variant">ATS Score</p>
                   </div>
                   <ArrowRight size={18} className="text-on-surface-variant" />
                 </div>
