@@ -6,8 +6,8 @@ import { CheckCircle, NotePencil, Spinner, WarningCircle, X } from "@phosphor-ic
 import { apiClient } from "@/lib/api-client";
 import { appendMiscPoints, getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import {
-  isMiscSection, MAX_MISC_POINTS, MAX_NOTE_CHARS, MISC_SECTION_LABEL, MISC_SECTIONS,
-  RESTRUCTURE_NOTES_CREDITS, type MiscPoint, type MiscSection,
+  BULLET_SECTIONS, BULLET_WORDS, isMiscSection, MAX_MISC_POINTS, MAX_NOTE_CHARS, MISC_SECTION_LABEL,
+  MISC_SECTIONS, RESTRUCTURE_NOTES_CREDITS, wordCount, type MiscPoint, type MiscSection,
 } from "@/lib/misc-points";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
@@ -16,6 +16,8 @@ interface Draft {
   text: string;
   section: MiscSection;
   flags: string[];
+  /** The AI's question for a detail the note didn't give. */
+  ask: string;
 }
 
 type Phase = "writing" | "cleaning" | "preview" | "saving" | "saved";
@@ -66,6 +68,7 @@ export function MiscNotesCanvas() {
           text: p.text,
           section: isMiscSection(p.section) ? p.section : "miscellaneous",
           flags: p.flags ?? [],
+          ask: p.ask ?? "",
         })),
       );
       setPhase("preview");
@@ -192,12 +195,19 @@ export function MiscNotesCanvas() {
                       </option>
                     ))}
                   </select>
+                  {BULLET_SECTIONS.has(d.section) && <BulletLength text={d.text} />}
                   {d.flags.map((f) => (
                     <span key={f} className="flex items-center gap-1 text-caption text-tertiary">
-                      <WarningCircle size={14} weight="fill" /> {f} — keep it only if it&rsquo;s true
+                      <WarningCircle size={14} weight="fill" /> {f}
                     </span>
                   ))}
                 </div>
+                {d.ask && (
+                  <p className="text-caption text-on-surface-variant">
+                    <span className="font-semibold text-on-surface">Make it stronger:</span> {d.ask} Add the
+                    answer above if you know it.
+                  </p>
+                )}
               </li>
             ))}
           </ul>
@@ -254,5 +264,25 @@ export function MiscNotesCanvas() {
         </p>
       )}
     </section>
+  );
+}
+
+/** A bullet's length against what a strong one runs. Short is said, not
+ * fixed: only the user knows the detail that would make it longer. */
+function BulletLength({ text }: { text: string }) {
+  const words = wordCount(text);
+  const { preferMin, preferMax, max } = BULLET_WORDS;
+  const [tone, note] =
+    words > max
+      ? ["text-error", `long — keep it under ${max}`]
+      : words < preferMin
+        ? ["text-tertiary", `short — strong bullets run ${preferMin}–${preferMax}`]
+        : words > preferMax
+          ? ["text-on-surface-variant", `a little long — ${preferMin}–${preferMax} reads best`]
+          : ["text-success", "a good length"];
+  return (
+    <span className={`tabular text-caption ${tone}`}>
+      {words} words · {note}
+    </span>
   );
 }

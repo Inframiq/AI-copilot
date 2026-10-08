@@ -42,9 +42,90 @@ def test_clean_points_flags_a_number_the_user_never_wrote():
          NotePoint(text="Mentored 2,000 students", section="volunteer")],
         "made the build faster. mentored 2000 students",
     )
-    assert out[0].flags == ["Adds a number you didn't write: 40"]
+    assert out[0].flags == ["Adds a number you didn't write: 40 — keep it only if it's true"]
     # "2,000" and "2000" are the same number.
     assert out[1].flags == []
+
+
+def test_clean_points_flags_a_bullet_over_the_word_limit_but_not_a_long_award_line():
+    long = " ".join(["word"] * 36)
+    out = clean_points(
+        [NotePoint(text=f"Built {long}", section="project"),
+         NotePoint(text=f"Award {long}", section="awards")],
+        f"built {long} award {long}",
+    )
+    assert out[0].flags == ["Long for a résumé bullet: 37 words (keep it under 35)"]
+    assert out[1].flags == []
+
+
+def test_clean_points_keeps_the_question_for_a_missing_detail_except_for_skills():
+    out = clean_points(
+        [NotePoint(text="Led the college robotics club", section="leadership",
+                   ask="  How many members did   it grow to? "),
+         NotePoint(text="Docker", section="skills", ask="Which projects used it?")],
+        "led the robotics club, docker",
+    )
+    assert out[0].ask == "How many members did it grow to?"
+    assert out[1].ask == ""
+
+
+ROBOTICS = "i led the robotics club in college for 2 years, we went from 12 members to 40 and entered the regional robocon"
+
+
+@pytest.mark.parametrize("point, invented", [
+    # Real outputs from the model when it was told to reach 15–28 words.
+    ("Led the robotics club in college for 2 years, increasing membership from 12 to 40 members "
+     "through effective outreach and engagement strategies",
+     ["through effective outreach and engagement strategies"]),
+    ("Coordinated entry into the regional robocon, showcasing the club's projects and innovations "
+     "at a competitive level",
+     ["showcasing the club's projects and innovations at a competitive level"]),
+    # Reworded but true: nothing flagged.
+    ("Led the college robotics club for 2 years, growing membership from 12 to 40 and entering "
+     "the regional Robocon", []),
+])
+def test_invented_clauses_finds_what_the_note_never_said(point, invented):
+    from app.services.misc_notes import invented_clauses
+    assert invented_clauses(point, ROBOTICS) == invented
+
+
+def test_clean_points_cuts_an_invented_ending_and_asks_on_a_short_bullet():
+    out = clean_points(
+        [NotePoint(text="Volunteered teaching coding to children on weekends, enhancing their "
+                        "technical skills and understanding of programming concepts", section="volunteer"),
+         NotePoint(text="Taught coding to children on weekends", section="volunteer")],
+        "volunteered teaching kids coding on weekends",
+    )
+    assert out[0].text == "Volunteered teaching coding to children on weekends"
+    assert out[0].flags == [
+        "Took out what your note doesn't say: \"enhancing their technical skills and understanding of "
+        "programming concepts\" — add it back if it's true",
+    ]
+    # Short, and the model asked nothing: the default question stands in.
+    assert out[0].ask.startswith("What came of it")
+    assert out[1].ask.startswith("What came of it")
+
+
+def test_strip_invented_tail_cuts_only_closing_clauses():
+    from app.services.misc_notes import strip_invented_tail
+    notes = "won best intern award at my internship"
+    assert strip_invented_tail(
+        "Awarded Best Intern by the internship organization for outstanding performance and contributions", notes,
+    ) == ("Awarded Best Intern", ["by the internship organization for outstanding performance and contributions"])
+    # Nothing invented: untouched.
+    assert strip_invented_tail("Won the Best Intern award during the internship", notes) == (
+        "Won the Best Intern award during the internship", [],
+    )
+    # Never cut a point down to nothing.
+    assert strip_invented_tail("Showcasing outstanding cross-functional excellence", notes)[0] != ""
+
+
+def test_the_prompt_holds_bullets_to_the_resume_standard():
+    from app.services.misc_notes import NOTES_SYSTEM
+    from app.services.resume_spec import HARD_LIMITS
+    bw = HARD_LIMITS["bullet_words"]
+    assert f"{bw['prefer_min']}–{bw['prefer_max']} words" in NOTES_SYSTEM
+    assert "NEVER FABRICATE" in NOTES_SYSTEM
 
 
 def test_clean_points_caps_the_count():
@@ -83,7 +164,8 @@ async def test_restructure_notes_charges_one_credit_and_returns_points():
     r, sub = await _post({"text": "i organised a 3 day coding bootcamp"}, provider)
     assert r.status_code == 200
     assert r.json() == {"points": [
-        {"text": "Organised a 3-day coding bootcamp", "section": "leadership", "flags": []},
+        {"text": "Organised a 3-day coding bootcamp", "section": "leadership", "flags": [],
+         "ask": "What came of it — a result, a number, or how many people it reached?"},
     ]}
     assert sub.credits_remaining == 49
     # The user's text reaches the model fenced as data.

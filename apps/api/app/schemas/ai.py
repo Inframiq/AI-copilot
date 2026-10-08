@@ -125,6 +125,9 @@ class MiscPointOut(BaseModel):
     # Fact-lock flags, e.g. a number the user never wrote. Shown in the
     # preview; the user decides whether to keep the point.
     flags: list[str] = []
+    # A question for a detail the notes didn't give that would strengthen
+    # the point — asked rather than invented. "" when nothing is missing.
+    ask: str = ""
 
 
 class RestructureNotesOut(BaseModel):

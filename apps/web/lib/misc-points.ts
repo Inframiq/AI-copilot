@@ -35,6 +35,15 @@ export const MAX_NOTE_CHARS = 2000;
 /** CREDIT_COSTS["restructure_notes"] in apps/api/app/core/credits.py. */
 export const RESTRUCTURE_NOTES_CREDITS = 1;
 
+/** Sections whose points are written as résumé bullets, and the length a
+ * strong one runs — HARD_LIMITS["bullet_words"] in resume_spec.py. */
+export const BULLET_SECTIONS: ReadonlySet<MiscSection> = new Set(["experience", "project", "leadership", "volunteer"]);
+export const BULLET_WORDS = { preferMin: 15, preferMax: 28, max: 35 } as const;
+
+export function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
 export function isMiscSection(s: string): s is MiscSection {
   return (MISC_SECTIONS as readonly string[]).includes(s);
 }

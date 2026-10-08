@@ -378,7 +378,9 @@ export const apiClient = {
    * nothing — the canvas writes the points the user confirms. `flags` say
    * what the fact-lock caught, e.g. a number they never wrote. */
   restructureNotes: (text: string): Promise<{
-    points: Array<{ text: string; section: string; flags: string[] }>;
+    /** `ask`: a question for a detail the note didn't give that would make
+     * the point stronger — asked rather than invented. "" when none. */
+    points: Array<{ text: string; section: string; flags: string[]; ask?: string }>;
   }> => request("POST", "/ai/restructure-notes", { text }),
 
   getSession: (sessionId: string): Promise<{

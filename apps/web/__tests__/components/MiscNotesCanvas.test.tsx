@@ -85,6 +85,28 @@ describe("MiscNotesCanvas", () => {
     expect(appendMiscPoints.mock.calls[0][0][0]).toMatchObject({ text: "Docker", section: "skills" });
   });
 
+  it("measures a bullet against the résumé standard and asks for what would make it stronger", async () => {
+    restructureNotes.mockResolvedValue({
+      points: [
+        {
+          text: "Led the college robotics club", section: "leadership", flags: [],
+          ask: "How many members did it grow to?",
+        },
+        { text: "First place, Inter-College Hackathon 2024", section: "awards", flags: [], ask: "" },
+      ],
+    });
+    const user = await typeAndSave("led robotics club, won 2024 hackathon");
+
+    expect(await screen.findByText(/5 words · short — strong bullets run 15–28/)).toBeTruthy();
+    expect(screen.getByText(/How many members did it grow to\?/)).toBeTruthy();
+    // An award is a line, not a bullet: no word count for it.
+    expect(screen.getAllByText(/words ·/)).toHaveLength(1);
+
+    const first = screen.getByRole("textbox", { name: "Point 1" });
+    await user.type(first, ", growing it from 12 to 40 members through weekly build nights and a regional competition entry");
+    expect(screen.getByText(/2[0-9] words · a good length/)).toBeTruthy();
+  });
+
   it("keeps the user's text when tidying fails, and says so", async () => {
     restructureNotes.mockRejectedValue(new Error("Not enough credits"));
     await typeAndSave("won an award");
