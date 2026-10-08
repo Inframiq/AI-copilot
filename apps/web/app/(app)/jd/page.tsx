@@ -359,12 +359,12 @@ export default function JDIndexPage() {
       />
 
       {/* Page Header */}
-      <section className="pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+      <section className="sm:pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
         <div>
           <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
             JD Analyzer
           </h1>
-          <p className="text-body-lg text-on-surface-variant">
+          <p className="hidden sm:block text-body-lg text-on-surface-variant">
             Paste a job description to instantly analyze fit, extract key skills, and identify gaps.
           </p>
         </div>
@@ -372,7 +372,7 @@ export default function JDIndexPage() {
 
       {/* Profile status banner */}
       {!profileLoading && (
-        <div className={`rounded-2xl border p-md flex items-center gap-md flex-wrap ${
+        <div className={`rounded-2xl border px-md py-sm sm:p-md flex items-center gap-sm sm:gap-md flex-wrap ${
           activeResumeId
             ? "bg-primary/5 border-primary/20"
             : "bg-surface-container border-outline-variant/20"
@@ -395,7 +395,8 @@ export default function JDIndexPage() {
               ) : (
                 <button onClick={() => setOverrideMode(overrideMode === "none" ? "pick" : "none")}
                   className="text-label-sm text-primary hover:underline shrink-0">
-                  Use a different resume
+                  <span className="sm:hidden">Change</span>
+                  <span className="hidden sm:inline">Use a different resume</span>
                 </button>
               )}
             </>
@@ -493,13 +494,14 @@ export default function JDIndexPage() {
       )}
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter items-start">
-        {/* Input Area — 2 cols */}
-        <div className="lg:col-span-2 flex flex-col gap-md bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden">
-          <div className="flex justify-between items-center mb-xs">
-            <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
-              <ClipboardText size={24} className="text-primary" />
-              Job Description Input
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter items-start">
+        {/* Input Area — 2 cols; on phones half the row, beside Match */}
+        <div className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden">
+          <div className="flex justify-between items-center gap-xs sm:mb-xs">
+            <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold min-w-0">
+              <ClipboardText size={20} className="text-primary shrink-0" />
+              <span className="sm:hidden">Paste JD</span>
+              <span className="hidden sm:inline">Job Description Input</span>
               <InfoTooltip text="Paste the full posting text — Analyze compares it against your resume, and Tailor rewrites your resume's bullets to fit it." />
             </h2>
             <div className="flex items-center gap-xs">
@@ -510,16 +512,16 @@ export default function JDIndexPage() {
                   className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption font-semibold text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-all duration-300"
                 >
                   <Trash size={14} />
-                  Clear
+                  <span className="hidden sm:inline">Clear</span>
                 </button>
               )}
-              <button className="p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 transition-all duration-300">
+              <button className="hidden sm:block p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 transition-all duration-300">
                 <ListDashes size={20} />
               </button>
             </div>
           </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-md flex-1">
-            <div className="relative flex-1 min-h-[300px]">
+            <div className="relative flex-1 min-h-[220px] sm:min-h-[300px]">
               <textarea
                 value={jdText}
                 onChange={(e) => {
@@ -529,7 +531,7 @@ export default function JDIndexPage() {
                     setJd("", val);
                   }
                 }}
-                className="w-full h-full p-md bg-surface-container-lowest/50 border border-outline-variant/50 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none text-body-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none min-h-[300px]"
+                className="w-full h-full p-md bg-surface-container-lowest/50 border border-outline-variant/50 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none text-body-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none min-h-[220px] sm:min-h-[300px]"
                 placeholder={`Paste the full job description here...\n\ne.g., 'Looking for a Senior Product Designer with 5+ years of experience in Figma, design systems, and user testing...'`}
               />
             </div>
@@ -537,10 +539,10 @@ export default function JDIndexPage() {
             <button
               type="submit"
               disabled={isSubmitting || !jdText.trim()}
-              className="w-full py-md text-label-md text-on-primary rounded-xl bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full py-sm sm:py-md text-label-md text-on-primary rounded-xl bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
-              <MagnifyingGlass size={20} />
-              {isSubmitting ? "Analyzing…" : "Analyze Description"}
+              <MagnifyingGlass size={18} />
+              {isSubmitting ? "Analyzing…" : <><span className="sm:hidden">Analyze</span><span className="hidden sm:inline">Analyze Description</span></>}
             </button>
           </form>
 
@@ -553,26 +555,28 @@ export default function JDIndexPage() {
                 type="button"
                 onClick={handleTailor}
                 disabled={!activeResumeId}
-                className="w-full py-md text-label-md text-on-primary rounded-xl bg-success-accent shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                className="w-full py-sm sm:py-md text-label-md text-on-primary rounded-xl bg-success-accent shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
               >
-                <Sparkle size={20} />
-                {sessionId ? "Re-tailor Resume" : "Tailor Resume"}
+                <Sparkle size={18} />
+                <span className="sm:hidden">{sessionId ? "Re-tailor" : "Tailor"}</span>
+                <span className="hidden sm:inline">{sessionId ? "Re-tailor Resume" : "Tailor Resume"}</span>
               </button>
             </div>
           )}
         </div>
 
         {/* Profile Match + Keywords — 2 cols, beside the Input card in the same row */}
-        <div className="lg:col-span-2 bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-sm relative overflow-hidden">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
-            <Target size={24} className="text-primary" />
-            Profile Match &amp; Keywords
+        <div className="min-w-0 lg:col-span-2 bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow flex flex-col gap-sm relative overflow-hidden">
+          <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold">
+            <Target size={20} className="text-primary shrink-0" />
+            <span className="sm:hidden">Match</span>
+            <span className="hidden sm:inline">Profile Match &amp; Keywords</span>
             <InfoTooltip text="The gauge is your ATS match score — how well your resume's keywords cover this JD. Matched/Not Matched break that down by skill." />
           </h2>
 
           <div className="flex flex-col sm:flex-row gap-sm">
             {/* Compact gauge */}
-            <div className="flex sm:flex-col items-center gap-sm shrink-0 sm:w-24">
+            <div className="flex flex-col items-center gap-xs sm:gap-sm shrink-0 sm:w-24">
               <div className="relative w-20 h-20 shrink-0">
                 <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
                   <circle cx="50" cy="50" fill="none" r="45" stroke="#e8eaee" strokeWidth="10" />
@@ -612,7 +616,7 @@ export default function JDIndexPage() {
 
             {!hasResults ? (
               <div className="flex-1 flex items-center justify-center">
-                <p className="text-body-sm text-on-surface-variant text-center px-md">
+                <p className="text-body-sm text-on-surface-variant text-center sm:px-md">
                   Analyze a job description to see your match score and keyword breakdown.
                 </p>
               </div>
@@ -707,20 +711,20 @@ export default function JDIndexPage() {
             call — labeled accordingly so it doesn't read as equally
             authoritative as the ATS score above, which is. */}
         {hasResults && insights && (
-          <div className="md:col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-3 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
+          <div className="col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-3 bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
             <div className="flex items-center justify-between mb-md">
               <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
                 <Lightbulb size={24} className="text-primary" />
                 Quick Scan
                 <InfoTooltip text="Seniority, location, pay, and culture signals pulled straight from the JD text you pasted — pattern-matched, not an AI call, so treat it as a hint rather than a verified fact." />
               </h2>
-              <span className="text-caption text-on-surface-variant uppercase tracking-wider">
+              <span className="hidden sm:inline text-caption text-on-surface-variant uppercase tracking-wider">
                 Keyword-based, not AI-verified
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-md">
-              <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
-                <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-sm sm:gap-md">
+              <div className="min-w-0 bg-surface-container-lowest p-sm sm:p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+                <div className="hidden sm:flex w-10 h-10 bg-surface-container rounded-lg text-primary items-center justify-center shrink-0">
                   <Briefcase size={20} />
                 </div>
                 <div>
@@ -729,8 +733,8 @@ export default function JDIndexPage() {
                   <p className="text-caption text-on-surface-variant mt-1">{insights.yearsNote || "No year req. found"}</p>
                 </div>
               </div>
-              <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
-                <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+              <div className="min-w-0 bg-surface-container-lowest p-sm sm:p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+                <div className="hidden sm:flex w-10 h-10 bg-surface-container rounded-lg text-primary items-center justify-center shrink-0">
                   <MapPin size={20} />
                 </div>
                 <div>
@@ -739,8 +743,8 @@ export default function JDIndexPage() {
                   <p className="text-caption text-on-surface-variant mt-1">{insights.locNote || "No region specified"}</p>
                 </div>
               </div>
-              <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
-                <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+              <div className="min-w-0 bg-surface-container-lowest p-sm sm:p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+                <div className="hidden sm:flex w-10 h-10 bg-surface-container rounded-lg text-primary items-center justify-center shrink-0">
                   <Money size={20} />
                 </div>
                 <div>
@@ -749,8 +753,8 @@ export default function JDIndexPage() {
                   <p className="text-caption text-on-surface-variant mt-1">{insights.compNote}</p>
                 </div>
               </div>
-              <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
-                <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+              <div className="min-w-0 bg-surface-container-lowest p-sm sm:p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
+                <div className="hidden sm:flex w-10 h-10 bg-surface-container rounded-lg text-primary items-center justify-center shrink-0">
                   <Brain size={20} />
                 </div>
                 <div>
@@ -771,8 +775,8 @@ export default function JDIndexPage() {
           <MiscNotesCanvas
             className={
               insights
-                ? "md:col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-1"
-                : "md:col-span-2 lg:col-span-4"
+                ? "col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-1"
+                : "col-span-2 lg:col-span-4"
             }
           />
         )}
@@ -781,15 +785,15 @@ export default function JDIndexPage() {
       {/* Previous Analyses — always shown below bento grid */}
       {jds.length > 0 && (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
-          <h2 className="text-headline-md text-on-surface flex items-center gap-sm mb-md font-semibold">
-            <Lightbulb size={24} className="text-primary" />
+          <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm mb-sm sm:mb-md font-semibold">
+            <Lightbulb size={20} className="text-primary" />
             Previous Analyses
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-sm sm:gap-md">
             {jds.map((jd) => (
               <div
                 key={jd.id}
-                className="p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-sm relative"
+                className="min-w-0 p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col gap-xs sm:gap-sm relative"
               >
                 {/* Delete menu */}
                 <button
@@ -854,7 +858,8 @@ export default function JDIndexPage() {
                 <p className="text-caption text-on-surface-variant -mt-xs px-xs">
                   {new Date(jd.created_at).toLocaleDateString()} ·{" "}
                   <button onClick={() => router.push(`/jd/${jd.id}`)} className="hover:text-primary transition-colors">
-                    View analysis →
+                    <span className="sm:hidden">View →</span>
+                    <span className="hidden sm:inline">View analysis →</span>
                   </button>
                 </p>
 
@@ -869,7 +874,7 @@ export default function JDIndexPage() {
                     className="flex items-center gap-xs rounded-lg border border-success/30 bg-success-container/25 px-sm py-xs text-caption font-semibold text-on-success-container hover:border-success/60 transition-colors"
                   >
                     <FileText size={14} weight="fill" className="text-success shrink-0" />
-                    <span className="flex-1 text-left">Tailored résumé saved</span>
+                    <span className="flex-1 text-left"><span className="sm:hidden">Tailored</span><span className="hidden sm:inline">Tailored résumé saved</span></span>
                     <span className="text-primary">Open →</span>
                   </button>
                 )}

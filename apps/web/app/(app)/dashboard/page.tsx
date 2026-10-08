@@ -302,13 +302,13 @@ export default function DashboardPage() {
 
       {/* Hero Greeting — the Get Started checklist that used to sit below
           it was removed: Quick Actions already offers the same three steps. */}
-      <section className="pt-lg pb-md min-h-[5.5rem]" aria-live="polite">
+      <section className="pt-xs sm:pt-lg sm:pb-md min-h-[4rem] sm:min-h-[5.5rem]" aria-live="polite">
         {hello ? (
           <>
             <h1 className="text-headline-xl text-on-surface mb-sm font-bold" style={{ letterSpacing: "-0.02em" }}>
               {hello.title}
             </h1>
-            <p className="text-body-lg text-on-surface-variant">{hello.subtitle}</p>
+            <p className="text-body-md sm:text-body-lg text-on-surface-variant">{hello.subtitle}</p>
           </>
         ) : (
           <div aria-hidden className="flex flex-col gap-sm">
@@ -319,7 +319,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Key Metrics Bento Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-gutter">
         {metrics.map(({ label, tooltip, value, badge, icon: Icon, barWidth, action }) => {
           // A clickable card is a div with role="button", never a <button>:
           // it holds the InfoTooltip's own <button>, and the HTML parser
@@ -342,18 +342,18 @@ export default function DashboardPage() {
                   }
                 },
               })}
-              className={`bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden flex flex-col justify-between h-32 w-full text-left${action ? " cursor-pointer active:scale-[0.98]" : ""}`}
+              className={`bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden flex flex-col justify-between gap-sm min-h-24 sm:h-32 w-full text-left${action ? " cursor-pointer active:scale-[0.98]" : ""}`}
             >
-              <div className="flex justify-between items-start">
-                <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+              <div className="flex justify-between items-start gap-xs">
+                <span className="text-label-md text-on-surface-variant flex items-center gap-xs leading-tight">
                   {label}
                   <InfoTooltip text={tooltip} />
                 </span>
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Icon size={20} weight="fill" className="text-primary" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Icon size={18} weight="fill" className="text-primary" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-sm">
+              <div className="flex flex-wrap items-baseline gap-x-sm">
                 <span className="text-headline-xl text-on-surface">{value}</span>
                 {badge && (
                   <span className="text-label-sm text-success-accent">{badge}</span>
@@ -370,10 +370,10 @@ export default function DashboardPage() {
       </section>
 
       {/* Quick Actions + Recent Resumes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:grid-cols-2 gap-gutter">
         {/* Quick Actions */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
-          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+          <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-xs sm:gap-sm">
             Quick Actions
             <InfoTooltip text="The fastest way into the app's three core flows — analyzing a JD, building a resume, or practicing interview questions." />
           </h2>
@@ -383,38 +383,47 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-sm">
             <button
               onClick={() => router.push("/jd")}
-              className="flex items-center gap-md p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md transition-all text-left"
+              className="flex items-center gap-sm sm:gap-md p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md active:bg-surface-container transition-all text-left"
             >
-              <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
-                <FileDashed size={20} />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+                <FileDashed size={18} />
               </div>
-              <div>
-                <p className="text-label-md text-on-surface">Analyze a Job Description</p>
-                <p className="text-caption text-on-surface-variant">Get your match score instantly</p>
+              <div className="min-w-0">
+                <p className="text-label-md text-on-surface leading-tight">
+                  <span className="sm:hidden">Analyze a JD</span>
+                  <span className="hidden sm:inline">Analyze a Job Description</span>
+                </p>
+                <p className="hidden sm:block text-caption text-on-surface-variant">Get your match score instantly</p>
               </div>
             </button>
             <button
               onClick={createNewResume}
-              className="flex items-center gap-md p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md transition-all text-left"
+              className="flex items-center gap-sm sm:gap-md p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md active:bg-surface-container transition-all text-left"
             >
-              <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
-                <Brain size={20} />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+                <Brain size={18} />
               </div>
-              <div>
-                <p className="text-label-md text-on-surface">Create New Resume</p>
-                <p className="text-caption text-on-surface-variant">Build with AI assistance</p>
+              <div className="min-w-0">
+                <p className="text-label-md text-on-surface leading-tight">
+                  <span className="sm:hidden">New résumé</span>
+                  <span className="hidden sm:inline">Create New Resume</span>
+                </p>
+                <p className="hidden sm:block text-caption text-on-surface-variant">Build with AI assistance</p>
               </div>
             </button>
             <button
               onClick={() => router.push("/interview")}
-              className="flex items-center gap-md p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md transition-all text-left"
+              className="flex items-center gap-sm sm:gap-md p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-md active:bg-surface-container transition-all text-left"
             >
-              <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
-                <Briefcase size={20} />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
+                <Briefcase size={18} />
               </div>
-              <div>
-                <p className="text-label-md text-on-surface">Practice Interviews</p>
-                <p className="text-caption text-on-surface-variant">AI-powered mock sessions</p>
+              <div className="min-w-0">
+                <p className="text-label-md text-on-surface leading-tight">
+                  <span className="sm:hidden">Practice</span>
+                  <span className="hidden sm:inline">Practice Interviews</span>
+                </p>
+                <p className="hidden sm:block text-caption text-on-surface-variant">AI-powered mock sessions</p>
               </div>
             </button>
           </div>
@@ -423,13 +432,13 @@ export default function DashboardPage() {
         {/* Recent Resumes */}
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
           <div className="flex items-center justify-between">
-            <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+            <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-xs sm:gap-sm">
               Recent Resumes
               <InfoTooltip text="Your most recently updated resumes — click one to open it in Resume Builder. The percentage is its ATS score, if it's been tailored to a JD." />
             </h2>
             <button
               onClick={createNewResume}
-              className="text-label-sm text-primary hover:text-primary-container transition-colors"
+              className="shrink-0 whitespace-nowrap text-label-sm text-primary hover:text-primary-container transition-colors"
             >
               + New
             </button>
@@ -455,15 +464,15 @@ export default function DashboardPage() {
               {resumes.slice(0, 5).map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-sm cursor-pointer transition-all"
+                  className="flex items-center justify-between gap-sm p-sm sm:p-md rounded-xl border border-outline-variant/20 hover:bg-surface-container hover:shadow-sm active:bg-surface-container cursor-pointer transition-all"
                   onClick={() => router.push(`/studio/${r.id}`)}
                 >
-                  <div className="flex items-center gap-md">
-                    <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
+                  <div className="flex min-w-0 items-center gap-sm sm:gap-md">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-lg bg-surface-container flex items-center justify-center">
                       <FileDashed size={16} className="text-primary" />
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-label-md text-on-surface">{r.title}</span>
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-label-md text-on-surface truncate">{r.title}</span>
                       <span className="text-caption text-on-surface-variant">
                         {new Date(r.updated_at).toLocaleDateString()}
                       </span>
@@ -490,7 +499,7 @@ export default function DashboardPage() {
               {learningItems.filter((li) => li.status === "done").length}/{learningItems.length} done
             </span>
           </div>
-          <p className="text-body-sm text-on-surface-variant -mt-sm">
+          <p className="hidden sm:block text-body-sm text-on-surface-variant -mt-sm">
             Skills flagged from JD Analyzer. Click a status to cycle it.
           </p>
           <div className="flex flex-col gap-sm">

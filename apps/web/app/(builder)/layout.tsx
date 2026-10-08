@@ -11,7 +11,7 @@ import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
  */
 export default function BuilderLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-on-background">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-on-background">
       {children}
       <PlanTracker />
       <PolicyUpdatePrompt />

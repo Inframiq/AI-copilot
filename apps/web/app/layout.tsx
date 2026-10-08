@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -19,6 +19,14 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 const SITE_URL = "https://kripax.inframiq.com";
+
+// viewport-fit=cover makes env(safe-area-inset-*) real on iPhones, so the
+// phone tab bar can sit above the home indicator instead of under it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

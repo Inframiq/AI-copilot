@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -37,6 +37,27 @@ describe("TopNav", () => {
     renderTopNav();
     const wordmarkLink = screen.getByAltText("KripaX").closest("a");
     expect(wordmarkLink).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("reaches every page the sidebar offers: four tabs and the rest under More", async () => {
+    const { APP_NAV } = await import("@/lib/nav");
+    renderTopNav();
+    const tabs = screen.getByRole("navigation", { name: "Main" });
+    expect(tabs.querySelectorAll("a")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const sheet = screen.getByRole("dialog", { name: "More pages" });
+    const reachable = new Set(
+      [...tabs.querySelectorAll("a"), ...sheet.querySelectorAll("a")].map((a) => a.getAttribute("href")),
+    );
+    for (const item of APP_NAV) expect(reachable).toContain(item.href);
+  });
+
+  it("closes the More sheet on Escape", () => {
+    renderTopNav();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("dialog", { name: "More pages" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "More pages" })).toBeNull();
   });
 
   it("marks the current mobile nav item active", () => {

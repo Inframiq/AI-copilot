@@ -3,33 +3,10 @@ import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import {
-  SquaresFour,
-  FileDashed,
-  FileText,
-  ChartLineUp,
-  MicrophoneStage,
-  IdentificationCard,
-  EnvelopeSimple,
-  CreditCard,
-  CaretDoubleLeft,
-} from "@phosphor-icons/react";
+import { CaretDoubleLeft } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
 import { useSidebarStore } from "@/stores/sidebar-store";
-
-// Phase 1 nav — Career Path (/career-path) and Networking (/networking) are
-// intentionally excluded. Their pages and backend code are intact in git
-// and will be re-enabled in Phase 2.
-const NAV = [
-  { href: "/dashboard", icon: SquaresFour, label: "Dashboard" },
-  { href: "/profile", icon: IdentificationCard, label: "My Profile" },
-  { href: "/jd", icon: FileDashed, label: "JD Analyzer" },
-  { href: "/studio", icon: FileText, label: "Resume Builder" },
-  { href: "/cover-letters", icon: EnvelopeSimple, label: "Cover Letter" },
-  { href: "/interview", icon: MicrophoneStage, label: "Interview Center" },
-  { href: "/analytics", icon: ChartLineUp, label: "Analytics" },
-  { href: "/account", icon: CreditCard, label: "Account" },
-];
+import { APP_NAV, isActive } from "@/lib/nav";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -131,7 +108,7 @@ export function Sidebar() {
 
       {/* Nav Items */}
       <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-sm">
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {APP_NAV.map(({ href, icon: Icon, label }) => {
             const active = isActive(pathname, href);
             return (
               <Link
@@ -173,9 +150,4 @@ export function Sidebar() {
       </div>
     </aside>
   );
-}
-
-function isActive(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(href + "/");
 }
