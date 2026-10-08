@@ -702,11 +702,12 @@ export default function JDIndexPage() {
           </div>
         </div>
 
-        {/* Quick Scan — full width. Plain keyword matching against the JD
-            text, not an AI call — labeled accordingly so it doesn't read
-            as equally authoritative as the ATS score above, which is. */}
+        {/* Quick Scan — full width, sharing its row with the notes canvas
+            from xl. Plain keyword matching against the JD text, not an AI
+            call — labeled accordingly so it doesn't read as equally
+            authoritative as the ATS score above, which is. */}
         {hasResults && insights && (
-          <div className="lg:col-span-4 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
+          <div className="md:col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-3 bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow">
             <div className="flex items-center justify-between mb-md">
               <h2 className="text-headline-md text-on-surface flex items-center gap-sm font-semibold">
                 <Lightbulb size={24} className="text-primary" />
@@ -717,7 +718,7 @@ export default function JDIndexPage() {
                 Keyword-based, not AI-verified
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-md">
               <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-start gap-md">
                 <div className="w-10 h-10 bg-surface-container rounded-lg text-primary flex items-center justify-center shrink-0">
                   <Briefcase size={20} />
@@ -761,11 +762,21 @@ export default function JDIndexPage() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Notes canvas — something about yourself this analysis reminded
-          you of, kept in the profile's Miscellaneous for any tailoring. */}
-      {hasResults && <MiscNotesCanvas />}
+        {/* Notes canvas — something about yourself this analysis reminded
+            you of, kept in the profile's Miscellaneous for any tailoring.
+            Right of Quick Scan from xl (half there, a quarter from 2xl,
+            where a quarter is wide enough to edit in); its own row below. */}
+        {hasResults && (
+          <MiscNotesCanvas
+            className={
+              insights
+                ? "md:col-span-2 lg:col-span-4 xl:col-span-2 2xl:col-span-1"
+                : "md:col-span-2 lg:col-span-4"
+            }
+          />
+        )}
+      </div>
 
       {/* Previous Analyses — always shown below bento grid */}
       {jds.length > 0 && (

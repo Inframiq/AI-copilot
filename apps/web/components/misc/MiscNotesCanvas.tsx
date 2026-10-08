@@ -34,7 +34,7 @@ const credits = `${RESTRUCTURE_NOTES_CREDITS} credit${RESTRUCTURE_NOTES_CREDITS 
  * Anything that would stop the save at the end — no profile yet, the
  * database not ready, the profile full — is said before a credit is spent.
  */
-export function MiscNotesCanvas() {
+export function MiscNotesCanvas({ className = "" }: { className?: string } = {}) {
   const queryClient = useQueryClient();
   const { data: profile, isLoading } = useQuery({ queryKey: ["careerProfile"], queryFn: getCareerProfile });
   const [text, setText] = useState("");
@@ -111,7 +111,7 @@ export function MiscNotesCanvas() {
   return (
     <section
       aria-label="Notes for your profile"
-      className="flex flex-col gap-md rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm"
+      className={`flex flex-col gap-md rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm ${className}`}
     >
       <header className="flex flex-col gap-xs">
         <h2 className="flex items-center gap-sm text-body-lg font-semibold text-on-surface">
