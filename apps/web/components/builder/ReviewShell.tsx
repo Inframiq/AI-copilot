@@ -287,7 +287,9 @@ export function ReviewShell({
       <div className="flex-1 overflow-y-auto">
         <div
           className={`mx-auto grid w-full gap-xl px-md py-lg sm:px-lg lg:py-xl ${
-            reviewing ? "max-w-6xl lg:grid-cols-[300px_minmax(0,1fr)]" : "max-w-3xl"
+            reviewing
+              ? "max-w-6xl lg:grid-cols-[300px_minmax(0,1fr)] xl:max-w-[88rem] xl:grid-cols-[300px_minmax(0,1fr)_320px]"
+              : "max-w-3xl"
           }`}
         >
           {reviewing && (
@@ -401,10 +403,24 @@ export function ReviewShell({
                   onRewrite={handleRewriteSummary}
                 />
 
-                <MiscNotesCanvas />
+                {/* Below xl there is no room for a third column, so the notes
+                    canvas closes the list; from xl it has its own (below). */}
+                <div className="xl:hidden">
+                  <MiscNotesCanvas />
+                </div>
               </>
             )}
           </main>
+
+          {/* The notes canvas beside the points, in view while you work
+              through them — a thought tends to come mid-list, not after it. */}
+          {reviewing && (
+            <aside className="hidden xl:block">
+              <div className="sticky top-0 max-h-[calc(100dvh-7rem)] overflow-y-auto">
+                <MiscNotesCanvas />
+              </div>
+            </aside>
+          )}
         </div>
       </div>
 
