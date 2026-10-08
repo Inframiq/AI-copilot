@@ -40,7 +40,7 @@ export function BuilderHeader({
           };
 
   return (
-    <header className="flex shrink-0 items-center gap-lg border-b border-outline-variant/30 bg-surface px-lg py-md">
+    <header className="flex shrink-0 items-center gap-sm sm:gap-lg border-b border-outline-variant/30 bg-surface px-md sm:px-lg py-sm sm:py-md">
       <button
         type="button"
         onClick={onBack}

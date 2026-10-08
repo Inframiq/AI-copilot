@@ -425,7 +425,7 @@ export function ReviewShell({
       </div>
 
       {reviewing && (
-        <footer className="shrink-0 border-t border-outline-variant/30 bg-surface/95 px-md py-sm backdrop-blur lg:hidden">
+        <footer className="shrink-0 border-t border-outline-variant/30 bg-surface/95 px-md pt-sm pb-[max(8px,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <ScoreDock {...rail} />
         </footer>
       )}

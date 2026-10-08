@@ -51,7 +51,7 @@ export function BuilderShell({
       <div
         ref={scrollRef}
         data-section-scroll
-        className="flex flex-1 flex-col gap-xl overflow-y-auto px-lg py-xl lg:flex-row lg:justify-center"
+        className="flex flex-1 flex-col gap-lg sm:gap-xl overflow-y-auto px-md py-md sm:px-lg sm:py-xl lg:flex-row lg:justify-center"
       >
         {/* Keyed so the fade replays on every change, not just the first. */}
         <main key={current} className="section-enter w-full max-w-3xl">

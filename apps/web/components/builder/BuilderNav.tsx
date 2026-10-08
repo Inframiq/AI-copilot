@@ -30,7 +30,7 @@ export function BuilderNav({
   const next = i < SECTION_ORDER.length - 1 ? SECTION_ORDER[i + 1] : null;
 
   return (
-    <div className="flex shrink-0 items-center justify-between gap-md border-t border-outline-variant/30 bg-surface px-lg py-md">
+    <div className="flex shrink-0 items-center justify-between gap-md border-t border-outline-variant/30 bg-surface px-md sm:px-lg pt-sm sm:pt-md pb-[max(8px,env(safe-area-inset-bottom))] sm:pb-md">
       <button
         type="button"
         onClick={onPrevious}

@@ -55,7 +55,7 @@ function Popover({
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`flex h-9 items-center gap-xs rounded-xl px-sm text-label-sm transition-colors ${FOCUS_RING} ${
+        className={`flex h-9 items-center gap-xs rounded-xl px-xs sm:px-sm text-label-sm transition-colors ${FOCUS_RING} ${
           open
             ? "bg-primary/10 text-primary"
             : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface"
@@ -71,7 +71,7 @@ function Popover({
           aria-label={label}
           // Five thumbnails at page aspect ratio overrun a laptop viewport, so the
           // panel scrolls inside itself rather than off the bottom of the screen.
-          className="absolute top-full right-0 z-20 mt-sm max-h-[70vh] w-72 overflow-y-auto rounded-2xl border border-outline-variant/40 bg-surface p-md shadow-2xl"
+          className="fixed inset-x-sm top-14 z-20 max-h-[70vh] overflow-y-auto rounded-2xl border border-outline-variant/40 bg-surface p-md shadow-2xl sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-sm sm:w-72"
         >
           {children}
         </div>
@@ -85,7 +85,7 @@ export function StudioControls() {
   const setTemplateId = useResumeStore((s) => s.setTemplateId);
 
   return (
-    <div className="flex shrink-0 items-center gap-xs">
+    <div className="flex shrink-0 items-center gap-0.5 sm:gap-xs">
       <Popover label="Template" icon={<Cards size={16} />}>
         <TemplateGallery value={templateId} onChange={setTemplateId} />
       </Popover>

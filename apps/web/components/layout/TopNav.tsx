@@ -125,6 +125,7 @@ export function TopNav() {
                   <li key={href}>
                     <Link
                       href={href}
+                      onClick={() => setMoreOpen(false)}
                       aria-current={active ? "page" : undefined}
                       className={`flex flex-col items-center gap-1 rounded-2xl px-1 py-sm text-center transition-colors ${
                         active

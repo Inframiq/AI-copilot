@@ -177,7 +177,10 @@ export function ResumeCanvas({
   onPageCount?: (pages: number) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<ShadowRoot | null>(null);
+  // How far the sheet is scaled down to fit a narrow screen; 1 = actual size.
+  const scaleRef = useRef(1);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -194,13 +197,44 @@ export function ResumeCanvas({
     // innerHTML makes the parser drop <html>/<head>/<body>, so a `body` rule
     // would have nothing to match. The width matters as much as the padding —
     // laid out any wider or narrower, the document's line breaks stop being
-    // the ones the PDF will have.
+    // the ones the PDF will have. So the page is never narrowed to fit a
+    // phone: it keeps its width and the whole sheet is scaled down instead.
     const geometry = pageGeometry(html);
     host.style.width = `${geometry.width}px`;
-    host.style.maxWidth = "100%";
     host.style.padding = `${geometry.margin}px`;
     host.style.boxSizing = "border-box";
     host.style.position = "relative";
+    host.style.transformOrigin = "top left";
+  }, [html]);
+
+  // Scale the sheet to the space it has, like a page on a laptop seen from
+  // further away — the same lines, breaks and page count as the PDF, where
+  // reflowing it to a phone's width rewrapped every line (and miscounted
+  // the pages). Pinch to read closer.
+  useEffect(() => {
+    const frame = frameRef.current;
+    const host = hostRef.current;
+    if (!frame || !host) return;
+    const { width } = pageGeometry(html);
+    const fit = () => {
+      const parent = frame.parentElement;
+      let available = 0;
+      if (parent) {
+        const cs = getComputedStyle(parent);
+        available = parent.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+      }
+      const scale = available > 0 ? Math.min(1, available / width) : 1;
+      scaleRef.current = scale;
+      host.style.transform = scale < 1 ? `scale(${scale})` : "";
+      frame.style.width = `${width * scale}px`;
+      frame.style.height = scale < 1 ? `${host.offsetHeight * scale}px` : "";
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    if (frame.parentElement) observer.observe(frame.parentElement);
+    observer.observe(host);
+    return () => observer.disconnect();
   }, [html]);
 
   // Measure after layout, and again whenever the document reflows — a wider
@@ -220,8 +254,10 @@ export function ResumeCanvas({
       const flowed = Array.from(root.children)
         .filter((n) => n.tagName !== "STYLE" && !n.hasAttribute("data-page-break"))
         .reduce((bottom, n) => Math.max(bottom, n.getBoundingClientRect().bottom), 0);
-      const top = host.getBoundingClientRect().top + pageGeometry(html).margin;
-      onPageCount(pageCount(Math.max(0, flowed - top), contentHeight));
+      // Screen positions are scaled with the sheet; the page maths is not.
+      const scale = scaleRef.current;
+      const top = host.getBoundingClientRect().top + pageGeometry(html).margin * scale;
+      onPageCount(pageCount(Math.max(0, flowed - top) / scale, contentHeight));
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
@@ -416,10 +452,8 @@ export function ResumeCanvas({
   }, [html, editable, onEdit, onEditLink]);
 
   return (
-    <div
-      data-canvas
-      ref={hostRef}
-      className="mx-auto w-full max-w-[8.5in] bg-white shadow-xl"
-    />
+    <div ref={frameRef} className="mx-auto">
+      <div data-canvas ref={hostRef} className="bg-white shadow-xl" />
+    </div>
   );
 }

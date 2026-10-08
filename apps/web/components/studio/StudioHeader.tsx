@@ -57,7 +57,7 @@ export function StudioHeader({
   }
 
   return (
-    <header className="flex shrink-0 items-center gap-lg border-b border-outline-variant/30 bg-surface px-lg py-sm">
+    <header className="flex shrink-0 items-center gap-sm sm:gap-lg border-b border-outline-variant/30 bg-surface px-sm sm:px-lg py-sm">
       <button
         type="button"
         onClick={onBack}
@@ -70,7 +70,7 @@ export function StudioHeader({
         <span className="hidden sm:inline">{backLabel}</span>
       </button>
 
-      <h1 className="truncate text-label-md font-semibold text-on-surface">{title}</h1>
+      <h1 className="hidden sm:block truncate text-label-md font-semibold text-on-surface">{title}</h1>
 
       <div
         role="tablist"
@@ -86,7 +86,7 @@ export function StudioHeader({
             tabIndex={mode === m ? 0 : -1}
             onClick={() => onMode(m)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`rounded-full px-md py-xs text-label-sm capitalize transition-colors ${FOCUS_RING} ${
+            className={`rounded-full px-sm sm:px-md py-xs text-label-sm capitalize transition-colors ${FOCUS_RING} ${
               mode === m
                 ? "bg-surface text-on-surface shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface"
@@ -106,7 +106,7 @@ export function StudioHeader({
           disabled={isRefreshing}
           aria-label="Refresh preview"
           title="Refresh preview"
-          className={`flex h-9 shrink-0 items-center gap-xs rounded-xl px-sm text-label-sm text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+          className={`flex h-9 shrink-0 items-center gap-xs rounded-xl px-xs sm:px-sm text-label-sm text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
         >
           <ArrowClockwise size={16} className={isRefreshing ? "animate-spin" : undefined} />
           <span className="hidden lg:inline">Refresh</span>
@@ -120,7 +120,7 @@ export function StudioHeader({
         onClick={onExport}
         disabled={isExporting}
         aria-label="Export PDF"
-        className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-md py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+        className={`flex shrink-0 items-center gap-xs rounded-xl bg-primary px-sm sm:px-md py-sm text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
       >
         {isExporting ? (
           <CircleNotch size={16} className="animate-spin" />

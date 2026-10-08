@@ -26,7 +26,7 @@ export function SectionStepper({
   return (
     <nav
       aria-label="Resume sections"
-      className="flex shrink-0 items-center gap-xs overflow-x-auto border-b border-outline-variant/20 px-lg py-sm"
+      className="flex shrink-0 items-center gap-xs overflow-x-auto border-b border-outline-variant/20 px-md sm:px-lg py-sm"
     >
       {states.map((state, i) => {
         const status =
