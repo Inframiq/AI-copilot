@@ -12,6 +12,10 @@ jobs:
     # schedule, which is a change to CI nobody chose.
     runs-on: ubuntu-26.04
     steps:
+      # checkout runs `git init`, and a fresh runner's git prints a page of
+      # hints about the default branch name unless one is set.
+      - run: git config --global init.defaultBranch main
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
@@ -45,6 +49,10 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci_placeholder
       OPENAI_API_KEY: ci-placeholder
     steps:
+      # checkout runs `git init`, and a fresh runner's git prints a page of
+      # hints about the default branch name unless one is set.
+      - run: git config --global init.defaultBranch main
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
