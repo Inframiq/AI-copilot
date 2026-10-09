@@ -315,6 +315,8 @@ export default function ProfilePage() {
       // (instead of creating a new, orphaned one the rest of the app might
       // still be pointing at).
       const resume = await apiClient.parseResumeFile(file, templateId, masterResumeId ?? undefined);
+      // Reading the PDF is a model call: it costs a credit.
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       // Fully replace the form with the newly parsed resume — a "Replace"
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.

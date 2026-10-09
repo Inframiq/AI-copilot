@@ -102,6 +102,8 @@ export default function OnboardingPage() {
     setUploadError(null);
     try {
       const resume = await apiClient.parseResumeFile(file, "ats_clean");
+      // Reading the PDF is a model call: it costs a credit.
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       const parsed = resumeContentToCareerProfileInput(resume.content, resume.id);
       await upsertCareerProfile({
         ...parsed,

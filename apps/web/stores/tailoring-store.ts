@@ -781,6 +781,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     });
     try {
       const result = await apiClient.analyzeJd(resumeId, jdId, companyName || undefined);
+      // A fresh analysis costs a credit (a cached one is free).
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       if (get().jdText !== startedForJdText) return;
       set({
         // Recorded twice on purpose: profileAnalysis is the analyzer's own
@@ -1074,6 +1076,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set({ isReanalyzing: true, error: null });
     try {
       const result = await apiClient.analyzeJd(resumeId, jdId, companyName, mergedContent);
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       set({
         atsScore: result.ats_score,
         matchedSkills: result.matched_skills,

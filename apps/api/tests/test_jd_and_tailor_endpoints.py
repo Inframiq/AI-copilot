@@ -606,7 +606,9 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
     def _rows():
         rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
         jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-        return [rr, jr]
+        # require_credits' balance check; analyze_jd_match is mocked, so no
+        # model runs and nothing is charged.
+        return [rr, jr, credit_sub_result()]
 
     mock_session.execute = AsyncMock(side_effect=_rows() + _rows())
 
@@ -643,6 +645,49 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
 
 
 @pytest.mark.asyncio
+async def test_analyze_charges_a_credit_only_when_a_model_ran():
+    """Pages re-run analysis on view; a cached one makes no model call and
+    must be free, a fresh one is charged."""
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+    from app.core.usage import record_call
+
+    fake = JDMatchAnalysis(
+        jd_analysis=JDAnalysis(
+            exact_technical_tools=["Python"], methodologies_and_frameworks=[],
+            domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+        ),
+        matched_skills=["Python"], missing_skills=[], ats_score=100, company_keywords=[],
+    )
+
+    async def ran_a_model(*args, **kwargs):
+        record_call(call_name="agent1_parse_jd", model="m", model_tier="fast",
+                    input_tokens=1, output_tokens=1, reasoning_tokens=0, total_tokens=2)
+        return fake
+
+    for analyze, expected in ((ran_a_model, 9998), (AsyncMock(return_value=fake), 9999)):
+        override, mock_session = make_mock_db()
+        resume, jd = make_resume(), make_jd()
+        jd.parsed = {}
+        rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+        jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+        sr = credit_sub_result()
+        sub = sr.scalar_one_or_none.return_value
+        mock_session.execute = AsyncMock(side_effect=[rr, jr, sr, sr])
+        app.dependency_overrides[get_db] = override
+        try:
+            with patch("app.routers.ai.analyze_jd_match", new=analyze), \
+                 patch("app.db.session.AsyncSessionLocal"):  # the usage log's own session
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    r = await client.post("/ai/analyze",
+                        json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                        headers=make_auth_header())
+            assert r.status_code == 200
+            assert sub.credits_remaining == expected
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_analyze_returns_importance_map():
     from app.services.tailoring import JDMatchAnalysis, JDAnalysis
 
@@ -651,7 +696,7 @@ async def test_analyze_returns_importance_map():
     jd = make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    mock_session.execute = AsyncMock(side_effect=[rr, jr, credit_sub_result()])
 
     fake = JDMatchAnalysis(
         jd_analysis=JDAnalysis(

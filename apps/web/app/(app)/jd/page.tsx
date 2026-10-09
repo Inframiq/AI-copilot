@@ -259,6 +259,8 @@ export default function JDIndexPage() {
     setOverrideUploading(true); setOverrideError(null);
     try {
       const resume = await apiClient.parseResumeFile(overrideFile, "ats_clean");
+      // Reading the PDF is a model call: it costs a credit.
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       setOverrideResumeId(resume.id);
       setOverrideMode("none");

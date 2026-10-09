@@ -9,6 +9,7 @@ from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
+from app.core.credits import spend_credits
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
@@ -538,6 +539,9 @@ async def generate_resume_endpoint(
         if existing is None:
             raise HTTPException(status_code=404, detail="Resume not found")
 
+    # Three model calls. Deducted with the résumé row's commit below; a
+    # failure before it rolls the deduction back with everything else.
+    await spend_credits(db, uuid.UUID(user["sub"]), "generate_resume", email=user.get("email"))
     provider = get_ai_provider()
     generated = await generate_resume(
         body.profile,
@@ -631,6 +635,11 @@ async def parse_and_create_resume(
         _check_magic_bytes(raw_bytes)
     except ValueError:
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
+
+    # A model call reads the text into fields. Checked before anything is
+    # stored, so a refusal leaves no orphaned file; the deduction commits
+    # with the résumé row below, and any failure before then rolls it back.
+    await spend_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
 
     # Fixed up front (rather than left to the DB default) so the original file
     # can be uploaded to its final storage path before the Resume row exists.

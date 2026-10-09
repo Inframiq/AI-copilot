@@ -58,6 +58,8 @@ export async function startPrepQuestions(
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["jdDetails", jdId] }),
       queryClient.invalidateQueries({ queryKey: ["myQuestions"] }),
+      // Making a set costs credits.
+      queryClient.invalidateQueries({ queryKey: ["subscription"] }),
     ]);
   }
 }

@@ -234,7 +234,7 @@ export const apiClient = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail ?? "Upload failed");
+      throw new ApiError(res.status, err.detail ?? "Upload failed");
     }
     return res.json() as Promise<Resume>;
   },

@@ -51,13 +51,17 @@ def record_call(
 async def record_ai_usage(user_id, action: str):
     """Collect every `record_call` made inside the block and persist one
     `ai_usage_events` row each. Opens its own session so telemetry can't
-    interfere with (or be rolled back by) the caller's transaction."""
+    interfere with (or be rolled back by) the caller's transaction.
+
+    Yields the list of calls, which stays readable after the block: an
+    action whose work may be served from a cache (analyze) charges credits
+    only when this shows a model was actually called."""
     from app.db.session import AsyncSessionLocal
     from app.db.models import AiUsageEvent
 
     token = _sink.set([])
     try:
-        yield
+        yield _sink.get()
     finally:
         calls = _sink.get() or []
         _sink.reset(token)

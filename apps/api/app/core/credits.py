@@ -26,19 +26,38 @@ def _is_unlimited_credit_email(email: str | None) -> bool:
     allowlist = {e.strip().lower() for e in settings.unlimited_credit_emails.split(",") if e.strip()}
     return email.strip().lower() in allowlist
 
-# Credits charged per user-initiated action. 0 = not metered.
-# Sized so the priciest realistic run still clears margin: ~$0.028 per
-# blended tailor (see docs/ai-pipeline.md) -> a $5 / 600-credit plan =
-# 60 tailors for ~$1.7 of AI cost.
+# Credits charged per user-initiated action — every action that calls a
+# model is metered (2026-10-09). Sized so the priciest realistic run still
+# clears margin: ~$0.028 per blended tailor (see docs/ai-pipeline.md) -> a
+# $5 / 600-credit plan = 60 tailors for ~$1.7 of AI cost.
 CREDIT_COSTS: dict[str, int] = {
     "tailor": 10,
+    # Three model calls: relevance filter, writer, compressor.
+    "generate_resume": 3,
     "cover_letter": 3,
+    # One pro-tier call writing ~10-15 questions with answer frameworks.
+    "prep_questions": 2,
     "rewrite_bullet": 1,
     # The notes canvas: one fast call that tidies what the user typed into
     # points for the profile's Miscellaneous section.
     "restructure_notes": 1,
-    "analyze": 0,
-    "prep_questions": 0,
+    # Charged only when a model actually runs — a repeat analysis of the
+    # same JD and résumé is served from cache, and pages re-run it on view.
+    "analyze": 1,
+    # Reading an uploaded PDF into résumé fields.
+    "parse_resume": 1,
+}
+
+# What each action is called in an out-of-credits message.
+ACTION_LABELS: dict[str, str] = {
+    "tailor": "Tailoring a résumé",
+    "generate_resume": "Generating a résumé",
+    "cover_letter": "A cover letter",
+    "prep_questions": "Interview questions",
+    "rewrite_bullet": "A rewrite",
+    "restructure_notes": "Tidying your notes",
+    "analyze": "Analyzing a job description",
+    "parse_resume": "Reading an uploaded résumé",
 }
 
 # Starting balance per plan. "free" is a ONE-TIME grant (current_period_end
@@ -59,8 +78,8 @@ PLANS: list[dict] = [
         "features": [
             "50 credits, one-time",
             "About 5 resume tailors",
-            "Cover letters and bullet rewrites",
-            "Free JD analysis",
+            "Cover letters, interview prep and rewrites",
+            "JD analysis from 1 credit",
         ],
     },
     {
@@ -81,9 +100,17 @@ PLANS: list[dict] = [
 
 BILLING_PERIOD = timedelta(days=30)
 
-# Actions currently enforced. Others have a cost defined above for the
-# future but aren't gated yet (one-line change to add them).
-ENFORCED_ACTIONS = {"tailor", "cover_letter", "rewrite_bullet", "restructure_notes"}
+# Every priced action is enforced: anything that calls a model is metered.
+ENFORCED_ACTIONS = set(CREDIT_COSTS)
+
+
+def _out_of_credits(action: str, cost: int, remaining: int) -> HTTPException:
+    label = ACTION_LABELS.get(action, action)
+    unit = "credit" if cost == 1 else "credits"
+    return HTTPException(
+        status_code=402,
+        detail=f"Out of credits: {label} costs {cost} {unit} and you have {remaining}.",
+    )
 
 
 async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:
@@ -137,16 +164,38 @@ async def spend_credits(db: AsyncSession, user_id, action: str, email: str | Non
     if sub.status != "active":
         raise HTTPException(status_code=402, detail="Your subscription is not active.")
     if sub.credits_remaining < cost:
-        raise HTTPException(
-            status_code=402,
-            detail=(
-                f"Out of credits: {action} costs {cost} and you have "
-                f"{sub.credits_remaining}."
-            ),
-        )
+        raise _out_of_credits(action, cost, sub.credits_remaining)
     sub.credits_remaining -= cost
     await db.flush()
     return sub
+
+
+async def require_credits(db: AsyncSession, user_id, action: str, email: str | None = None) -> None:
+    """Raise 402 unless the balance covers `action` — without deducting.
+
+    For actions that may be served without a model call (a cached analysis,
+    questions that already exist): check up front so nothing runs that can't
+    be paid for, then `charge_credits` only once a model actually ran."""
+    sub = await resolve_subscription(db, user_id)
+    cost = CREDIT_COSTS.get(action, 0)
+    if cost <= 0 or action not in ENFORCED_ACTIONS or _is_unlimited_credit_email(email):
+        return
+    if sub.status != "active":
+        raise HTTPException(status_code=402, detail="Your subscription is not active.")
+    if sub.credits_remaining < cost:
+        raise _out_of_credits(action, cost, sub.credits_remaining)
+
+
+async def charge_credits(db: AsyncSession, user_id, action: str, email: str | None = None) -> None:
+    """Deduct `action`'s cost after its model call ran (see require_credits).
+    Never below zero: the balance was checked first, and a concurrent spend
+    in between must not leave it negative."""
+    cost = CREDIT_COSTS.get(action, 0)
+    if cost <= 0 or action not in ENFORCED_ACTIONS or _is_unlimited_credit_email(email):
+        return
+    sub = await resolve_subscription(db, user_id)
+    sub.credits_remaining = max(0, sub.credits_remaining - cost)
+    await db.flush()
 
 
 async def refund_credits(db: AsyncSession, user_id, action: str, email: str | None = None) -> None:

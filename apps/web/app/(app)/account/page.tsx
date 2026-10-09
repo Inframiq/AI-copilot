@@ -11,18 +11,24 @@ import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { Subscription } from "@career-copilot/types";
 
-// Only actions the user actively triggers with a button. Interview prep
-// questions are deliberately excluded: they're generated from a tailored
-// resume you already paid for, not a standalone action you can "buy".
+// Every action that calls a model costs credits; the server's price list
+// (sub.costs) is the source of truth, these are just its names.
 const ACTION_LABELS: Record<string, string> = {
   tailor: "Tailor a resume to a job description",
+  generate_resume: "Generate a resume from your profile",
   cover_letter: "Generate a cover letter",
+  prep_questions: "Make interview prep questions for a job",
   rewrite_bullet: "Rewrite or humanize a bullet",
+  restructure_notes: "Tidy your notes into resume points",
   analyze: "Analyze a job description",
+  parse_resume: "Read an uploaded resume",
 };
 
 // Order the cost table so the headline action is first.
-const ACTION_ORDER = ["tailor", "cover_letter", "rewrite_bullet", "analyze"];
+const ACTION_ORDER = [
+  "tailor", "generate_resume", "cover_letter", "prep_questions",
+  "rewrite_bullet", "restructure_notes", "analyze", "parse_resume",
+];
 
 const STATUS_LABEL: Record<string, string> = { working: "Working", student: "Student" };
 
@@ -168,7 +174,7 @@ export default function AccountPage() {
                 <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
                 <span className="sm:hidden">Credits</span>
                 <span className="hidden sm:inline">Credits remaining</span>
-                <InfoTooltip text="Most actions (tailoring, cover letters, bullet rewrites) spend credits — see the table below for exact costs. Interview prep questions are free." />
+                <InfoTooltip text="Everything that uses AI spends credits — see the table below for exact costs." />
               </span>
               <span className={`text-headline-xl font-bold ${low ? "text-error" : "text-on-surface"}`}>
                 {sub.credits_remaining}
@@ -196,7 +202,7 @@ export default function AccountPage() {
           <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
             <h2 className="text-headline-md text-on-surface font-semibold mb-md flex items-center gap-sm">
               What credits cost
-              <InfoTooltip text="How many credits each action deducts from your balance. Actions with 0 shown are free." />
+              <InfoTooltip text="How many credits each action deducts from your balance." />
             </h2>
             <div className="flex flex-col divide-y divide-outline-variant/20">
               {ACTION_ORDER.filter((a) => a in sub.costs).map((action) => {
@@ -214,8 +220,8 @@ export default function AccountPage() {
               })}
             </div>
             <p className="text-body-sm text-on-surface-variant mt-md">
-              Interview prep questions are generated from a resume you&apos;ve
-              already tailored — they don&apos;t cost extra.
+              You&apos;re only charged when AI actually runs: reopening an analysis
+              you&apos;ve already done, or interview questions you already have, is free.
             </p>
           </div>
 

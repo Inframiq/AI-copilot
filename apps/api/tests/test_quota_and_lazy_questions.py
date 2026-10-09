@@ -323,7 +323,11 @@ async def test_generate_endpoint_makes_questions_for_a_saved_jd():
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
     run = MagicMock(); run.scalars.return_value.first.return_value = sess
-    db.execute = AsyncMock(side_effect=[jr, rr, run])
+    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
+    sub = _sub(credits=50)
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
+    # jd, saved résumé, run, existing-count, balance check, charge
+    db.execute = AsyncMock(side_effect=[jr, rr, run, none_yet, sr, sr])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -335,6 +339,8 @@ async def test_generate_endpoint_makes_questions_for_a_saved_jd():
         assert r.json() == {"session_id": str(sess.id), "questions_total": 2}
         gen.assert_awaited_once()
         assert gen.call_args.args[3] == {"experience": ["saved"]}
+        # Making the set is a model call, so it is charged.
+        assert sub.credits_remaining == 48
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -350,7 +356,9 @@ async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from():
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
     nr = MagicMock(); nr.scalar_one_or_none.return_value = named
-    db.execute = AsyncMock(side_effect=[jr, rr, nr])
+    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=50)
+    db.execute = AsyncMock(side_effect=[jr, rr, nr, none_yet, sr])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -362,6 +370,55 @@ async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from():
         assert r.status_code == 200
         assert r.json()["session_id"] == str(named.id)
         assert gen.call_args.args[1] is named
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_generate_endpoint_returns_an_existing_set_free_even_with_no_credits():
+    override, db = make_mock_db()
+    saved = make_resume()
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    sess = _session(); sess.jd_id = jd.id
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    run = MagicMock(); run.scalars.return_value.first.return_value = sess
+    have = MagicMock(); have.scalar_one.return_value = 10
+    db.execute = AsyncMock(side_effect=[jr, rr, run, have])  # no balance lookups at all
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session",
+                   new=AsyncMock(return_value=[MagicMock()] * 10)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["questions_total"] == 10
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_generate_endpoint_402_before_any_model_call_when_out_of_credits():
+    override, db = make_mock_db()
+    saved = make_resume()
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    sess = _session(); sess.jd_id = jd.id
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    run = MagicMock(); run.scalars.return_value.first.return_value = sess
+    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=1)
+    db.execute = AsyncMock(side_effect=[jr, rr, run, none_yet, sr])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+        assert r.status_code == 402
+        assert "Interview questions costs 2 credits" in r.json()["detail"]
+        gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
 

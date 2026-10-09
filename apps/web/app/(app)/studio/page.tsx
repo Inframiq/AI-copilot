@@ -103,6 +103,8 @@ export default function StudioIndexPage() {
       let resume: Resume;
       if (mode === "upload" && file) {
         resume = await apiClient.parseResumeFile(file, selected);
+        // Reading the PDF is a model call: it costs a credit.
+        queryClient.invalidateQueries({ queryKey: ["subscription"] });
       } else {
         // Pre-fill from the career profile (Profile page) so a new resume
         // starts with what's already known about the user instead of a

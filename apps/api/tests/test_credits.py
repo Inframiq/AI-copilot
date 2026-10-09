@@ -112,12 +112,62 @@ async def test_spend_raises_402_when_subscription_not_active():
 
 
 @pytest.mark.asyncio
-async def test_spend_is_a_noop_for_unmetered_actions():
+async def test_spend_is_a_noop_for_an_unpriced_action():
     existing = Subscription(user_id=USER, plan="free", status="active",
                             credits_remaining=1, credits_allotment=50, current_period_end=None)
     db = _db(existing_sub=existing)
-    await spend_credits(db, USER, "analyze")  # cost 0 — free JD analysis by design
+    await spend_credits(db, USER, "export_pdf")  # no model call, no price
     assert existing.credits_remaining == 1
+
+
+def test_every_action_that_calls_a_model_is_priced_and_enforced():
+    from app.core.credits import CREDIT_COSTS, ENFORCED_ACTIONS
+    model_actions = {
+        "tailor", "generate_resume", "cover_letter", "prep_questions",
+        "rewrite_bullet", "restructure_notes", "analyze", "parse_resume",
+    }
+    for action in model_actions:
+        assert CREDIT_COSTS.get(action, 0) > 0, f"{action} is free"
+        assert action in ENFORCED_ACTIONS, f"{action} is not enforced"
+
+
+@pytest.mark.asyncio
+async def test_spend_names_the_action_in_words_when_out_of_credits():
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=1, credits_allotment=50, current_period_end=None)
+    with pytest.raises(HTTPException) as ei:
+        await spend_credits(_db(existing_sub=existing), USER, "prep_questions")
+    assert ei.value.detail == "Out of credits: Interview questions costs 2 credits and you have 1."
+
+
+@pytest.mark.asyncio
+async def test_require_checks_without_deducting_and_charge_deducts():
+    from app.core.credits import require_credits, charge_credits
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=5, credits_allotment=50, current_period_end=None)
+    await require_credits(_db(existing_sub=existing), USER, "analyze")
+    assert existing.credits_remaining == 5
+    await charge_credits(_db(existing_sub=existing), USER, "analyze")
+    assert existing.credits_remaining == 4
+
+
+@pytest.mark.asyncio
+async def test_require_refuses_when_the_balance_cannot_cover_it():
+    from app.core.credits import require_credits
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=1, credits_allotment=50, current_period_end=None)
+    with pytest.raises(HTTPException) as ei:
+        await require_credits(_db(existing_sub=existing), USER, "prep_questions")
+    assert ei.value.status_code == 402
+
+
+@pytest.mark.asyncio
+async def test_charge_never_takes_the_balance_below_zero():
+    from app.core.credits import charge_credits
+    existing = Subscription(user_id=USER, plan="free", status="active",
+                            credits_remaining=1, credits_allotment=50, current_period_end=None)
+    await charge_credits(_db(existing_sub=existing), USER, "prep_questions")
+    assert existing.credits_remaining == 0
 
 
 @pytest.mark.asyncio

@@ -145,9 +145,14 @@ résumé). Four changes:
    `CREDIT_COSTS["tailor"]` (10), or returns **402**. Free plan =
    `PLAN_CREDITS["free"]` (50 = 5 tailors), a one-time grant that never
    refills (`current_period_end` NULL); paid plans refill every 30 days once
-   billing sets that column. `CREDIT_COSTS` also prices `cover_letter` (3) and
-   `rewrite_bullet` (1) but only `tailor` is in `ENFORCED_ACTIONS` for now.
-   `GET /me/subscription` returns the balance + cost table. Payment-provider
+   billing sets that column. Since 2026-10-09 every action that calls a
+   model is priced and enforced: `tailor` 10, `generate_resume` 3,
+   `cover_letter` 3, `prep_questions` 2, `rewrite_bullet` 1,
+   `restructure_notes` 1, `analyze` 1, `parse_resume` 1. `analyze` and
+   `prep_questions` can be served without a model (cached analysis, an
+   existing question set), so they use `require_credits` up front and
+   `charge_credits` only once a model actually ran (`record_ai_usage` yields
+   the calls it saw). `GET /me/subscription` returns the balance + cost table. Payment-provider
    integration (Razorpay webhook → set plan/refill) is deferred until GST.
 
 ### Content-quality prompt upgrade (2026-08-17): responsibility-alignment, not just keyword injection

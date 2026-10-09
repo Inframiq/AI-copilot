@@ -2,7 +2,7 @@
 import { use, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { apiClient } from "@/lib/api-client";
+import { ApiError, apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
@@ -98,9 +98,17 @@ export default function JDPage({
   // Read-only match analysis for this specific JD/resume pair — does not
   // touch the resume, same semantics as the JD Analyzer index page's
   // "Analyze Description" step.
-  const { data: analysis, isLoading: isAnalyzing, isError: isAnalysisError, refetch: refetchAnalysis } = useQuery<AnalyzeOut>({
+  const {
+    data: analysis, isLoading: isAnalyzing, isError: isAnalysisError, error: analysisError, refetch: refetchAnalysis,
+  } = useQuery<AnalyzeOut>({
     queryKey: ["jdAnalysis", jdId, masterResume?.id],
-    queryFn: () => apiClient.analyzeJd(masterResume!.id, jdId),
+    queryFn: async () => {
+      const result = await apiClient.analyzeJd(masterResume!.id, jdId);
+      // A fresh analysis costs a credit (a cached one is free) — keep the
+      // meter honest either way.
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      return result;
+    },
     enabled: !!masterResume,
     // This calls a multi-LLM-call, rate-limited backend endpoint — not a
     // cheap read. Cache aggressively so revisiting this page doesn't
@@ -234,7 +242,11 @@ export default function JDPage({
             <p className="text-body-sm text-on-surface-variant">Analyzing…</p>
           ) : isAnalysisError ? (
             <div className="flex flex-col items-start gap-xs">
-              <p className="text-body-sm text-error">Failed to analyze this job description.</p>
+              <p className="text-body-sm text-error">
+                {analysisError instanceof ApiError && analysisError.status === 402
+                  ? analysisError.message
+                  : "Failed to analyze this job description."}
+              </p>
               <button
                 type="button"
                 onClick={() => refetchAnalysis()}

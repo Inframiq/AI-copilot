@@ -31,7 +31,10 @@ const SUB = {
   credits_allotment: 50,
   current_period_end: null,
   renews: false,
-  costs: { tailor: 10, cover_letter: 3, rewrite_bullet: 1, analyze: 0 },
+  costs: {
+    tailor: 10, generate_resume: 3, cover_letter: 3, prep_questions: 2,
+    rewrite_bullet: 1, restructure_notes: 1, analyze: 1, parse_resume: 1,
+  },
 };
 
 const PROFILE = {
@@ -67,8 +70,23 @@ describe("Account page", () => {
     expect(screen.getByText(/about 3 more resume tailors/i)).toBeInTheDocument();
     expect(screen.getByText("Tailor a resume to a job description")).toBeInTheDocument();
     expect(screen.getByText("10 credits")).toBeInTheDocument();
-    expect(screen.getByText("Free")).toBeInTheDocument(); // analyze
     expect(screen.getByText(/does not refill/i)).toBeInTheDocument();
+  });
+
+  it("prices everything that uses AI, interview prep included, and calls nothing free", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    vi.mocked(getCareerProfile).mockResolvedValue(null);
+    renderPage();
+
+    const row = async (label: string) =>
+      (await screen.findByText(label)).parentElement!.textContent;
+    expect(await row("Make interview prep questions for a job")).toContain("2 credits");
+    expect(await row("Analyze a job description")).toContain("1 credit");
+    expect(await row("Read an uploaded resume")).toContain("1 credit");
+    expect(await row("Generate a resume from your profile")).toContain("3 credits");
+    expect(await row("Tidy your notes into resume points")).toContain("1 credit");
+    expect(screen.queryByText("Free")).toBeNull();
+    expect(screen.queryByText(/don.t cost extra/i)).toBeNull();
   });
 
   it("warns when the balance is below one tailor", async () => {

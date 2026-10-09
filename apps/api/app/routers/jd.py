@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter, Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
+from app.core.credits import require_credits, charge_credits
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.prep_questions import (
     generate_for_session, latest_session_with_questions, run_for_saved_resume,
@@ -284,7 +285,18 @@ async def generate_jd_prep_questions(
             status_code=409,
             detail="Tailor your résumé to this job and save it to the JD first — that is what interview questions are made from.",
         )
+    # An existing set is returned as it is, free. Making one is a model call,
+    # so it is charged — checked first, deducted only once it was made.
+    have = (
+        await db.execute(select(func.count(PrepQuestion.id)).where(PrepQuestion.session_id == session.id))
+    ).scalar_one()
+    email = user.get("email")
+    if not have:
+        await require_credits(db, uid, "prep_questions", email=email)
     rows = await generate_for_session(db, session, jd, saved.content)
+    if not have and rows:
+        await charge_credits(db, uid, "prep_questions", email=email)
+        await db.commit()
     return {"session_id": str(session.id), "questions_total": len(rows)}
 
 

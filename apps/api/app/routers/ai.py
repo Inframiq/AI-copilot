@@ -11,7 +11,7 @@ from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.core.usage import record_ai_usage
-from app.core.credits import spend_credits, refund_credits
+from app.core.credits import spend_credits, refund_credits, require_credits, charge_credits
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
@@ -91,7 +91,12 @@ async def analyze_jd(
         if sem_cache and resume_fp and sem_cache.get("fingerprint") == resume_fp:
             cached_semantic_verdicts = sem_cache.get("verdicts") or {}
 
-    async with record_ai_usage(uid, "analyze"):
+    # Charged only when a model actually runs: a repeat analysis of the same
+    # JD and résumé comes from the caches above, and the JD pages re-run it
+    # on every visit. Checked first, so no model call happens unpaid.
+    email = user.get("email")
+    await require_credits(db, uid, "analyze", email=email)
+    async with record_ai_usage(uid, "analyze") as calls:
         analysis = await analyze_jd_match(
             content_for_analysis,
             jd_row.raw_text,
@@ -100,6 +105,9 @@ async def analyze_jd(
             cached_jd_analysis=cached_jd_analysis,
             cached_semantic_verdicts=cached_semantic_verdicts,
         )
+    charged = bool(calls)
+    if charged:
+        await charge_credits(db, uid, "analyze", email=email)
 
     # Persist Agent 1 + semantic verdicts so future no-company analyses are
     # deterministic (same JD text → same skill list, same resume → same score).
@@ -119,6 +127,8 @@ async def analyze_jd(
             jd_row.parsed = existing
             attributes.flag_modified(jd_row, "parsed")
             await db.commit()
+    if charged:
+        await db.commit()
 
     return AnalyzeOut(
         ats_score=analysis.ats_score,

@@ -15,6 +15,15 @@ from app.db.models import Resume
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
+@pytest.fixture(autouse=True)
+def charged():
+    """Uploads and generation are charged (a model call each); these tests
+    are about the endpoints' other behaviour, so the charge is stubbed and
+    the ones about credits assert on it."""
+    with patch("app.routers.resumes.spend_credits", new=AsyncMock()) as spend:
+        yield spend
+
+
 def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,
@@ -327,7 +336,7 @@ _FAKE_PDF_BYTES = b"%PDF-1.4\n%fake minimal pdf content for magic-byte check\n"
 
 
 @pytest.mark.asyncio
-async def test_parse_upload_creates_resume():
+async def test_parse_upload_creates_resume(charged):
     limiter.reset()
     override, mock_session = make_mock_db()
 
@@ -385,6 +394,55 @@ async def test_parse_upload_creates_resume():
         mock_sb.storage.from_.assert_called_with("resumes")
         upload_call = mock_sb.storage.from_.return_value.upload.call_args
         assert upload_call.args[1] == _FAKE_PDF_BYTES
+        # Reading the PDF is a model call, so it is charged.
+        assert charged.call_args.args[2] == "parse_resume"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_generate_resume_out_of_credits_runs_no_model(charged):
+    from fastapi import HTTPException
+    limiter.reset()
+    override, _ = make_mock_db()
+    charged.side_effect = HTTPException(status_code=402, detail="Out of credits")
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes.generate_resume", new=AsyncMock()) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/generate",
+                    json={"profile": {"name": "Jane"}, "candidate_type": "experienced", "template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 402
+        assert charged.call_args.args[2] == "generate_resume"
+        gen.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_parse_upload_out_of_credits_stores_nothing_and_parses_nothing(charged):
+    from fastapi import HTTPException
+    limiter.reset()
+    override, _ = make_mock_db()
+    charged.side_effect = HTTPException(status_code=402, detail="Out of credits")
+    app.dependency_overrides[get_db] = override
+    try:
+        mock_sb = MagicMock()
+        with patch("app.routers.resumes.parse_resume_text", new=AsyncMock()) as parse, \
+             patch("app.routers.resumes._supabase", return_value=mock_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 402
+        mock_sb.storage.from_.return_value.upload.assert_not_called()
+        parse.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
