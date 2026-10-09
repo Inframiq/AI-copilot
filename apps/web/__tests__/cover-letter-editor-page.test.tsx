@@ -76,6 +76,66 @@ describe("CoverLetterEditorPage", () => {
     await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Edited body"));
   });
 
+  it("reads Saved until the draft changes, then Saved again once the save lands", async () => {
+    vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Original body!", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+    });
+
+    await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
+
+    const textarea = await screen.findByDisplayValue("Original body");
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+
+    await userEvent.type(textarea, "!");
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+
+    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
+  });
+
+  it("downloads the PDF from the data: URL without fetching it, saving unsaved edits first", async () => {
+    vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Original body!", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(apiClient.generateCoverLetterPdf).mockResolvedValue({ signed_url: "data:application/pdf;base64,JVBERg==" });
+
+    // fetch() on a data: URL is blocked by the page's CSP — it must never be called.
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const names: string[] = [];
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    try {
+      await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
+      await userEvent.type(await screen.findByDisplayValue("Original body"), "!");
+      await userEvent.click(screen.getByText("Download PDF"));
+
+      await waitFor(() => expect(names).toEqual(["Cover Letter.pdf"]));
+      expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Original body!");
+      expect(
+        vi.mocked(apiClient.updateCoverLetter).mock.invocationCallOrder[0]
+      ).toBeLessThan(vi.mocked(apiClient.generateCoverLetterPdf).mock.invocationCallOrder[0]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      clickSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("clicking Regenerate once results in exactly one generateCoverLetter call", async () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,

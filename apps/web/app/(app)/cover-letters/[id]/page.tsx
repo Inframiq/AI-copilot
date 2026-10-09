@@ -2,8 +2,9 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { DownloadSimple, Copy, FloppyDisk, Sparkle } from "@phosphor-icons/react";
+import { DownloadSimple, Copy, FloppyDisk, Sparkle, Check } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
 import type { CoverLetter } from "@career-copilot/types";
@@ -53,24 +54,37 @@ export default function CoverLetterEditorPage({
   // re-seed on a later refetch (that would blow away unsaved edits). Tracks
   // by id so navigating from one letter to another does re-seed.
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  // What the server holds — the Save button reads "Saved" while the draft
+  // matches it, so a click visibly lands instead of flashing back to "Save".
+  const [savedContent, setSavedContent] = useState("");
   useEffect(() => {
     if (letter?.status === "completed" && letter.content !== null && seededFor !== id) {
       setDraft(letter.content);
+      setSavedContent(letter.content);
       setSeededFor(id);
     }
   }, [letter, id, seededFor]);
+  const isDirty = draft !== savedContent;
+
+  /** Writes the draft to the server; false (with the error shown) on failure. */
+  async function persistDraft(): Promise<boolean> {
+    const content = draft;
+    try {
+      await apiClient.updateCoverLetter(id, content);
+      setSavedContent(content);
+      queryClient.invalidateQueries({ queryKey: ["coverLetter", id] });
+      return true;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
+    }
+  }
 
   async function handleSave() {
     setIsSaving(true);
     setError(null);
-    try {
-      await apiClient.updateCoverLetter(id, draft);
-      queryClient.invalidateQueries({ queryKey: ["coverLetter", id] });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setIsSaving(false);
-    }
+    await persistDraft();
+    setIsSaving(false);
   }
 
   async function handleRegenerate(nextHumanizeLevel: number) {
@@ -105,17 +119,13 @@ export default function CoverLetterEditorPage({
     setIsExporting(true);
     setError(null);
     try {
+      // The PDF is rendered from the server's copy — save unsaved edits first
+      // so the download matches what's on screen.
+      if (isDirty && !(await persistDraft())) return;
       const { signed_url } = await apiClient.generateCoverLetterPdf(id);
-      const response = await fetch(signed_url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = "cover-letter.pdf";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      // signed_url is a data: URI; fetch() on it is blocked by the CSP's
+      // connect-src, so it must be decoded in place (downloadFile does).
+      await downloadFile(signed_url, "Cover Letter.pdf");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to export PDF");
     } finally {
@@ -197,11 +207,11 @@ export default function CoverLetterEditorPage({
         <div className="flex flex-wrap gap-sm">
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !isDirty}
             className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all disabled:opacity-50"
           >
-            <FloppyDisk size={16} />
-            {isSaving ? "Saving…" : "Save"}
+            {isDirty || isSaving ? <FloppyDisk size={16} /> : <Check size={16} />}
+            {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
           </button>
           <button
             onClick={handleExportPdf}
