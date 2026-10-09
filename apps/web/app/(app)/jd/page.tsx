@@ -35,6 +35,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import type { JobDescription, JDStatus, Resume, LearningItem } from "@career-copilot/types";
 
 const STATUS_LABEL: Record<JDStatus, string> = {
@@ -118,6 +119,9 @@ export default function JDIndexPage() {
   const storedJdText = useTailoringStore((s) => s.jdText);
   const storeResumeId = useResumeStore((s) => s.resumeId);
   const [tailorError, setTailorError] = useState<string | null>(null);
+  // Held here, not in the store: editing the JD text calls setJd, which
+  // clears the store's company. handleTailor writes it once the JD is final.
+  const [company, setCompany] = useState(() => useTailoringStore.getState().companyName);
   const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
   // Pending "Save As" — set when the user submits new JD text, cleared once
   // they confirm a name (or cancel) in SaveAnalysisModal.
@@ -218,6 +222,7 @@ export default function JDIndexPage() {
       return;
     }
     setJdText(jd.raw_text);
+    if (jd.id !== jdId) setCompany("");
     setJd(jd.id, jd.raw_text);
     setIsSubmitting(true);
     setError(null);
@@ -315,6 +320,7 @@ export default function JDIndexPage() {
   function handleClearJd() {
     setJdText("");
     setJd("", "");
+    setCompany("");
     setError(null);
     setTailorError(null);
   }
@@ -336,6 +342,9 @@ export default function JDIndexPage() {
     if (atsScore !== null) {
       useTailoringStore.getState().setAnalysisResults({ atsScore, matchedSkills, missingSkills, companyKeywords });
     }
+    // After setJd, which may have cleared it: the review page starts the run
+    // on arrival, so this is when the company has to be in the store.
+    useTailoringStore.getState().setCompanyName(company.trim());
     useTailoringStore.getState().discardPending();
     // The JD path lands on the tailoring review, not the six-section
     // Builder: arriving here you have already said what you want.
@@ -550,6 +559,7 @@ export default function JDIndexPage() {
               Navigates to Resume Builder where the user configures and runs tailoring. */}
           {jdText.trim() && (
             <div className="flex flex-col gap-xs">
+              <TargetCompanyField id="jd-company" value={company} onChange={setCompany} />
               {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
               <button
                 type="button"

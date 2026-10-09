@@ -130,6 +130,37 @@ describe("JDPage — Open (handleOpen)", () => {
   });
 });
 
+describe("JDPage — Tailor with a target company", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    useResumeStore.getState().resetStore();
+    vi.clearAllMocks();
+    vi.mocked(apiClient.getJd).mockResolvedValue(JD as any);
+    vi.mocked(apiClient.getResumes).mockResolvedValue([RESUME] as any);
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({ session_id: null } as any);
+  });
+
+  // The review page starts the run the moment it opens, so the company has to
+  // be in the store before the navigation — and survive setJd clearing it for
+  // a JD the store wasn't on yet.
+  it("puts the typed company in the store for the run, even coming from another JD", async () => {
+    useTailoringStore.getState().setJd("jd-other", "Some other JD");
+    useTailoringStore.getState().setCompanyName("Old Co");
+
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+
+    const field = await screen.findByLabelText(/Target Company/);
+    // Another JD's company is not carried over.
+    expect(field).toHaveValue("");
+    await userEvent.type(field, "  Stripe ");
+    await userEvent.click(screen.getByRole("button", { name: /Tailor/ }));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review"));
+    expect(useTailoringStore.getState().jdId).toBe("jd-1");
+    expect(useTailoringStore.getState().companyName).toBe("Stripe");
+  });
+});
+
 describe("JDPage — Cover Letter row", () => {
   beforeEach(() => {
     useTailoringStore.getState().resetStore();

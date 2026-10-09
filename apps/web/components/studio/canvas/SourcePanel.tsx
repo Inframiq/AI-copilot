@@ -2,6 +2,7 @@
 import { CheckCircle, Sparkle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 
 // The canvas surface behind the spine's "Source" and "Match" nodes.
 //
@@ -40,26 +41,7 @@ export function SourcePanel() {
   }
 
   const companyField = (
-    <div className="flex flex-col gap-xs">
-      <label
-        htmlFor="source-company"
-        className="flex items-center gap-xs text-label-caps text-on-surface-variant"
-      >
-        Target Company
-        <span className="rounded-full bg-secondary-container px-xs py-xs text-caption font-semibold text-on-secondary-container">
-          optional
-        </span>
-      </label>
-      <input
-        id="source-company"
-        type="text"
-        value={companyName}
-        onChange={(e) => setCompanyName(e.target.value)}
-        placeholder="e.g. Google, Stripe, Amazon…"
-        maxLength={200}
-        className="w-full rounded-xl border border-outline-variant/50 bg-surface px-md py-sm text-body-md text-on-surface transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-      />
-    </div>
+    <TargetCompanyField id="source-company" value={companyName} onChange={setCompanyName} />
   );
 
   const runButton = (

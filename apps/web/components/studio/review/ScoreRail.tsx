@@ -159,8 +159,33 @@ function TryAnotherButton({ onTryAnother, className = "" }: { onTryAnother: () =
       } ${className}`}
     >
       <ArrowsClockwise size={14} />
-      {armed ? "Uses a credit — click to confirm" : "Try another version"}
+      {armed ? "Uses a credit — press again to confirm" : "Try another version"}
     </button>
+  );
+}
+
+function RunNote({ reusedRun }: { reusedRun: boolean }) {
+  return (
+    <p className="text-center text-caption text-on-surface-variant">
+      {reusedRun
+        ? "Same résumé, job and settings as last time — this is that result, no credit used."
+        : "The same résumé and job always return this result."}
+    </p>
+  );
+}
+
+/** Phones and tablets: the dock only has room for the score and Apply, so
+ * the rail's "Try another version" closes the list of points instead. */
+export function RunAgain({
+  onTryAnother,
+  reusedRun,
+  className = "",
+}: Pick<ScoreRailProps, "onTryAnother" | "reusedRun"> & { className?: string }) {
+  return (
+    <div className={`flex flex-col items-center gap-xs ${className}`}>
+      <TryAnotherButton onTryAnother={onTryAnother} />
+      <RunNote reusedRun={reusedRun} />
+    </div>
   );
 }
 
@@ -276,11 +301,7 @@ export function ScoreRail(props: ScoreRailProps) {
           <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
         </button>
         <TryAnotherButton onTryAnother={props.onTryAnother} />
-        <p className="text-center text-caption text-on-surface-variant">
-          {props.reusedRun
-            ? "Same résumé, job and settings as last time — this is that result, no credit used."
-            : "The same résumé and job always return this result."}
-        </p>
+        <RunNote reusedRun={props.reusedRun} />
       </div>
     </div>
   );

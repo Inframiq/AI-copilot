@@ -114,6 +114,13 @@ describe("useTailoringStore", () => {
     expect(useTailoringStore.getState().companyName).toBe("");
   });
 
+  it("setJd keeps companyName while a pasted JD is typed — the company field sits above the JD box", () => {
+    useTailoringStore.getState().setCompanyName("Acme Corp");
+    useTailoringStore.getState().setJd("", "S");
+    useTailoringStore.getState().setJd("", "Senior engineer, Python");
+    expect(useTailoringStore.getState().companyName).toBe("Acme Corp");
+  });
+
   describe("runAnalysis", () => {
     it("populates atsScore/matchedSkills/missingSkills from the API result", async () => {
       useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");

@@ -102,7 +102,9 @@ export function InfoTooltip({ text, className }: InfoTooltipProps) {
           e.stopPropagation();
           setOpen(true);
         }}
-        className="w-4 h-4 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors shrink-0"
+        // A 16px icon is too small a target for a finger; the ::before
+        // stretches the tappable area to 32px without moving the layout.
+        className="relative before:absolute before:-inset-2 before:content-[''] w-4 h-4 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary focus:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors shrink-0"
       >
         <Info size={16} weight="bold" />
       </button>

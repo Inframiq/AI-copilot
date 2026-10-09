@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
@@ -30,6 +31,11 @@ export default function JDPage({
   const queryClient = useQueryClient();
   const [isOpening, setIsOpening] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
+  // Prefilled only when the store's company was given for this same JD.
+  const [company, setCompany] = useState(() => {
+    const s = useTailoringStore.getState();
+    return s.jdId === jdId ? s.companyName : "";
+  });
 
   const setJd = useTailoringStore((s) => s.setJd);
   const setAnalysisResults = useTailoringStore((s) => s.setAnalysisResults);
@@ -127,6 +133,9 @@ export default function JDPage({
         companyKeywords: analysis.company_keywords ?? [],
       });
     }
+    // After setJd, which clears it for a different JD: the review page starts
+    // the run on arrival, so this is when the company has to be in the store.
+    useTailoringStore.getState().setCompanyName(company.trim());
     // Straight to the tailoring review, which runs the pipeline on arrival.
     // Not the Builder: its six sections are not part of this path.
     router.push(`/studio/${masterResume.id}/review`);
@@ -306,6 +315,8 @@ export default function JDPage({
                   sit beside it called the same handleOpen as the one in
                   "Generated for This JD" below — and that one sits next to the
                   resume it opens, which this one did not. */}
+              <TargetCompanyField id="jd-detail-company" value={company} onChange={setCompany} />
+
               <div className="flex mt-xs">
                 <button
                   onClick={handleTailor}

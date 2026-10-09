@@ -21,7 +21,15 @@ const ICON = {
  * Each button reflects queryCommandState, so a caret inside bold text shows
  * Bold pressed and clicking it removes the bold rather than adding more.
  */
-export function FormatToolbar({ className = "" }: { className?: string }) {
+export function FormatToolbar({
+  className = "",
+  orientation = "vertical",
+}: {
+  className?: string;
+  /** Vertical in the page's side gutter; horizontal above the page where
+   * there is no gutter (below xl, phones included). */
+  orientation?: "vertical" | "horizontal";
+}) {
   const [active, setActive] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(() => {
@@ -55,8 +63,8 @@ export function FormatToolbar({ className = "" }: { className?: string }) {
     <div
       role="toolbar"
       aria-label="Text formatting"
-      aria-orientation="vertical"
-      className={`flex flex-col gap-xs rounded-2xl border border-outline-variant/30 bg-surface p-xs ${className}`}
+      aria-orientation={orientation}
+      className={`flex ${orientation === "vertical" ? "flex-col" : "flex-row"} gap-xs rounded-2xl border border-outline-variant/30 bg-surface p-xs ${className}`}
     >
       {RICH_COMMANDS.map(({ command, label, shortcut }) => {
         const Icon = ICON[command];

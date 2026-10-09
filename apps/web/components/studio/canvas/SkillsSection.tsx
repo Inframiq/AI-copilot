@@ -46,7 +46,7 @@ export function SkillsSection() {
                 onClick={() =>
                   updateContent({ skills: skills.filter((s) => s !== skill) })
                 }
-                className="rounded-full p-0.5 hover:bg-error/15 hover:text-error transition-colors"
+                className="relative rounded-full p-0.5 before:absolute before:-inset-1.5 before:content-[''] hover:bg-error/15 hover:text-error transition-colors"
               >
                 <X size={12} weight="bold" />
               </button>

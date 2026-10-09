@@ -536,7 +536,7 @@ export default function ProfilePage() {
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
   return (
-    <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-section">
+    <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-[calc(var(--spacing-xxl)+64px)] md:pb-xxl flex flex-col gap-section">
       {/* Page header */}
       <div className="pt-xs sm:pt-lg flex flex-col gap-xs">
         <h1 className="text-headline-xl text-on-surface font-extrabold" style={{ letterSpacing: "-0.02em" }}>
@@ -739,7 +739,7 @@ export default function ProfilePage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
                   {s}
                   <button type="button" onClick={() => removeSkill(s)} aria-label={`Remove ${s}`}
-                    className="rounded-full p-0.5 hover:bg-primary/15 hover:text-error transition-colors">
+                    className="relative rounded-full p-0.5 before:absolute before:-inset-1.5 before:content-[''] hover:bg-primary/15 hover:text-error transition-colors">
                     <X size={11} weight="bold" />
                   </button>
                 </span>
@@ -968,7 +968,7 @@ export default function ProfilePage() {
                         }`}>
                           <Code size={22} />
                         </div>
-                        <div className="flex items-center gap-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <button type="button" onClick={e => { e.stopPropagation(); setCollapsedProj(p => ({ ...p, [proj.id]: false })); }}
                             className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                             <PencilSimple size={14} />
@@ -1157,7 +1157,7 @@ export default function ProfilePage() {
                         }`}>
                           <Certificate size={22} />
                         </div>
-                        <div className="flex items-center gap-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <button type="button" onClick={e => { e.stopPropagation(); setCollapsedCert(p => ({ ...p, [cert.id]: false })); }}
                             className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
                             <PencilSimple size={14} />
@@ -1227,8 +1227,9 @@ export default function ProfilePage() {
         <MiscellaneousPoints />
       </section>
 
-      {/* Floating save */}
-      <div className="fixed bottom-xl right-gutter z-50">
+      {/* Floating save — above the phone's bottom tab bar, which otherwise
+          covered it and left the profile with no way to save. */}
+      <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-xl right-gutter z-50">
         <button
           onClick={handleSave}
           disabled={saving}

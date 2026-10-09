@@ -21,7 +21,7 @@ import { ProfilePoints } from "@/components/studio/review/ProfilePoints";
 import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { WordingChecks } from "@/components/studio/review/WordingChecks";
 import { findRepetition, listBullets, numberGaps, quantifiedShare } from "@/lib/wording-checks";
-import { ScoreRail, ScoreDock, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
+import { ScoreRail, ScoreDock, RunAgain, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
 import { TailoringStar } from "./TailoringStar";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
@@ -408,6 +408,8 @@ export function ReviewShell({
                 <div className="xl:hidden">
                   <MiscNotesCanvas />
                 </div>
+
+                <RunAgain onTryAnother={onTryAnother} reusedRun={reusedRun} className="lg:hidden" />
               </>
             )}
           </main>

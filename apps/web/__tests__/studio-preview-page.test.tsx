@@ -242,10 +242,17 @@ describe("Studio preview page", () => {
     expect(push).toHaveBeenCalledWith("/studio/r1");
   });
 
-  it("offers formatting in the space beside the document while editing", async () => {
+  it("offers formatting while editing — beside the document, or above it where there is no gutter", async () => {
     await renderPage();
-    await waitFor(() => screen.getByRole("toolbar", { name: /formatting/i }));
-    expect(screen.getByRole("button", { name: /bold/i })).toBeTruthy();
+    // Both are rendered and CSS shows one: the gutter's from xl, the bar above
+    // the page below it (phones included). jsdom applies no breakpoints.
+    await waitFor(() => expect(screen.getAllByRole("toolbar", { name: /formatting/i })).toHaveLength(2));
+    const [gutter, above] = screen.getAllByRole("toolbar", { name: /formatting/i });
+    expect(gutter.getAttribute("aria-orientation")).toBe("vertical");
+    expect(gutter.className).toContain("hidden xl:flex");
+    expect(above.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(above.className).toContain("xl:hidden");
+    expect(screen.getAllByRole("button", { name: /bold/i })).toHaveLength(2);
   });
 
   it("hides formatting in preview, where nothing is editable", async () => {

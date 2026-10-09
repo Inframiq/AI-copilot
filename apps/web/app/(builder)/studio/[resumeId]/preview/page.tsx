@@ -350,10 +350,16 @@ export default function StudioPreviewPage({
       )}
       <div className="relative flex-1 overflow-y-auto bg-surface-container-low p-sm sm:p-xl">
         {/* In the gutter the centred page leaves. Sticky rather than fixed so
-            it travels with the document, and hidden below xl where that
-            gutter is not there to put it in. */}
+            it travels with the document. Below xl there is no gutter, so the
+            same buttons sit above the page instead — phones edit too. */}
         {mode === "edit" && content && (
-          <FormatToolbar className="sticky top-0 float-left -ml-xs hidden xl:flex" />
+          <>
+            <FormatToolbar className="sticky top-0 float-left -ml-xs hidden xl:flex" />
+            <FormatToolbar
+              orientation="horizontal"
+              className="sticky top-0 z-10 mx-auto mb-sm w-fit shadow-sm xl:hidden"
+            />
+          </>
         )}
         <div className="mx-auto mb-sm w-full max-w-[793.7px]">
           <PageMeter pages={pages} />

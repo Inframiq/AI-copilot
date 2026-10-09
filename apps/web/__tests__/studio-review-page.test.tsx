@@ -177,11 +177,18 @@ describe("Studio review page", () => {
   it("tries another version only after a confirming second click, since it spends a credit", async () => {
     useTailoringStore.setState({ pendingContent: TAILORED, reusedRun: true } as never);
     await renderPage();
-    expect(screen.getByText(/this is that result, no credit used/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /try another version/i }));
-    expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /uses a credit — click to confirm/i }));
-    expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1", { fresh: true });
+    // Two copies: the laptop rail's, and the phone one below the points
+    // (the phone dock has room only for Apply). CSS picks one; jsdom has both.
+    expect(screen.getAllByText(/this is that result, no credit used/i)).toHaveLength(2);
+    const buttons = screen.getAllByRole("button", { name: /try another version/i });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      vi.mocked(useTailoringStore.getState().runTailoring).mockClear();
+      fireEvent.click(button);
+      expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /uses a credit — press again to confirm/i }));
+      expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1", { fresh: true });
+    }
   });
 
   it("offers a retry when tailoring fails", async () => {

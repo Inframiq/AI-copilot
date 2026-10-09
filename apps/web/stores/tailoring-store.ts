@@ -548,7 +548,11 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     set({
       jdId: id,
       jdText: text,
-      companyName: isDifferentJd ? "" : current.companyName,
+      // Only a move to another JD clears the company. Typing or pasting into
+      // a JD box calls setJd("", text) per keystroke, and clearing on that
+      // wiped a company entered before the JD was pasted. ("" and the initial
+      // null are both "no saved JD".)
+      companyName: (id || null) !== (current.jdId || null) ? "" : current.companyName,
       profileAnalysis: isDifferentJd ? null : current.profileAnalysis,
       atsScore: isDifferentJd ? null : current.atsScore,
       matchedSkills: isDifferentJd ? [] : current.matchedSkills,
