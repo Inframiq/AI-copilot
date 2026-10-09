@@ -35,6 +35,23 @@ def test_highlight_matches_symbol_suffixed_skill():
     assert '<strong class="kw">C++</strong>' in result
 
 
+def test_highlight_takes_the_js_suffix_that_is_part_of_the_name():
+    # The skill is "Vue"; the bullet says "Vue.js". Bolding stopped at the dot
+    # and left a plain ".js" hanging after the bold "Vue".
+    result = str(_highlight_keywords("Implemented components with Vue.js and React.jsx", ["Vue", "React"]))
+    assert '<strong class="kw">Vue.js</strong>' in result
+    assert '<strong class="kw">React.jsx</strong>' in result
+
+
+def test_highlight_keeps_a_full_stop_out_and_skills_with_their_own_suffix_whole():
+    result = str(_highlight_keywords("Shipped Node.js services. Wrote Python.", ["Node.js", "Python"]))
+    assert '<strong class="kw">Node.js</strong> services.' in result
+    assert '<strong class="kw">Python</strong>.' in result
+    # ".jsonly" is not a ".js" suffix: only the skill itself is bolded.
+    result = str(_highlight_keywords("Deployed on Vue.jsonly", ["Vue"]))
+    assert '<strong class="kw">Vue</strong>.jsonly' in result
+
+
 def test_highlight_case_insensitive():
     result = str(_highlight_keywords("Experience with kubernetes clusters", ["Kubernetes"]))
     assert '<strong class="kw">kubernetes</strong>' in result

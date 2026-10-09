@@ -87,6 +87,11 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
     inside "JavaScript" and "React" doesn't get truncated inside "ReactJS",
     while symbol-suffixed skills like "C++" or "Node.js" still match in full
     (a bare \\b breaks on those since +/. aren't word characters).
+
+    A match also takes a JavaScript-style suffix that is part of the same
+    name — ".js", ".ts", ".jsx", ".tsx" — so the skill "Vue" bolds all of
+    "Vue.js", not "Vue" with a plain ".js" after it. Only those suffixes, and
+    only with a letter after the dot, so a sentence's full stop stays out.
     """
     if not keywords or not text:
         return sanitize_inline(text)
@@ -103,7 +108,7 @@ def _highlight_keywords(text: str, keywords: list) -> Markup:
 
     pattern = "|".join(re.escape(k) for k in sorted_kw)
     highlighted = _sub_outside_tags(
-        f"(?i)(?<![A-Za-z0-9])({pattern})(?![A-Za-z0-9])",
+        f"(?i)(?<![A-Za-z0-9])((?:{pattern})(?:\\.(?:jsx|tsx|js|ts))?)(?![A-Za-z0-9])",
         r'<strong class="kw">\1</strong>',
         safe_text,
     )
