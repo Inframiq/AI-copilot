@@ -6,7 +6,8 @@ import { apiClient } from "@/lib/api-client";
 import { QuestionCard } from "@/components/interview/QuestionCard";
 import { TopicList } from "@/components/interview/TopicList";
 import type { PrepQuestionOut } from "@career-copilot/types";
-import { CaretLeft, CaretRight } from "@phosphor-icons/react";
+import Link from "next/link";
+import { ArrowLeft, CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export default function InterviewPage({
@@ -39,7 +40,13 @@ export default function InterviewPage({
   return (
     <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Page Header */}
-      <section className="pt-lg pb-md">
+      <section className="pt-xs sm:pt-lg sm:pb-md">
+        <Link
+          href="/interview"
+          className="mb-xs inline-flex items-center gap-xs text-label-sm text-on-surface-variant hover:text-primary"
+        >
+          <ArrowLeft size={14} /> Interview Center
+        </Link>
         <h1 className="text-headline-xl text-on-surface mb-xs">
           Interview Prep
         </h1>
@@ -74,8 +81,9 @@ export default function InterviewPage({
         </div>
       ) : (
         <div className="flex gap-gutter">
-          {/* Topic sidebar */}
-          <aside className="w-64 flex-shrink-0">
+          {/* Topic sidebar — on phones, a chip strip above the question
+              instead (inside the question column below). */}
+          <aside className="hidden sm:block w-48 lg:w-64 flex-shrink-0">
             <p className="text-label-md text-on-surface-variant uppercase tracking-wider mb-md flex items-center gap-sm">
               Topics
               <InfoTooltip text="All questions from this session, grouped by topic — pick one to jump straight to it." />
@@ -88,27 +96,36 @@ export default function InterviewPage({
           </aside>
 
           {/* Question area */}
-          <div className="flex-1 flex flex-col gap-lg">
+          <div className="flex-1 min-w-0 flex flex-col gap-md sm:gap-lg">
+            <div className="sm:hidden">
+              <TopicList
+                layout="strip"
+                questions={questions}
+                activeIndex={activeIndex}
+                onSelect={setActiveIndex}
+              />
+            </div>
             {active && (
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-label-md text-on-surface-variant">
                     Question {activeIndex + 1} of {questions.length}
                   </span>
-                  <span className="px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
+                  {/* Phones already show the topic on the chip and the card. */}
+                  <span className="hidden sm:inline px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
                     {active.topic}
                   </span>
                 </div>
 
                 <QuestionCard key={active.id} question={active} />
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-sm">
                   <button
                     onClick={() =>
                       setActiveIndex((i) => Math.max(0, i - 1))
                     }
                     disabled={activeIndex === 0}
-                    className="flex items-center gap-sm px-lg py-md rounded-lg border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-sm px-md py-sm sm:px-lg sm:py-md rounded-lg border border-outline-variant text-label-md text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <CaretLeft size={16} /> Previous
                   </button>
@@ -119,7 +136,7 @@ export default function InterviewPage({
                       )
                     }
                     disabled={activeIndex === questions.length - 1}
-                    className="flex items-center gap-sm px-lg py-md rounded-lg text-label-md text-on-primary bg-primary hover:bg-primary-container transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-sm px-md py-sm sm:px-lg sm:py-md rounded-lg text-label-md text-on-primary bg-primary hover:bg-primary-container transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Next <CaretRight size={16} />
                   </button>

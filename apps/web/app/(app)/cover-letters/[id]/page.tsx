@@ -2,7 +2,8 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { DownloadSimple, Copy, FloppyDisk, Sparkle, Check } from "@phosphor-icons/react";
+import Link from "next/link";
+import { ArrowLeft, DownloadSimple, Copy, FloppyDisk, Sparkle, Check } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
@@ -184,7 +185,13 @@ export default function CoverLetterEditorPage({
 
   return (
     <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
-      <section className="pb-md">
+      <section className="sm:pb-md">
+        <Link
+          href="/cover-letters"
+          className="mb-xs inline-flex items-center gap-xs text-label-sm text-on-surface-variant hover:text-primary"
+        >
+          <ArrowLeft size={14} /> Cover Letters
+        </Link>
         <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
           Cover Letter
         </h1>

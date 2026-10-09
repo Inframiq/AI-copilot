@@ -33,7 +33,11 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
       {data.plans.map((plan) => {
         const isCurrent = currentPlan === plan.id;
         const isPremium = plan.id === "premium";
-        const features = compact ? plan.features.slice(0, 3) : plan.features;
+        // The credits line is printed above the list already; the catalog
+        // also lists it as a feature, which showed it twice on every card.
+        const creditsLine = `${plan.credits} credits${plan.refills ? " every month" : ", one-time"}`;
+        const listed = plan.features.filter((f) => f.trim().toLowerCase() !== creditsLine.toLowerCase());
+        const features = compact ? listed.slice(0, 3) : listed;
         const label = isCurrent
           ? "Current plan"
           : isPremium
@@ -69,7 +73,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             </div>
             <p className="text-body-sm text-on-surface-variant mt-xs flex items-start sm:items-center gap-xs leading-tight">
               <Lightning size={14} weight="fill" className="text-primary shrink-0" />
-              {plan.credits} credits{plan.refills ? " every month" : ", one-time"}
+              {creditsLine}
             </p>
 
             <ul className="mt-sm sm:mt-md flex flex-col gap-xs sm:gap-sm flex-1">
