@@ -265,9 +265,14 @@ async def test_get_jd_details_returns_resume_and_question_progress():
     # against), same as before this field existed.
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = None
+    # The run that holds the questions — here the latest run itself.
+    questions_session_result = MagicMock()
+    questions_session_result.scalars.return_value.first.return_value = session_row
     questions_result = MagicMock()
     questions_result.one.return_value = (5, 2)
-    mock_session.execute = AsyncMock(side_effect=[session_result, jd_result, questions_result])
+    mock_session.execute = AsyncMock(
+        side_effect=[session_result, jd_result, questions_session_result, questions_result]
+    )
 
     app.dependency_overrides[get_db] = override
     try:
@@ -282,6 +287,8 @@ async def test_get_jd_details_returns_resume_and_question_progress():
         assert body["resume_pdf_url"] == "resumes/user/resume.pdf"
         assert body["questions_total"] == 5
         assert body["questions_practiced"] == 2
+        assert body["questions_session_id"] == str(session_row.id)
+        assert body["resume_saved"] is False
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -323,10 +330,11 @@ async def test_get_jd_details_prefers_the_saved_tailored_resume_over_the_session
     jd_result.scalar_one_or_none.return_value = jd_row
     tailored_resume_result = MagicMock()
     tailored_resume_result.scalar_one_or_none.return_value = saved_resume
-    questions_result = MagicMock()
-    questions_result.one.return_value = (0, 0)
+    # No run has questions yet (saved before saving made them).
+    no_questions_session = MagicMock()
+    no_questions_session.scalars.return_value.first.return_value = None
     mock_session.execute = AsyncMock(
-        side_effect=[session_result, jd_result, tailored_resume_result, questions_result]
+        side_effect=[session_result, jd_result, tailored_resume_result, no_questions_session]
     )
 
     app.dependency_overrides[get_db] = override
@@ -338,6 +346,9 @@ async def test_get_jd_details_prefers_the_saved_tailored_resume_over_the_session
         assert body["resume_id"] == str(saved_resume.id)
         assert body["resume_title"] == "Resume — Acme"
         assert body["resume_pdf_url"] == "acme.pdf"
+        assert body["resume_saved"] is True
+        assert body["questions_total"] == 0
+        assert body["questions_session_id"] is None
     finally:
         app.dependency_overrides.pop(get_db, None)
 

@@ -147,6 +147,11 @@ export interface JDDetails {
   session_created_at: string | null;
   questions_total: number;
   questions_practiced: number;
+  /** The run holding this JD's questions — not necessarily session_id, the
+   * latest run: a later re-tailor that was never saved has none. */
+  questions_session_id?: string | null;
+  /** A tailored résumé is saved to this JD; saving is what makes questions. */
+  resume_saved?: boolean;
 }
 
 export interface CoverLetter {

@@ -81,19 +81,30 @@ export default function StudioPreviewPage({
     return () => window.removeEventListener("beforeunload", warn);
   }, [draftJdId]);
 
+  /** Saves the tailored draft as the JD's résumé, which also makes the JD's
+   * interview prep questions (server-side, from this save). Returns the
+   * saved résumé's id. Throws on failure. */
+  async function saveDraftToJd(): Promise<string> {
+    const name = useResumeStore.getState().content?.contact?.name?.trim();
+    const title = [name ? `${name}'s Resume` : "Tailored Resume", jd?.title]
+      .filter(Boolean)
+      .join(" — ")
+      .slice(0, 255);
+    const savedId = await useResumeStore
+      .getState()
+      .saveDraftToJd(title, useTailoringStore.getState().sessionId);
+    queryClient.invalidateQueries({ queryKey: ["jds"] });
+    queryClient.invalidateQueries({ queryKey: ["jd", linkedJdId] });
+    queryClient.invalidateQueries({ queryKey: ["jdDetails", linkedJdId] });
+    queryClient.invalidateQueries({ queryKey: ["resumes"] });
+    queryClient.invalidateQueries({ queryKey: ["myQuestions"] });
+    return savedId;
+  }
+
   async function handleSaveToJd() {
     setSaveError(null);
     try {
-      const name = useResumeStore.getState().content?.contact?.name?.trim();
-      const title = [name ? `${name}'s Resume` : "Tailored Resume", jd?.title]
-        .filter(Boolean)
-        .join(" — ")
-        .slice(0, 255);
-      const savedId = await useResumeStore.getState().saveDraftToJd(title);
-      queryClient.invalidateQueries({ queryKey: ["jds"] });
-      queryClient.invalidateQueries({ queryKey: ["jd", linkedJdId] });
-      queryClient.invalidateQueries({ queryKey: ["jdDetails", linkedJdId] });
-      queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      const savedId = await saveDraftToJd();
       // The Studio now edits the JD's own copy, and autosaves into it.
       router.replace(`/studio/${savedId}/preview`);
     } catch (err) {
@@ -169,24 +180,33 @@ export default function StudioPreviewPage({
     setExportError(null);
     try {
       const s = useResumeStore.getState();
-      let signed_url: string;
+      // Exporting an unsaved tailored draft means it is the version going
+      // out — save it to its JD first (which also makes the JD's interview
+      // questions), then export the saved copy. It used to render the draft
+      // and save nothing, so the résumé that was sent existed nowhere.
+      let savedFromDraft: string | null = null;
       if (s.draftJdId && s.content) {
-        // An unsaved draft renders from what is on screen and persists
-        // nothing: resumeId is the résumé it was built from.
-        ({ signed_url } = await apiClient.generatePdf(
-          resumeId, s.templateId, s.content, s.lineSpacing, s.paragraphSpacing,
-          s.fontChoice, s.accentColor, s.headingSizeDelta, s.bodySizeDelta,
-        ));
-      } else {
+        try {
+          savedFromDraft = await saveDraftToJd();
+        } catch (err) {
+          throw new Error(
+            `couldn't save it to the job first — ${err instanceof Error ? err.message : "please try again"}`,
+          );
+        }
+      } else if (s.isDirty) {
         // The page shows the store's content, which autosave writes only after
         // a pause; the PDF is rendered from what is saved. Flush first, or an
         // export right after an edit would miss it.
-        if (s.isDirty) await s.saveNow();
-        ({ signed_url } = await apiClient.generatePdf(resumeId, templateId));
+        await s.saveNow();
       }
+      const { signed_url } = await apiClient.generatePdf(
+        savedFromDraft ?? resumeId, useResumeStore.getState().templateId,
+      );
       // Generating is not downloading: this step was lost when the old
       // workbench was removed, so the button spun and then did nothing.
       await downloadFile(signed_url, resumeFileName(content?.contact?.name));
+      // The Studio now edits the JD's own copy, as after Save to JD.
+      if (savedFromDraft) router.replace(`/studio/${savedFromDraft}/preview`);
     } catch (err) {
       // Previously a bare finally: a failed export reset the button and said
       // nothing, so it read as a click that simply did not work.

@@ -20,10 +20,11 @@ from app.schemas.ai import (
 )
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import (
-    run_tailoring_pipeline, analyze_jd_match, JDAnalysis, get_or_generate_prep_questions,
+    run_tailoring_pipeline, analyze_jd_match, JDAnalysis,
     build_single_bullet_system, tailor_fingerprint, _bullet_text,
 )
 from app.services.bullet_guard import guard_rewrite
+from app.services.prep_questions import latest_with_questions_per_jd
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
@@ -676,10 +677,11 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
 
 @router.get("/sessions/{session_id}/questions", response_model=list[PrepQuestionOut])
 async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Interview-prep questions for a session. Generated lazily on first call
-    (the tailoring pipeline no longer produces them — see
-    run_tailoring_pipeline) and persisted, so subsequent calls are a plain
-    read."""
+    """Interview-prep questions for a session — a plain read. They are made
+    when the tailored résumé is saved to its JD (services/prep_questions.py),
+    never by viewing them: this used to generate on first view, which only
+    the per-session page ever triggered, so the Interview Center (which
+    lists, never generates) showed nothing for new runs."""
     uid = uuid.UUID(user["sub"])
     session = (
         await db.execute(
@@ -691,70 +693,27 @@ async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), d
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    existing = (
+    return (
         await db.execute(
             select(PrepQuestion)
             .where(PrepQuestion.session_id == session_id)
             .order_by(PrepQuestion.order_index)
         )
     ).scalars().all()
-    if existing or session.status != "completed":
-        return existing
-
-    # First view — generate now. Needs the JD's cached Agent 1 analysis; if
-    # it's absent (older JD, never analyzed) there's nothing to ground
-    # questions in, so return empty rather than a bad set.
-    jd_row = (
-        await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
-    ).scalar_one_or_none()
-    agent1 = (jd_row.parsed or {}).get("agent1") if jd_row else None
-    if not agent1:
-        return []
-
-    async with record_ai_usage(uid, "prep_questions"):
-        questions = await get_or_generate_prep_questions(
-            session.missing_skills or [],
-            session.tailored_content or {},
-            get_ai_provider(),
-            db,
-            jd_analysis=JDAnalysis(**agent1),
-            matched_skills=session.matched_skills or [],
-        )
-    rows = [
-        PrepQuestion(
-            session_id=session.id, topic=q.topic, question=q.question,
-            answer_framework=q.answer_framework, is_gap_based=q.is_gap_based,
-            source=q.source, basis=q.basis, order_index=q.order_index,
-        )
-        for q in questions
-    ]
-    if rows:
-        db.add_all(rows)
-        await db.commit()
-        for r in rows:
-            await db.refresh(r)
-    return rows
 
 
 @router.get("/questions/mine", response_model=list[PrepQuestionWithJdOut])
 async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Every prep question generated for this user, one JD's worth at a
-    time — from each JD's most recent completed tailoring session only, so
-    re-tailoring the same JD repeatedly doesn't pile up duplicate/stale
-    question sets under its name. Powers Interview Center's "categorize by
-    JD" grouping and its JD filter; both are computed client-side off this
-    one list rather than a separate endpoint per JD."""
+    time — from each JD's most recent completed run that has questions, so
+    re-tailoring the same JD doesn't pile up duplicate/stale sets under its
+    name, and a later run that was never saved (so has none) doesn't hide
+    the set that exists. Powers Interview Center's "categorize by JD"
+    grouping and its JD filter; both are computed client-side off this one
+    list rather than a separate endpoint per JD."""
     uid = uuid.UUID(user["sub"])
 
-    latest_per_jd = (
-        select(
-            TailoringSession.jd_id,
-            func.max(TailoringSession.created_at).label("latest_created_at"),
-        )
-        .where(TailoringSession.user_id == uid, TailoringSession.status == "completed")
-        .group_by(TailoringSession.jd_id)
-        .subquery()
-    )
+    latest_per_jd = latest_with_questions_per_jd(uid)
     sessions_result = await db.execute(
         select(TailoringSession.id, TailoringSession.jd_id, JobDescription.title)
         .join(

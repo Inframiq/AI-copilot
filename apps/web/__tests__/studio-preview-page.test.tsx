@@ -4,7 +4,8 @@ import { render, screen, waitFor, fireEvent, act, within } from "@testing-librar
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace }) }));
 vi.mock("@/lib/api-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-client")>()),
   apiClient: {
@@ -124,6 +125,44 @@ describe("Studio preview page", () => {
       click.mockRestore();
       vi.unstubAllGlobals();
     }
+  });
+
+  it("saves an unsaved tailored draft to its JD before exporting it", async () => {
+    // Exporting a draft means it is the version going out: it is saved to the
+    // JD first (which makes the JD's interview questions) and the PDF comes
+    // from the saved copy, then the Studio switches to that copy.
+    const order: string[] = [];
+    const saveDraftToJd = vi.fn(async () => { order.push("save"); return "saved-1"; });
+    useResumeStore.setState({ draftJdId: "jd1", saveDraftToJd } as never);
+    useTailoringStore.setState({ sessionId: "sess-9" } as never);
+    vi.mocked(apiClient.generatePdf).mockImplementationOnce(async () => {
+      order.push("pdf");
+      return { signed_url: "data:application/pdf;base64,JVBERg==", underfilled: false };
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    try {
+      await renderPage();
+      await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
+      fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/saved-1/preview"));
+      expect(order).toEqual(["save", "pdf"]);
+      expect(saveDraftToJd).toHaveBeenCalledWith(expect.any(String), "sess-9");
+      expect(vi.mocked(apiClient.generatePdf).mock.calls[0][0]).toBe("saved-1");
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it("exports nothing when saving the draft first fails, and says why", async () => {
+    const saveDraftToJd = vi.fn(async () => { throw new Error("offline"); });
+    useResumeStore.setState({ draftJdId: "jd1", saveDraftToJd } as never);
+    await renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
+    fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
+    expect(await screen.findByText(/couldn't save it to the job first — offline/i)).toBeTruthy();
+    expect(apiClient.generatePdf).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("saves pending edits before exporting, so the PDF matches the page", async () => {

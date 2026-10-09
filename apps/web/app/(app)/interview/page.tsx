@@ -98,6 +98,13 @@ export default function InterviewIndexPage() {
   // not myQuestions directly.
   const scopedQuestions = selectedJdId ? myQuestions.filter((q) => q.jd_id === selectedJdId) : myQuestions;
 
+  // The run "Next mock" opens: one that has questions. The latest run may
+  // have none — questions are made when a tailored résumé is saved to its
+  // JD, not by every tailoring run — and would open an empty page.
+  const questionSessionIds = new Set(myQuestions.map((q) => q.session_id));
+  const practiceSessionId =
+    sessionId && questionSessionIds.has(sessionId) ? sessionId : scopedQuestions[0]?.session_id ?? null;
+
   // Practice progress — real, persisted server-side (PrepQuestion.practiced_at).
   // Built from the full (unfiltered) list so the readiness gauge and
   // "N practiced" count reflect all JDs regardless of the filter above.
@@ -219,10 +226,10 @@ export default function InterviewIndexPage() {
             </div>
           </div>
           <NextMockCard
-            sessionId={sessionId}
-            ready={myQuestions.filter((q) => q.session_id === sessionId).length}
+            sessionId={practiceSessionId}
+            ready={myQuestions.filter((q) => q.session_id === practiceSessionId).length}
             practiced={answeredCount}
-            onGo={() => (sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd"))}
+            onGo={() => (practiceSessionId ? router.push(`/interview/${practiceSessionId}`) : router.push("/jd"))}
             compact
           />
           {(strengths.length > 0 || focus.length > 0) && (
@@ -393,9 +400,9 @@ export default function InterviewIndexPage() {
           <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
             <p className="text-body-md text-on-surface font-medium">No interview questions yet</p>
             <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
-              Interview questions are generated when you tailor a resume to a
-              specific job description. Analyze a JD and run tailoring to get
-              questions built from your resume and that role.
+              Interview questions are made when you save a tailored résumé to
+              a job: analyze a JD, tailor your résumé to it, then Save to JD.
+              The questions are built from that résumé and that role.
             </p>
             <button
               onClick={() => router.push("/jd")}
@@ -480,10 +487,10 @@ export default function InterviewIndexPage() {
         </div>
 
         <NextMockCard
-          sessionId={sessionId}
-          ready={myQuestions.filter((q) => q.session_id === sessionId).length}
+          sessionId={practiceSessionId}
+          ready={myQuestions.filter((q) => q.session_id === practiceSessionId).length}
           practiced={answeredCount}
-          onGo={() => (sessionId ? router.push(`/interview/${sessionId}`) : router.push("/jd"))}
+          onGo={() => (practiceSessionId ? router.push(`/interview/${practiceSessionId}`) : router.push("/jd"))}
         />
       </aside>
     </div>
@@ -549,8 +556,8 @@ function NextMockCard({
             ? `${ready} ready · ${practiced} done`
             : `${ready} questions ready · ${practiced} practiced`
           : compact
-            ? "Analyze a JD first"
-            : "Analyze a JD to generate personalized questions"}
+            ? "Save a tailored résumé first"
+            : "Save a tailored résumé to a JD to get personalized questions"}
       </p>
       <button
         onClick={onGo}

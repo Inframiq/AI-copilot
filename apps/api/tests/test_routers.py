@@ -12,6 +12,14 @@ from app.db.session import get_db
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
+@pytest.fixture(autouse=True)
+def prep_after_save():
+    """Saving a résumé to a JD queues interview-question generation, which
+    opens its own DB session — never run it from these endpoint tests."""
+    with patch("app.routers.resumes.generate_after_save", new=AsyncMock()) as gen:
+        yield gen
+
+
 def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,
@@ -127,7 +135,28 @@ async def test_create_resume_returns_201():
 
 
 @pytest.mark.asyncio
-async def test_create_resume_with_jd_id_links_new_resume_to_the_jd():
+async def test_create_resume_without_jd_makes_no_interview_questions(prep_after_save):
+    from datetime import datetime, timezone
+
+    override, mock_session = make_mock_db()
+
+    async def fake_refresh(obj):
+        obj.id = uuid.uuid4()
+        obj.created_at = obj.updated_at = datetime.now(timezone.utc)
+
+    mock_session.refresh = fake_refresh
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/resumes", json={"title": "Plain"}, headers=make_auth_header())
+        assert r.status_code == 201
+        prep_after_save.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_resume_with_jd_id_links_new_resume_to_the_jd(prep_after_save):
     """First "Save as new" for a JD that has no linked resume yet — creates a
     resume as normal and links JobDescription.tailored_resume_id to it."""
     from app.db.models import Resume, JobDescription
@@ -173,12 +202,16 @@ async def test_create_resume_with_jd_id_links_new_resume_to_the_jd():
         assert r.json()["title"] == "Resume — Acme"
         # The newly created resume gets linked back onto the JD.
         assert jd_row.tailored_resume_id == created_resume.id
+        # And saving it to the JD is what makes its interview questions.
+        prep_after_save.assert_called_once_with(
+            uuid.UUID(TEST_USER_ID), jd_id, None, {},
+        )
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
+async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume(prep_after_save):
     """Re-tailoring the same JD and clicking "Save as new" again must
     overwrite the resume already linked to it, not create a duplicate."""
     from app.db.models import Resume, JobDescription
@@ -186,6 +219,7 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
 
     jd_id = uuid.uuid4()
     existing_resume_id = uuid.uuid4()
+    session_id = uuid.uuid4()
     jd_row = JobDescription(
         id=jd_id,
         user_id=uuid.UUID(TEST_USER_ID),
@@ -221,6 +255,7 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
                     "title": "Resume — Acme v2",
                     "jd_id": str(jd_id),
                     "content": {"new": True},
+                    "tailoring_session_id": str(session_id),
                 },
                 headers=make_auth_header(),
             )
@@ -230,6 +265,11 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
         assert data["id"] == str(existing_resume_id)
         assert data["title"] == "Resume — Acme v2"
         assert data["content"] == {"new": True}
+        # Saving again still makes questions — for the run named, from the
+        # résumé as saved.
+        prep_after_save.assert_called_once_with(
+            uuid.UUID(TEST_USER_ID), jd_id, session_id, {"new": True},
+        )
     finally:
         app.dependency_overrides.pop(get_db, None)
 

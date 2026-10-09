@@ -22,6 +22,7 @@ vi.mock("@/lib/api-client", () => ({
     }),
     getJdCoverLetter: vi.fn().mockResolvedValue({ cover_letter_id: null, status: null, created_at: null }),
     generateCoverLetter: vi.fn(),
+    generateJdPrepQuestions: vi.fn(),
   },
 }));
 
@@ -158,6 +159,54 @@ describe("JDPage — Tailor with a target company", () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review"));
     expect(useTailoringStore.getState().jdId).toBe("jd-1");
     expect(useTailoringStore.getState().companyName).toBe("Stripe");
+  });
+});
+
+describe("JDPage — Interview Practice row", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    useResumeStore.getState().resetStore();
+    vi.clearAllMocks();
+    vi.mocked(apiClient.getJd).mockResolvedValue(JD as any);
+    vi.mocked(apiClient.getResumes).mockResolvedValue([RESUME] as any);
+  });
+
+  const details = (over: object) => ({
+    session_id: "run-latest", resume_id: "resume-1", resume_title: "R", resume_pdf_url: null,
+    ats_score: 80, session_created_at: new Date().toISOString(),
+    questions_total: 0, questions_practiced: 0, questions_session_id: null, resume_saved: false,
+    ...over,
+  });
+
+  it("practices the run that holds the questions, not simply the latest run", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue(
+      details({ questions_total: 8, questions_practiced: 3, questions_session_id: "run-saved", resume_saved: true }) as any,
+    );
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+    expect(await screen.findByText("3 of 8 questions practiced")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Practice" }));
+    expect(mockPush).toHaveBeenCalledWith("/interview/run-saved");
+  });
+
+  it("only points an unsaved JD at Save to JD — analyzing alone makes no questions", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue(details({ resume_saved: false }) as any);
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+    expect(await screen.findByText(/Save your tailored résumé to this job/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Generate questions/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Practice" })).toBeNull();
+  });
+
+  it("generates questions for a saved JD that has none", async () => {
+    vi.mocked(apiClient.getJdDetails)
+      .mockResolvedValueOnce(details({ resume_saved: true }) as any)
+      .mockResolvedValue(details({ resume_saved: true, questions_total: 10, questions_session_id: "run-saved" }) as any);
+    vi.mocked(apiClient.generateJdPrepQuestions).mockResolvedValue({ session_id: "run-saved", questions_total: 10 });
+
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Generate questions/ }));
+
+    expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-1");
+    expect(await screen.findByText("0 of 10 questions practiced")).toBeInTheDocument();
   });
 });
 

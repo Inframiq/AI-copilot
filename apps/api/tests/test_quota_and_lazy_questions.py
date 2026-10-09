@@ -1,5 +1,5 @@
 """POST /ai/tailor credit gate (app.core.credits.spend_credits) and
-GET /ai/sessions/{id}/questions lazy generation."""
+interview prep questions (made by Save to JD, never by viewing)."""
 import time
 import uuid
 import jwt as pyjwt
@@ -151,7 +151,7 @@ async def test_tailor_creates_a_free_subscription_on_first_use():
         app.dependency_overrides.pop(get_db, None)
 
 
-# ── lazy prep questions ──────────────────────────────────────────────────────
+# ── prep questions: made by Save to JD, never by viewing ─────────────────────
 
 _AGENT1 = {
     "exact_technical_tools": ["Python"], "methodologies_and_frameworks": [],
@@ -161,40 +161,44 @@ _AGENT1 = {
 }
 
 
-@pytest.mark.asyncio
-async def test_questions_generated_lazily_on_first_view_and_persisted():
+def _gen_out():
     from app.services.tailoring import PrepQuestionData
+    return [PrepQuestionData(topic="Technical", question="Tell me about the pipeline.",
+                             answer_framework="STAR", is_gap_based=False, source="requirement",
+                             basis="Own the pipeline", order_index=1)]
 
+
+def _scalars(rows):
+    r = MagicMock()
+    r.scalars.return_value.all.return_value = rows
+    return r
+
+
+@pytest.mark.asyncio
+async def test_viewing_a_sessions_questions_never_generates_any():
+    """The Interview Center lists and never generates; this page used to be
+    the only thing that generated, so new runs showed no questions anywhere."""
     override, db = make_mock_db()
     sess = TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), jd_id=uuid.uuid4(),
-                            status="completed", matched_skills=["Python"], missing_skills=["AWS"],
-                            tailored_content={"experience": []})
-    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
+                            status="completed")
     sr = MagicMock(); sr.scalar_one_or_none.return_value = sess
-    eq = MagicMock(); eq.scalars.return_value.all.return_value = []
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    db.execute = AsyncMock(side_effect=[sr, eq, jr])
+    db.execute = AsyncMock(side_effect=[sr, _scalars([])])
 
-    gen_out = [PrepQuestionData(topic="Technical", question="Tell me about the pipeline.",
-                                answer_framework="STAR", is_gap_based=False, source="requirement",
-                                basis="Own the pipeline", order_index=1)]
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.get_or_generate_prep_questions",
-                   new=AsyncMock(return_value=gen_out)) as gen, \
-             patch("app.routers.ai.get_ai_provider", return_value=MagicMock()):
+        with patch("app.services.prep_questions.get_or_generate_prep_questions", new=AsyncMock()) as gen:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.get(f"/ai/sessions/{sess.id}/questions", headers=make_auth_header())
         assert r.status_code == 200
-        assert [q["question"] for q in r.json()] == ["Tell me about the pipeline."]
-        gen.assert_awaited_once()
-        db.add_all.assert_called_once()
+        assert r.json() == []
+        gen.assert_not_awaited()
+        db.add_all.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_questions_return_existing_without_regenerating():
+async def test_viewing_returns_the_existing_set():
     override, db = make_mock_db()
     sess = TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
                             jd_id=uuid.uuid4(), status="completed")
@@ -202,40 +206,135 @@ async def test_questions_return_existing_without_regenerating():
                              answer_framework="STAR", is_gap_based=False, source="requirement",
                              basis="x", order_index=1)]
     sr = MagicMock(); sr.scalar_one_or_none.return_value = sess
-    qr = MagicMock(); qr.scalars.return_value.all.return_value = existing
-    db.execute = AsyncMock(side_effect=[sr, qr])
+    db.execute = AsyncMock(side_effect=[sr, _scalars(existing)])
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.get_or_generate_prep_questions", new=AsyncMock()) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.get(f"/ai/sessions/{sess.id}/questions", headers=make_auth_header())
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.get(f"/ai/sessions/{sess.id}/questions", headers=make_auth_header())
         assert r.status_code == 200
-        assert len(r.json()) == 1
+        assert [q["question"] for q in r.json()] == ["Q1"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def _session():
+    return TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), jd_id=uuid.uuid4(),
+                            status="completed", matched_skills=["Python"], missing_skills=["AWS"],
+                            tailored_content={"experience": ["from the run"]})
+
+
+@pytest.mark.asyncio
+async def test_generation_writes_questions_from_the_saved_resume_and_cached_analysis():
+    from app.services import prep_questions
+
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
+    sess = _session()
+    saved = {"experience": ["as saved"]}
+
+    with patch.object(prep_questions, "get_or_generate_prep_questions",
+                      new=AsyncMock(return_value=_gen_out())) as gen, \
+         patch.object(prep_questions, "_agent1_parse_jd", new=AsyncMock()) as parse, \
+         patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()), \
+         patch.object(prep_questions, "record_ai_usage"):
+        rows = await prep_questions.generate_for_session(db, sess, jd, saved)
+
+    assert [r.question for r in rows] == ["Tell me about the pipeline."]
+    assert all(r.session_id == sess.id for r in rows)
+    parse.assert_not_awaited()
+    args, kwargs = gen.call_args
+    assert args[0] == ["AWS"] and args[1] == saved  # the résumé as saved, not the raw run
+    assert kwargs["jd_analysis"].core_responsibilities == ["Own the pipeline"]
+    db.add_all.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generation_parses_the_jd_when_no_analysis_is_cached():
+    """A run made with a target company caches no JD analysis — that used to
+    mean no questions at all."""
+    from app.services import prep_questions
+    from app.services.tailoring import JDAnalysis
+
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    jd = make_jd(); jd.parsed = {}
+
+    with patch.object(prep_questions, "get_or_generate_prep_questions",
+                      new=AsyncMock(return_value=_gen_out())), \
+         patch.object(prep_questions, "_agent1_parse_jd",
+                      new=AsyncMock(return_value=JDAnalysis(**_AGENT1))) as parse, \
+         patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()), \
+         patch.object(prep_questions, "record_ai_usage"):
+        rows = await prep_questions.generate_for_session(db, _session(), jd, {"experience": []})
+
+    parse.assert_awaited_once()
+    assert len(rows) == 1
+    assert jd.parsed == {}  # the score's cache is not written from here
+
+
+@pytest.mark.asyncio
+async def test_generation_keeps_a_set_that_already_exists():
+    from app.services import prep_questions
+
+    sess = _session()
+    have = [PrepQuestion(id=uuid.uuid4(), session_id=sess.id, topic="Technical", question="Old",
+                         answer_framework="STAR", is_gap_based=False, source="requirement",
+                         basis="x", order_index=1)]
+    db = MagicMock(); db.execute = AsyncMock(return_value=_scalars(have)); db.add_all = MagicMock()
+
+    with patch.object(prep_questions, "get_or_generate_prep_questions", new=AsyncMock()) as gen:
+        rows = await prep_questions.generate_for_session(db, sess, make_jd(), {})
+
+    assert [r.question for r in rows] == ["Old"]
+    gen.assert_not_awaited()
+    db.add_all.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_endpoint_refuses_a_jd_that_was_only_analyzed():
+    override, db = make_mock_db()
+    jd = make_jd(); jd.tailored_resume_id = None
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    no_run = MagicMock(); no_run.scalars.return_value.first.return_value = None
+    db.execute = AsyncMock(side_effect=[jr, no_run])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+        assert r.status_code == 409
+        assert "save it to the JD" in r.json()["detail"]
         gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_questions_empty_when_jd_has_no_cached_analysis():
+async def test_generate_endpoint_makes_questions_for_a_saved_jd():
     override, db = make_mock_db()
-    sess = TailoringSession(id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
-                            jd_id=uuid.uuid4(), status="completed")
-    jd = make_jd(); jd.parsed = None
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = sess
-    eq = MagicMock(); eq.scalars.return_value.all.return_value = []
+    saved = make_resume(); saved.content = {"experience": ["saved"]}
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    sess = _session(); sess.jd_id = jd.id
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    db.execute = AsyncMock(side_effect=[sr, eq, jr])
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    run = MagicMock(); run.scalars.return_value.first.return_value = sess
+    db.execute = AsyncMock(side_effect=[jr, rr, run])
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.get_or_generate_prep_questions", new=AsyncMock()) as gen:
+        with patch("app.routers.jd.generate_for_session",
+                   new=AsyncMock(return_value=[MagicMock(), MagicMock()])) as gen:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.get(f"/ai/sessions/{sess.id}/questions", headers=make_auth_header())
+                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
         assert r.status_code == 200
-        assert r.json() == []
-        gen.assert_not_awaited()
+        assert r.json() == {"session_id": str(sess.id), "questions_total": 2}
+        gen.assert_awaited_once()
+        assert gen.call_args.args[3] == {"experience": ["saved"]}
     finally:
         app.dependency_overrides.pop(get_db, None)
 

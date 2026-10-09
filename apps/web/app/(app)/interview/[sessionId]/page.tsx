@@ -61,8 +61,8 @@ export default function InterviewPage({
               No questions yet
             </h2>
             <p className="text-body-md text-on-surface-variant mb-lg">
-              Go to the JD Analyzer, tailor a resume, and your personalized
-              interview questions will appear here.
+              Tailor your résumé to a job in the JD Analyzer and Save to JD —
+              your personalized interview questions are made from that save.
             </p>
             <button
               onClick={() => router.push("/dashboard")}

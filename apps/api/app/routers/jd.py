@@ -8,6 +8,9 @@ from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverL
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
+from app.services.prep_questions import (
+    generate_for_session, latest_session_with_questions, run_for_saved_resume,
+)
 
 router = APIRouter(prefix="/jd", tags=["jd"])
 
@@ -204,15 +207,20 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
             "session_created_at": None,
             "questions_total": 0,
             "questions_practiced": 0,
+            "questions_session_id": None,
+            "resume_saved": False,
         }
 
+    # Questions come from the run that has them, which need not be the latest
+    # (a later re-tailor that was never saved has none).
     questions_total = questions_practiced = 0
-    if session:
+    questions_session = await latest_session_with_questions(db, uid, jd_id)
+    if questions_session:
         q_result = await db.execute(
             select(
                 func.count(PrepQuestion.id),
                 func.count(PrepQuestion.practiced_at),
-            ).where(PrepQuestion.session_id == session.id)
+            ).where(PrepQuestion.session_id == questions_session.id)
         )
         questions_total, questions_practiced = q_result.one()
 
@@ -227,7 +235,44 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
         "session_created_at": session.created_at.isoformat() if session else None,
         "questions_total": questions_total,
         "questions_practiced": questions_practiced,
+        "questions_session_id": str(questions_session.id) if questions_session else None,
+        # Questions are made by saving the tailored résumé to this JD.
+        "resume_saved": tailored_resume is not None,
     }
+
+
+@router.post("/{jd_id}/prep-questions")
+@limiter.limit("5/minute")
+async def generate_jd_prep_questions(
+    request: Request, jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Interview prep questions for a JD whose tailored résumé is saved —
+    normally made by the save itself; this is for a JD saved before that was
+    so, or whose generation failed. Refuses a JD that was only analyzed:
+    questions are about the résumé you are applying with."""
+    uid = uuid.UUID(user["sub"])
+    jd = (
+        await db.execute(
+            select(JobDescription).where(JobDescription.id == jd_id, JobDescription.user_id == uid)
+        )
+    ).scalar_one_or_none()
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD not found")
+    saved = None
+    if jd.tailored_resume_id:
+        saved = (
+            await db.execute(
+                select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
+            )
+        ).scalar_one_or_none()
+    session = await run_for_saved_resume(db, uid, jd_id)
+    if saved is None or session is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Tailor your résumé to this job and save it to the JD first — that is what interview questions are made from.",
+        )
+    rows = await generate_for_session(db, session, jd, saved.content)
+    return {"session_id": str(session.id), "questions_total": len(rows)}
 
 
 @router.get("/{jd_id}/cover-letter")

@@ -140,6 +140,9 @@ export const apiClient = {
      * creating a new row, so re-tailoring + saving again doesn't pile up
      * duplicates. */
     jd_id?: string;
+    /** With jd_id: the tailoring run this résumé came from. Saving to a JD
+     * makes that run's interview prep questions, server-side. */
+    tailoring_session_id?: string;
   }): Promise<Resume> => request<Resume>("POST", "/resumes", payload),
 
   updateResume: (
@@ -472,9 +475,15 @@ export const apiClient = {
       `/ai/sessions/${sessionId}/questions`
     ),
 
+  /** Interview prep questions for a JD whose tailored résumé is saved —
+   * saving normally makes them; this covers a JD saved before it did, or a
+   * failed generation. 409 for a JD that was only analyzed. */
+  generateJdPrepQuestions: (jdId: string): Promise<{ session_id: string; questions_total: number }> =>
+    request("POST", `/jd/${jdId}/prep-questions`),
+
   // Every prep question generated across all of the user's JDs — one JD's
-  // worth at a time, from its latest completed session — used by Interview
-  // Center to categorize questions by JD and filter down to one.
+  // worth at a time, from its latest completed run that has questions — used
+  // by Interview Center to categorize questions by JD and filter down to one.
   getMyQuestions: (): Promise<PrepQuestionWithJdOut[]> =>
     request<PrepQuestionWithJdOut[]>("GET", "/ai/questions/mine"),
 

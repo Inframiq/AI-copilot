@@ -61,6 +61,14 @@ export default function JDPage({
   const { data: jdDetails } = useQuery<JDDetails>({
     queryKey: ["jdDetails", jdId],
     queryFn: () => apiClient.getJdDetails(jdId),
+    // Saving to this JD makes its interview questions in the background, so
+    // a page opened straight after a save checks back for a minute or so.
+    refetchInterval: (query) =>
+      query.state.data?.resume_saved &&
+      query.state.data.questions_total === 0 &&
+      query.state.dataUpdateCount < 12
+        ? 5000
+        : false,
   });
 
   const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
@@ -139,6 +147,24 @@ export default function JDPage({
     // Straight to the tailoring review, which runs the pipeline on arrival.
     // Not the Builder: its six sections are not part of this path.
     router.push(`/studio/${masterResume.id}/review`);
+  }
+
+  // Saving the tailored résumé to this JD makes its questions; this covers a
+  // JD saved before that was so, or a generation that failed.
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [prepError, setPrepError] = useState<string | null>(null);
+  async function handleGenerateQuestions() {
+    setIsGeneratingQuestions(true);
+    setPrepError(null);
+    try {
+      await apiClient.generateJdPrepQuestions(jdId);
+      await queryClient.invalidateQueries({ queryKey: ["jdDetails", jdId] });
+      queryClient.invalidateQueries({ queryKey: ["myQuestions"] });
+    } catch (e: unknown) {
+      setPrepError(e instanceof Error ? e.message : "Couldn't generate questions. Try again.");
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
   }
 
   async function handleOpen() {
@@ -384,15 +410,30 @@ export default function JDPage({
                   <p className="text-caption text-on-surface-variant">
                     {jdDetails.questions_total > 0
                       ? `${jdDetails.questions_practiced} of ${jdDetails.questions_total} questions practiced`
-                      : "No prep questions generated yet"}
+                      : jdDetails.resume_saved
+                      ? "Questions are made from the résumé you saved for this job"
+                      : "Save your tailored résumé to this job to get interview questions"}
                   </p>
+                  {prepError && <p className="text-caption text-error mt-xs">{prepError}</p>}
                 </div>
-                <button
-                  onClick={() => router.push(`/interview/${jdDetails.session_id}`)}
-                  className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-                >
-                  Practice
-                </button>
+                {jdDetails.questions_total > 0 ? (
+                  <button
+                    onClick={() =>
+                      router.push(`/interview/${jdDetails.questions_session_id ?? jdDetails.session_id}`)
+                    }
+                    className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                  >
+                    Practice
+                  </button>
+                ) : jdDetails.resume_saved ? (
+                  <button
+                    onClick={handleGenerateQuestions}
+                    disabled={isGeneratingQuestions}
+                    className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+                  >
+                    {isGeneratingQuestions ? "Generating…" : "Generate questions"}
+                  </button>
+                ) : null}
               </div>
             </div>
           )}

@@ -34,12 +34,12 @@ describe("InterviewIndexPage — no active session", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
   });
 
-  it("shows only the 'tailor a resume to a JD' CTA when the user has no generated questions", async () => {
+  it("shows only the 'save a tailored résumé to a JD' CTA when the user has no generated questions", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
     expect(
-      screen.getByText(/generated when you tailor a resume to a specific job description/i)
+      screen.getByText(/made when you save a tailored résumé to\s+a job/i)
     ).toBeInTheDocument();
   });
 
