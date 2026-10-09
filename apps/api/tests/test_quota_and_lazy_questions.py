@@ -339,6 +339,33 @@ async def test_generate_endpoint_makes_questions_for_a_saved_jd():
         app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.mark.asyncio
+async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from():
+    """Called by the client straight after Save to JD, naming the run it
+    reviewed — which need not be the JD's latest."""
+    override, db = make_mock_db()
+    saved = make_resume()
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    named = _session(); named.jd_id = jd.id
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    nr = MagicMock(); nr.scalar_one_or_none.return_value = named
+    db.execute = AsyncMock(side_effect=[jr, rr, nr])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock(return_value=[])) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions",
+                                 json={"tailoring_session_id": str(named.id)},
+                                 headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["session_id"] == str(named.id)
+        assert gen.call_args.args[1] is named
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ── Tailoring caches its JD analysis, like analyze does ──────────────────────
 # Without it, POST /ai/project-score 409s ("Session JD has no cached analysis")
 # and the review screen's live before->now score silently stops responding to

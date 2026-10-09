@@ -33,6 +33,7 @@ vi.mock("@/lib/career-profile-client", () => ({
 import JDPage from "../app/(app)/jd/[jdId]/page";
 import { useTailoringStore } from "../stores/tailoring-store";
 import { useResumeStore } from "../stores/resume-store";
+import { usePrepQuestionsStore } from "../stores/prep-questions-store";
 import { apiClient } from "../lib/api-client";
 
 async function renderWithQueryClient(ui: React.ReactElement) {
@@ -205,8 +206,21 @@ describe("JDPage — Interview Practice row", () => {
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
     await userEvent.click(await screen.findByRole("button", { name: /Generate questions/ }));
 
-    expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-1");
+    expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-1", undefined);
     expect(await screen.findByText("0 of 10 questions practiced")).toBeInTheDocument();
+  });
+
+  it("says the questions are being prepared while a save's generation is running", async () => {
+    usePrepQuestionsStore.setState({ pending: { "jd-1": "Senior Backend Engineer" }, errors: {} });
+    // The details may predate the save, still saying nothing is saved.
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue(details({ resume_saved: false }) as any);
+    try {
+      await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+      expect(await screen.findByText(/Preparing your interview questions/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Generating…" })).toBeDisabled();
+    } finally {
+      usePrepQuestionsStore.setState({ pending: {}, errors: {} });
+    }
   });
 });
 

@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -241,15 +242,25 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
     }
 
 
+class PrepQuestionsRequest(BaseModel):
+    # The tailoring run the saved résumé came out of; else the JD's latest.
+    tailoring_session_id: uuid.UUID | None = None
+
+
 @router.post("/{jd_id}/prep-questions")
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 async def generate_jd_prep_questions(
-    request: Request, jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+    request: Request,
+    jd_id: uuid.UUID,
+    body: PrepQuestionsRequest | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Interview prep questions for a JD whose tailored résumé is saved —
-    normally made by the save itself; this is for a JD saved before that was
-    so, or whose generation failed. Refuses a JD that was only analyzed:
-    questions are about the résumé you are applying with."""
+    """Interview prep questions for a JD whose tailored résumé is saved. The
+    client calls this right after Save to JD and waits for it; the JD page
+    also offers it for a JD saved before that was so. Returns the existing
+    set if there is one. Refuses a JD that was only analyzed: questions are
+    about the résumé you are applying with."""
     uid = uuid.UUID(user["sub"])
     jd = (
         await db.execute(
@@ -265,7 +276,9 @@ async def generate_jd_prep_questions(
                 select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
             )
         ).scalar_one_or_none()
-    session = await run_for_saved_resume(db, uid, jd_id)
+    session = await run_for_saved_resume(
+        db, uid, jd_id, body.tailoring_session_id if body else None,
+    )
     if saved is None or session is None:
         raise HTTPException(
             status_code=409,

@@ -5,6 +5,11 @@ does opening an interview page — saving the reviewed, tailored résumé for a 
 is the user saying "this is the version I'm applying with", and that version is
 what the questions are about.
 
+The client asks for them (POST /jd/{id}/prep-questions) the moment its save
+succeeds and waits on the answer. It used to be a background task the client
+could not see finish, so every list of questions stayed empty until something
+happened to fetch it again.
+
 They hang off the tailoring run (PrepQuestion.session_id) that produced the
 saved résumé, but are written from the résumé as saved, edits included.
 """
@@ -16,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.usage import record_ai_usage
 from app.db.models import JobDescription, PrepQuestion, TailoringSession
-from app.db.session import AsyncSessionLocal
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import JDAnalysis, _agent1_parse_jd, get_or_generate_prep_questions
 
@@ -87,10 +91,10 @@ async def generate_for_session(
             jd_analysis = JDAnalysis(**raw_cached)
         except Exception:
             jd_analysis = None
-    if jd_analysis is None:
-        jd_analysis = await _agent1_parse_jd(jd.raw_text, provider)
 
     async with record_ai_usage(session.user_id, "prep_questions"):
+        if jd_analysis is None:
+            jd_analysis = await _agent1_parse_jd(jd.raw_text, provider)
         questions = await get_or_generate_prep_questions(
             session.missing_skills or [],
             resume_content or session.tailored_content or {},
@@ -117,29 +121,6 @@ async def generate_for_session(
         for r in rows:
             await db.refresh(r)
     return rows
-
-
-async def generate_after_save(
-    user_id: uuid.UUID, jd_id: uuid.UUID, session_id: uuid.UUID | None, resume_content: dict,
-) -> None:
-    """Background task behind Save to JD. Its own DB session — the request's
-    is closed by the time this runs. Never raises: the save already succeeded,
-    and a failure here leaves the JD page's "Generate questions" to retry."""
-    async with AsyncSessionLocal() as db:
-        try:
-            jd = (
-                await db.execute(
-                    select(JobDescription).where(
-                        JobDescription.id == jd_id, JobDescription.user_id == user_id
-                    )
-                )
-            ).scalar_one_or_none()
-            session = await run_for_saved_resume(db, user_id, jd_id, session_id)
-            if jd is None or session is None:
-                return
-            await generate_for_session(db, session, jd, resume_content)
-        except Exception:
-            logger.exception("Prep question generation failed for JD %s", jd_id)
 
 
 async def latest_session_with_questions(

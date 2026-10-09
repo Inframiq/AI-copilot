@@ -92,7 +92,7 @@ interface ResumeState {
   /** Save the draft as the tailored résumé for its JD — a new résumé, or the
    *  one already linked to that JD, never the source — and switch the store
    *  to it so later edits autosave there. Returns the saved résumé's id. */
-  saveDraftToJd: (title: string, tailoringSessionId?: string | null) => Promise<string>;
+  saveDraftToJd: (title: string) => Promise<string>;
   setTemplateId: (id: string) => void;
   setSpacing: (lineSpacing: number, paragraphSpacing: number) => void;
   setFontChoice: (fontChoice: string) => void;
@@ -205,9 +205,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     set({ ...base, draftJdId: null, _draftBase: null, isDirty: false });
   },
 
-  // tailoringSessionId: the run the draft came out of — the server makes its
-  // interview prep questions from this save.
-  saveDraftToJd: async (title, tailoringSessionId) => {
+  saveDraftToJd: async (title) => {
     const {
       draftJdId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
       accentColor, headingSizeDelta, bodySizeDelta,
@@ -229,7 +227,6 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
         heading_size_delta: headingSizeDelta,
         body_size_delta: bodySizeDelta,
         jd_id: draftJdId,
-        ...(tailoringSessionId ? { tailoring_session_id: tailoringSessionId } : {}),
       });
       get().setResume(
         saved.id, content, templateId, lineSpacing, paragraphSpacing, fontChoice,

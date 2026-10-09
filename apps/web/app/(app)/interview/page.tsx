@@ -8,11 +8,14 @@ import {
   Play,
   MicrophoneStage,
   Check,
+  CircleNotch,
 } from "@phosphor-icons/react";
+import { useShallow } from "zustand/react/shallow";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { usePrepQuestionsStore } from "@/stores/prep-questions-store";
 import type { PrepQuestionWithJdOut, Resume, JobDescription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
@@ -34,6 +37,8 @@ export default function InterviewIndexPage() {
   const storeSessionId = useTailoringStore((s) => s.sessionId);
   const storeMatchedSkills = useTailoringStore((s) => s.matchedSkills);
   const storeMissingSkills = useTailoringStore((s) => s.missingSkills);
+  // Titles of JDs whose questions are being made right now (Save to JD).
+  const preparing = usePrepQuestionsStore(useShallow((s) => Object.values(s.pending)));
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
   // null = "All Job Descriptions" — narrows the list (and its tab counts/
@@ -209,6 +214,22 @@ export default function InterviewIndexPage() {
             Prepare, practice, and perfect your interview skills across technical, behavioral, and HR disciplines.
           </p>
         </div>
+
+        {/* A Save to JD just started making questions; the list refreshes the
+            moment they exist, so say so rather than show an empty page. */}
+        {preparing.length > 0 && (
+          <div
+            role="status"
+            className="flex items-center gap-sm rounded-2xl border border-primary/20 bg-primary/5 px-md py-sm text-body-sm text-on-surface"
+          >
+            <CircleNotch size={16} className="shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+            <span className="min-w-0">
+              Preparing interview questions
+              {preparing.length === 1 && preparing[0] ? ` for ${preparing[0]}` : ""} — they&apos;ll appear here
+              in a moment.
+            </span>
+          </div>
+        )}
 
         {/* Phones: the laptop's right-hand rail, as a strip under the title —
             below the questions it was out of sight. */}

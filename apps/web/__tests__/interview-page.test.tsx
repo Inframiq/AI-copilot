@@ -19,6 +19,7 @@ vi.mock("@/lib/api-client", () => ({
 
 import InterviewIndexPage from "../app/(app)/interview/page";
 import { useTailoringStore } from "../stores/tailoring-store";
+import { usePrepQuestionsStore } from "../stores/prep-questions-store";
 import { apiClient } from "../lib/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -41,6 +42,18 @@ describe("InterviewIndexPage — no active session", () => {
     expect(
       screen.getByText(/made when you save a tailored résumé to\s+a job/i)
     ).toBeInTheDocument();
+  });
+
+  it("says questions are being prepared while a Save to JD is making them", async () => {
+    usePrepQuestionsStore.setState({ pending: { "jd-1": "Backend Engineer" }, errors: {} });
+    try {
+      renderWithQueryClient(<InterviewIndexPage />);
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        /Preparing interview questions for Backend Engineer/,
+      );
+    } finally {
+      usePrepQuestionsStore.setState({ pending: {}, errors: {} });
+    }
   });
 
   it("still shows only the CTA after switching tabs", async () => {

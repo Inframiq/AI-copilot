@@ -53,10 +53,6 @@ class ResumeCreate(BaseModel):
     # see create_resume in routers/resumes.py, which overwrites the JD's
     # already-linked resume (if any) instead of creating a new row.
     jd_id: uuid.UUID | None = None
-    # With jd_id: the tailoring run this résumé came out of, whose interview
-    # prep questions the save generates (services/prep_questions.py). Falls
-    # back to the JD's latest completed run when absent or not this user's.
-    tailoring_session_id: uuid.UUID | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

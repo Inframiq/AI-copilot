@@ -18,7 +18,6 @@ from app.services.pdf import (
 from app.services.resume_parser import extract_text, parse_resume_text
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
-from app.services.prep_questions import generate_after_save
 from supabase import create_client
 from app.core.config import settings
 
@@ -165,21 +164,12 @@ async def list_resumes(user=Depends(get_current_user), db: AsyncSession = Depend
 
 
 @router.post("", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
-async def create_resume(
-    body: ResumeCreate,
-    background_tasks: BackgroundTasks,
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Saving with jd_id is what makes the JD's interview prep questions: the
+    # client calls POST /jd/{jd_id}/prep-questions straight after, and waits
+    # on it, so every view of the questions updates the moment they exist.
     uid = uuid.UUID(user["sub"])
-    payload = body.model_dump(exclude={"jd_id", "tailoring_session_id"})
-
-    def queue_prep_questions(content: dict) -> None:
-        # Saving the tailored résumé for a JD is what makes its interview
-        # prep questions — after the response, since it is a model call.
-        background_tasks.add_task(
-            generate_after_save, uid, body.jd_id, body.tailoring_session_id, content,
-        )
+    payload = body.model_dump(exclude={"jd_id"})
     # The size columns are NOT NULL; None means "not chosen", which the
     # column default already encodes. Passing it through writes a NULL.
     for field in ("heading_size_delta", "body_size_delta"):
@@ -213,7 +203,6 @@ async def create_resume(
                     setattr(existing, field, value)
                 await db.commit()
                 await db.refresh(existing)
-                queue_prep_questions(existing.content)
                 return existing
 
     resume = Resume(user_id=uid, **payload)
@@ -223,7 +212,6 @@ async def create_resume(
     if jd:
         jd.tailored_resume_id = resume.id
         await db.commit()
-        queue_prep_questions(resume.content)
     await _evict_oldest_resumes(db, uid)
     return resume
 

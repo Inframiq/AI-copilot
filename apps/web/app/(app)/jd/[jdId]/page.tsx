@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import { useTailoringStore } from "@/stores/tailoring-store";
+import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
 import {
@@ -61,14 +62,6 @@ export default function JDPage({
   const { data: jdDetails } = useQuery<JDDetails>({
     queryKey: ["jdDetails", jdId],
     queryFn: () => apiClient.getJdDetails(jdId),
-    // Saving to this JD makes its interview questions in the background, so
-    // a page opened straight after a save checks back for a minute or so.
-    refetchInterval: (query) =>
-      query.state.data?.resume_saved &&
-      query.state.data.questions_total === 0 &&
-      query.state.dataUpdateCount < 12
-        ? 5000
-        : false,
   });
 
   const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
@@ -149,22 +142,13 @@ export default function JDPage({
     router.push(`/studio/${masterResume.id}/review`);
   }
 
-  // Saving the tailored résumé to this JD makes its questions; this covers a
-  // JD saved before that was so, or a generation that failed.
-  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
-  const [prepError, setPrepError] = useState<string | null>(null);
-  async function handleGenerateQuestions() {
-    setIsGeneratingQuestions(true);
-    setPrepError(null);
-    try {
-      await apiClient.generateJdPrepQuestions(jdId);
-      await queryClient.invalidateQueries({ queryKey: ["jdDetails", jdId] });
-      queryClient.invalidateQueries({ queryKey: ["myQuestions"] });
-    } catch (e: unknown) {
-      setPrepError(e instanceof Error ? e.message : "Couldn't generate questions. Try again.");
-    } finally {
-      setIsGeneratingQuestions(false);
-    }
+  // Saving the tailored résumé to this JD starts its questions (from the
+  // Studio); "Generate questions" covers a JD saved before that was so, or a
+  // generation that failed. Either way the same in-flight state shows here.
+  const isGeneratingQuestions = usePrepQuestionsStore((s) => jdId in s.pending);
+  const prepError = usePrepQuestionsStore((s) => s.errors[jdId] ?? null);
+  function handleGenerateQuestions() {
+    void startPrepQuestions(queryClient, jdId, { title: jd?.title });
   }
 
   async function handleOpen() {
@@ -410,6 +394,8 @@ export default function JDPage({
                   <p className="text-caption text-on-surface-variant">
                     {jdDetails.questions_total > 0
                       ? `${jdDetails.questions_practiced} of ${jdDetails.questions_total} questions practiced`
+                      : isGeneratingQuestions
+                      ? "Preparing your interview questions — usually under a minute"
                       : jdDetails.resume_saved
                       ? "Questions are made from the résumé you saved for this job"
                       : "Save your tailored résumé to this job to get interview questions"}
@@ -425,7 +411,7 @@ export default function JDPage({
                   >
                     Practice
                   </button>
-                ) : jdDetails.resume_saved ? (
+                ) : jdDetails.resume_saved || isGeneratingQuestions ? (
                   <button
                     onClick={handleGenerateQuestions}
                     disabled={isGeneratingQuestions}

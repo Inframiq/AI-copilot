@@ -75,7 +75,7 @@ describe("editing links in the Studio", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("offers to add each link a project is missing, beside its name", () => {
+  it("offers to add each link a project is missing, above its line — never over the links it has", () => {
     const onEditLink = vi.fn();
     const html = `<div class="job-row"><span data-field="projects.0.name">OdTect</span> &middot;
 <span><a href="https://github.com/j/o" data-link="projects.0.link" data-link-url="github.com/j/o" data-link-text="GitHub">GitHub</a></span></div>
@@ -85,15 +85,22 @@ describe("editing links in the Studio", () => {
       <ResumeCanvas html={html} editable onEdit={() => {}} onEditLink={onEditLink} />,
     );
     const root = shadow(container);
-    const labels = (i: number) =>
-      Array.from(root.querySelector(`[data-field="projects.${i}.name"]`)!.nextElementSibling!.querySelectorAll("button"))
-        .map((b) => b.textContent);
+    // Placed just before the name: the bar floats above the line from where
+    // the line starts. After the name it sat on the line, over "· GitHub".
+    const anchor = (i: number) =>
+      root.querySelector(`[data-field="projects.${i}.name"]`)!.previousElementSibling!;
+    const labels = (i: number) => Array.from(anchor(i).querySelectorAll("button")).map((b) => b.textContent);
 
+    expect(anchor(0).hasAttribute("data-studio-add-links")).toBe(true);
     expect(labels(0)).toEqual(["+ Live link"]);
     expect(labels(1)).toEqual(["+ Link", "+ Live link"]);
     expect(root.querySelectorAll("[data-studio-add-links]")).toHaveLength(2);
+    // Nothing is added to the name itself, whose text is what gets saved.
+    expect(root.querySelector('[data-field="projects.0.name"]')!.textContent).toBe("OdTect");
+    const css = root.querySelector("style[data-studio-affordance]")!.textContent!;
+    expect(css).toMatch(/\[data-studio-add-links\] > span \{[^}]*bottom: calc\(100%/);
 
-    const add = root.querySelector('[data-field="projects.0.name"]')!.nextElementSibling!.querySelector("button")!;
+    const add = anchor(0).querySelector("button")!;
     add.click();
     expect(onEditLink).toHaveBeenCalledWith(
       expect.objectContaining({ path: "projects.0.live_link", url: "", text: "" }),

@@ -13,6 +13,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => ({
       html: '<p data-field="summary">Old summary.</p>',
     })),
     generatePdf: vi.fn(async () => ({ signed_url: "u", underfilled: false })),
+    generateJdPrepQuestions: vi.fn(async () => ({ session_id: "sess-9", questions_total: 10 })),
     getResume: vi.fn(async () => ({
       id: "r1", content: { contact: {}, summary: "Fetched.", experience: [], education: [], skills: [] },
       template_id: "ats_clean", line_spacing: 1.25, paragraph_spacing: 12,
@@ -146,7 +147,8 @@ describe("Studio preview page", () => {
       fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
       await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/saved-1/preview"));
       expect(order).toEqual(["save", "pdf"]);
-      expect(saveDraftToJd).toHaveBeenCalledWith(expect.any(String), "sess-9");
+      // The save starts the JD's interview questions, for the run reviewed.
+      expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd1", "sess-9");
       expect(vi.mocked(apiClient.generatePdf).mock.calls[0][0]).toBe("saved-1");
       expect(click).toHaveBeenCalled();
     } finally {

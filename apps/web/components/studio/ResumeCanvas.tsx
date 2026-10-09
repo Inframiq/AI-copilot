@@ -70,22 +70,41 @@ const AFFORDANCE_CSS = `
   height: 1em;
   vertical-align: baseline;
 }
+/* A small solid toolbar above the project's line, starting where the line
+   starts — never on the line itself, where it used to sit over the
+   "· GitHub" after the name and take the click meant for it. Opaque, so
+   whatever it covers above is hidden cleanly rather than showing through.
+   The ::after bridges the gap down to the line, and hiding waits a moment,
+   so the pointer can travel up onto it. */
 [data-studio-add-links] > span {
   position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: -4px;
+  bottom: calc(100% + 4px);
+  z-index: 1;
   display: flex;
   gap: 4px;
+  padding: 3px;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(15, 23, 42, 0.06);
   white-space: nowrap;
   opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
+  visibility: hidden;
+  transition: opacity 120ms ease 150ms, visibility 0s linear 270ms;
+}
+[data-studio-add-links] > span::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 6px;
 }
 :hover > [data-studio-add-links] > span,
-[data-studio-add-links]:focus-within > span {
+:focus-within > [data-studio-add-links] > span {
   opacity: 1;
-  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
 }
 [data-studio-add-links] button {
   font: 600 10.5px/1.4 system-ui, sans-serif;
@@ -347,9 +366,9 @@ export function ResumeCanvas({
       });
     }
 
-    // Floated over the page, never in its flow, so offering a link moves no
-    // line and costs no page. The export renders on the server and never
-    // sees these.
+    // Floated above the project's line, never in its flow, so offering a
+    // link moves no line and costs no page. The export renders on the server
+    // and never sees these.
     if (editable && onEditLink) {
       for (const name of Array.from(root.querySelectorAll<HTMLElement>("[data-field$='.name']"))) {
         const index = /^projects\.(\d+)\.name$/.exec(name.dataset.field ?? "")?.[1];
@@ -381,7 +400,9 @@ export function ResumeCanvas({
           });
           bar.appendChild(button);
         }
-        name.after(anchor);
+        // Before the name, so the bar (floated above the line) starts where
+        // the line starts and can never run off the page's left edge.
+        name.before(anchor);
         cleanups.push(() => anchor.remove());
       }
     }

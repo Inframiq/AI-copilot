@@ -18,6 +18,7 @@ import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader"
 import { PhotoPrompt } from "@/components/resume/PhotoPrompt";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
 import { SaveToJd } from "@/components/studio/SaveToJd";
+import { startPrepQuestions } from "@/stores/prep-questions-store";
 
 /**
  * The Resume Studio: the document is the interface.
@@ -81,23 +82,28 @@ export default function StudioPreviewPage({
     return () => window.removeEventListener("beforeunload", warn);
   }, [draftJdId]);
 
-  /** Saves the tailored draft as the JD's résumé, which also makes the JD's
-   * interview prep questions (server-side, from this save). Returns the
-   * saved résumé's id. Throws on failure. */
+  /** Saves the tailored draft as the JD's résumé, then starts making the
+   * JD's interview prep questions from it — not awaited: every view of the
+   * questions shows them as preparing and refreshes when they land. Returns
+   * the saved résumé's id. Throws if the save fails. */
   async function saveDraftToJd(): Promise<string> {
+    const jdForDraft = useResumeStore.getState().draftJdId;
     const name = useResumeStore.getState().content?.contact?.name?.trim();
     const title = [name ? `${name}'s Resume` : "Tailored Resume", jd?.title]
       .filter(Boolean)
       .join(" — ")
       .slice(0, 255);
-    const savedId = await useResumeStore
-      .getState()
-      .saveDraftToJd(title, useTailoringStore.getState().sessionId);
+    const savedId = await useResumeStore.getState().saveDraftToJd(title);
     queryClient.invalidateQueries({ queryKey: ["jds"] });
     queryClient.invalidateQueries({ queryKey: ["jd", linkedJdId] });
     queryClient.invalidateQueries({ queryKey: ["jdDetails", linkedJdId] });
     queryClient.invalidateQueries({ queryKey: ["resumes"] });
-    queryClient.invalidateQueries({ queryKey: ["myQuestions"] });
+    if (jdForDraft) {
+      void startPrepQuestions(queryClient, jdForDraft, {
+        sessionId: useTailoringStore.getState().sessionId,
+        title: jd?.title,
+      });
+    }
     return savedId;
   }
 
