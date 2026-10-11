@@ -97,7 +97,7 @@ export function Sidebar() {
         onClick={toggle}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="absolute top-sm right-0 translate-x-full z-10 flex items-center justify-center w-5 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200"
+        className="absolute top-sm right-0 translate-x-full z-10 flex items-center justify-center w-6 h-10 rounded-r-lg border border-l-0 border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl text-on-surface-variant shadow-sm hover:text-primary hover:border-primary/40 transition-colors duration-200"
       >
         <CaretDoubleLeft
           size={14}

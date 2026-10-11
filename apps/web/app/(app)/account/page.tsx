@@ -301,23 +301,23 @@ export default function AccountPage() {
 
       {/* Legal */}
       <p className="text-body-sm text-on-surface-variant text-center pt-md">
-        <Link href="/terms" className="hover:text-on-surface hover:underline">
+        <Link href="/terms" className="inline-block whitespace-nowrap py-xs hover:text-on-surface hover:underline">
           Terms of Service
         </Link>
         <span className="mx-sm text-outline-variant">·</span>
-        <Link href="/privacy" className="hover:text-on-surface hover:underline">
+        <Link href="/privacy" className="inline-block whitespace-nowrap py-xs hover:text-on-surface hover:underline">
           Privacy Policy
         </Link>
         <span className="mx-sm text-outline-variant">·</span>
-        <Link href="/refunds" className="hover:text-on-surface hover:underline">
+        <Link href="/refunds" className="inline-block whitespace-nowrap py-xs hover:text-on-surface hover:underline">
           Refund Policy
         </Link>
         <span className="mx-sm text-outline-variant">·</span>
-        <Link href="/cookies" className="hover:text-on-surface hover:underline">
+        <Link href="/cookies" className="inline-block whitespace-nowrap py-xs hover:text-on-surface hover:underline">
           Cookie Policy
         </Link>
         <span className="mx-sm text-outline-variant">·</span>
-        <Link href="/data-deletion" className="hover:text-on-surface hover:underline">
+        <Link href="/data-deletion" className="inline-block whitespace-nowrap py-xs hover:text-on-surface hover:underline">
           Delete your data
         </Link>
       </p>

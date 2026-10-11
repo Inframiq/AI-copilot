@@ -194,7 +194,7 @@ export default function CareerPathPage() {
               </div>
             ))}
           </div>
-          <button className="flex items-center gap-sm text-label-md text-primary hover:text-primary-container transition-colors mt-sm">
+          <button className="flex items-center gap-sm text-label-md text-primary hover:text-primary-container transition-colors py-sm -mb-sm">
             <Plus size={18} /> Add milestone
           </button>
         </div>
@@ -241,7 +241,7 @@ export default function CareerPathPage() {
                 </p>
                 <button
                   onClick={() => router.push("/jd")}
-                  className="text-label-sm text-primary hover:text-primary-container transition-colors"
+                  className="py-sm -my-sm text-label-sm text-primary hover:text-primary-container transition-colors"
                 >
                   Go to JD Analyzer →
                 </button>

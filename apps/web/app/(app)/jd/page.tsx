@@ -405,7 +405,7 @@ export default function JDIndexPage() {
                 </button>
               ) : (
                 <button onClick={() => setOverrideMode(overrideMode === "none" ? "pick" : "none")}
-                  className="text-label-sm text-primary hover:underline shrink-0">
+                  className="py-sm -my-sm text-label-sm text-primary hover:underline shrink-0">
                   <span className="sm:hidden">Change</span>
                   <span className="hidden sm:inline">Use a different resume</span>
                 </button>
@@ -869,7 +869,7 @@ export default function JDIndexPage() {
 
                 <p className="text-caption text-on-surface-variant -mt-xs px-xs">
                   {new Date(jd.created_at).toLocaleDateString()} ·{" "}
-                  <button onClick={() => router.push(`/jd/${jd.id}`)} className="hover:text-primary transition-colors">
+                  <button onClick={() => router.push(`/jd/${jd.id}`)} className="py-sm -my-sm hover:text-primary transition-colors">
                     <span className="sm:hidden">View →</span>
                     <span className="hidden sm:inline">View analysis →</span>
                   </button>

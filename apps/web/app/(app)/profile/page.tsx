@@ -805,7 +805,7 @@ export default function ProfilePage() {
                     <div className="flex flex-col sm:flex-row rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
                       {(["full-time", "internship"] as const).map(t => (
                         <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
-                          className={`px-xs sm:px-sm py-0.5 sm:py-xs font-medium transition-colors ${
+                          className={`px-xs sm:px-sm py-xs font-medium transition-colors ${
                             exp.type === t
                               ? t === "internship" ? "bg-secondary-container text-on-secondary-container" : "bg-primary text-on-primary"
                               : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"
@@ -879,17 +879,22 @@ export default function ProfilePage() {
                           <div className="flex items-center gap-sm h-[18px]">
                             <label className="text-caption text-on-surface-variant">End</label>
                             {/* Currently working toggle — sits right after the label */}
-                            <div
+                            {/* A real button: reachable by keyboard and named for
+                                screen readers. The ::before widens the 18px-tall
+                                track to a finger-sized target without moving it. */}
+                            <button
+                              type="button"
                               role="switch"
                               aria-checked={exp.current}
+                              aria-label="Currently working here"
                               onClick={() => {
                                 updateExp(exp.id, "current", !exp.current);
                                 if (!exp.current) updateExp(exp.id, "end", "Present");
                               }}
-                              className={`w-8 h-[18px] rounded-full flex items-center px-[3px] cursor-pointer transition-colors duration-200 shrink-0 ${exp.current ? "bg-primary" : "bg-surface-variant"}`}
+                              className={`relative before:absolute before:-inset-x-[4px] before:-inset-y-[5px] before:content-[''] w-8 h-[18px] rounded-full flex items-center px-[3px] cursor-pointer transition-colors duration-200 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${exp.current ? "bg-primary" : "bg-surface-variant"}`}
                             >
-                              <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${exp.current ? "translate-x-[14px]" : "translate-x-0"}`} />
-                            </div>
+                              <span className={`w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${exp.current ? "translate-x-[14px]" : "translate-x-0"}`} />
+                            </button>
                             <span className="text-caption text-on-surface-variant">Current</span>
                           </div>
                           <input
@@ -928,7 +933,7 @@ export default function ProfilePage() {
                   </div>
                   {exp.company.trim() && (
                     <button type="button" onClick={() => addRoleAtCompany(idx)}
-                      className="mt-xs ml-md flex items-center gap-xs text-caption text-primary/80 hover:text-primary transition-colors">
+                      className="-mt-xs -mb-sm py-sm ml-md flex items-center gap-xs text-caption text-primary/80 hover:text-primary transition-colors">
                       <Plus size={11} weight="bold" />
                       Add another role at {exp.company.trim()}
                     </button>

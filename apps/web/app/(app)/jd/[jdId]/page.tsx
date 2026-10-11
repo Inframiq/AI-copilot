@@ -192,7 +192,7 @@ export default function JDPage({
         </div>
         <button
           onClick={() => router.back()}
-          className="shrink-0 flex items-center gap-xs sm:gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
+          className="shrink-0 flex items-center gap-xs sm:gap-sm py-sm -my-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <ArrowLeft size={16} />
           Back
@@ -250,7 +250,7 @@ export default function JDPage({
               <button
                 type="button"
                 onClick={() => refetchAnalysis()}
-                className="text-label-sm text-primary hover:underline"
+                className="py-sm -my-sm text-label-sm text-primary hover:underline"
               >
                 Retry
               </button>

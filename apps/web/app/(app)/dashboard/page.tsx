@@ -438,7 +438,7 @@ export default function DashboardPage() {
             </h2>
             <button
               onClick={createNewResume}
-              className="shrink-0 whitespace-nowrap text-label-sm text-primary hover:text-primary-container transition-colors"
+              className="shrink-0 whitespace-nowrap py-sm -my-sm px-xs -mx-xs text-label-sm text-primary hover:text-primary-container transition-colors"
             >
               + New
             </button>

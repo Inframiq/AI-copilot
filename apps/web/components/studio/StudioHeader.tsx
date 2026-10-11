@@ -62,7 +62,7 @@ export function StudioHeader({
         type="button"
         onClick={onBack}
         aria-label={backLabel}
-        className={`flex shrink-0 items-center gap-xs rounded-lg text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
+        className={`flex shrink-0 items-center gap-xs rounded-lg p-sm -m-sm text-label-md text-on-surface-variant transition-colors hover:text-on-surface ${FOCUS_RING}`}
       >
         <ArrowLeft size={16} />
         {/* Back, title, two tabs and Export do not fit a phone; the two text

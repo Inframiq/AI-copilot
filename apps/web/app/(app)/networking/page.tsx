@@ -790,7 +790,7 @@ export default function NetworkingPage() {
         <div className="flex items-center gap-sm mb-md">
           <button
             onClick={() => setContactsOpen((o) => !o)}
-            className="flex items-center gap-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
+            className="flex items-center gap-sm py-sm -my-sm text-label-md text-on-surface-variant hover:text-on-surface transition-colors"
           >
             <CaretDown
               size={18}
