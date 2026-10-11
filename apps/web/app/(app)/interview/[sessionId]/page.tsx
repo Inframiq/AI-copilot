@@ -42,7 +42,7 @@ export default function InterviewPage({
       {/* Page Header */}
       <section className="pt-xs sm:pt-lg sm:pb-md">
         <Link
-          href="/interview"
+          href={searchParams.get("jd") ? `/interview?jd=${encodeURIComponent(searchParams.get("jd")!)}` : "/interview"}
           className="mb-xs inline-flex items-center gap-xs text-label-sm text-on-surface-variant hover:text-primary"
         >
           <ArrowLeft size={14} /> Interview Center

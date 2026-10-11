@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ThumbsUp,
   TrendDown,
@@ -9,6 +10,10 @@ import {
   MicrophoneStage,
   Check,
   CircleNotch,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  ArrowRight,
 } from "@phosphor-icons/react";
 import { useShallow } from "zustand/react/shallow";
 import { apiClient } from "@/lib/api-client";
@@ -33,6 +38,7 @@ function classifyTopic(topic: string): Tab {
 
 export default function InterviewIndexPage() {
   const router    = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const storeSessionId = useTailoringStore((s) => s.sessionId);
   const storeMatchedSkills = useTailoringStore((s) => s.matchedSkills);
@@ -41,9 +47,10 @@ export default function InterviewIndexPage() {
   const preparing = usePrepQuestionsStore(useShallow((s) => Object.values(s.pending)));
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
-  // null = "All Job Descriptions" — narrows the list (and its tab counts/
-  // progress/strengths) to one JD's questions when set.
-  const [selectedJdId, setSelectedJdId] = useState<string | null>(null);
+  // Each JD's questions are their own page — one JD in view at a time, picked
+  // from the switcher. Seeded from ?jd= so a link (or the practice page's
+  // back link) lands on the right one; null = the default JD below.
+  const [pickedJdId, setPickedJdId] = useState<string | null>(() => searchParams.get("jd"));
 
   // The in-memory tailoring store only knows about a session if tailoring
   // just ran in this browser tab — a reload, direct nav, or switching JDs
@@ -92,23 +99,47 @@ export default function InterviewIndexPage() {
     jdsQuery.refetch();
   };
 
-  // Distinct JDs present in myQuestions, for the filter dropdown —
-  // deliberately not apiClient.getJds() directly, since that would offer
-  // JDs with no generated questions at all as a filter option.
-  const jdOptions = [...new Map(myQuestions.map((q) => [q.jd_id, q.jd_title])).entries()]
-    .map(([jd_id, jd_title]) => ({ jd_id, jd_title }))
-    .sort((a, b) => a.jd_title.localeCompare(b.jd_title));
+  // The JDs that have questions, for the switcher — deliberately not
+  // apiClient.getJds() directly, since that would offer JDs with no
+  // generated questions at all. Newest JD first (by the JD list's
+  // created_at; a JD it doesn't know about keeps first-seen order).
+  const jdCreatedAt = new Map(jds.map((j) => [j.id, j.created_at]));
+  const jdOptions = [
+    ...myQuestions
+      .reduce((acc, q) => {
+        const o = acc.get(q.jd_id) ?? { jd_id: q.jd_id, jd_title: q.jd_title, total: 0, practiced: 0 };
+        o.total += 1;
+        if (q.practiced_at) o.practiced += 1;
+        return acc.set(q.jd_id, o);
+      }, new Map<string, { jd_id: string; jd_title: string; total: number; practiced: number }>())
+      .values(),
+  ].sort((a, b) => (jdCreatedAt.get(b.jd_id) ?? "").localeCompare(jdCreatedAt.get(a.jd_id) ?? ""));
 
-  // The JD filter's scope — everything below the filter derives from this,
-  // not myQuestions directly.
-  const scopedQuestions = selectedJdId ? myQuestions.filter((q) => q.jd_id === selectedJdId) : myQuestions;
+  // The JD in view: the one picked (or linked via ?jd=) if it has questions,
+  // else the one the latest run was for, else the newest.
+  const latestRunJdId = myQuestions.find((q) => q.session_id === sessionId)?.jd_id;
+  const selectedJd =
+    jdOptions.find((o) => o.jd_id === pickedJdId) ??
+    jdOptions.find((o) => o.jd_id === latestRunJdId) ??
+    jdOptions[0] ??
+    null;
+  const selectedJdId = selectedJd?.jd_id ?? null;
 
-  // The run "Next mock" opens: one that has questions. The latest run may
-  // have none — questions are made when a tailored résumé is saved to its
-  // JD, not by every tailoring run — and would open an empty page.
-  const questionSessionIds = new Set(myQuestions.map((q) => q.session_id));
-  const practiceSessionId =
-    sessionId && questionSessionIds.has(sessionId) ? sessionId : scopedQuestions[0]?.session_id ?? null;
+  function selectJd(jdId: string) {
+    setPickedJdId(jdId);
+    router.replace(`/interview?jd=${encodeURIComponent(jdId)}`, { scroll: false });
+  }
+
+  // The selected JD's questions — everything below the switcher derives
+  // from this, not myQuestions directly.
+  const scopedQuestions = myQuestions.filter((q) => q.jd_id === selectedJdId);
+
+  // The run "Next mock" opens: the selected JD's (one run per JD in this
+  // list). Only runs with questions appear here, so it never opens an
+  // empty page.
+  const practiceSessionId = scopedQuestions[0]?.session_id ?? null;
+  const practiceHref = (sid: string, qId?: string) =>
+    `/interview/${sid}?${qId ? `q=${qId}&` : ""}jd=${encodeURIComponent(selectedJdId ?? "")}`;
 
   // Practice progress — real, persisted server-side (PrepQuestion.practiced_at).
   // Built from the full (unfiltered) list so the readiness gauge and
@@ -146,26 +177,13 @@ export default function InterviewIndexPage() {
   const answeredTopics   = [...new Set(scopedQuestions.filter((q) => answeredSet.has(q.id)).map((q) => q.topic))];
   const unansweredTopics = [...new Set(scopedQuestions.filter((q) => !answeredSet.has(q.id)).map((q) => q.topic))];
 
-  // Current tab's questions, grouped by JD name when no JD filter is
-  // applied — this is the "categorize by JD" view. A filter picks one
-  // group; groups collapse to a single unlabeled one when there's nothing
-  // to distinguish.
   const tabQuestions = scopedQuestions.filter((q) => classifyTopic(q.topic) === activeTab);
-  const tabGroups: { jdTitle: string | null; questions: PrepQuestionWithJdOut[] }[] = selectedJdId
-    ? [{ jdTitle: null, questions: tabQuestions }]
-    : Array.from(
-        tabQuestions.reduce((acc, q) => {
-          if (!acc.has(q.jd_title)) acc.set(q.jd_title, []);
-          acc.get(q.jd_title)!.push(q);
-          return acc;
-        }, new Map<string, PrepQuestionWithJdOut[]>()),
-      ).map(([jdTitle, qs]) => ({ jdTitle, questions: qs }));
 
   async function handleMarkAnswered(qId: string) {
     // Optimistic — flip it locally immediately, reconcile with the server's
     // actual practiced_at once the request resolves. Merge (not replace):
     // markQuestionPracticed's response has no jd_id/jd_title, so replacing
-    // the whole item would drop it from its group.
+    // the whole item would drop it from its JD.
     queryClient.setQueryData<PrepQuestionWithJdOut[]>(["myQuestions"], (list) =>
       list?.map((q) => (q.id === qId ? { ...q, practiced_at: new Date().toISOString() } : q))
     );
@@ -248,9 +266,9 @@ export default function InterviewIndexPage() {
           </div>
           <NextMockCard
             sessionId={practiceSessionId}
-            ready={myQuestions.filter((q) => q.session_id === practiceSessionId).length}
-            practiced={answeredCount}
-            onGo={() => (practiceSessionId ? router.push(`/interview/${practiceSessionId}`) : router.push("/jd"))}
+            ready={scopedQuestions.length}
+            practiced={selectedJd?.practiced ?? 0}
+            onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId) : "/jd")}
             compact
           />
           {(strengths.length > 0 || focus.length > 0) && (
@@ -269,7 +287,16 @@ export default function InterviewIndexPage() {
           )}
         </div>
 
-        {/* Tab Navigation + JD filter */}
+        {/* Which JD's questions are on screen — each JD is its own page. */}
+        {selectedJd && (
+          <JdSwitcher
+            options={jdOptions}
+            selected={selectedJd}
+            onSelect={selectJd}
+          />
+        )}
+
+        {/* Tab Navigation */}
         <div className="flex items-center justify-between gap-md border-b border-outline-variant/30 flex-wrap">
           <div className="flex gap-md sm:gap-lg">
             {TABS.map((tab) => {
@@ -289,21 +316,6 @@ export default function InterviewIndexPage() {
               );
             })}
           </div>
-
-          {/* Filter by the JD these questions were generated for — only
-              worth showing once there's more than one to choose between. */}
-          {jdOptions.length > 1 && (
-            <select
-              value={selectedJdId ?? ""}
-              onChange={(e) => setSelectedJdId(e.target.value || null)}
-              className="mb-sm px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="">All Job Descriptions</option>
-              {jdOptions.map((o) => (
-                <option key={o.jd_id} value={o.jd_id}>{o.jd_title}</option>
-              ))}
-            </select>
-          )}
         </div>
 
         {/* Per-tab practice progress bar (only when there are real questions) */}
@@ -321,7 +333,7 @@ export default function InterviewIndexPage() {
           </div>
         )}
 
-        {/* Content: real questions (grouped by JD) OR topic cards */}
+        {/* Content: the selected JD's questions OR the empty-state CTA */}
         {hasAnyQuestions ? (
           <div className="flex flex-col gap-md">
             {isLoading ? (
@@ -333,82 +345,71 @@ export default function InterviewIndexPage() {
                 <p className="text-label-md text-on-surface-variant uppercase tracking-wider">
                   {tabQuestions.length} question{tabQuestions.length !== 1 ? "s" : ""} · {activeTab}
                 </p>
-                {tabGroups.map((group) => (
-                  <div key={group.jdTitle ?? "__single"} className="flex flex-col gap-md">
-                    {/* Group header — the "categorize by JD" view. Omitted
-                        when a JD filter narrows to a single group already. */}
-                    {group.jdTitle && (
-                      <p className="text-label-sm text-primary font-bold pt-sm first:pt-0">
-                        {group.jdTitle}
-                      </p>
-                    )}
-                    {group.questions.map((q) => {
-                      const isPracticed = answeredSet.has(q.id);
-                      return (
-                        <div
-                          key={q.id}
-                          className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
-                        >
-                          <div className="flex justify-between items-start mb-sm sm:mb-md">
-                            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
-                              <MicrophoneStage size={20} />
-                            </div>
-                            <span className="bg-surface-container text-caption text-primary px-sm py-xs pill rounded-full">
-                              {q.topic}
-                            </span>
-                          </div>
-                          <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
-                          {q.answer_framework && (
-                            <p className="text-body-sm text-on-surface-variant mb-sm">{q.answer_framework}</p>
-                          )}
-                          {q.basis && (
-                            <p className="text-caption text-primary/80 mb-md flex items-start gap-xs">
-                              <span className="shrink-0 font-semibold">
-                                {q.source === "overlap" ? "From your resume:" : q.source === "gap" ? "Bridging a gap:" : "From the JD:"}
-                              </span>
-                              <span className="text-on-surface-variant">{q.basis}</span>
-                            </p>
-                          )}
-                          <div className="flex items-center gap-sm mb-md sm:mb-lg">
-                            <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary rounded-full transition-all duration-500"
-                                style={{ width: isPracticed ? "100%" : "0%" }}
-                              />
-                            </div>
-                            <span className="text-label-sm text-on-surface-variant">
-                              {isPracticed ? "Practiced ✓" : "Not started"}
-                            </span>
-                          </div>
-                          <div className="flex gap-sm">
-                            <button
-                              onClick={() => router.push(`/interview/${q.session_id}?q=${q.id}`)}
-                              className="flex-1 py-sm sm:py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
-                            >
-                              <Play size={16} weight="fill" />
-                              <span className="sm:hidden">Practice</span>
-                              <span className="hidden sm:inline">Practice This Question</span>
-                            </button>
-                            {!isPracticed && (
-                              <button
-                                onClick={() => handleMarkAnswered(q.id)}
-                                className="py-sm sm:py-md px-md rounded-xl border border-outline-variant/30 text-label-md text-on-surface hover:bg-surface-container transition-all flex items-center gap-sm"
-                              >
-                                <Check size={16} />
-                                <span className="sm:hidden">Done</span>
-                                <span className="hidden sm:inline">Mark as Practiced</span>
-                              </button>
-                            )}
-                          </div>
+                {tabQuestions.map((q) => {
+                  const isPracticed = answeredSet.has(q.id);
+                  return (
+                    <div
+                      key={q.id}
+                      className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
+                    >
+                      <div className="flex justify-between items-start mb-sm sm:mb-md">
+                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
+                          <MicrophoneStage size={20} />
                         </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                        <span className="bg-surface-container text-caption text-primary px-sm py-xs pill rounded-full">
+                          {q.topic}
+                        </span>
+                      </div>
+                      <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
+                      {q.answer_framework && (
+                        <p className="text-body-sm text-on-surface-variant mb-sm">{q.answer_framework}</p>
+                      )}
+                      {q.basis && (
+                        <p className="text-caption text-primary/80 mb-md flex items-start gap-xs">
+                          <span className="shrink-0 font-semibold">
+                            {q.source === "overlap" ? "From your resume:" : q.source === "gap" ? "Bridging a gap:" : "From the JD:"}
+                          </span>
+                          <span className="text-on-surface-variant">{q.basis}</span>
+                        </p>
+                      )}
+                      <div className="flex items-center gap-sm mb-md sm:mb-lg">
+                        <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-500"
+                            style={{ width: isPracticed ? "100%" : "0%" }}
+                          />
+                        </div>
+                        <span className="text-label-sm text-on-surface-variant">
+                          {isPracticed ? "Practiced ✓" : "Not started"}
+                        </span>
+                      </div>
+                      <div className="flex gap-sm">
+                        <button
+                          onClick={() => router.push(practiceHref(q.session_id, q.id))}
+                          className="flex-1 py-sm sm:py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
+                        >
+                          <Play size={16} weight="fill" />
+                          <span className="sm:hidden">Practice</span>
+                          <span className="hidden sm:inline">Practice This Question</span>
+                        </button>
+                        {!isPracticed && (
+                          <button
+                            onClick={() => handleMarkAnswered(q.id)}
+                            className="py-sm sm:py-md px-md rounded-xl border border-outline-variant/30 text-label-md text-on-surface hover:bg-surface-container transition-all flex items-center gap-sm"
+                          >
+                            <Check size={16} />
+                            <span className="sm:hidden">Done</span>
+                            <span className="hidden sm:inline">Mark as Practiced</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-xl gap-md text-center bg-surface-container-lowest rounded-2xl border border-outline-variant/20">
-                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions{selectedJdId ? " for this JD" : ""}</p>
+                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions for this JD</p>
                 <p className="text-body-sm text-on-surface-variant">Your personalized questions focus on other areas.</p>
               </div>
             )}
@@ -509,9 +510,9 @@ export default function InterviewIndexPage() {
 
         <NextMockCard
           sessionId={practiceSessionId}
-          ready={myQuestions.filter((q) => q.session_id === practiceSessionId).length}
-          practiced={answeredCount}
-          onGo={() => (practiceSessionId ? router.push(`/interview/${practiceSessionId}`) : router.push("/jd"))}
+          ready={scopedQuestions.length}
+          practiced={selectedJd?.practiced ?? 0}
+          onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId) : "/jd")}
         />
       </aside>
     </div>
@@ -587,5 +588,99 @@ function NextMockCard({
         {sessionId ? (compact ? "Join" : "Join Session") : compact ? "Go" : "Analyze a JD First"}
       </button>
     </div>
+  );
+}
+
+type JdOption = { jd_id: string; jd_title: string; total: number; practiced: number };
+
+function JdSwitcher({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: JdOption[];
+  selected: JdOption;
+  onSelect: (jdId: string) => void;
+}) {
+  const index = options.findIndex((o) => o.jd_id === selected.jd_id);
+  const many = options.length > 1;
+  const pct = selected.total > 0 ? Math.round((selected.practiced / selected.total) * 100) : 0;
+  const stepBtn =
+    "w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl border border-outline-variant/40 text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-on-surface disabled:opacity-40 disabled:pointer-events-none transition-colors";
+
+  return (
+    <section className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-sm">
+      <div className="flex items-center justify-between gap-sm">
+        <label htmlFor="jd-switcher" className="text-label-sm text-on-surface-variant uppercase tracking-wider">
+          Questions for
+        </label>
+        {many && (
+          <span className="text-caption text-on-surface-variant">
+            JD {index + 1} of {options.length}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-xs sm:gap-sm">
+        {many && (
+          <button
+            type="button"
+            aria-label="Previous job description"
+            disabled={index <= 0}
+            onClick={() => onSelect(options[index - 1].jd_id)}
+            className={stepBtn}
+          >
+            <CaretLeft size={16} />
+          </button>
+        )}
+        <div className="relative flex-1 min-w-0">
+          <select
+            id="jd-switcher"
+            value={selected.jd_id}
+            onChange={(e) => onSelect(e.target.value)}
+            disabled={!many}
+            className="w-full appearance-none truncate pl-md pr-xl py-xs sm:py-sm rounded-xl border border-outline-variant/50 bg-surface text-body-md sm:text-headline-md text-on-surface font-semibold disabled:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {options.map((o) => (
+              <option key={o.jd_id} value={o.jd_id}>
+                {o.jd_title} — {o.total} question{o.total !== 1 ? "s" : ""}
+              </option>
+            ))}
+          </select>
+          {many && (
+            <CaretDown
+              size={16}
+              className="pointer-events-none absolute right-sm top-1/2 -translate-y-1/2 text-on-surface-variant"
+            />
+          )}
+        </div>
+        {many && (
+          <button
+            type="button"
+            aria-label="Next job description"
+            disabled={index >= options.length - 1}
+            onClick={() => onSelect(options[index + 1].jd_id)}
+            className={stepBtn}
+          >
+            <CaretRight size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-sm sm:gap-md text-caption text-on-surface-variant">
+        <span className="shrink-0">
+          {selected.practiced} of {selected.total} practiced
+        </span>
+        <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+          <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+        </div>
+        <Link
+          href={`/jd/${selected.jd_id}`}
+          className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline"
+        >
+          View JD <ArrowRight size={12} />
+        </Link>
+      </div>
+    </section>
   );
 }

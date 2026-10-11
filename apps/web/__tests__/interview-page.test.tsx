@@ -3,8 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+const nav = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn(),
+  params: new URLSearchParams(),
+}));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: nav.push, replace: nav.replace }),
+  useSearchParams: () => nav.params,
 }));
 
 vi.mock("@/lib/api-client", () => ({
@@ -96,91 +102,95 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(await screen.findByText(/Tell me about a time you used Python/)).toBeInTheDocument();
   });
 
-  it("groups questions under their JD's name when multiple JDs have questions", async () => {
-    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
-      {
-        id: "q-acme",
-        session_id: "session-acme",
-        jd_id: "jd-acme",
-        jd_title: "Senior Backend Engineer — Acme",
-        topic: "Technical",
-        question: "Acme technical question",
-        answer_framework: "STAR: ...",
-        is_gap_based: false,
-        source: "requirement",
-        basis: "",
-        order_index: 0,
-        practiced_at: null,
-      },
-      {
-        id: "q-globex",
-        session_id: "session-globex",
-        jd_id: "jd-globex",
-        jd_title: "Staff Engineer — Globex",
-        topic: "Technical",
-        question: "Globex technical question",
-        answer_framework: "STAR: ...",
-        is_gap_based: false,
-        source: "requirement",
-        basis: "",
-        order_index: 0,
-        practiced_at: null,
-      },
-    ]);
+  function question(jd: "acme" | "globex", overrides: Record<string, unknown> = {}) {
+    return {
+      id: `q-${jd}`,
+      session_id: `session-${jd}`,
+      jd_id: `jd-${jd}`,
+      jd_title: jd === "acme" ? "Senior Backend Engineer — Acme" : "Staff Engineer — Globex",
+      topic: "Technical",
+      question: `${jd === "acme" ? "Acme" : "Globex"} technical question`,
+      answer_framework: "STAR: ...",
+      is_gap_based: false,
+      source: "requirement",
+      basis: "",
+      order_index: 0,
+      practiced_at: null,
+      ...overrides,
+    };
+  }
 
-    renderWithQueryClient(<InterviewIndexPage />);
+  function twoJds() {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme"), question("globex")]);
+    // Globex was analyzed more recently, so it opens first.
+    vi.mocked(apiClient.getJds).mockResolvedValue([
+      { id: "jd-acme", created_at: "2026-09-01T00:00:00Z" },
+      { id: "jd-globex", created_at: "2026-10-01T00:00:00Z" },
+    ] as never);
+  }
 
-    expect(await screen.findByText("Acme technical question")).toBeInTheDocument();
-    expect(screen.getByText("Globex technical question")).toBeInTheDocument();
-    // Group headers specifically (as opposed to the JD filter's <option>s,
-    // which also carry this text).
-    expect(screen.getByText("Senior Backend Engineer — Acme", { selector: "p" })).toBeInTheDocument();
-    expect(screen.getByText("Staff Engineer — Globex", { selector: "p" })).toBeInTheDocument();
+  beforeEach(() => {
+    nav.params = new URLSearchParams();
   });
 
-  it("filters down to one JD's questions via the JD filter, hiding its group header", async () => {
-    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
-      {
-        id: "q-acme",
-        session_id: "session-acme",
-        jd_id: "jd-acme",
-        jd_title: "Senior Backend Engineer — Acme",
-        topic: "Technical",
-        question: "Acme technical question",
-        answer_framework: "STAR: ...",
-        is_gap_based: false,
-        source: "requirement",
-        basis: "",
-        order_index: 0,
-        practiced_at: null,
-      },
-      {
-        id: "q-globex",
-        session_id: "session-globex",
-        jd_id: "jd-globex",
-        jd_title: "Staff Engineer — Globex",
-        topic: "Technical",
-        question: "Globex technical question",
-        answer_framework: "STAR: ...",
-        is_gap_based: false,
-        source: "requirement",
-        basis: "",
-        order_index: 0,
-        practiced_at: null,
-      },
-    ]);
-
+  it("shows one JD's questions at a time — the newest JD by default", async () => {
+    twoJds();
     renderWithQueryClient(<InterviewIndexPage />);
 
-    await screen.findByText("Acme technical question");
-    const filter = screen.getByRole("combobox");
-    await userEvent.selectOptions(filter, "jd-acme");
+    expect(await screen.findByText("Globex technical question")).toBeInTheDocument();
+    expect(screen.queryByText("Acme technical question")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Questions for")).toHaveValue("jd-globex"),
+    );
+    expect(screen.getByText("JD 1 of 2")).toBeInTheDocument();
+  });
+
+  it("switches to another JD's questions from the dropdown and puts it in the URL", async () => {
+    twoJds();
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await screen.findByText("Globex technical question");
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    await userEvent.selectOptions(screen.getByLabelText("Questions for"), "jd-acme");
 
     expect(screen.getByText("Acme technical question")).toBeInTheDocument();
     expect(screen.queryByText("Globex technical question")).not.toBeInTheDocument();
-    // Only one JD in scope now — no redundant group header (the JD's name
-    // still legitimately appears once, as the filter's selected <option>).
-    expect(screen.queryByText("Senior Backend Engineer — Acme", { selector: "p" })).not.toBeInTheDocument();
+    expect(nav.replace).toHaveBeenCalledWith("/interview?jd=jd-acme", { scroll: false });
+  });
+
+  it("steps between JDs with the next/previous arrows", async () => {
+    twoJds();
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await screen.findByText("Globex technical question");
+    await waitFor(() => expect(screen.getByText("JD 1 of 2")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Previous job description" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next job description" }));
+    expect(screen.getByText("Acme technical question")).toBeInTheDocument();
+    expect(screen.getByText("JD 2 of 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next job description" })).toBeDisabled();
+  });
+
+  it("opens the JD named in ?jd=", async () => {
+    twoJds();
+    nav.params = new URLSearchParams("jd=jd-acme");
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByText("Acme technical question")).toBeInTheDocument();
+    expect(screen.queryByText("Globex technical question")).not.toBeInTheDocument();
+  });
+
+  it("counts practice per JD in the switcher", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", { practiced_at: "2026-10-01T00:00:00Z" }),
+      question("acme", { id: "q-acme-2", question: "Second Acme question" }),
+    ]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByText("1 of 2 practiced")).toBeInTheDocument();
+    // One JD — nothing to step between.
+    expect(screen.queryByRole("button", { name: "Next job description" })).not.toBeInTheDocument();
   });
 });
 
