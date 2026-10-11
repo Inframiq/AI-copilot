@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,6 +10,7 @@ import {
   EnvelopeSimple,
   MicrophoneStage,
   ArrowRight,
+  X,
   type Icon,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
@@ -42,65 +44,24 @@ function score(text: string, words: string[]): number {
   return total;
 }
 
-/**
- * The top bar's search: jump to any résumé, job description, cover letter,
- * interview question set or page by name. Ctrl/⌘ K focuses it; arrows move,
- * Enter opens, Escape closes. Your data is only fetched once it's first
- * opened (and is usually cached already).
- */
-export function GlobalSearch() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [used, setUsed] = useState(false);
-  const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const listId = useId();
-
-  const resumes = useQuery<Resume[]>({ queryKey: ["resumes"], queryFn: () => apiClient.getResumes(), enabled: used });
-  const jds = useQuery<JobDescription[]>({ queryKey: ["jds"], queryFn: () => apiClient.getJds(), enabled: used });
+/** What the search finds for `query` — shared by the laptop's top-bar box
+ * and the phone's full-screen search, so both find the same things. Your
+ * data is only fetched once `enabled` (the search was first opened), and is
+ * usually cached already. */
+function useSearchHits(query: string, enabled: boolean) {
+  const resumes = useQuery<Resume[]>({ queryKey: ["resumes"], queryFn: () => apiClient.getResumes(), enabled });
+  const jds = useQuery<JobDescription[]>({ queryKey: ["jds"], queryFn: () => apiClient.getJds(), enabled });
   const letters = useQuery<CoverLetter[]>({
     queryKey: ["coverLetters"],
     queryFn: () => apiClient.getCoverLetters(),
-    enabled: used,
+    enabled,
   });
   const questions = useQuery<PrepQuestionWithJdOut[]>({
     queryKey: ["myQuestions"],
     queryFn: () => apiClient.getMyQuestions(),
-    enabled: used,
+    enabled,
   });
-  const loading = used && [resumes, jds, letters, questions].some((q) => q.isLoading);
-
-  // Close on navigation.
-  useEffect(() => {
-    setOpen(false);
-    setQuery("");
-  }, [pathname]);
-
-  // Ctrl/⌘ K from anywhere.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Click outside closes.
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  const loading = enabled && [resumes, jds, letters, questions].some((q) => q.isLoading);
 
   const hits = useMemo<Hit[]>(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -154,6 +115,125 @@ export function GlobalSearch() {
     ];
   }, [query, jds.data, resumes.data, letters.data, questions.data]);
 
+  return { hits, loading };
+}
+
+/** The results list, grouped — a popover on a laptop, the whole sheet on a
+ * phone (`touch`: taller rows, no hover highlight). */
+function SearchResults({
+  id,
+  hits,
+  active,
+  query,
+  loading,
+  onActive,
+  onPick,
+  touch = false,
+}: {
+  id: string;
+  hits: Hit[];
+  active: number;
+  query: string;
+  loading: boolean;
+  onActive: (i: number) => void;
+  onPick: (h: Hit) => void;
+  touch?: boolean;
+}) {
+  // Keep the highlighted row in view.
+  useEffect(() => {
+    document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [active, id]);
+
+  if (hits.length === 0) {
+    return (
+      <p className="px-md py-md text-body-sm text-on-surface-variant">
+        {loading ? "Searching…" : `Nothing matches “${query.trim()}”.`}
+      </p>
+    );
+  }
+  return (
+    <>
+      {hits.map((h, i) => {
+        const first = i === 0 || hits[i - 1].group !== h.group;
+        const Icon = h.icon;
+        const highlighted = !touch && i === active;
+        return (
+          <div key={h.key}>
+            {first && (
+              <p className="px-sm pt-sm pb-xs text-caption text-on-surface-variant uppercase tracking-wider">
+                {query.trim() === "" && h.group === "Job descriptions" ? "Recent jobs" : h.group}
+              </p>
+            )}
+            <div
+              id={`${id}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              onMouseEnter={touch ? undefined : () => onActive(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(h)}
+              className={`flex items-center gap-sm px-sm rounded-lg cursor-pointer text-on-surface ${
+                touch ? "py-md text-body-md active:bg-secondary-container" : "py-sm text-body-sm"
+              } ${highlighted ? "bg-secondary-container" : ""}`}
+            >
+              <Icon size={touch ? 20 : 18} className="shrink-0 text-primary" />
+              <span className="flex-1 min-w-0 truncate">{h.label}</span>
+              {h.hint && <span className="shrink-0 text-caption text-on-surface-variant">{h.hint}</span>}
+              {highlighted && <ArrowRight size={14} className="shrink-0 text-on-surface-variant" />}
+            </div>
+          </div>
+        );
+      })}
+      {loading && <p className="px-sm py-xs text-caption text-on-surface-variant">Loading your files…</p>}
+    </>
+  );
+}
+
+/**
+ * The laptop top bar's search: jump to any résumé, job description, cover
+ * letter, interview question set or page by name. Ctrl/⌘ K focuses it;
+ * arrows move, Enter opens, Escape closes.
+ */
+export function GlobalSearch() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [used, setUsed] = useState(false);
+  const [active, setActive] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const { hits, loading } = useSearchHits(query, used);
+
+  // Close on navigation.
+  useEffect(() => {
+    setOpen(false);
+    setQuery("");
+  }, [pathname]);
+
+  // Ctrl/⌘ K from anywhere.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Click outside closes.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
   useEffect(() => setActive(0), [query]);
 
   function go(h: Hit | undefined) {
@@ -180,11 +260,6 @@ export function GlobalSearch() {
       inputRef.current?.blur();
     }
   }
-
-  // Keep the highlighted row in view.
-  useEffect(() => {
-    document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: "nearest" });
-  }, [active, listId]);
 
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -228,46 +303,164 @@ export function GlobalSearch() {
           aria-label="Search results"
           className="absolute left-0 top-full mt-xs w-[26rem] max-h-[70vh] overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-xl shadow-on-surface/10 p-xs z-50"
         >
-          {hits.length === 0 ? (
-            <p className="px-md py-md text-body-sm text-on-surface-variant">
-              {loading ? "Searching…" : `Nothing matches “${query.trim()}”.`}
-            </p>
-          ) : (
-            hits.map((h, i) => {
-              const first = i === 0 || hits[i - 1].group !== h.group;
-              const Icon = h.icon;
-              return (
-                <div key={h.key}>
-                  {first && (
-                    <p className="px-sm pt-sm pb-xs text-caption text-on-surface-variant uppercase tracking-wider">
-                      {query.trim() === "" && h.group === "Job descriptions" ? "Recent jobs" : h.group}
-                    </p>
-                  )}
-                  <div
-                    id={`${listId}-${i}`}
-                    role="option"
-                    aria-selected={i === active}
-                    onMouseEnter={() => setActive(i)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => go(h)}
-                    className={`flex items-center gap-sm px-sm py-sm rounded-lg cursor-pointer text-body-sm ${
-                      i === active ? "bg-secondary-container text-on-surface" : "text-on-surface"
-                    }`}
-                  >
-                    <Icon size={18} className="shrink-0 text-primary" />
-                    <span className="flex-1 min-w-0 truncate">{h.label}</span>
-                    {h.hint && <span className="shrink-0 text-caption text-on-surface-variant">{h.hint}</span>}
-                    {i === active && <ArrowRight size={14} className="shrink-0 text-on-surface-variant" />}
-                  </div>
-                </div>
-              );
-            })
-          )}
-          {loading && hits.length > 0 && (
-            <p className="px-sm py-xs text-caption text-on-surface-variant">Loading your files…</p>
-          )}
+          <SearchResults
+            id={listId}
+            hits={hits}
+            active={active}
+            query={query}
+            loading={loading}
+            onActive={setActive}
+            onPick={go}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The phone header's search: a magnifier that opens the same search
+ * full-screen — the header has no room for a box, and a popover under the
+ * on-screen keyboard would leave a sliver of results. Tapping a result (or
+ * Go on the keyboard, for the first one) opens it; Cancel or Escape closes.
+ */
+export function MobileSearch() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const [used, setUsed] = useState(false);
+  const [query, setQuery] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const { hits, loading } = useSearchHits(query, used);
+
+  useEffect(() => setMounted(true), []);
+
+  // Close on navigation.
+  useEffect(() => {
+    setOpen(false);
+    setQuery("");
+  }, [pathname]);
+
+  // While open: the page behind doesn't scroll, Escape closes, and the
+  // keyboard comes up on the box.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    inputRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  function go(h: Hit | undefined) {
+    if (!h) return;
+    setOpen(false);
+    setQuery("");
+    router.push(h.href);
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Search"
+        aria-haspopup="dialog"
+        onClick={() => {
+          setUsed(true);
+          setOpen(true);
+        }}
+        className="w-10 h-10 -mr-xs rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface active:bg-surface-container"
+      >
+        <MagnifyingGlass size={22} />
+      </button>
+
+      {mounted &&
+        open &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search"
+            className="md:hidden fixed inset-0 z-[60] flex flex-col bg-surface"
+          >
+            <form
+              role="search"
+              onSubmit={(e) => {
+                e.preventDefault();
+                go(hits[0]);
+              }}
+              className="flex items-center gap-sm px-md pb-sm border-b border-outline-variant/30 shrink-0"
+              style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}
+            >
+              <div className="flex-1 min-w-0 flex items-center bg-surface-container-low rounded-full px-md h-10 border border-outline-variant/30 focus-within:border-primary/50">
+                <MagnifyingGlass size={18} className="text-on-surface-variant shrink-0" />
+                <input
+                  ref={inputRef}
+                  role="combobox"
+                  aria-expanded
+                  aria-controls={listId}
+                  aria-autocomplete="list"
+                  aria-label="Search your résumés, jobs and pages"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search résumés, jobs, pages…"
+                  type="search"
+                  enterKeyHint="go"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  // 16px: iOS zooms the page into any smaller input.
+                  className="flex-1 min-w-0 bg-transparent border-none outline-none ml-sm h-full text-[16px] text-on-surface placeholder:text-on-surface-variant/60 [&::-webkit-search-cancel-button]:hidden"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      setQuery("");
+                      inputRef.current?.focus();
+                    }}
+                    className="relative before:absolute before:-inset-[8px] before:content-[''] shrink-0 text-on-surface-variant"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="shrink-0 h-10 px-xs text-label-md text-primary"
+              >
+                Cancel
+              </button>
+            </form>
+            <div
+              id={listId}
+              role="listbox"
+              aria-label="Search results"
+              className="flex-1 overflow-y-auto overscroll-contain px-sm pb-xl"
+            >
+              <SearchResults
+                id={listId}
+                hits={hits}
+                active={-1}
+                query={query}
+                loading={loading}
+                onActive={() => {}}
+                onPick={go}
+                touch
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

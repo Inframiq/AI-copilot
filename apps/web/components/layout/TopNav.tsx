@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { DotsThreeOutline, X } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
-import { GlobalSearch } from "./GlobalSearch";
+import { GlobalSearch, MobileSearch } from "./GlobalSearch";
 import { FeedbackWidget } from "../feedback/FeedbackWidget";
 import { APP_NAV, PHONE_TABS, isActive } from "@/lib/nav";
 
@@ -34,6 +34,7 @@ export function TopNav() {
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={100} height={22} priority />
         </Link>
         <div className="flex items-center gap-xs">
+          <MobileSearch />
           <FeedbackWidget />
           <CreditMeter variant="compact" />
         </div>

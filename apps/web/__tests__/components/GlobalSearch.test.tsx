@@ -26,16 +26,12 @@ vi.mock("@/lib/api-client", () => ({
   },
 }));
 
-import { GlobalSearch } from "../../components/layout/GlobalSearch";
+import { GlobalSearch, MobileSearch } from "../../components/layout/GlobalSearch";
 import { apiClient } from "../../lib/api-client";
 
-function renderSearch() {
+function renderSearch(ui: React.ReactElement = <GlobalSearch />) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <GlobalSearch />
-    </QueryClientProvider>,
-  );
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
 describe("GlobalSearch", () => {
@@ -118,5 +114,57 @@ describe("GlobalSearch", () => {
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+});
+
+describe("MobileSearch", () => {
+  beforeEach(() => {
+    push.mockClear();
+    vi.mocked(apiClient.getJds).mockClear();
+  });
+
+  it("is just an icon until tapped, and loads nothing", () => {
+    renderSearch(<MobileSearch />);
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(apiClient.getJds).not.toHaveBeenCalled();
+  });
+
+  it("opens full-screen with the box focused, and a tapped result opens it", async () => {
+    renderSearch(<MobileSearch />);
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    const box = screen.getByRole("combobox");
+    expect(box).toHaveFocus();
+
+    await userEvent.type(box, "acme");
+    await userEvent.click(await screen.findByRole("option", { name: /^Senior Backend Engineer — Acme/ }));
+    expect(push).toHaveBeenCalledWith("/jd/jd-acme");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Go on the keyboard opens the top result", async () => {
+    renderSearch(<MobileSearch />);
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    await userEvent.type(screen.getByRole("combobox"), "kubernetes");
+    await screen.findByRole("option", { name: /JD4/ });
+    await userEvent.keyboard("{Enter}");
+    expect(push).toHaveBeenCalledWith("/jd/jd-4");
+  });
+
+  it("clears, and closes with Cancel or Escape", async () => {
+    renderSearch(<MobileSearch />);
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    const box = screen.getByRole("combobox");
+    await userEvent.type(box, "zz");
+    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(box).toHaveValue("");
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
