@@ -31,9 +31,11 @@ class OpenAIProvider(AIProvider):
     # 2.5x; putting only Agent 2 (the JD+resume semantic mapping — the call
     # that most determines whether the tailoring makes sense) on it lands
     # close to that budget while still upgrading the highest-leverage step.
-    # So Agent 2 is the only caller that requests "premium"
-    # (tailoring.py's _agent2_semantic_map) — everything else keeps
-    # requesting "pro" and silently gets the budget model, same as before.
+    # So Agent 2 (tailoring.py's _agent2_semantic_map) requests "premium" —
+    # and since then Agent 3 (_agent3_write) and interview prep questions
+    # (_agent4_generate_interview_questions: screening-level on the budget
+    # model, and one call per Save to JD rather than per run) do too.
+    # Everything else keeps requesting "pro" and gets the budget model.
     def _model_for(self, model_tier: str) -> str:
         return self._premium_model if model_tier == "premium" else self._fast_model
 

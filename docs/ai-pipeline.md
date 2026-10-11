@@ -34,11 +34,16 @@ call on `sol` (Agent 2, Agent 3, prep questions, cover letter) costs
 JD+resume semantic mapper, the single call that most determines whether
 the tailoring makes sense — lands close to that budget.
 
-**Only one call site requests `"premium"`:** `tailoring.py`'s
-`_agent2_semantic_map` (Agent 2). Every other call in the table below still
-requests `"fast"` or `"pro"` and lands on `gpt-5.6-luna`, same as before —
-this is intentional, re-derive the cost math in the git history before
-changing which calls get `"premium"`.
+**Three call sites request `"premium"`:** `tailoring.py`'s
+`_agent2_semantic_map` (Agent 2), `_agent3_write` (Agent 3, see the
+2026-09-03 cost pass below) and `_agent4_generate_interview_questions`
+(prep questions, 2026-10-11 — on `luna` they came out at screening level:
+JD duties restated as "Tell me about a time…" with generic tails, however
+the prompt was worded; on `sol` the same prompt gives résumé deep dives and
+role-specific scenarios. It runs once per Save to JD, not per tailoring
+run). Every other call in the table below still requests `"fast"` or
+`"pro"` and lands on `gpt-5.6-luna` — this is intentional, re-derive the
+cost math in the git history before changing which calls get `"premium"`.
 
 ### Confirmed bug (2026-08-13): 4096 output tokens is too low, and it was silently killing entire tailoring runs
 
@@ -290,7 +295,7 @@ forces or fabricates a weak metric to fit the `[Action Verb] + [Method] +
 | 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | premium model | 3,288 chars (~822 tokens) | 16384 (`agent2_semantic_map`) — scales with bullet count |
 | 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | **`"premium"`** (was `"pro"` — see 2026-09-03 note) | premium model | 2,302 chars (~575 tokens, varies slightly with humanize tone) | 16384 (`agent3_write`) — scales with bullet count |
 | — | Cover letter (`write_cover_letter`) | "Generate Cover Letter" action | `"pro"` | fast model | ~1,000 chars (~250 tokens) | 3000 (`cover_letter`) |
-| — | Prep Questions (`_agent4_generate_interview_questions` via `get_or_generate_prep_questions`) | **Lazy** — first view of `GET /ai/sessions/{id}/questions` (Interview Center), NOT the tailoring pipeline | `"pro"` | fast model | ~1,400 chars (~350 tokens) | 6000 (`prep_questions_interview`) |
+| — | Prep Questions (`_agent4_generate_interview_questions` via `get_or_generate_prep_questions`) | Save to JD (`POST /jd/{id}/prep-questions`), NOT the tailoring pipeline | **`"premium"`** (was `"pro"` — see 2026-10-11 note above) | premium model | ~6,400 chars (~1,600 tokens) | 6000 (`prep_questions_interview`) |
 | — | Semantic presence verify (`_verify_semantic_presence`) | Twice per "Tailor Resume" (pre + post re-score); once per "Analyze" | `"fast"` | fast model | ~1,250 chars (~314 tokens) | 4000 (`verify_semantic_presence`) |
 | — | Gap filler (`_agent_gap_filler`) | Every "Tailor Resume" only | `"fast"` | fast model | ~1,200 chars (~308 tokens) | 4000 (`agent_gap_filler`) |
 | — | Rewrite/Humanize bullet (`/ai/rewrite-bullet`, `apps/api/app/routers/ai.py`) | Per-click "Rewrite"/"Humanize" button in the tailoring review panel | `"fast"` | fast model | 250–350 chars (~70–90 tokens) | 1200 (`rewrite_bullet`) |

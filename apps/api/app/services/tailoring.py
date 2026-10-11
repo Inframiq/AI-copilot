@@ -189,7 +189,12 @@ class InterviewQuestionData(BaseModel):
     see _agent4_generate_interview_questions. source distinguishes which
     of the three required categories this question came from; basis names
     the specific responsibility/skill/resume detail it's grounded in, so
-    the UI can show *why* this question was asked, not just that it was."""
+    the UI can show *why* this question was asked, not just that it was.
+
+    interviewer_intent is declared first — same schema-order technique as
+    BulletMapping.reasoning — so the model commits to what the question
+    tests, and at what level, before writing it. Never stored or shown."""
+    interviewer_intent: str = ""
     source: str  # "requirement" | "overlap" | "gap"
     basis: str
     topic: str
@@ -1434,65 +1439,104 @@ def _build_interview_prep_system(seniority_indicators: list[str]) -> str:
     seniority_block = json.dumps(seniority_indicators) if seniority_indicators else "(none extracted for this JD)"
     return f"""\
 <system_role>
-You are an expert interview coach building a real, personalized prep set \
-for one candidate applying to one specific role. Every question must be \
-something a real interviewer would plausibly ask FOR THIS ROLE and THIS \
-CANDIDATE — never generic trivia any candidate for any job could be asked.
+You are the hiring manager and a senior panel interviewer for this exact \
+role, writing the questions you would actually ask this candidate in the \
+onsite / final rounds — not a recruiter's phone screen. A strong candidate \
+should find these questions hard. A question any candidate could answer \
+from a one-line summary of their résumé is a wasted question.
 </system_role>
 
 <rules>
-1. BEHAVIORAL-EVENT FRAMING — MANDATORY: every question must ask for a \
-SPECIFIC PAST EXAMPLE, never a hypothetical. Use "Tell me about a time...", \
-"Walk me through...", "Describe a situation where...". NEVER use "How would \
-you..." or "What would you do if..." — past behavior is what real \
-interviewers actually probe for; hypotheticals invite rehearsed, generic \
-answers.
-2. CAP: generate AT MOST 15 questions total across all three categories \
-combined. If the input lists below could support more than that, prioritize \
-the most role-critical responsibilities/skills and the clearest resume \
-evidence — breadth of coverage matters less than every question being \
-worth asking.
-3. THREE REQUIRED CATEGORIES — generate questions across all three that \
-have real input to draw from (skip a category only if its input list below \
-is empty; do not force a question with nothing to ground it):
-   - "requirement": seeded from jd_core_responsibilities — one question per \
-responsibility (do not exceed the number of responsibilities given), \
-probing whether the candidate has real experience matching that specific \
-duty. Set basis to the exact responsibility text this question targets.
-   - "overlap": seeded from matched_skills AND the candidate's actual \
-resume_content — must reference or allude to a SPECIFIC real accomplishment \
-from resume_content (not just repeat the skill name in the abstract), \
-inviting the candidate to elaborate — e.g. "Walk me through how you [the \
-specific thing their resume shows] — what made that work for [the JD's \
-need]?". NEVER phrase this as skepticism or a demand for proof ("prove you \
-really did X") — it must read as a genuine invitation to elaborate on real \
-evidence, not an interrogation. Set basis to "<skill> — <the specific \
-resume detail referenced>".
-   - "gap": seeded from missing_skills, but NEVER a trivia/knowledge-check \
-question on the missing skill itself ("explain how X works", "what is Y" \
-are FORBIDDEN). Instead, ask the candidate to connect an ADJACENT skill \
-they DO have (drawn from matched_skills or resume_content) to the gap — \
-e.g. "You haven't listed direct Kubernetes experience, but you've run \
-production Docker deployments — tell me about a time that container \
-experience would carry over to a Kubernetes environment." Set basis to the \
-missing skill name.
-4. FACT LOCK: only reference resume content that literally appears in \
-resume_content. Never invent an accomplishment, metric, tool, or project \
-the candidate's resume doesn't actually show — an "overlap" question \
-grounded in a fabricated detail is worse than not asking it at all.
-5. SENIORITY-AWARE MIX: this JD's seniority signals are {seniority_block}. \
-As seniority increases, bias the overall mix toward behavioral/ownership- \
-framed questions over narrow technical-trivia framing — at senior levels \
-the technical bar is largely assumed, and the real signal being tested is \
-scope, ambiguity-handling, and influence over others' work. If signals are \
-sparse or absent, default to a balanced technical+behavioral mix rather \
-than guessing a level the JD doesn't clearly support.
-6. TOPIC: exactly one of "Technical", "Behavioral", "HR & Culture" per \
-question.
-7. ANSWER FRAMEWORK: STAR method (Situation, Task, Action, Result) — a \
-short structural cue for how to organize an answer, not a full model answer \
-or a restatement of the question.
-8. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+1. CALIBRATE THE LEVEL FIRST. Work out the level being hired for from \
+jd_target_job_titles and the seniority signals {seniority_block}, and the \
+candidate's own level from resume_content (years, titles, scope). Pitch \
+every question at the HIGHER of the two — the bar this interview must \
+clear. Junior roles: fundamentals in depth, debugging, reasoning out loud. \
+Mid: design choices, trade-offs, ownership of a component end to end. \
+Senior/lead and above: system- or program-level design, ambiguity, failure \
+and recovery, influencing people they don't manage, cost/risk trade-offs. \
+State the level and what is being tested in interviewer_intent.
+2. MIX OF QUESTION TYPES (over the whole set):
+   - DEEP DIVE (about a third): take one SPECIFIC thing from \
+resume_content — a named project, system, metric or decision — and drill \
+into it: why that approach over the obvious alternative, how it actually \
+worked under the hood, what broke, what they would change now, how the \
+number was measured. Name the thing; never "a project where you used X".
+   - SCENARIO / DESIGN (about a third): a realistic problem from THIS \
+role's day-to-day, with concrete constraints (scale, deadline, budget, an \
+audit date, a conflicting stakeholder, a failing system) — e.g. for an \
+engineer a system design or production-incident question with numbers, for \
+a GRC/security role a control-failure or audit-finding case, for a \
+PM/analyst a prioritization or metric-drop case. Ask how they would \
+approach it AND which trade-off they would make. These ARE allowed to be \
+hypothetical — that is how real technical and case rounds work.
+   - BEHAVIORAL AT THE ROLE'S BAR (the rest): past examples only ("Tell me \
+about a time…", "Walk me through…"), but about what is hard at this level \
+— a decision that turned out wrong, pushing back on a senior stakeholder, \
+a trade-off with real cost, delivering through ambiguity. Never "a time \
+you did <JD duty>".
+3. FORBIDDEN — rewrite any question that does one of these:
+   - Restates a JD responsibility as the question ("Tell me about a time \
+you established security operating models").
+   - Ends in a generic tail: "What challenges did you face?", "What was \
+the outcome?", "How did you ensure success?", "What steps did you take?". \
+Ask about the specific hard part instead.
+   - Definition or trivia ("What is X?", "Explain how Y works" with no \
+context) — depth comes from applying X under a constraint, not reciting \
+it.
+   - Could be asked of any candidate for any similar role unchanged.
+   Every question must contain at least one concrete detail: a named \
+system, tool, metric, standard, constraint or number from the JD or \
+résumé. A question is at most two sentences and asks about ONE hard \
+thing. Never ask how the candidate would learn or research a skill.
+   The SHAPE of a strong question (fill the <...> from THIS JD and résumé \
+— the shapes are not content, never write <...> or invent around them):
+   - Scenario: "<a concrete deadline or scale> — you discover <a specific \
+failure in a system or process this role owns>. What do you tell <a named \
+stakeholder>, and what do you fix first?"
+   - Deep dive: "On <named project from the résumé>, <the specific result \
+it claims> — how did you <the hard part>, why <their choice> over <the \
+obvious alternative>, and what would break at <10x the scale or a \
+tighter constraint>?"
+   - Gap: "<a realistic incident or task that needs the missing skill>. \
+You have <the adjacent skill they do have> but not <the missing one> — \
+walk me through your first <hour / week>."
+   - Behavioral: "Tell me about a time <a senior person> rejected <a \
+specific call you made in this domain>. What did you give up, and what \
+did you refuse to give up?"
+4. CATEGORIES (the source field — label them truthfully):
+   - "requirement": grounded in jd_core_responsibilities / tools / \
+methodologies — usually the SCENARIO / DESIGN questions. Pick the \
+responsibilities that make or break the role; do not walk the list one \
+question per line. basis = the responsibility or tool it targets.
+   - "overlap": grounded in a SPECIFIC accomplishment in resume_content \
+that matches the JD — usually the DEEP DIVE questions. A genuine \
+invitation to go deep, never an accusation ("prove you really did X"). \
+basis = "<skill> — <the résumé detail referenced>".
+   - "gap": grounded in missing_skills. Never trivia on the missing skill. \
+Put the candidate in a realistic situation that needs it, and let them \
+show how adjacent experience they DO have (from matched_skills or \
+resume_content) gets them there — and what they would need to learn. basis \
+= the missing skill. Any question about a missing skill is "gap", never \
+"requirement".
+   Skip a category only when its input is empty.
+5. CAP: AT MOST 15 questions in total. Fewer, harder questions beat broad \
+coverage.
+6. FACT LOCK: only reference résumé content that literally appears in \
+resume_content. Never invent an accomplishment, metric, tool or project — \
+a deep dive on a fabricated detail is worse than no question.
+7. TOPIC: exactly one of "Technical", "Behavioral", "HR & Culture". \
+Deep dives and scenario/design questions on tools, systems or domain \
+practice are "Technical". A past example about people, conflict, \
+failure, ambiguity or influence is "Behavioral". "HR & Culture" is ONLY \
+motivation for this role/company and working-style fit — at most one \
+or two, still specific.
+8. ANSWER FRAMEWORK — what a strong answer at this level covers, in 2-3 \
+short sentences: the specific points an interviewer listens for (for \
+behavioral questions, which part of a STAR answer carries the signal), \
+then "Likely follow-up:" and the one probing follow-up the interviewer \
+would ask next. Not a model answer, not a restatement of the question.
+9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>"""
 
 
@@ -1507,12 +1551,13 @@ async def _agent4_generate_interview_questions(
     """The real, personalized prep-question generator for one JD + one
     resume — replaces the old design where most questions came from a
     generic, cross-user skill-name cache with no JD or resume grounding.
-    See _build_interview_prep_system for the full rule set (behavioral-
-    event framing, the three required categories, FACT LOCK, seniority-
-    aware mix)."""
+    See _build_interview_prep_system for the full rule set (level
+    calibration, the deep-dive/scenario/behavioral mix, what is forbidden,
+    the three categories, FACT LOCK)."""
     at_company = f" at {company_name.strip()}" if company_name and company_name.strip() else None
     payload = {
         "target_role_context": at_company,
+        "jd_target_job_titles": jd_analysis.target_job_titles,
         "jd_core_responsibilities": jd_analysis.core_responsibilities,
         "jd_domain_expertise_themes": jd_analysis.domain_expertise_themes,
         "jd_exact_technical_tools": jd_analysis.exact_technical_tools,
@@ -1525,7 +1570,11 @@ async def _agent4_generate_interview_questions(
         _build_interview_prep_system(jd_analysis.seniority_indicators),
         json.dumps(payload),
         InterviewQuestionsWrapper,
-        model_tier="pro",
+        # Premium, like Agent 2: on the budget model the questions came out
+        # at screening level whatever the prompt said — JD duties restated as
+        # "Tell me about a time…" with generic tails. One call per Save to JD
+        # (not per tailoring run), so the 5x price lands on far fewer calls.
+        model_tier="premium",
         max_output_tokens=_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS,
         call_name="prep_questions_interview",
     )
