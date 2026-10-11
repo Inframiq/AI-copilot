@@ -150,3 +150,52 @@ def test_account_deletion_wipes_milestones():
     import inspect
     from app.routers import me
     assert "CareerMilestone" in inspect.getsource(me.delete_my_account)
+
+
+# ── Target role (/career/plan) ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_is_empty_until_set():
+    override, db = mock_db()
+    db.get = AsyncMock(return_value=None)
+    r = await call("GET", "/career/plan", override)
+    assert r.status_code == 200
+    assert r.json() == {"target_role": None}
+
+
+@pytest.mark.asyncio
+async def test_saving_a_target_role_creates_the_plan():
+    from app.db.models import CareerPlan
+    override, db = mock_db()
+    db.get = AsyncMock(return_value=None)
+    r = await call("PUT", "/career/plan", override, json={"target_role": "  Staff Engineer "})
+    assert r.status_code == 200
+    assert r.json() == {"target_role": "Staff Engineer"}
+    added = db.add.call_args.args[0]
+    assert isinstance(added, CareerPlan) and added.user_id == uuid.UUID(TEST_USER_ID)
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_blank_target_role_clears_it():
+    from app.db.models import CareerPlan
+    override, db = mock_db()
+    plan = CareerPlan(user_id=uuid.UUID(TEST_USER_ID), target_role="Staff Engineer")
+    db.get = AsyncMock(return_value=plan)
+    r = await call("PUT", "/career/plan", override, json={"target_role": "   "})
+    assert r.json() == {"target_role": None}
+    assert plan.target_role is None
+    db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_target_role_is_capped():
+    override, db = mock_db()
+    r = await call("PUT", "/career/plan", override, json={"target_role": "x" * 121})
+    assert r.status_code == 422
+
+
+def test_account_deletion_wipes_the_plan():
+    import inspect
+    from app.routers import me
+    assert "CareerPlan" in inspect.getsource(me.delete_my_account)

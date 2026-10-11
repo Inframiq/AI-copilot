@@ -249,6 +249,16 @@ class CareerMilestone(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
 
+class CareerPlan(Base):
+    """One row per user: Career Path's target role (and, later, the rest of
+    the plan). Absent until they first set one."""
+    __tablename__ = "career_plans"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    target_role: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class Subscription(Base):
     """One row per user — their plan, credit balance, and (for paid plans)
     billing cycle. Credits are spent by app.core.credits.spend_credits at the

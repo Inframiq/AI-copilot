@@ -16,6 +16,7 @@ from app.core.credits import resolve_subscription, subscription_public
 from app.db.models import (
     AiUsageEvent,
     CareerMilestone,
+    CareerPlan,
     CoverLetter,
     ExternalContact,
     Feedback,
@@ -163,6 +164,7 @@ async def delete_my_account(
         Resume,
         LearningItem,
         CareerMilestone,
+        CareerPlan,
         ExternalContact,
         Feedback,
         AiUsageEvent,

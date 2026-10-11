@@ -1,5 +1,6 @@
-"""Career Path's own roadmap milestones — the ones the user adds. The page's
-built-in milestones are worked out from activity and never stored."""
+"""Career Path's saved state: the roadmap milestones the user adds (the
+page's built-in ones are worked out from activity and never stored), and
+their plan — the target role."""
 import uuid
 from datetime import datetime
 
@@ -9,10 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
-from app.db.models import CareerMilestone
+from app.db.models import CareerMilestone, CareerPlan
 from app.db.session import get_db
 
 router = APIRouter(prefix="/career/milestones", tags=["career"])
+plan_router = APIRouter(prefix="/career/plan", tags=["career"])
 
 # Enough for a roadmap; stops a runaway client filling the table.
 MAX_MILESTONES = 50
@@ -126,3 +128,35 @@ async def delete_milestone(
     m = await _own(db, user, milestone_id)
     await db.delete(m)
     await db.commit()
+
+
+class PlanIn(BaseModel):
+    target_role: str | None = Field(default=None, max_length=120)
+
+    @field_validator("target_role")
+    @classmethod
+    def _target_role(cls, v: str | None) -> str | None:
+        return _clean(v)
+
+
+class PlanOut(BaseModel):
+    target_role: str | None
+
+
+@plan_router.get("", response_model=PlanOut)
+async def get_plan(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    plan = await db.get(CareerPlan, uuid.UUID(user["sub"]))
+    return PlanOut(target_role=plan.target_role if plan else None)
+
+
+@plan_router.put("", response_model=PlanOut)
+async def save_plan(body: PlanIn, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Set (or, with a blank, clear) the target role."""
+    uid = uuid.UUID(user["sub"])
+    plan = await db.get(CareerPlan, uid)
+    if plan is None:
+        plan = CareerPlan(user_id=uid)
+        db.add(plan)
+    plan.target_role = body.target_role
+    await db.commit()
+    return PlanOut(target_role=plan.target_role)

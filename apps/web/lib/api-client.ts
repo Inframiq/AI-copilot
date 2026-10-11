@@ -499,6 +499,12 @@ export const apiClient = {
     request<PrepQuestionOut>("PATCH", `/ai/questions/${questionId}/practice`),
 
   // ── Learning Path ────────────────────────────────────────────────────────
+  // Career Path's target role, saved to the account (null until set).
+  getCareerPlan: (): Promise<{ target_role: string | null }> =>
+    request<{ target_role: string | null }>("GET", "/career/plan"),
+  saveCareerPlan: (plan: { target_role: string | null }): Promise<{ target_role: string | null }> =>
+    request<{ target_role: string | null }>("PUT", "/career/plan", plan),
+
   // Career Path milestones the user added.
   getCareerMilestones: (): Promise<CareerMilestone[]> =>
     request<CareerMilestone[]>("GET", "/career/milestones"),

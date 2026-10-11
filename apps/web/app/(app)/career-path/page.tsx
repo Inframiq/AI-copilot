@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,9 +16,9 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import { UserMilestones } from "@/components/career/UserMilestones";
+import { TargetRole } from "@/components/career/TargetRole";
 import type { Resume, JobDescription, LearningItem, PrepQuestionWithJdOut } from "@career-copilot/types";
 
-const TARGET_ROLE_KEY = "career-copilot-target-role";
 const TAILOR_GOAL = 3;
 const APPLY_GOAL = 10;
 
@@ -73,30 +73,6 @@ export default function CareerPathPage() {
   const currentJob = exp.find((e) => e.current && e.title.trim()) ?? exp.find((e) => e.title.trim());
   const currentRole = currentJob?.title.trim() ?? null;
   const currentCompany = currentJob?.company.trim() || null;
-
-  const newestJds = [...jds].sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-  // The target role is a note to yourself, kept on this device. Until one is
-  // typed, the newest job you analyzed stands in.
-  const [targetRole, setTargetRole] = useState("");
-  const [targetTouched, setTargetTouched] = useState(false);
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(TARGET_ROLE_KEY);
-      if (saved) {
-        setTargetRole(saved);
-        setTargetTouched(true);
-      }
-    } catch {}
-  }, []);
-  const shownTarget = targetTouched ? targetRole : newestJds[0]?.title ?? "";
-  function changeTarget(v: string) {
-    setTargetTouched(true);
-    setTargetRole(v);
-    try {
-      localStorage.setItem(TARGET_ROLE_KEY, v);
-    } catch {}
-  }
 
   const tailored = jds.filter((j) => j.ats_score != null).length;
   const applied = jds.filter((j) => j.status !== "not_applied").length;
@@ -237,12 +213,7 @@ export default function CareerPathPage() {
         <ArrowRight weight="bold" className="w-5 h-5 sm:w-8 sm:h-8 mt-md sm:mt-0 text-on-primary/60 shrink-0 relative z-10" />
         <label className="flex-1 min-w-0 flex flex-col gap-xs relative z-10">
           <span className="text-caption text-on-primary/60 uppercase tracking-wider">Target Role</span>
-          <input
-            value={shownTarget}
-            onChange={(e) => changeTarget(e.target.value)}
-            placeholder="Where to next?"
-            className="w-full min-w-0 text-body-lg sm:text-headline-md text-on-primary font-bold bg-transparent border-b border-on-primary/30 focus:border-on-primary outline-none pb-xs placeholder:text-on-primary/40"
-          />
+          <TargetRole inputClassName="w-full min-w-0 text-body-lg sm:text-headline-md text-on-primary font-bold bg-transparent border-b border-on-primary/30 focus:border-on-primary outline-none pb-xs placeholder:text-on-primary/40" />
         </label>
         <div
           className="relative z-10 flex flex-col items-center gap-xs shrink-0"

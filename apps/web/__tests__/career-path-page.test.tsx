@@ -35,6 +35,8 @@ vi.mock("@/lib/api-client", () => ({
     }),
     updateLearningItemStatus: vi.fn().mockResolvedValue({}),
     getCareerMilestones: vi.fn().mockResolvedValue([]),
+    getCareerPlan: vi.fn().mockResolvedValue({ target_role: "Staff Engineer" }),
+    saveCareerPlan: vi.fn(),
   },
 }));
 
@@ -52,11 +54,11 @@ describe("CareerPathPage — real data, nothing made up", () => {
     try { localStorage.clear(); } catch {}
   });
 
-  it("takes the current role from My Profile, and the target from the newest job", async () => {
+  it("takes the current role from My Profile, and the target role from the account", async () => {
     renderPage();
     expect(await screen.findByText("Technical Head")).toBeInTheDocument();
     expect(screen.getByText(/· Inframiq/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Target Role/)).toHaveValue("Platform Engineer");
+    expect(await screen.findByDisplayValue("Staff Engineer")).toBeInTheDocument();
     expect(screen.queryByText(/~6 months/)).not.toBeInTheDocument();
   });
 
