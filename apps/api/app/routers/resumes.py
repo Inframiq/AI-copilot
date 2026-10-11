@@ -41,70 +41,83 @@ def _supabase():
 _MAX_RESUMES_PER_USER = 5
 
 
-async def _evict_oldest_resumes(db: AsyncSession, user_id: uuid.UUID) -> None:
-    """Keeps only the user's 5 most recently edited resumes — deletes the
-    oldest ones beyond that. Never removes a resume that's the career
-    profile's linked master resume or tied to a JD's tailored_resume_id, so
-    this can't silently pull a resume out from under a flow that's actively
-    depending on it; if every resume past the 5th is protected, nothing is
-    deleted. Editing an old resume updates its updated_at, so it counts as
-    "recent" again and survives the next eviction.
+async def _ensure_room_for_a_new_resume(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Refuse (409) to create a résumé past _MAX_RESUMES_PER_USER — never
+    delete one to make room. The oldest unprotected résumé used to be deleted
+    silently, and people lost work without being asked.
 
-    Best-effort, same as storage cleanup on delete below — a failure here
-    must never block resume creation.
+    The refusal carries what the web app's popup needs to ask instead: every
+    résumé (newest first) with whether it's the profile's main résumé or the
+    one saved for a JD, how many must go (more than one for anyone already
+    over the limit — protected résumés were never evicted), and which would
+    have gone (the oldest unprotected). The user exports or picks, the app
+    deletes through DELETE /resumes/{id}, then retries the create.
+
+    Called before any credits are charged, so a refusal costs nothing.
     """
-    try:
-        result = await db.execute(
-            select(Resume.id, Resume.user_id)
+    rows = (
+        await db.execute(
+            select(Resume.id, Resume.title, Resume.updated_at, Resume.template_id)
             .where(Resume.user_id == user_id)
             .order_by(Resume.updated_at.desc())
         )
-        ids = [row[0] for row in result.all()]
-        overflow_ids = ids[_MAX_RESUMES_PER_USER:]
-        if not overflow_ids:
-            return
+    ).all()
+    if len(rows) < _MAX_RESUMES_PER_USER:
+        return
 
-        protected: set[uuid.UUID] = set()
-        master_rows = await db.execute(
+    master = (
+        await db.execute(
             text(
                 "SELECT master_resume_id FROM career_profiles "
                 "WHERE user_id = :uid AND master_resume_id IS NOT NULL"
             ),
             {"uid": str(user_id)},
         )
-        protected.update(uuid.UUID(str(row[0])) for row in master_rows)
-        jd_result = await db.execute(
-            select(JobDescription.tailored_resume_id).where(
-                JobDescription.user_id == user_id,
-                JobDescription.tailored_resume_id.isnot(None),
-            )
-        )
-        protected.update(jd_result.scalars().all())
-
-        to_delete = [rid for rid in overflow_ids if rid not in protected]
-        if not to_delete:
-            return
-
-        result = await db.execute(select(Resume).where(Resume.id.in_(to_delete)))
-        resumes_to_delete = result.scalars().all()
-        storage_paths: list[str] = []
-        for r in resumes_to_delete:
-            storage_paths.extend(p for p in (r.original_file_path, r.pdf_url) if p)
-            db.add(ResumeDeletionLog(
-                resume_id=r.id, user_id=r.user_id, title="", was_master_resume=False,
-            ))
-            await db.delete(r)
-        await db.commit()
-
-        if storage_paths:
-            try:
-                _supabase().storage.from_("resumes").remove(storage_paths)
-            except Exception:
-                logger.warning(
-                    "Failed to remove storage objects for evicted resumes: %s", storage_paths
+    ).scalar_one_or_none()
+    master_id = uuid.UUID(str(master)) if master else None
+    jd_for: dict[uuid.UUID, str] = {
+        rid: title
+        for rid, title in (
+            await db.execute(
+                select(JobDescription.tailored_resume_id, JobDescription.title).where(
+                    JobDescription.user_id == user_id,
+                    JobDescription.tailored_resume_id.isnot(None),
                 )
-    except Exception:
-        logger.warning("Resume eviction (keep last %d) failed for user %s", _MAX_RESUMES_PER_USER, user_id, exc_info=True)
+            )
+        ).all()
+    }
+
+    need = len(rows) - _MAX_RESUMES_PER_USER + 1
+    oldest_first = list(reversed(rows))
+    unprotected = [r.id for r in oldest_first if r.id != master_id and r.id not in jd_for]
+    protected = [r.id for r in oldest_first if r.id == master_id or r.id in jd_for]
+    suggested = (unprotected + protected)[:need]
+
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "resume_limit",
+            "message": (
+                f"You can keep up to {_MAX_RESUMES_PER_USER} résumés. "
+                + ("Delete one" if need == 1 else f"Delete {need}")
+                + " to add another."
+            ),
+            "limit": _MAX_RESUMES_PER_USER,
+            "need": need,
+            "suggested": [str(i) for i in suggested],
+            "resumes": [
+                {
+                    "id": str(r.id),
+                    "title": r.title,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    "template_id": r.template_id,
+                    "is_master": r.id == master_id,
+                    "jd_title": jd_for.get(r.id),
+                }
+                for r in rows
+            ],
+        },
+    )
 
 
 async def _is_master_resume(db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID) -> bool:
@@ -206,6 +219,7 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
                 await db.refresh(existing)
                 return existing
 
+    await _ensure_room_for_a_new_resume(db, uid)
     resume = Resume(user_id=uid, **payload)
     db.add(resume)
     await db.commit()
@@ -213,7 +227,6 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
     if jd:
         jd.tailored_resume_id = resume.id
         await db.commit()
-    await _evict_oldest_resumes(db, uid)
     return resume
 
 
@@ -539,6 +552,9 @@ async def generate_resume_endpoint(
         if existing is None:
             raise HTTPException(status_code=404, detail="Resume not found")
 
+    if existing is None:
+        await _ensure_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
+
     # Three model calls. The deduction is committed up front (so the
     # balance isn't held locked through them) and refunded if anything
     # after it fails.
@@ -580,7 +596,6 @@ async def generate_resume_endpoint(
             db.add(resume)
             await db.commit()
             await db.refresh(resume)
-            await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
 
         return GenerateResumeOut(
             resume_id=resume.id,
@@ -644,6 +659,9 @@ async def parse_and_create_resume(
         _check_magic_bytes(raw_bytes)
     except ValueError:
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
+
+    if existing_resume is None:
+        await _ensure_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
 
     # A model call reads the text into fields. Charged before anything is
     # stored, so a refusal leaves no orphaned file. The deduction is
@@ -722,7 +740,6 @@ async def parse_and_create_resume(
         db.add(resume)
         await db.commit()
         await db.refresh(resume)
-        await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
         return resume
     except Exception:
         # Charged above and committed — nothing was delivered, give it back.

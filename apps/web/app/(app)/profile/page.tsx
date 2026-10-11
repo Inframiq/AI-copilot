@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { safeHref } from "@/lib/safe-url";
 import { useQueryClient } from "@tanstack/react-query";
@@ -381,7 +382,7 @@ export default function ProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      if (!isResumeLimitCancelled(e)) setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }

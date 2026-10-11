@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -191,6 +192,7 @@ export default function DashboardPage() {
       });
       router.push(`/studio/${resume.id}`);
     } catch (err) {
+      if (isResumeLimitCancelled(err)) return;
       setCreateError(err instanceof Error ? err.message : "Failed to create resume. Check your connection.");
     }
   }

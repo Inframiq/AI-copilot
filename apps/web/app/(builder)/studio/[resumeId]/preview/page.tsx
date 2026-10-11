@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { use, useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -114,6 +115,7 @@ export default function StudioPreviewPage({
       // The Studio now edits the JD's own copy, and autosaves into it.
       router.replace(`/studio/${savedId}/preview`);
     } catch (err) {
+      if (isResumeLimitCancelled(err)) return;
       setSaveError(err instanceof Error ? err.message : "Couldn't save. Please try again.");
     }
   }
@@ -195,6 +197,7 @@ export default function StudioPreviewPage({
         try {
           savedFromDraft = await saveDraftToJd();
         } catch (err) {
+          if (isResumeLimitCancelled(err)) throw err;
           throw new Error(
             `couldn't save it to the job first — ${err instanceof Error ? err.message : "please try again"}`,
           );
@@ -214,6 +217,7 @@ export default function StudioPreviewPage({
       // The Studio now edits the JD's own copy, as after Save to JD.
       if (savedFromDraft) router.replace(`/studio/${savedFromDraft}/preview`);
     } catch (err) {
+      if (isResumeLimitCancelled(err)) return;
       // Previously a bare finally: a failed export reset the button and said
       // nothing, so it read as a click that simply did not work.
       setExportError(err instanceof Error ? err.message : "Export failed. Please try again.");

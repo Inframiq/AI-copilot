@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@/lib/supabase";
+import { withResumeRoom } from "@/stores/resume-limit-store";
 import type {
   Resume,
   JobDescription,
@@ -45,11 +46,25 @@ async function getToken(): Promise<string> {
  * instead of just knowing *something* went wrong. */
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's `detail` as sent — usually the message, but sometimes a
+   * structured object (e.g. the résumé limit's list of résumés). */
+  detail: unknown;
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail ?? message;
   }
+}
+
+/** A server `detail` as words: itself when it's a string, its `message`
+ * when it's a structured one. */
+function detailMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail) return detail;
+  if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string") {
+    return (detail as { message: string }).message;
+  }
+  return fallback;
 }
 
 async function request<T>(
@@ -68,7 +83,7 @@ async function request<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, err.detail ?? "Request failed");
+    throw new ApiError(res.status, detailMessage(err.detail, "Request failed"), err.detail);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -141,7 +156,10 @@ export const apiClient = {
      * creating a new row, so re-tailoring + saving again doesn't pile up
      * duplicates. */
     jd_id?: string;
-  }): Promise<Resume> => request<Resume>("POST", "/resumes", payload),
+  }): Promise<Resume> =>
+    // At the résumé limit the server refuses; this asks the user what to
+    // delete (or export) and tries again — see stores/resume-limit-store.
+    withResumeRoom(() => request<Resume>("POST", "/resumes", payload)),
 
   updateResume: (
     id: string,
@@ -222,23 +240,26 @@ export const apiClient = {
      * creating a new, orphaned one — used by the Profile page's "Replace"
      * flow so re-uploading doesn't leave the old resume dangling around. */
     resumeId?: string
-  ): Promise<Resume> => {
-    const token = await getToken();
-    const form = new FormData();
-    form.append("file", file);
-    form.append("template_id", templateId);
-    if (resumeId) form.append("resume_id", resumeId);
-    const res = await fetch(`${BASE}/resumes/parse-upload`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new ApiError(res.status, err.detail ?? "Upload failed");
-    }
-    return res.json() as Promise<Resume>;
-  },
+  ): Promise<Resume> =>
+    // A new résumé (no resumeId) can hit the limit — same ask-and-retry as
+    // createResume. Replacing one in place never does.
+    withResumeRoom(async () => {
+      const token = await getToken();
+      const form = new FormData();
+      form.append("file", file);
+      form.append("template_id", templateId);
+      if (resumeId) form.append("resume_id", resumeId);
+      const res = await fetch(`${BASE}/resumes/parse-upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new ApiError(res.status, detailMessage(err.detail, "Upload failed"), err.detail);
+      }
+      return res.json() as Promise<Resume>;
+    }),
 
   // ── Job Descriptions ──────────────────────────────────────────────────────
   getJds: (): Promise<JobDescription[]> =>

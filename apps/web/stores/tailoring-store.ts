@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { apiClient, type AtsFix, type RevertedBullet, type BulletRationale } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
@@ -1167,6 +1168,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       });
       return targetId;
     } catch (err) {
+      if (isResumeLimitCancelled(err)) {
+        set({ isApplying: false });
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : "Failed to save resume";
       set({ error: msg, isApplying: false });
       throw new Error(msg);

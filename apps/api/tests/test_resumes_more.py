@@ -15,6 +15,15 @@ from app.db.models import Resume
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
+@pytest.fixture(autouse=True)
+def room_for_resumes():
+    """These tests use a mocked database that can't answer the 5-résumé
+    limit's query; the limit itself is tested on a real Postgres in
+    test_resume_limit.py."""
+    with patch("app.routers.resumes._ensure_room_for_a_new_resume", new=AsyncMock()):
+        yield
+
+
 def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,

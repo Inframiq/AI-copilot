@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -120,6 +121,7 @@ export default function OnboardingPage() {
       await setProfileMasterResume(resume.id);
       setStep("plan");
     } catch (err) {
+      if (isResumeLimitCancelled(err)) { setUploading(false); return; }
       setUploadError(err instanceof Error ? err.message : "Upload failed. You can skip and add this later.");
       setUploading(false);
     }

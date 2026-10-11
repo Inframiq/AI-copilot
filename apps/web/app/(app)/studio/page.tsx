@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -127,7 +128,7 @@ export default function StudioIndexPage() {
       }
       router.push(`/studio/${resume.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (!isResumeLimitCancelled(err)) setError(err instanceof Error ? err.message : "Something went wrong");
       setIsWorking(false);
     }
   }

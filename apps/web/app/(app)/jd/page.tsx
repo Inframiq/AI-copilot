@@ -1,4 +1,5 @@
 "use client";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -266,6 +267,7 @@ export default function JDIndexPage() {
       setOverrideMode("none");
       setOverrideFile(null);
     } catch (e: unknown) {
+      if (isResumeLimitCancelled(e)) return;
       setOverrideError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setOverrideUploading(false);

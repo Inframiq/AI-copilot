@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { apiClient } from "@/lib/api-client";
 import type { ResumeContent } from "@career-copilot/types";
 
@@ -235,7 +236,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       return saved.id;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save";
-      set({ isSaving: false, saveError: message });
+      set({ isSaving: false, saveError: isResumeLimitCancelled(err) ? null : message });
       throw err;
     }
   },
