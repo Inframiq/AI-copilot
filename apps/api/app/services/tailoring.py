@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.ai_budget import jd_for_model
 from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
@@ -578,6 +579,7 @@ low = "nice to have", peripheral, or generic. Keys are the term verbatim \
 async def _agent1_parse_jd(
     jd_text: str, provider: AIProvider, company_intel: CompanyIntel | None = None
 ) -> JDAnalysis:
+    jd_text = jd_for_model(jd_text)  # bounded — see app.core.ai_budget
     user_msg = jd_text
     if company_intel and not company_intel.known_not_found:
         intel_block = json.dumps({
@@ -1573,7 +1575,7 @@ async def _agent4_generate_interview_questions(
         # Premium, like Agent 2: on the budget model the questions came out
         # at screening level whatever the prompt said — JD duties restated as
         # "Tell me about a time…" with generic tails. One call per Save to JD
-        # (not per tailoring run), so the 5x price lands on far fewer calls.
+        # (not per tailoring run), so the ~2.7x price lands on far fewer calls.
         model_tier="premium",
         max_output_tokens=_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS,
         call_name="prep_questions_interview",

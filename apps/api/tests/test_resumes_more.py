@@ -15,15 +15,6 @@ from app.db.models import Resume
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
-@pytest.fixture(autouse=True)
-def charged():
-    """Uploads and generation are charged (a model call each); these tests
-    are about the endpoints' other behaviour, so the charge is stubbed and
-    the ones about credits assert on it."""
-    with patch("app.routers.resumes.spend_credits", new=AsyncMock()) as spend:
-        yield spend
-
-
 def make_auth_header():
     payload = {
         "sub": TEST_USER_ID,
@@ -40,6 +31,7 @@ def make_mock_db():
     mock_session = MagicMock()
     mock_session.execute = AsyncMock()
     mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
     mock_session.refresh = AsyncMock()
     mock_session.add = MagicMock()
     mock_session.delete = AsyncMock()
@@ -336,7 +328,7 @@ _FAKE_PDF_BYTES = b"%PDF-1.4\n%fake minimal pdf content for magic-byte check\n"
 
 
 @pytest.mark.asyncio
-async def test_parse_upload_creates_resume(charged):
+async def test_parse_upload_creates_resume(ledger):
     limiter.reset()
     override, mock_session = make_mock_db()
 
@@ -395,17 +387,16 @@ async def test_parse_upload_creates_resume(charged):
         upload_call = mock_sb.storage.from_.return_value.upload.call_args
         assert upload_call.args[1] == _FAKE_PDF_BYTES
         # Reading the PDF is a model call, so it is charged.
-        assert charged.call_args.args[2] == "parse_resume"
+        assert ledger.spent == ["parse_resume"] and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_generate_resume_out_of_credits_runs_no_model(charged):
-    from fastapi import HTTPException
+async def test_generate_resume_out_of_credits_runs_no_model(ledger):
     limiter.reset()
     override, _ = make_mock_db()
-    charged.side_effect = HTTPException(status_code=402, detail="Out of credits")
+    ledger.set(TEST_USER_ID, 0)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.resumes.generate_resume", new=AsyncMock()) as gen:
@@ -416,18 +407,17 @@ async def test_generate_resume_out_of_credits_runs_no_model(charged):
                     headers=make_auth_header(),
                 )
         assert r.status_code == 402
-        assert charged.call_args.args[2] == "generate_resume"
+        assert "costs 3 credits" in r.json()["detail"]  # generate_resume's price
         gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_parse_upload_out_of_credits_stores_nothing_and_parses_nothing(charged):
-    from fastapi import HTTPException
+async def test_parse_upload_out_of_credits_stores_nothing_and_parses_nothing(ledger):
     limiter.reset()
     override, _ = make_mock_db()
-    charged.side_effect = HTTPException(status_code=402, detail="Out of credits")
+    ledger.set(TEST_USER_ID, 0)
     app.dependency_overrides[get_db] = override
     try:
         mock_sb = MagicMock()
@@ -525,7 +515,7 @@ async def test_parse_upload_rejects_docx():
 
 
 @pytest.mark.asyncio
-async def test_parse_upload_fails_when_storage_upload_fails():
+async def test_parse_upload_fails_when_storage_upload_fails(ledger):
     """If the original file can't be stored, the whole upload must fail
     rather than creating a Resume row with no master copy behind it."""
     limiter.reset()
@@ -544,6 +534,8 @@ async def test_parse_upload_fails_when_storage_upload_fails():
                 )
         assert r.status_code == 502
         mock_session.add.assert_not_called()
+        # Charged up front, nothing delivered: the credit comes back.
+        assert ledger.spent == ["parse_resume"] and ledger.refunded == ["parse_resume"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -585,7 +577,7 @@ async def test_parse_upload_rejects_unsupported_extension():
 
 
 @pytest.mark.asyncio
-async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch):
+async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch, ledger):
     """A pathological file that makes extract_text hang must not hang the request."""
     import time
     from app.routers import resumes as resumes_module
@@ -612,6 +604,7 @@ async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch):
                 )
         assert r.status_code == 422
         assert "too long" in r.json()["detail"].lower()
+        assert ledger.refunded == ["parse_resume"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 

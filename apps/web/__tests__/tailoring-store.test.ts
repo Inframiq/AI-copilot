@@ -315,6 +315,24 @@ describe("useTailoringStore", () => {
     expect(state.sessionId).toBe("session-xyz");
   });
 
+  it("runTailoring started twice at once runs (and charges) once", async () => {
+    useResumeStore
+      .getState()
+      .setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    // No jdId yet: the run first saves the JD — the window a double click
+    // used to slip a second run into.
+    useTailoringStore.getState().setJd("", "Senior TypeScript Engineer\nWe need 5+ years of React.");
+
+    await Promise.all([
+      useTailoringStore.getState().runTailoring("resume-abc"),
+      useTailoringStore.getState().runTailoring("resume-abc"),
+    ]);
+
+    expect(apiClient.createJd).toHaveBeenCalledTimes(1);
+    expect(apiClient.tailorResume).toHaveBeenCalledTimes(1);
+    expect(useTailoringStore.getState().sessionId).toBe("session-xyz");
+  });
+
   it("runTailoring surfaces an error if creating the JD fails", async () => {
     useResumeStore
       .getState()

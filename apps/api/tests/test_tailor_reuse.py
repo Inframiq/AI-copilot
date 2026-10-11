@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.db.models import TailoringSession
 from app.services.tailoring import tailor_fingerprint
 from tests.test_jd_and_tailor_endpoints import (
-    make_auth_header, make_mock_db, make_resume, make_jd, credit_sub_result,
+    make_auth_header, make_mock_db, make_resume, make_jd,
 )
 
 CONTENT = {"experience": [{"title": "Eng", "bullets": ["Did stuff"]}], "skills": ["Python"]}
@@ -88,7 +88,7 @@ async def test_identical_rerun_reuses_the_completed_session_without_charging():
 async def test_fresh_run_skips_reuse_and_records_the_fingerprint():
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
-    db.execute = AsyncMock(side_effect=[_result(resume), _result(jd), credit_sub_result()])
+    db.execute = AsyncMock(side_effect=[_result(resume), _result(jd)])
     added = []
     db.add = MagicMock(side_effect=lambda o: (added.append(o), setattr(o, "id", uuid.uuid4())))
 
@@ -118,7 +118,7 @@ async def test_tailor_reuses_the_analyzers_semantic_verdicts_for_the_before_scor
     resume, jd = make_resume(), make_jd()
     fp = hashlib.sha1(build_resume_text(resume.content)[0].encode("utf-8")).hexdigest()
     jd.parsed = {"semantic": {"fingerprint": fp, "verdicts": {"aws": "partial"}}}
-    db.execute = AsyncMock(side_effect=[_result(resume), _result(jd), _result(None), credit_sub_result()])
+    db.execute = AsyncMock(side_effect=[_result(resume), _result(jd), _result(None)])
     db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4()))
     bg = AsyncMock()
 

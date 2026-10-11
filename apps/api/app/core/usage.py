@@ -55,10 +55,15 @@ async def record_ai_usage(user_id, action: str):
 
     Yields the list of calls, which stays readable after the block: an
     action whose work may be served from a cache (analyze) charges credits
-    only when this shows a model was actually called."""
+    only when this shows a model was actually called.
+
+    Nested blocks hand their calls to the enclosing block instead of
+    persisting them, so the outer one sees every call made inside it (and
+    each is recorded once, under the outer block's action)."""
     from app.db.session import AsyncSessionLocal
     from app.db.models import AiUsageEvent
 
+    parent = _sink.get()
     token = _sink.set([])
     try:
         yield _sink.get()
@@ -67,7 +72,9 @@ async def record_ai_usage(user_id, action: str):
         _sink.reset(token)
         # No `return` in this finally — it would swallow an exception
         # propagating out of the wrapped block.
-        if calls:
+        if parent is not None:
+            parent.extend(calls)
+        elif calls:
             try:
                 async with AsyncSessionLocal() as db:
                     db.add_all(

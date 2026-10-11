@@ -89,3 +89,24 @@ async def test_does_not_swallow_an_exception_from_the_wrapped_block():
                 record_call(call_name="c", model="m", model_tier="fast", input_tokens=1,
                             output_tokens=1, reasoning_tokens=0, total_tokens=2)
                 raise ValueError("boom")
+
+
+@pytest.mark.asyncio
+async def test_a_nested_block_hands_its_calls_to_the_outer_one():
+    """An endpoint that charges by "did a model run?" wraps a service that
+    records its own calls. The outer block must see them (or it would
+    refund every time), and each call is persisted once."""
+    sessions = []
+
+    def new_session():
+        sessions.append(_FakeSession())
+        return sessions[-1]
+
+    with patch("app.db.session.AsyncSessionLocal", new=new_session):
+        async with record_ai_usage(USER, "prep_questions") as outer:
+            async with record_ai_usage(USER, "prep_questions") as inner:
+                record_call(call_name="prep_questions_interview", model="m", model_tier="premium",
+                            input_tokens=1, output_tokens=1, reasoning_tokens=0, total_tokens=2)
+            assert len(inner) == 1
+            assert len(outer) == 1  # handed up as the inner block closed
+    assert len(sessions) == 1 and len(sessions[0].added) == 1

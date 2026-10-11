@@ -810,12 +810,19 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   },
 
   runTailoring: async (resumeId: string, opts?: { fresh?: boolean }) => {
+    // One run at a time, claimed before the first await: a second call while
+    // one is starting (a double click, two buttons) would start — and pay
+    // 10 credits for — a second run. The button's own `disabled` only
+    // catches up after a render.
+    if (get().isLoading) return;
+    set({ isLoading: true });
+
     let { jdId } = get();
     const { jdText, humanizeLevel, companyName } = get();
 
     if (!jdId) {
       if (!jdText.trim()) {
-        set({ error: "No job description selected" });
+        set({ error: "No job description selected", isLoading: false });
         return;
       }
       try {
@@ -824,7 +831,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         jdId = jd.id;
         set({ jdId });
       } catch (e: unknown) {
-        set({ error: e instanceof Error ? e.message : "Failed to save job description" });
+        set({ error: e instanceof Error ? e.message : "Failed to save job description", isLoading: false });
         return;
       }
     }

@@ -1,10 +1,15 @@
-"""app.core.credits — subscription resolution, rollover, and credit spend."""
+"""app.core.credits — subscription resolution, rollover, spend and refund.
+
+Run against a real Postgres (the `pg_session` fixture in conftest.py), since
+the credit functions are single atomic SQL statements: a mocked database
+would only test the mock. Races are in test_credits_concurrency.py.
+"""
 import uuid
 from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
-from unittest.mock import AsyncMock, MagicMock
+from sqlalchemy import select
 
 from app.core.credits import (
     resolve_subscription, spend_credits, refund_credits, subscription_public,
@@ -13,115 +18,140 @@ from app.core.credits import (
 from app.core.config import settings
 from app.db.models import Subscription, utcnow
 
-USER = uuid.uuid4()
+
+async def _seed(Session, **fields):
+    user = uuid.uuid4()
+    row = dict(plan="free", status="active", credits_remaining=50, credits_allotment=50,
+               current_period_start=utcnow(), current_period_end=None)
+    row.update(fields)
+    async with Session() as s:
+        s.add(Subscription(user_id=user, **row))
+        await s.commit()
+    return user
 
 
-def _db(existing_sub=None):
-    db = MagicMock()
-    res = MagicMock()
-    res.scalar_one_or_none.return_value = existing_sub
-    db.execute = AsyncMock(return_value=res)
-    db.add = MagicMock()
-    db.flush = AsyncMock()
-    return db
+async def _row(Session, user):
+    async with Session() as s:
+        rows = (await s.execute(select(Subscription).where(Subscription.user_id == user))).scalars().all()
+        assert len(rows) == 1
+        return rows[0]
 
 
-@pytest.mark.asyncio
-async def test_resolve_creates_a_free_subscription_on_first_touch():
-    db = _db(existing_sub=None)
-    sub = await resolve_subscription(db, USER)
+async def _spend(Session, user, action, email=None):
+    async with Session() as s:
+        await spend_credits(s, user, action, email=email)
+        await s.commit()
+
+
+async def test_resolve_creates_a_free_subscription_on_first_touch(pg_session):
+    user = uuid.uuid4()
+    async with pg_session() as s:
+        sub = await resolve_subscription(s, user)
+        await s.commit()
     assert sub.plan == "free"
     assert sub.credits_remaining == PLAN_CREDITS["free"] == sub.credits_allotment
     assert sub.current_period_end is None  # one-time grant, never refills
-    db.add.assert_called_once_with(sub)
+    assert (await _row(pg_session, user)).credits_remaining == PLAN_CREDITS["free"]
 
 
-@pytest.mark.asyncio
-async def test_resolve_returns_existing_without_recreating():
-    existing = Subscription(user_id=USER, plan="premium", status="active",
-                            credits_remaining=42, credits_allotment=600,
-                            current_period_end=None)
-    db = _db(existing_sub=existing)
-    sub = await resolve_subscription(db, USER)
-    assert sub is existing
-    db.add.assert_not_called()
+async def test_resolve_returns_existing_without_recreating(pg_session):
+    user = await _seed(pg_session, plan="premium", credits_remaining=42, credits_allotment=600)
+    async with pg_session() as s:
+        sub = await resolve_subscription(s, user)
+        await s.commit()
+    assert sub.plan == "premium" and sub.credits_remaining == 42
+    await _row(pg_session, user)  # still exactly one row
 
 
-@pytest.mark.asyncio
-async def test_resolve_refills_a_paid_plan_after_its_period_ends():
+async def test_resolve_refills_a_paid_plan_after_its_period_ends(pg_session):
     past = utcnow() - timedelta(days=1)
-    existing = Subscription(user_id=USER, plan="premium", status="active",
-                            credits_remaining=3, credits_allotment=600,
-                            current_period_start=past - BILLING_PERIOD,
-                            current_period_end=past)
-    db = _db(existing_sub=existing)
-    sub = await resolve_subscription(db, USER)
+    user = await _seed(pg_session, plan="premium", credits_remaining=3, credits_allotment=600,
+                       current_period_start=past - BILLING_PERIOD, current_period_end=past)
+    async with pg_session() as s:
+        sub = await resolve_subscription(s, user)
+        await s.commit()
     assert sub.credits_remaining == 600
     assert sub.current_period_end > utcnow()
+    assert sub.current_period_start == past  # the new period starts where the old one ended
 
 
-@pytest.mark.asyncio
-async def test_resolve_does_not_refill_a_free_plan():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=0, credits_allotment=50,
-                            current_period_end=None)
-    db = _db(existing_sub=existing)
-    sub = await resolve_subscription(db, USER)
+async def test_resolve_skips_every_missed_period(pg_session):
+    long_ago = utcnow() - BILLING_PERIOD * 3 - timedelta(days=1)
+    user = await _seed(pg_session, plan="premium", credits_remaining=0, credits_allotment=600,
+                       current_period_start=long_ago - BILLING_PERIOD, current_period_end=long_ago)
+    async with pg_session() as s:
+        sub = await resolve_subscription(s, user)
+        await s.commit()
+    assert sub.current_period_start <= utcnow() < sub.current_period_end
+    assert sub.credits_remaining == 600
+
+
+async def test_resolve_does_not_refill_a_free_plan(pg_session):
+    user = await _seed(pg_session, credits_remaining=0)
+    async with pg_session() as s:
+        sub = await resolve_subscription(s, user)
     assert sub.credits_remaining == 0  # stays empty — no monthly reset
 
 
-@pytest.mark.asyncio
-async def test_spend_deducts_the_action_cost():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=50, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
-    await spend_credits(db, USER, "tailor")
-    assert existing.credits_remaining == 50 - CREDIT_COSTS["tailor"]
+async def test_spend_deducts_the_action_cost(pg_session):
+    user = await _seed(pg_session)
+    await _spend(pg_session, user, "tailor")
+    assert (await _row(pg_session, user)).credits_remaining == 50 - CREDIT_COSTS["tailor"]
 
 
-@pytest.mark.asyncio
-async def test_spend_deducts_for_cover_letter_and_rewrite_bullet():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=50, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
-    await spend_credits(db, USER, "cover_letter")
-    assert existing.credits_remaining == 50 - CREDIT_COSTS["cover_letter"]
-    await spend_credits(db, USER, "rewrite_bullet")
-    assert existing.credits_remaining == 50 - CREDIT_COSTS["cover_letter"] - CREDIT_COSTS["rewrite_bullet"]
+async def test_spend_returns_the_balance_after_the_deduction(pg_session):
+    user = await _seed(pg_session)
+    async with pg_session() as s:
+        sub = await spend_credits(s, user, "cover_letter")
+        await s.commit()
+    assert sub.credits_remaining == 50 - CREDIT_COSTS["cover_letter"]
 
 
-@pytest.mark.asyncio
-async def test_spend_raises_402_when_balance_too_low():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=4, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
+async def test_spend_deducts_for_cover_letter_and_rewrite_bullet(pg_session):
+    user = await _seed(pg_session)
+    await _spend(pg_session, user, "cover_letter")
+    await _spend(pg_session, user, "rewrite_bullet")
+    expected = 50 - CREDIT_COSTS["cover_letter"] - CREDIT_COSTS["rewrite_bullet"]
+    assert (await _row(pg_session, user)).credits_remaining == expected
+
+
+async def test_spend_can_use_the_last_credits_exactly(pg_session):
+    user = await _seed(pg_session, credits_remaining=CREDIT_COSTS["tailor"])
+    await _spend(pg_session, user, "tailor")
+    assert (await _row(pg_session, user)).credits_remaining == 0
+
+
+async def test_spend_raises_402_when_balance_too_low(pg_session):
+    user = await _seed(pg_session, credits_remaining=4)
     with pytest.raises(HTTPException) as ei:
-        await spend_credits(db, USER, "tailor")
+        await _spend(pg_session, user, "tailor")
     assert ei.value.status_code == 402
-    assert existing.credits_remaining == 4  # unchanged
+    assert (await _row(pg_session, user)).credits_remaining == 4  # unchanged
 
 
-@pytest.mark.asyncio
-async def test_spend_raises_402_when_subscription_not_active():
-    existing = Subscription(user_id=USER, plan="premium", status="past_due",
-                            credits_remaining=500, credits_allotment=600, current_period_end=None)
-    db = _db(existing_sub=existing)
+async def test_spend_raises_402_when_subscription_not_active(pg_session):
+    user = await _seed(pg_session, plan="premium", status="past_due", credits_remaining=500, credits_allotment=600)
     with pytest.raises(HTTPException) as ei:
-        await spend_credits(db, USER, "tailor")
+        await _spend(pg_session, user, "tailor")
     assert ei.value.status_code == 402
+    assert ei.value.detail == "Your subscription is not active."
+    assert (await _row(pg_session, user)).credits_remaining == 500
 
 
-@pytest.mark.asyncio
-async def test_spend_is_a_noop_for_an_unpriced_action():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=1, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
-    await spend_credits(db, USER, "export_pdf")  # no model call, no price
-    assert existing.credits_remaining == 1
+async def test_spend_is_a_noop_for_an_unpriced_action(pg_session):
+    user = await _seed(pg_session, credits_remaining=1)
+    await _spend(pg_session, user, "export_pdf")  # no model call, no price
+    assert (await _row(pg_session, user)).credits_remaining == 1
+
+
+async def test_spend_creates_the_subscription_for_a_new_user(pg_session):
+    user = uuid.uuid4()
+    await _spend(pg_session, user, "analyze")
+    assert (await _row(pg_session, user)).credits_remaining == PLAN_CREDITS["free"] - CREDIT_COSTS["analyze"]
 
 
 def test_every_action_that_calls_a_model_is_priced_and_enforced():
-    from app.core.credits import CREDIT_COSTS, ENFORCED_ACTIONS
+    from app.core.credits import ENFORCED_ACTIONS
     model_actions = {
         "tailor", "generate_resume", "cover_letter", "prep_questions",
         "rewrite_bullet", "restructure_notes", "analyze", "parse_resume",
@@ -131,88 +161,57 @@ def test_every_action_that_calls_a_model_is_priced_and_enforced():
         assert action in ENFORCED_ACTIONS, f"{action} is not enforced"
 
 
-@pytest.mark.asyncio
-async def test_spend_names_the_action_in_words_when_out_of_credits():
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=1, credits_allotment=50, current_period_end=None)
+async def test_spend_names_the_action_in_words_when_out_of_credits(pg_session):
+    user = await _seed(pg_session, credits_remaining=1)
     with pytest.raises(HTTPException) as ei:
-        await spend_credits(_db(existing_sub=existing), USER, "prep_questions")
+        await _spend(pg_session, user, "prep_questions")
     assert ei.value.detail == "Out of credits: Interview questions costs 2 credits and you have 1."
 
 
-@pytest.mark.asyncio
-async def test_require_checks_without_deducting_and_charge_deducts():
-    from app.core.credits import require_credits, charge_credits
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=5, credits_allotment=50, current_period_end=None)
-    await require_credits(_db(existing_sub=existing), USER, "analyze")
-    assert existing.credits_remaining == 5
-    await charge_credits(_db(existing_sub=existing), USER, "analyze")
-    assert existing.credits_remaining == 4
-
-
-@pytest.mark.asyncio
-async def test_require_refuses_when_the_balance_cannot_cover_it():
-    from app.core.credits import require_credits
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=1, credits_allotment=50, current_period_end=None)
-    with pytest.raises(HTTPException) as ei:
-        await require_credits(_db(existing_sub=existing), USER, "prep_questions")
-    assert ei.value.status_code == 402
-
-
-@pytest.mark.asyncio
-async def test_charge_never_takes_the_balance_below_zero():
-    from app.core.credits import charge_credits
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=1, credits_allotment=50, current_period_end=None)
-    await charge_credits(_db(existing_sub=existing), USER, "prep_questions")
-    assert existing.credits_remaining == 0
-
-
-@pytest.mark.asyncio
-async def test_spend_is_a_noop_for_unlimited_credit_email(monkeypatch):
+async def test_spend_is_a_noop_for_unlimited_credit_email(pg_session, monkeypatch):
     monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com, Other@Example.com")
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=0, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
+    user = await _seed(pg_session, credits_remaining=0)
     # Would otherwise 402 — email match (case-insensitive) bypasses metering entirely.
-    await spend_credits(db, USER, "tailor", email="QA@example.com")
-    assert existing.credits_remaining == 0  # unchanged, no deduction
+    await _spend(pg_session, user, "tailor", email="QA@example.com")
+    assert (await _row(pg_session, user)).credits_remaining == 0
 
 
-@pytest.mark.asyncio
-async def test_spend_still_enforced_for_email_not_on_the_allowlist(monkeypatch):
+async def test_spend_still_enforced_for_email_not_on_the_allowlist(pg_session, monkeypatch):
     monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com")
-    existing = Subscription(user_id=USER, plan="free", status="active",
-                            credits_remaining=4, credits_allotment=50, current_period_end=None)
-    db = _db(existing_sub=existing)
+    user = await _seed(pg_session, credits_remaining=4)
     with pytest.raises(HTTPException) as ei:
-        await spend_credits(db, USER, "tailor", email="someone-else@example.com")
+        await _spend(pg_session, user, "tailor", email="someone-else@example.com")
     assert ei.value.status_code == 402
 
 
-@pytest.mark.asyncio
-async def test_refund_is_a_noop_for_unlimited_credit_email(monkeypatch):
+async def test_refund_gives_the_cost_back(pg_session):
+    user = await _seed(pg_session, credits_remaining=20)
+    async with pg_session() as s:
+        await refund_credits(s, user, "cover_letter")
+        await s.commit()
+    assert (await _row(pg_session, user)).credits_remaining == 20 + CREDIT_COSTS["cover_letter"]
+
+
+async def test_refund_is_a_noop_for_unlimited_credit_email(pg_session, monkeypatch):
     monkeypatch.setattr(settings, "unlimited_credit_emails", "qa@example.com")
-    existing = Subscription(user_id=USER, plan="premium", status="active",
-                            credits_remaining=590, credits_allotment=600, current_period_end=None)
-    db = _db(existing_sub=existing)
-    await refund_credits(db, USER, "tailor", email="qa@example.com")
-    assert existing.credits_remaining == 590  # nothing was ever deducted, so nothing to add back
+    user = await _seed(pg_session, plan="premium", credits_remaining=590, credits_allotment=600)
+    async with pg_session() as s:
+        await refund_credits(s, user, "tailor", email="qa@example.com")
+        await s.commit()
+    # Nothing was ever deducted, so nothing to add back.
+    assert (await _row(pg_session, user)).credits_remaining == 590
 
 
-@pytest.mark.asyncio
-async def test_refund_caps_at_allotment():
-    existing = Subscription(user_id=USER, plan="premium", status="active",
-                            credits_remaining=595, credits_allotment=600, current_period_end=None)
-    db = _db(existing_sub=existing)
-    await refund_credits(db, USER, "tailor")  # tailor costs 10 — would overshoot to 605
-    assert existing.credits_remaining == 600
+async def test_refund_caps_at_allotment(pg_session):
+    user = await _seed(pg_session, plan="premium", credits_remaining=595, credits_allotment=600)
+    async with pg_session() as s:
+        await refund_credits(s, user, "tailor")  # tailor costs 10 — would overshoot to 605
+        await s.commit()
+    assert (await _row(pg_session, user)).credits_remaining == 600
 
 
 def test_subscription_public_shape():
-    sub = Subscription(user_id=USER, plan="free", status="active",
+    sub = Subscription(user_id=uuid.uuid4(), plan="free", status="active",
                        credits_remaining=30, credits_allotment=50, current_period_end=None)
     out = subscription_public(sub)
     assert out["plan"] == "free" and out["credits_remaining"] == 30

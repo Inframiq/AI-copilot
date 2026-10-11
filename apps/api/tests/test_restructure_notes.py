@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from app.db.session import get_db
 from app.main import app
 from app.services.misc_notes import MAX_POINTS_PER_SAVE, NotePoint, NotesDraft, clean_points
-from tests.test_jd_and_tailor_endpoints import credit_sub_result, make_auth_header, make_mock_db
+from tests.test_jd_and_tailor_endpoints import TEST_USER_ID, make_auth_header, make_mock_db
 
 
 # ── clean_points ──────────────────────────────────────────────────────────────
@@ -136,11 +136,19 @@ def test_clean_points_caps_the_count():
 # ── the endpoint ──────────────────────────────────────────────────────────────
 
 
-async def _post(json, provider=None, credits=50, raise_app_exceptions=True):
-    sub_result = credit_sub_result(credits=credits)
-    sub = sub_result.scalar_one_or_none()
+class _Balance:
+    def __init__(self, ledger):
+        self._ledger = ledger
+
+    @property
+    def credits_remaining(self):
+        return self._ledger.balance(TEST_USER_ID)
+
+
+async def _post(ledger, json, provider=None, credits=50, raise_app_exceptions=True):
+    ledger.set(TEST_USER_ID, credits)
+    sub = _Balance(ledger)
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=sub_result)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.ai.get_ai_provider", return_value=provider or MagicMock()):
@@ -159,9 +167,9 @@ def _provider(points):
 
 
 @pytest.mark.asyncio
-async def test_restructure_notes_charges_one_credit_and_returns_points():
+async def test_restructure_notes_charges_one_credit_and_returns_points(ledger):
     provider = _provider([NotePoint(text="Organised a 3-day coding bootcamp", section="leadership")])
-    r, sub = await _post({"text": "i organised a 3 day coding bootcamp"}, provider)
+    r, sub = await _post(ledger, {"text": "i organised a 3 day coding bootcamp"}, provider)
     assert r.status_code == 200
     assert r.json() == {"points": [
         {"text": "Organised a 3-day coding bootcamp", "section": "leadership", "flags": [],
@@ -173,34 +181,34 @@ async def test_restructure_notes_charges_one_credit_and_returns_points():
 
 
 @pytest.mark.asyncio
-async def test_restructure_notes_refunds_when_the_model_fails():
+async def test_restructure_notes_refunds_when_the_model_fails(ledger):
     provider = MagicMock()
     provider.complete_structured = AsyncMock(side_effect=RuntimeError("provider exploded"))
-    r, sub = await _post({"text": "won an award"}, provider, raise_app_exceptions=False)
+    r, sub = await _post(ledger, {"text": "won an award"}, provider, raise_app_exceptions=False)
     assert r.status_code == 500
     assert sub.credits_remaining == 50
 
 
 @pytest.mark.asyncio
-async def test_restructure_notes_refunds_when_nothing_usable_comes_back():
-    r, sub = await _post({"text": "hmm"}, _provider([NotePoint(text=" ", section="awards")]))
+async def test_restructure_notes_refunds_when_nothing_usable_comes_back(ledger):
+    r, sub = await _post(ledger, {"text": "hmm"}, _provider([NotePoint(text=" ", section="awards")]))
     assert r.status_code == 422
     assert "credit was returned" in r.json()["detail"]
     assert sub.credits_remaining == 50
 
 
 @pytest.mark.asyncio
-async def test_restructure_notes_refuses_blank_text_without_charging():
+async def test_restructure_notes_refuses_blank_text_without_charging(ledger):
     provider = _provider([])
-    r, sub = await _post({"text": "   \n "}, provider)
+    r, sub = await _post(ledger, {"text": "   \n "}, provider)
     assert r.status_code == 422
     assert sub.credits_remaining == 50
     provider.complete_structured.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_restructure_notes_refuses_text_over_2000_characters():
-    r, sub = await _post({"text": "a" * 2001}, _provider([]))
+async def test_restructure_notes_refuses_text_over_2000_characters(ledger):
+    r, sub = await _post(ledger, {"text": "a" * 2001}, _provider([]))
     assert r.status_code == 422
     assert sub.credits_remaining == 50
 

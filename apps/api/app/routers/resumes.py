@@ -9,7 +9,7 @@ from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.core.credits import spend_credits
+from app.core.credits import spend_credits, refund_credits
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
@@ -539,56 +539,65 @@ async def generate_resume_endpoint(
         if existing is None:
             raise HTTPException(status_code=404, detail="Resume not found")
 
-    # Three model calls. Deducted with the résumé row's commit below; a
-    # failure before it rolls the deduction back with everything else.
+    # Three model calls. The deduction is committed up front (so the
+    # balance isn't held locked through them) and refunded if anything
+    # after it fails.
     await spend_credits(db, uuid.UUID(user["sub"]), "generate_resume", email=user.get("email"))
-    provider = get_ai_provider()
-    generated = await generate_resume(
-        body.profile,
-        body.candidate_type,
-        provider,
-        target_role=body.target_role,
-        jd_text=body.jd_text,
-        template_id=body.template_id,
-    )
-
-    name = (generated.resume_content.get("contact") or {}).get("name", "").strip()
-    title = body.title or (f"{name}'s Resume" if name else "Generated Resume")
-
-    if existing is not None:
-        existing.title = title[:255]
-        existing.template_id = body.template_id
-        existing.content = generated.resume_content
-        await db.commit()
-        await db.refresh(existing)
-        resume = existing
-        response.status_code = status.HTTP_200_OK
-    else:
-        # Only dedupe the auto-generated fallback title — an explicit
-        # body.title is the caller's deliberate choice (e.g. "Save As"),
-        # same as create_jd honoring an explicit title on a content match.
-        final_title = title if body.title else await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
-        resume = Resume(
-            user_id=uuid.UUID(user["sub"]),
-            title=final_title[:255],
+    await db.commit()
+    try:
+        provider = get_ai_provider()
+        generated = await generate_resume(
+            body.profile,
+            body.candidate_type,
+            provider,
+            target_role=body.target_role,
+            jd_text=body.jd_text,
             template_id=body.template_id,
-            content=generated.resume_content,
         )
-        db.add(resume)
-        await db.commit()
-        await db.refresh(resume)
-        await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
 
-    return GenerateResumeOut(
-        resume_id=resume.id,
-        content=generated.resume_content,
-        template_id=body.template_id,
-        valid=generated.validation.valid,
-        violations=generated.validation.to_dict()["violations"],
-        # Computed inside generate_resume from the final content (see
-        # GenerationResult.underfilled) — advisory, independent of `valid`.
-        underfilled=generated.underfilled,
-    )
+        name = (generated.resume_content.get("contact") or {}).get("name", "").strip()
+        title = body.title or (f"{name}'s Resume" if name else "Generated Resume")
+
+        if existing is not None:
+            existing.title = title[:255]
+            existing.template_id = body.template_id
+            existing.content = generated.resume_content
+            await db.commit()
+            await db.refresh(existing)
+            resume = existing
+            response.status_code = status.HTTP_200_OK
+        else:
+            # Only dedupe the auto-generated fallback title — an explicit
+            # body.title is the caller's deliberate choice (e.g. "Save As"),
+            # same as create_jd honoring an explicit title on a content match.
+            final_title = title if body.title else await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
+            resume = Resume(
+                user_id=uuid.UUID(user["sub"]),
+                title=final_title[:255],
+                template_id=body.template_id,
+                content=generated.resume_content,
+            )
+            db.add(resume)
+            await db.commit()
+            await db.refresh(resume)
+            await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
+
+        return GenerateResumeOut(
+            resume_id=resume.id,
+            content=generated.resume_content,
+            template_id=body.template_id,
+            valid=generated.validation.valid,
+            violations=generated.validation.to_dict()["violations"],
+            # Computed inside generate_resume from the final content (see
+            # GenerationResult.underfilled) — advisory, independent of `valid`.
+            underfilled=generated.underfilled,
+        )
+    except Exception:
+        # Charged above and committed — nothing was delivered, give it back.
+        await db.rollback()
+        await refund_credits(db, uuid.UUID(user["sub"]), "generate_resume", email=user.get("email"))
+        await db.commit()
+        raise
 
 
 @router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
@@ -636,79 +645,88 @@ async def parse_and_create_resume(
     except ValueError:
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
 
-    # A model call reads the text into fields. Checked before anything is
-    # stored, so a refusal leaves no orphaned file; the deduction commits
-    # with the résumé row below, and any failure before then rolls it back.
+    # A model call reads the text into fields. Charged before anything is
+    # stored, so a refusal leaves no orphaned file. The deduction is
+    # committed up front (so the balance isn't held locked through the
+    # parse) and refunded if anything after it fails.
     await spend_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
-
-    # Fixed up front (rather than left to the DB default) so the original file
-    # can be uploaded to its final storage path before the Resume row exists.
-    resume_id = existing_resume.id if existing_resume is not None else uuid.uuid4()
-
-    # Store the untouched original — this is the user's master copy, shown
-    # verbatim in Preview. Synchronous and required (unlike the best-effort
-    # background upload used for generated preview PDFs): if this fails, the
-    # whole upload fails rather than leaving a Resume row with no master file.
-    original_path = f"resumes/{user['sub']}/{resume_id}/original.pdf"
-    try:
-        _supabase().storage.from_("resumes").upload(
-            original_path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
-        )
-    except Exception:
-        raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
-
-    try:
-        # Run off the event loop with a hard deadline — a pathologically
-        # crafted PDF can make parsing take a long time, and this call is
-        # synchronous CPU work that would otherwise block every other
-        # concurrent request on this worker for its duration.
-        raw_text = await asyncio.wait_for(
-            # The magic bytes said PDF, so parse it as one, whatever type the
-            # client claimed it was.
-            asyncio.to_thread(extract_text, raw_bytes, "application/pdf"),
-            timeout=_PARSE_TIMEOUT_SECONDS,
-        )
-    except ValueError as exc:
-        # Surface user-facing constraint violations (e.g. page count exceeded)
-        raise HTTPException(status_code=422, detail=str(exc))
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=422, detail="File took too long to process.")
-    except Exception:
-        raise HTTPException(status_code=422, detail="Could not extract text from the file.")
-
-    if not raw_text.strip():
-        raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
-
-    provider = get_ai_provider()
-    parsed = await parse_resume_text(raw_text, provider)
-
-    # Derive a sensible title from the candidate's name
-    name = parsed.get("contact", {}).get("name", "").strip()
-    title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
-
-    if existing_resume is not None:
-        existing_resume.title = title[:255]
-        existing_resume.template_id = template_id
-        existing_resume.content = parsed
-        existing_resume.original_file_path = original_path
-        existing_resume.original_file_name = file.filename
-        await db.commit()
-        await db.refresh(existing_resume)
-        response.status_code = status.HTTP_200_OK
-        return existing_resume
-
-    title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
-    resume = Resume(
-        id=resume_id,
-        user_id=uuid.UUID(user["sub"]),
-        title=title[:255],
-        template_id=template_id,
-        content=parsed,
-        original_file_path=original_path,
-        original_file_name=file.filename,
-    )
-    db.add(resume)
     await db.commit()
-    await db.refresh(resume)
-    await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
-    return resume
+    try:
+
+        # Fixed up front (rather than left to the DB default) so the original file
+        # can be uploaded to its final storage path before the Resume row exists.
+        resume_id = existing_resume.id if existing_resume is not None else uuid.uuid4()
+
+        # Store the untouched original — this is the user's master copy, shown
+        # verbatim in Preview. Synchronous and required (unlike the best-effort
+        # background upload used for generated preview PDFs): if this fails, the
+        # whole upload fails rather than leaving a Resume row with no master file.
+        original_path = f"resumes/{user['sub']}/{resume_id}/original.pdf"
+        try:
+            _supabase().storage.from_("resumes").upload(
+                original_path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
+            )
+        except Exception:
+            raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
+
+        try:
+            # Run off the event loop with a hard deadline — a pathologically
+            # crafted PDF can make parsing take a long time, and this call is
+            # synchronous CPU work that would otherwise block every other
+            # concurrent request on this worker for its duration.
+            raw_text = await asyncio.wait_for(
+                # The magic bytes said PDF, so parse it as one, whatever type the
+                # client claimed it was.
+                asyncio.to_thread(extract_text, raw_bytes, "application/pdf"),
+                timeout=_PARSE_TIMEOUT_SECONDS,
+            )
+        except ValueError as exc:
+            # Surface user-facing constraint violations (e.g. page count exceeded)
+            raise HTTPException(status_code=422, detail=str(exc))
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=422, detail="File took too long to process.")
+        except Exception:
+            raise HTTPException(status_code=422, detail="Could not extract text from the file.")
+
+        if not raw_text.strip():
+            raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+
+        provider = get_ai_provider()
+        parsed = await parse_resume_text(raw_text, provider)
+
+        # Derive a sensible title from the candidate's name
+        name = parsed.get("contact", {}).get("name", "").strip()
+        title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
+
+        if existing_resume is not None:
+            existing_resume.title = title[:255]
+            existing_resume.template_id = template_id
+            existing_resume.content = parsed
+            existing_resume.original_file_path = original_path
+            existing_resume.original_file_name = file.filename
+            await db.commit()
+            await db.refresh(existing_resume)
+            response.status_code = status.HTTP_200_OK
+            return existing_resume
+
+        title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
+        resume = Resume(
+            id=resume_id,
+            user_id=uuid.UUID(user["sub"]),
+            title=title[:255],
+            template_id=template_id,
+            content=parsed,
+            original_file_path=original_path,
+            original_file_name=file.filename,
+        )
+        db.add(resume)
+        await db.commit()
+        await db.refresh(resume)
+        await _evict_oldest_resumes(db, uuid.UUID(user["sub"]))
+        return resume
+    except Exception:
+        # Charged above and committed — nothing was delivered, give it back.
+        await db.rollback()
+        await refund_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
+        await db.commit()
+        raise

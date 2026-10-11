@@ -30,6 +30,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.core.ai_budget import jd_for_model
 from app.services.ai_engine.base import AIProvider
 from app.services.resume_spec import (
     BANNED_GENERIC_PHRASES,
@@ -168,7 +169,7 @@ depth, impact, recency, and uniqueness — never by length or wording quality.
 async def _classify_relevance(
     items: dict[str, str], target_role: str, jd_text: str | None, provider: AIProvider
 ) -> SelectionPlan:
-    payload = {"target_role": target_role, "job_description": jd_text or "", "items": items}
+    payload = {"target_role": target_role, "job_description": jd_for_model(jd_text), "items": items}
     return await provider.complete_structured(
         _SELECTOR_SYSTEM, json.dumps(payload), SelectionPlan, model_tier="pro"
     )

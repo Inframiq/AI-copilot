@@ -28,6 +28,16 @@ class AIEmptyResponseError(AIResponseError):
     """Empty output with no stated reason."""
 
 
+class AIInputTooLargeError(ValueError):
+    """The prompt is over the per-call size limit (app.core.ai_budget), so it
+    was never sent. Not retryable as is: the input has to get shorter."""
+
+
+class AIPausedError(RuntimeError):
+    """Today's site-wide OpenAI spend has reached its limit
+    (app.core.ai_budget); AI features are paused until the next UTC day."""
+
+
 class AIProvider(ABC):
     @abstractmethod
     async def complete(

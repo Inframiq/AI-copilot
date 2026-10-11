@@ -8,20 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import Resume, JobDescription, Subscription
+from app.db.models import Resume, JobDescription
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
-
-
-def credit_sub_result(credits=9999):
-    """A MagicMock execute-result yielding a well-funded subscription, so
-    spend_credits() in POST /ai/tailor passes without touching a real DB."""
-    r = MagicMock()
-    r.scalar_one_or_none.return_value = Subscription(
-        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), plan="premium", status="active",
-        credits_remaining=credits, credits_allotment=credits, current_period_end=None,
-    )
-    return r
 
 
 def no_previous_run():
@@ -502,7 +491,7 @@ async def test_analyze_uses_saved_resume_content_by_default():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -552,7 +541,7 @@ async def test_analyze_uses_content_override_when_provided():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run()])
 
     fake_analysis = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -606,9 +595,7 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
     def _rows():
         rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
         jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-        # require_credits' balance check; analyze_jd_match is mocked, so no
-        # model runs and nothing is charged.
-        return [rr, jr, credit_sub_result()]
+        return [rr, jr]
 
     mock_session.execute = AsyncMock(side_effect=_rows() + _rows())
 
@@ -645,9 +632,10 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
 
 
 @pytest.mark.asyncio
-async def test_analyze_charges_a_credit_only_when_a_model_ran():
-    """Pages re-run analysis on view; a cached one makes no model call and
-    must be free, a fresh one is charged."""
+async def test_analyze_charges_a_credit_only_when_a_model_ran(ledger):
+    """Pages re-run analysis on view. A fresh one reserves its credit up
+    front and keeps it once a model ran; if no model ran after all, the
+    credit comes back."""
     from app.services.tailoring import JDMatchAnalysis, JDAnalysis
     from app.core.usage import record_call
 
@@ -664,27 +652,87 @@ async def test_analyze_charges_a_credit_only_when_a_model_ran():
                     input_tokens=1, output_tokens=1, reasoning_tokens=0, total_tokens=2)
         return fake
 
-    for analyze, expected in ((ran_a_model, 9998), (AsyncMock(return_value=fake), 9999)):
+    for analyze, expected, refunded in (
+        (ran_a_model, 49, []),
+        (AsyncMock(return_value=fake), 50, ["analyze"]),
+    ):
+        ledger.set(TEST_USER_ID, 50)
+        ledger.refunded.clear()
         override, mock_session = make_mock_db()
         resume, jd = make_resume(), make_jd()
         jd.parsed = {}
         rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
         jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-        sr = credit_sub_result()
-        sub = sr.scalar_one_or_none.return_value
-        mock_session.execute = AsyncMock(side_effect=[rr, jr, sr, sr])
+        mock_session.execute = AsyncMock(side_effect=[rr, jr])
         app.dependency_overrides[get_db] = override
         try:
-            with patch("app.routers.ai.analyze_jd_match", new=analyze), \
-                 patch("app.db.session.AsyncSessionLocal"):  # the usage log's own session
+            with patch("app.routers.ai.analyze_jd_match", new=analyze),                  patch("app.db.session.AsyncSessionLocal"):  # the usage log's own session
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     r = await client.post("/ai/analyze",
                         json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
                         headers=make_auth_header())
             assert r.status_code == 200
-            assert sub.credits_remaining == expected
+            assert ledger.balance(TEST_USER_ID) == expected
+            assert ledger.refunded == refunded
         finally:
             app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_a_fully_cached_analysis_is_free_even_at_zero_credits(ledger):
+    """The JD pages re-run analysis on every visit. With the JD's parse and
+    this résumé's verdicts both cached, nothing is reserved — so it works
+    for someone who has run out."""
+    import hashlib
+    from app.services.tailoring import JDMatchAnalysis, JDAnalysis
+    from app.services.ats import build_resume_text
+
+    ledger.set(TEST_USER_ID, 0)
+    resume, jd = make_resume(), make_jd()
+    agent1 = dict(exact_technical_tools=["Python"], methodologies_and_frameworks=[],
+                  domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[])
+    fp = hashlib.sha1(build_resume_text(resume.content)[0].encode("utf-8")).hexdigest()
+    jd.parsed = {"agent1": agent1, "semantic": {"fingerprint": fp, "verdicts": {"python": "matched"}}}
+    fake = JDMatchAnalysis(jd_analysis=JDAnalysis(**agent1), matched_skills=["Python"], missing_skills=[],
+                           ats_score=100, company_keywords=[])
+    override, mock_session = make_mock_db()
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake)) as run:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/ai/analyze",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                    headers=make_auth_header())
+        assert r.status_code == 200
+        assert run.call_args.kwargs["cached_semantic_verdicts"] == {"python": "matched"}
+        assert ledger.spent == [] and ledger.balance(TEST_USER_ID) == 0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_analyze_refunds_when_the_model_call_fails(ledger):
+    override, mock_session = make_mock_db()
+    resume, jd = make_resume(), make_jd()
+    jd.parsed = {}
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as client:
+                r = await client.post("/ai/analyze",
+                    json={"resume_id": str(resume.id), "jd_id": str(jd.id)},
+                    headers=make_auth_header())
+        assert r.status_code == 500
+        assert ledger.spent == ["analyze"] and ledger.refunded == ["analyze"]
+        assert ledger.balance(TEST_USER_ID) == 50
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -696,7 +744,7 @@ async def test_analyze_returns_importance_map():
     jd = make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[rr, jr, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[rr, jr])
 
     fake = JDMatchAnalysis(
         jd_analysis=JDAnalysis(
@@ -774,7 +822,7 @@ async def test_tailor_resume_returns_202_and_creates_pending_session():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run()])
 
     from app.db.models import TailoringSession
 
@@ -848,7 +896,7 @@ async def test_tailor_resume_background_task_persists_result_and_forwards_priori
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
@@ -916,7 +964,8 @@ async def test_tailor_resume_background_task_persists_result_and_forwards_priori
 
 
 @pytest.mark.asyncio
-async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_error():
+async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_error(ledger):
+    ledger.set(TEST_USER_ID, 600)
     from app.db.models import TailoringSession
 
     override, mock_session = make_mock_db()
@@ -927,7 +976,7 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run(), credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_previous_run()])
 
     created_session = TailoringSession(
         user_id=resume.user_id, resume_id=resume.id, jd_id=jd.id, humanize_level=50, status="pending"
@@ -942,17 +991,11 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
 
     # spend_credits already deducted 10 for this run before the background
     # job started — the pipeline failure below must credit it back.
-    sub = Subscription(
-        id=uuid.uuid4(), user_id=resume.user_id, plan="premium", status="active",
-        credits_remaining=590, credits_allotment=600, current_period_end=None,
-    )
     session_result = MagicMock()
     session_result.scalar_one_or_none.side_effect = lambda: created_session
-    sub_result = MagicMock()
-    sub_result.scalar_one_or_none.return_value = sub
 
     bg_session = MagicMock()
-    bg_session.execute = AsyncMock(side_effect=[session_result, sub_result])
+    bg_session.execute = AsyncMock(side_effect=[session_result])
     bg_session.commit = AsyncMock()
     bg_session.flush = AsyncMock()
 
@@ -978,7 +1021,8 @@ async def test_tailor_resume_background_task_marks_session_failed_on_pipeline_er
                 )
         assert r.status_code == 202
         assert created_session.status == "failed"
-        assert sub.credits_remaining == 600  # 590 + the 10-credit tailor cost refunded
+        assert ledger.refunded == ["tailor"]
+        assert ledger.balance(TEST_USER_ID) == 600  # 590 + the 10-credit tailor cost refunded
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -1188,7 +1232,6 @@ async def test_rewrite_bullet_custom_mode_requires_instructions():
 @pytest.mark.asyncio
 async def test_rewrite_bullet_custom_mode_follows_instructions():
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value="Rewritten per instructions.")
     app.dependency_overrides[get_db] = override
@@ -1221,7 +1264,6 @@ async def test_rewrite_bullet_summary_field_truncates_to_word_cap():
     max_words = HARD_LIMITS["summary"]["max_words"]
     overlong = " ".join(f"word{i}" for i in range(max_words + 30))
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value=overlong)
     app.dependency_overrides[get_db] = override
@@ -1254,7 +1296,6 @@ async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
     max_words = HARD_LIMITS["summary"]["max_words"]
     long_bullet = " ".join(f"word{i}" for i in range(max_words + 30))
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=credit_sub_result())
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value=long_bullet)
     app.dependency_overrides[get_db] = override
@@ -1288,11 +1329,8 @@ async def test_rewrite_bullet_requires_auth():
 
 
 @pytest.mark.asyncio
-async def test_rewrite_bullet_deducts_one_credit():
-    sub_result = credit_sub_result(credits=50)
-    sub = sub_result.scalar_one_or_none()
+async def test_rewrite_bullet_deducts_one_credit(ledger):
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=sub_result)
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(return_value="Rewritten.")
     app.dependency_overrides[get_db] = override
@@ -1305,18 +1343,16 @@ async def test_rewrite_bullet_deducts_one_credit():
                     headers=make_auth_header(),
                 )
         assert r.status_code == 200
-        assert sub.credits_remaining == 49  # rewrite_bullet costs 1
+        assert ledger.spent == ["rewrite_bullet"] and ledger.refunded == []
+        assert ledger.balance(TEST_USER_ID) == 49  # rewrite_bullet costs 1
         mock_session.commit.assert_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_rewrite_bullet_refunds_credit_when_provider_fails():
-    sub_result = credit_sub_result(credits=50)
-    sub = sub_result.scalar_one_or_none()
+async def test_rewrite_bullet_refunds_credit_when_provider_fails(ledger):
     override, mock_session = make_mock_db()
-    mock_session.execute = AsyncMock(return_value=sub_result)
     mock_provider = MagicMock()
     mock_provider.complete = AsyncMock(side_effect=RuntimeError("provider exploded"))
     app.dependency_overrides[get_db] = override
@@ -1330,7 +1366,8 @@ async def test_rewrite_bullet_refunds_credit_when_provider_fails():
                     headers=make_auth_header(),
                 )
         assert r.status_code == 500
-        assert sub.credits_remaining == 50  # charged then refunded — net zero
+        assert ledger.spent == ["rewrite_bullet"] and ledger.refunded == ["rewrite_bullet"]
+        assert ledger.balance(TEST_USER_ID) == 50  # charged then refunded — net zero
     finally:
         app.dependency_overrides.pop(get_db, None)
 

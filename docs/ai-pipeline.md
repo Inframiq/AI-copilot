@@ -9,10 +9,16 @@ configuration (not just the code's hardcoded defaults).
 
 ```
 OPENAI_API_KEY=<set>
-OPENAI_MODEL_FAST=gpt-5.6-luna
-OPENAI_MODEL_PREMIUM=gpt-5.6-sol
+OPENAI_MODEL_FAST=gpt-4o-mini
+OPENAI_MODEL_PREMIUM=gpt-4.1-mini
 OPENAI_MAX_OUTPUT_TOKENS=16384
+AI_DAILY_SPEND_LIMIT_USD=10        # optional; this is the default — see "Cost bounds" below
 ```
+
+These are the models every logged call in `ai_usage_events` actually used
+(checked 2026-10-12). Earlier revisions of this doc named `gpt-5.6-luna` /
+`gpt-5.6-sol` here; those were placeholders (they are still the code
+defaults in `app/core/config.py`, used only when the env vars are unset).
 
 OpenAI is the only provider. `apps/api/app/services/ai_engine/factory.py`
 returns `OpenAIProvider` (`apps/api/app/services/ai_engine/openai_provider.py`)
@@ -23,27 +29,45 @@ for **every** agent call in the app. A Gemini provider existed until
 
 `AIProvider.complete()` / `complete_structured()` accept a
 `model_tier: "fast" | "pro" | "premium"` argument. **`OpenAIProvider` maps
-"fast" and "pro" to the SAME budget model** (`gpt-5.6-luna`) and reserves
-`gpt-5.6-sol` (5x the input cost, 5x the output cost) for `"premium"`
-only (`openai_provider.py`'s `_model_for`). This was a deliberate
-cost/margin decision, not an oversight this time (compare the git history —
-`model_tier` used to be silently ignored entirely, mapping every tier onto
-`gpt-5.6-luna`): real per-call token estimates showed putting every "pro"-tier
-call on `sol` (Agent 2, Agent 3, prep questions, cover letter) costs
-~2.5x a $5-for-100-generations budget, while upgrading only Agent 2 — the
-JD+resume semantic mapper, the single call that most determines whether
-the tailoring makes sense — lands close to that budget.
+"fast" and "pro" to the SAME budget model** (the fast model, `gpt-4o-mini`)
+and reserves the premium model (`gpt-4.1-mini` — about 2.7x the price per
+token: $0.40/$1.60 vs $0.15/$0.60 per 1M input/output tokens) for
+`"premium"` only (`openai_provider.py`'s `_model_for`). This was a
+deliberate cost/margin decision, not an oversight this time (compare the git
+history — `model_tier` used to be silently ignored entirely, mapping every
+tier onto the fast model): real per-call token estimates showed putting
+every "pro"-tier call on the premium model (Agent 2, Agent 3, prep
+questions, cover letter) blew a $5-for-100-generations budget, while
+upgrading only Agent 2 — the JD+resume semantic mapper, the single call that
+most determines whether the tailoring makes sense — landed close to it.
 
 **Three call sites request `"premium"`:** `tailoring.py`'s
 `_agent2_semantic_map` (Agent 2), `_agent3_write` (Agent 3, see the
 2026-09-03 cost pass below) and `_agent4_generate_interview_questions`
-(prep questions, 2026-10-11 — on `luna` they came out at screening level:
-JD duties restated as "Tell me about a time…" with generic tails, however
-the prompt was worded; on `sol` the same prompt gives résumé deep dives and
-role-specific scenarios. It runs once per Save to JD, not per tailoring
-run). Every other call in the table below still requests `"fast"` or
-`"pro"` and lands on `gpt-5.6-luna` — this is intentional, re-derive the
-cost math in the git history before changing which calls get `"premium"`.
+(prep questions, 2026-10-11 — on the fast model they came out at screening
+level: JD duties restated as "Tell me about a time…" with generic tails,
+however the prompt was worded; on the premium model the same prompt gives
+résumé deep dives and role-specific scenarios. Measured: ~$0.0008 → ~$0.003
+a set. It runs once per Save to JD or Regenerate, not per tailoring run).
+Every other call in the table below still requests `"fast"` or `"pro"` and
+lands on the fast model — this is intentional, re-derive the cost math in
+the git history before changing which calls get `"premium"`.
+
+### Cost bounds (2026-10-12)
+
+`app/core/ai_budget.py`, enforced inside `OpenAIProvider` before every call:
+
+- Job-description text in a prompt is trimmed to 12,000 characters at a
+  paragraph break (`jd_for_model`) — above every real JD so far (max 9,165).
+- A single call whose system + user text is over 60,000 characters is
+  refused before it's sent (`AIInputTooLargeError` → 422 to the user).
+- A site-wide ceiling pauses AI for the rest of the UTC day once that day's
+  spend, priced from `ai_usage_events`, reaches `AI_DAILY_SPEND_LIMIT_USD`
+  (`AIPausedError` → 503). Prices live in `_PRICES_PER_MILLION`; a model
+  not listed there is priced as expensive, so add any new model to it.
+
+Every charged endpoint refunds when its model call raises, so neither error
+costs the user credits.
 
 ### Confirmed bug (2026-08-13): 4096 output tokens is too low, and it was silently killing entire tailoring runs
 
@@ -290,8 +314,8 @@ forces or fabricates a weak metric to fit the `[Action Verb] + [Method] +
 
 | # | Agent | Trigger | `model_tier` requested | Model actually used (this `.env`) | System prompt size | `max_output_tokens` (`call_name`) |
 |---|-------|---------|------------------------|-------------------------------------|---------------------|-------------------------------------|
-| 0 | Company Intel (`_agent0_company_intel`) | Optional — only when a company name is given to Analyze/Tailor | `"fast"` | `gpt-5.6-luna` | 1,866 chars (~466 tokens) | 3000 (`agent0_company_intel`) |
-| 1 | JD Deconstructor (`_agent1_parse_jd`) | Every "Analyze Description" and every "Tailor Resume" | `"fast"` | `gpt-5.6-luna` | 1,284 chars (~321 tokens) | 3000 (`agent1_parse_jd`) |
+| 0 | Company Intel (`_agent0_company_intel`) | Optional — only when a company name is given to Analyze/Tailor | `"fast"` | fast model | 1,866 chars (~466 tokens) | 3000 (`agent0_company_intel`) |
+| 1 | JD Deconstructor (`_agent1_parse_jd`) | Every "Analyze Description" and every "Tailor Resume" | `"fast"` | fast model | 1,284 chars (~321 tokens) | 3000 (`agent1_parse_jd`) |
 | 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | premium model | 3,288 chars (~822 tokens) | 16384 (`agent2_semantic_map`) — scales with bullet count |
 | 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | **`"premium"`** (was `"pro"` — see 2026-09-03 note) | premium model | 2,302 chars (~575 tokens, varies slightly with humanize tone) | 16384 (`agent3_write`) — scales with bullet count |
 | — | Cover letter (`write_cover_letter`) | "Generate Cover Letter" action | `"pro"` | fast model | ~1,000 chars (~250 tokens) | 3000 (`cover_letter`) |

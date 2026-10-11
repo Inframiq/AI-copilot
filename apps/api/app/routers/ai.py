@@ -11,7 +11,7 @@ from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
 from app.core.usage import record_ai_usage
-from app.core.credits import spend_credits, refund_credits, require_credits, charge_credits
+from app.core.credits import spend_credits, refund_credits
 from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
@@ -91,23 +91,46 @@ async def analyze_jd(
         if sem_cache and resume_fp and sem_cache.get("fingerprint") == resume_fp:
             cached_semantic_verdicts = sem_cache.get("verdicts") or {}
 
-    # Charged only when a model actually runs: a repeat analysis of the same
-    # JD and résumé comes from the caches above, and the JD pages re-run it
-    # on every visit. Checked first, so no model call happens unpaid.
+    # Charged only when a model actually runs. A repeat analysis of the same
+    # JD and résumé comes from the caches above (the JD pages re-run it on
+    # every visit), so it reserves nothing and works even at 0 credits.
+    # Anything else reserves the cost up front — atomically, so simultaneous
+    # requests can't share the same credits — committed before the model
+    # call, and refunded if no model ran after all or the call failed.
     email = user.get("email")
-    await require_credits(db, uid, "analyze", email=email)
-    async with record_ai_usage(uid, "analyze") as calls:
-        analysis = await analyze_jd_match(
-            content_for_analysis,
-            jd_row.raw_text,
-            provider,
-            company_name=body.company_name,
-            cached_jd_analysis=cached_jd_analysis,
-            cached_semantic_verdicts=cached_semantic_verdicts,
-        )
-    charged = bool(calls)
-    if charged:
-        await charge_credits(db, uid, "analyze", email=email)
+    fully_cached = cached_jd_analysis is not None and cached_semantic_verdicts is not None
+    reserved = False
+    if not fully_cached:
+        await spend_credits(db, uid, "analyze", email=email)
+        await db.commit()
+        reserved = True
+    try:
+        async with record_ai_usage(uid, "analyze") as calls:
+            analysis = await analyze_jd_match(
+                content_for_analysis,
+                jd_row.raw_text,
+                provider,
+                company_name=body.company_name,
+                cached_jd_analysis=cached_jd_analysis,
+                cached_semantic_verdicts=cached_semantic_verdicts,
+            )
+    except Exception:
+        if reserved:
+            await refund_credits(db, uid, "analyze", email=email)
+            await db.commit()
+        raise
+    if reserved and not calls:
+        await refund_credits(db, uid, "analyze", email=email)
+        await db.commit()
+    elif calls and not reserved:
+        # The caches didn't cover everything after all — charge for the run,
+        # if the balance holds it (the work is done either way).
+        try:
+            await spend_credits(db, uid, "analyze", email=email)
+            await db.commit()
+        except HTTPException:
+            await db.rollback()
+            logger.warning("analyze ran a model on a cached path with no credits left (user %s)", uid)
 
     # Persist Agent 1 + semantic verdicts so future no-company analyses are
     # deterministic (same JD text → same skill list, same resume → same score).
@@ -127,8 +150,6 @@ async def analyze_jd(
             jd_row.parsed = existing
             attributes.flag_modified(jd_row, "parsed")
             await db.commit()
-    if charged:
-        await db.commit()
 
     return AnalyzeOut(
         ats_score=analysis.ats_score,

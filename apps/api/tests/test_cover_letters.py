@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import Subscription
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -23,17 +22,6 @@ def _provider():
     provider.complete.return_value = ""
     provider.complete_structured.return_value = MagicMock()
     return provider
-
-def credit_sub_result(credits=9999):
-    """A MagicMock execute-result yielding a well-funded subscription, so
-    spend_credits() in POST /cover-letters passes without touching a real DB."""
-    r = MagicMock()
-    r.scalar_one_or_none.return_value = Subscription(
-        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), plan="premium", status="active",
-        credits_remaining=credits, credits_allotment=credits, current_period_end=None,
-    )
-    return r
-
 
 def make_auth_header():
     payload = {
@@ -77,7 +65,7 @@ async def test_generate_creates_pending_row_and_returns_202():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, credit_sub_result()])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -129,7 +117,7 @@ async def test_generate_creates_pending_row_and_returns_202():
 
 
 @pytest.mark.asyncio
-async def test_generate_deducts_three_credits():
+async def test_generate_deducts_three_credits(ledger):
     from app.db.models import Resume, JobDescription
 
     override, mock_session = make_mock_db()
@@ -143,9 +131,7 @@ async def test_generate_deducts_three_credits():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    sub_result = credit_sub_result(credits=50)
-    sub = sub_result.scalar_one_or_none()
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, sub_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -180,13 +166,15 @@ async def test_generate_deducts_three_credits():
                     headers=make_auth_header(),
                 )
         assert r.status_code == 202
-        assert sub.credits_remaining == 47  # cover_letter costs 3
+        # Charged up front (3 credits). This test's background job can't find
+        # its letter and refunds — see the refund test for that path.
+        assert ledger.spent == ["cover_letter"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_generate_refunds_credits_when_pipeline_fails():
+async def test_generate_refunds_credits_when_pipeline_fails(ledger):
     from app.db.models import Resume, JobDescription
 
     override, mock_session = make_mock_db()
@@ -200,9 +188,7 @@ async def test_generate_refunds_credits_when_pipeline_fails():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    sub_result = credit_sub_result(credits=50)
-    sub = sub_result.scalar_one_or_none()
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, sub_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -223,16 +209,10 @@ async def test_generate_refunds_credits_when_pipeline_fails():
 
     mock_session.add = MagicMock(side_effect=fake_add)
 
-    refund_sub = Subscription(
-        id=uuid.uuid4(), user_id=resume.user_id, plan="premium", status="active",
-        credits_remaining=47, credits_allotment=50, current_period_end=None,
-    )
-    refund_sub_result = MagicMock()
-    refund_sub_result.scalar_one_or_none.return_value = refund_sub
     bg_letter_result = MagicMock()
     bg_letter_result.scalar_one_or_none.side_effect = lambda: created_letter
     bg_session = MagicMock()
-    bg_session.execute = AsyncMock(side_effect=[bg_letter_result, refund_sub_result])
+    bg_session.execute = AsyncMock(side_effect=[bg_letter_result])
     bg_session.commit = AsyncMock()
     bg_session.flush = AsyncMock()
 
@@ -260,7 +240,8 @@ async def test_generate_refunds_credits_when_pipeline_fails():
                 )
         assert r.status_code == 202
         assert created_letter.status == "failed"
-        assert refund_sub.credits_remaining == 50  # 47 + the 3-credit cost refunded
+        assert ledger.refunded == ["cover_letter"]
+        assert ledger.balance(TEST_USER_ID) == 50  # 47 + the 3-credit cost refunded
     finally:
         app.dependency_overrides.pop(get_db, None)
 

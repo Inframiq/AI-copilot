@@ -34,3 +34,118 @@ def avatar_store(monkeypatch):
 
     monkeypatch.setattr(pdf, "_download_avatar", download)
     return store
+
+
+# ── Credits ─────────────────────────────────────────────────────────────────
+
+_ROUTERS_THAT_CHARGE = ("app.routers.ai", "app.routers.jd", "app.routers.cover_letters", "app.routers.resumes")
+
+
+class Ledger:
+    """In-memory stand-in for app.core.credits' spend/refund, patched into
+    every router that charges (see the autouse fixture below). Behaves like
+    the real thing — deducts, refuses with the same 402s, refunds up to the
+    allotment, skips unpriced actions and the unlimited allowlist — so
+    endpoint tests can check what an endpoint charged without scripting the
+    database. The credit logic itself is tested against a real Postgres
+    (test_credits.py, test_credits_concurrency.py)."""
+
+    def __init__(self):
+        from app.core.credits import PLAN_CREDITS
+        self.default = PLAN_CREDITS["free"]
+        self.balances: dict = {}
+        self.allotments: dict = {}
+        self.inactive: set = set()
+        self.spent: list[str] = []
+        self.refunded: list[str] = []
+
+    def set(self, user_id, credits, *, allotment=None, active=True):
+        import uuid
+        uid = uuid.UUID(str(user_id))
+        self.balances[uid] = credits
+        self.allotments[uid] = allotment if allotment is not None else max(credits, self.default)
+        (self.inactive.discard if active else self.inactive.add)(uid)
+
+    def balance(self, user_id):
+        import uuid
+        return self.balances.get(uuid.UUID(str(user_id)), self.default)
+
+    async def spend(self, db, user_id, action, email=None):
+        from fastapi import HTTPException
+        from app.core import credits
+        cost = credits.CREDIT_COSTS.get(action, 0)
+        if credits._exempt(action, cost, email):
+            return None
+        uid = user_id
+        if uid in self.inactive:
+            raise HTTPException(status_code=402, detail="Your subscription is not active.")
+        have = self.balances.get(uid, self.default)
+        if have < cost:
+            raise credits._out_of_credits(action, cost, have)
+        self.balances[uid] = have - cost
+        self.allotments.setdefault(uid, self.default)
+        self.spent.append(action)
+        return None
+
+    async def refund(self, db, user_id, action, email=None):
+        from app.core import credits
+        cost = credits.CREDIT_COSTS.get(action, 0)
+        if credits._exempt(action, cost, email):
+            return
+        uid = user_id
+        cap = self.allotments.get(uid, self.default)
+        self.balances[uid] = min(self.balances.get(uid, self.default) + cost, cap)
+        self.refunded.append(action)
+
+
+@pytest.fixture(autouse=True)
+def ledger(monkeypatch):
+    import importlib
+    book = Ledger()
+    for name in _ROUTERS_THAT_CHARGE:
+        mod = importlib.import_module(name)
+        if hasattr(mod, "spend_credits"):
+            monkeypatch.setattr(mod, "spend_credits", book.spend)
+        if hasattr(mod, "refund_credits"):
+            monkeypatch.setattr(mod, "refund_credits", book.refund)
+    return book
+
+
+# ── A real Postgres, for tests that need one ────────────────────────────────
+
+@pytest.fixture(scope="session")
+def pg_uri():
+    """A throwaway local PostgreSQL for the whole run (pgserver, dev-only).
+    Tests that use it are skipped where pgserver isn't installed."""
+    import tempfile
+    pgserver = pytest.importorskip("pgserver")
+    srv = pgserver.get_server(tempfile.mkdtemp(prefix="kripax-pg-"), cleanup_mode="stop")
+    return srv.get_uri().replace("postgresql://", "postgresql+asyncpg://", 1)
+
+
+@pytest.fixture
+async def pg_session(pg_uri):
+    """A sessionmaker on an empty `subscriptions` table."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from app.db.models import Subscription
+
+    engine = create_async_engine(pg_uri, pool_size=20, max_overflow=0)
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda c: Subscription.__table__.create(c, checkfirst=True))
+        await conn.execute(text("TRUNCATE subscriptions"))
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def no_ai_spend_ceiling(monkeypatch):
+    """The daily OpenAI spend ceiling (app.core.ai_budget) reads the usage log
+    from the database on the first model call of each 30s. Off for tests —
+    test_ai_budget.py turns it on against a throwaway Postgres."""
+    from app.core import ai_budget
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ai_daily_spend_limit_usd", 0.0)
+    monkeypatch.setitem(ai_budget._cache, "day", None)
+    monkeypatch.setitem(ai_budget._cache, "spent", 0.0)
+    monkeypatch.setitem(ai_budget._cache, "read_at", 0.0)

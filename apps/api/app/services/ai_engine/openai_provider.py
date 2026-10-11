@@ -7,6 +7,7 @@ from app.services.ai_engine.base import (
     AIRefusalError,
     AITruncatedError,
 )
+from app.core.ai_budget import check_input_size, ensure_ai_budget, note_spend
 
 logger = logging.getLogger("app")
 
@@ -48,6 +49,7 @@ class OpenAIProvider(AIProvider):
         input_tokens = getattr(usage, "input_tokens", None)
         output_tokens = getattr(usage, "output_tokens", None)
         total_tokens = getattr(usage, "total_tokens", None)
+        note_spend(model, input_tokens, output_tokens)
         logger.info(
             "ai_usage call=%s tier=%s model=%s input_tokens=%s output_tokens=%s "
             "reasoning_tokens=%s total_tokens=%s",
@@ -111,6 +113,10 @@ class OpenAIProvider(AIProvider):
         max_output_tokens: int | None = None,
         call_name: str = "unknown",
     ) -> str:
+        # Bounded before anything is sent (app.core.ai_budget): one call's
+        # size, and the whole site's spend today.
+        check_input_size(system, user)
+        await ensure_ai_budget()
         model = self._model_for(model_tier)
         response = await self._client.responses.create(
             model=model,
@@ -139,6 +145,8 @@ class OpenAIProvider(AIProvider):
         # gpt-5.6-luna rejects the `temperature` param on the Responses API
         # (400 Unsupported parameter) — neither budget nor premium GPT-5.6
         # tiers expose a sampling knob to set here.
+        check_input_size(system, user)
+        await ensure_ai_budget()
         model = self._model_for(model_tier)
         response = await self._client.responses.parse(
             model=model,

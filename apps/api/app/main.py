@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import resumes, jd, ai, learning, career, contacts, cover_letters, me, plans, feedback, admin, data_requests
+from app.services.ai_engine.base import AIInputTooLargeError, AIPausedError
 from app.core.rate_limit import limiter
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.config import settings
@@ -24,6 +25,26 @@ app.add_middleware(BodySizeLimitMiddleware)
 # Rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# The OpenAI cost bounds (app.core.ai_budget), in words. Credits are already
+# refunded by the time these reach here — every charged endpoint refunds
+# when its model call fails.
+@app.exception_handler(AIInputTooLargeError)
+async def ai_input_too_large_handler(request: Request, exc: AIInputTooLargeError) -> JSONResponse:
+    logger.warning("Model input too large on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "This is too long for the AI to read. Shorten the job description or your résumé and try again — your credits weren't used."},
+    )
+
+
+@app.exception_handler(AIPausedError)
+async def ai_paused_handler(request: Request, exc: AIPausedError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "AI features are paused for the rest of today. Please try again tomorrow — your credits weren't used."},
+    )
 
 
 # Catch-all for anything an endpoint doesn't handle itself — without this,

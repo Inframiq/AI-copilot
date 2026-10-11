@@ -8,7 +8,8 @@ from app.db.session import get_db
 from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter, Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import limiter
-from app.core.credits import require_credits, charge_credits
+from app.core.credits import spend_credits, refund_credits
+from app.core.usage import record_ai_usage
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.prep_questions import (
     generate_for_session, latest_session_with_questions, run_for_saved_resume,
@@ -290,8 +291,10 @@ async def generate_jd_prep_questions(
             detail="Tailor your résumé to this job and save it to the JD first — that is what interview questions are made from.",
         )
     # An existing set is returned as it is, free. Making one — first time or
-    # regenerated — is a model call, so it is charged: checked first,
-    # deducted only once the new set was written.
+    # regenerated — is a model call, so it is charged: the cost is reserved
+    # up front (atomically, so simultaneous requests can't share credits),
+    # committed before the model runs, and refunded if nothing was made or
+    # the set that comes back is one another request made meanwhile.
     regenerate = bool(body and body.regenerate)
     have = (
         await db.execute(select(func.count(PrepQuestion.id)).where(PrepQuestion.session_id == session.id))
@@ -299,16 +302,24 @@ async def generate_jd_prep_questions(
     makes_new = regenerate or not have
     email = user.get("email")
     if makes_new:
-        await require_credits(db, uid, "prep_questions", email=email)
-    rows = await generate_for_session(db, session, jd, saved.content, replace=regenerate)
+        await spend_credits(db, uid, "prep_questions", email=email)
+        await db.commit()
+    try:
+        async with record_ai_usage(uid, "prep_questions") as calls:
+            rows = await generate_for_session(db, session, jd, saved.content, replace=regenerate)
+    except Exception:
+        if makes_new:
+            await refund_credits(db, uid, "prep_questions", email=email)
+            await db.commit()
+        raise
+    if makes_new and (not rows or not calls):
+        await refund_credits(db, uid, "prep_questions", email=email)
+        await db.commit()
     if regenerate and not rows:
         raise HTTPException(
             status_code=502,
             detail="Couldn't make a new set of questions — your current questions are unchanged. Try again.",
         )
-    if makes_new and rows:
-        await charge_credits(db, uid, "prep_questions", email=email)
-        await db.commit()
     return {"session_id": str(session.id), "questions_total": len(rows)}
 
 

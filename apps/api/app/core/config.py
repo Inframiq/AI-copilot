@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # one for cost reasons decided against real per-call token estimates.
     openai_model_fast: str = "gpt-5.6-luna"
     openai_model_premium: str = "gpt-5.6-sol"
+    # Site-wide ceiling on OpenAI spend per UTC day (USD), priced from
+    # ai_usage_events — see app.core.ai_budget. AI features pause once it's
+    # reached. 0 turns it off. The busiest day so far (2026-10-11) was ~$0.19.
+    ai_daily_spend_limit_usd: float = 10.0
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
     # A regex for preview deployments' origins, e.g.
     # https://kripax-[a-z0-9-]+-inframiq\.vercel\.app — empty allows none.

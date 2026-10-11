@@ -75,13 +75,13 @@ def _sub(credits, status="active", allotment=50):
 
 
 @pytest.mark.asyncio
-async def test_tailor_402_when_out_of_credits():
+async def test_tailor_402_when_out_of_credits(ledger):
+    ledger.set(TEST_USER_ID, 4)  # < 10
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=4)  # < 10
-    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run()])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -97,14 +97,12 @@ async def test_tailor_402_when_out_of_credits():
 
 
 @pytest.mark.asyncio
-async def test_tailor_deducts_credits_and_proceeds_when_balance_ok():
+async def test_tailor_deducts_credits_and_proceeds_when_balance_ok(ledger):
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
-    sub = _sub(credits=50)
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
-    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run()])
     db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4())
                        if isinstance(o, TailoringSession) and o.id is None else None)
 
@@ -117,36 +115,33 @@ async def test_tailor_deducts_credits_and_proceeds_when_balance_ok():
                                  json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
                                  headers=make_auth_header())
         assert r.status_code == 202
-        assert sub.credits_remaining == 40  # 50 - CREDIT_COSTS["tailor"]
+        assert ledger.spent == ["tailor"]
+        assert ledger.balance(TEST_USER_ID) == 40  # 50 - CREDIT_COSTS["tailor"]
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_tailor_creates_a_free_subscription_on_first_use():
+async def test_tailor_charges_a_new_user_from_the_free_grant(ledger):
+    """A user with no subscription yet is charged from the free grant (the
+    row itself is created atomically — see test_credits.py)."""
     override, db = make_mock_db()
     resume, jd = make_resume(), make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = None  # no subscription yet
-    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run(), sr])
-    added = []
-    db.add = MagicMock(side_effect=lambda o: (added.append(o),
-        setattr(o, "id", uuid.uuid4()) if isinstance(o, TailoringSession) and o.id is None else None))
-    db.flush = AsyncMock()
+    db.execute = AsyncMock(side_effect=[rr, jr, no_previous_run()])
+    db.add = MagicMock(side_effect=lambda o: setattr(o, "id", uuid.uuid4())
+                       if isinstance(o, TailoringSession) and o.id is None else None)
 
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()), \
-             patch("app.routers.ai.AsyncSessionLocal", new=lambda: _BgCtx()):
+        with patch("app.routers.ai.run_tailoring_pipeline", new=AsyncMock()),              patch("app.routers.ai.AsyncSessionLocal", new=lambda: _BgCtx()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 r = await c.post("/ai/tailor",
                                  json={"resume_id": str(resume.id), "jd_id": str(jd.id), "humanize_level": 50},
                                  headers=make_auth_header())
         assert r.status_code == 202
-        subs = [o for o in added if isinstance(o, Subscription)]
-        assert len(subs) == 1 and subs[0].plan == "free"
-        assert subs[0].credits_remaining == 40  # 50 free grant - 10
+        assert ledger.balance(TEST_USER_ID) == 40  # 50 free grant - 10
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -337,7 +332,19 @@ async def test_regeneration_that_makes_nothing_keeps_the_old_set():
     db.commit.assert_not_awaited()
 
 
-def _regen_db(db, *, have, credits):
+def _made(rows):
+    """Stands in for generate_for_session: records the model call it makes
+    (as the real one does), then returns `rows`."""
+    from app.core.usage import record_call
+
+    async def run(*args, **kwargs):
+        record_call(call_name="prep_questions_interview", model="m", model_tier="premium",
+                    input_tokens=1, output_tokens=1, reasoning_tokens=0, total_tokens=2)
+        return rows
+    return AsyncMock(side_effect=run)
+
+
+def _regen_db(db, *, have, credits, ledger):
     saved = make_resume()
     jd = make_jd(); jd.tailored_resume_id = saved.id
     sess = _session(); sess.jd_id = jd.id
@@ -345,63 +352,95 @@ def _regen_db(db, *, have, credits):
     rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
     run = MagicMock(); run.scalars.return_value.first.return_value = sess
     count = MagicMock(); count.scalar_one.return_value = have
-    sub = _sub(credits=credits)
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
-    db.execute = AsyncMock(side_effect=[jr, rr, run, count, sr, sr])
-    return jd, sess, sub
+    ledger.set(TEST_USER_ID, credits)
+    db.execute = AsyncMock(side_effect=[jr, rr, run, count])
+    return jd, sess
+
+
+async def _post_prep(jd, body=None, *, raise_app_exceptions=True):
+    # record_ai_usage writes its rows through its own session — kept off the DB.
+    with patch("app.db.session.AsyncSessionLocal"):
+        transport = ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            return await c.post(f"/jd/{jd.id}/prep-questions", json=body, headers=make_auth_header())
+
+
+def _saved_jd_db(db, *, have=0, named=None):
+    """jd, saved résumé, run (latest, or the one named), existing-count."""
+    saved = make_resume(); saved.content = {"experience": ["saved"]}
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    sess = named or _session(); sess.jd_id = jd.id
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    run = MagicMock()
+    if named is not None:
+        run.scalar_one_or_none.return_value = named
+    else:
+        run.scalars.return_value.first.return_value = sess
+    count = MagicMock(); count.scalar_one.return_value = have
+    db.execute = AsyncMock(side_effect=[jr, rr, run, count])
+    return jd, sess
 
 
 @pytest.mark.asyncio
-async def test_regenerate_replaces_an_existing_set_and_charges_for_it():
+async def test_regenerate_replaces_an_existing_set_and_charges_for_it(ledger):
     override, db = make_mock_db()
-    jd, sess, sub = _regen_db(db, have=10, credits=50)
-
+    jd, sess = _regen_db(db, have=10, credits=50, ledger=ledger)
+    gen = _made([MagicMock()] * 9)
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.jd.generate_for_session",
-                   new=AsyncMock(return_value=[MagicMock()] * 9)) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
-                                 headers=make_auth_header())
+        with patch("app.routers.jd.generate_for_session", new=gen):
+            r = await _post_prep(jd, {"regenerate": True})
         assert r.status_code == 200
         assert r.json() == {"session_id": str(sess.id), "questions_total": 9}
         assert gen.call_args.kwargs["replace"] is True
-        assert sub.credits_remaining == 48
+        assert ledger.balance(TEST_USER_ID) == 48 and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_regenerate_402_before_any_model_call_when_out_of_credits():
+async def test_regenerate_402_before_any_model_call_when_out_of_credits(ledger):
     override, db = make_mock_db()
-    jd, _, _ = _regen_db(db, have=10, credits=1)
-
+    jd, _ = _regen_db(db, have=10, credits=1, ledger=ledger)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
-                                 headers=make_auth_header())
+            r = await _post_prep(jd, {"regenerate": True})
         assert r.status_code == 402
         gen.assert_not_awaited()
+        assert ledger.balance(TEST_USER_ID) == 1
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_regenerate_that_makes_nothing_is_not_charged():
+async def test_regenerate_that_makes_nothing_is_not_charged(ledger):
     override, db = make_mock_db()
-    jd, _, sub = _regen_db(db, have=10, credits=50)
-
+    jd, _ = _regen_db(db, have=10, credits=50, ledger=ledger)
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.jd.generate_for_session", new=AsyncMock(return_value=[])):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
-                                 headers=make_auth_header())
+        with patch("app.routers.jd.generate_for_session", new=_made([])):
+            r = await _post_prep(jd, {"regenerate": True})
         assert r.status_code == 502
         assert "unchanged" in r.json()["detail"]
-        assert sub.credits_remaining == 50
+        assert ledger.refunded == ["prep_questions"]
+        assert ledger.balance(TEST_USER_ID) == 50
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_refunds_when_the_model_call_fails(ledger):
+    override, db = make_mock_db()
+    jd, _ = _regen_db(db, have=10, credits=50, ledger=ledger)
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock(side_effect=RuntimeError("down"))):
+            r = await _post_prep(jd, {"regenerate": True}, raise_app_exceptions=False)
+        assert r.status_code == 500
+        assert ledger.refunded == ["prep_questions"]
+        assert ledger.balance(TEST_USER_ID) == 50
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -417,8 +456,7 @@ async def test_generate_endpoint_refuses_a_jd_that_was_only_analyzed():
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+            r = await _post_prep(jd)
         assert r.status_code == 409
         assert "save it to the JD" in r.json()["detail"]
         gen.assert_not_awaited()
@@ -427,58 +465,35 @@ async def test_generate_endpoint_refuses_a_jd_that_was_only_analyzed():
 
 
 @pytest.mark.asyncio
-async def test_generate_endpoint_makes_questions_for_a_saved_jd():
+async def test_generate_endpoint_makes_questions_for_a_saved_jd(ledger):
     override, db = make_mock_db()
-    saved = make_resume(); saved.content = {"experience": ["saved"]}
-    jd = make_jd(); jd.tailored_resume_id = saved.id
-    sess = _session(); sess.jd_id = jd.id
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
-    run = MagicMock(); run.scalars.return_value.first.return_value = sess
-    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
-    sub = _sub(credits=50)
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
-    # jd, saved résumé, run, existing-count, balance check, charge
-    db.execute = AsyncMock(side_effect=[jr, rr, run, none_yet, sr, sr])
-
+    jd, sess = _saved_jd_db(db)
+    gen = _made([MagicMock(), MagicMock()])
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.jd.generate_for_session",
-                   new=AsyncMock(return_value=[MagicMock(), MagicMock()])) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+        with patch("app.routers.jd.generate_for_session", new=gen):
+            r = await _post_prep(jd)
         assert r.status_code == 200
         assert r.json() == {"session_id": str(sess.id), "questions_total": 2}
         gen.assert_awaited_once()
         assert gen.call_args.args[3] == {"experience": ["saved"]}
         # Making the set is a model call, so it is charged.
-        assert sub.credits_remaining == 48
+        assert ledger.balance(TEST_USER_ID) == 48 and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from():
+async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from(ledger):
     """Called by the client straight after Save to JD, naming the run it
     reviewed — which need not be the JD's latest."""
     override, db = make_mock_db()
-    saved = make_resume()
-    jd = make_jd(); jd.tailored_resume_id = saved.id
-    named = _session(); named.jd_id = jd.id
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
-    nr = MagicMock(); nr.scalar_one_or_none.return_value = named
-    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=50)
-    db.execute = AsyncMock(side_effect=[jr, rr, nr, none_yet, sr])
-
+    named = _session()
+    jd, _ = _saved_jd_db(db, named=named)
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.jd.generate_for_session", new=AsyncMock(return_value=[])) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions",
-                                 json={"tailoring_session_id": str(named.id)},
-                                 headers=make_auth_header())
+        with patch("app.routers.jd.generate_for_session", new=_made([MagicMock()])) as gen:
+            r = await _post_prep(jd, {"tailoring_session_id": str(named.id)})
         assert r.status_code == 200
         assert r.json()["session_id"] == str(named.id)
         assert gen.call_args.args[1] is named
@@ -487,47 +502,50 @@ async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from():
 
 
 @pytest.mark.asyncio
-async def test_generate_endpoint_returns_an_existing_set_free_even_with_no_credits():
+async def test_generate_endpoint_returns_an_existing_set_free_even_with_no_credits(ledger):
+    ledger.set(TEST_USER_ID, 0)
     override, db = make_mock_db()
-    saved = make_resume()
-    jd = make_jd(); jd.tailored_resume_id = saved.id
-    sess = _session(); sess.jd_id = jd.id
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
-    run = MagicMock(); run.scalars.return_value.first.return_value = sess
-    have = MagicMock(); have.scalar_one.return_value = 10
-    db.execute = AsyncMock(side_effect=[jr, rr, run, have])  # no balance lookups at all
-
+    jd, _ = _saved_jd_db(db, have=10)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session",
                    new=AsyncMock(return_value=[MagicMock()] * 10)):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+            r = await _post_prep(jd)
         assert r.status_code == 200
         assert r.json()["questions_total"] == 10
+        assert ledger.spent == [] and ledger.balance(TEST_USER_ID) == 0
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
-async def test_generate_endpoint_402_before_any_model_call_when_out_of_credits():
+async def test_a_set_made_by_a_simultaneous_request_is_not_charged_twice(ledger):
+    """Save to JD and the JD page's button at once: both see no set, both
+    reserve; the second gets back the set the first made — no model ran
+    for it, so its credits come back."""
     override, db = make_mock_db()
-    saved = make_resume()
-    jd = make_jd(); jd.tailored_resume_id = saved.id
-    sess = _session(); sess.jd_id = jd.id
-    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
-    run = MagicMock(); run.scalars.return_value.first.return_value = sess
-    none_yet = MagicMock(); none_yet.scalar_one.return_value = 0
-    sr = MagicMock(); sr.scalar_one_or_none.return_value = _sub(credits=1)
-    db.execute = AsyncMock(side_effect=[jr, rr, run, none_yet, sr])
+    jd, _ = _saved_jd_db(db)
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session",
+                   new=AsyncMock(return_value=[MagicMock()] * 10)):  # no model call recorded
+            r = await _post_prep(jd)
+        assert r.status_code == 200
+        assert ledger.spent == ["prep_questions"] and ledger.refunded == ["prep_questions"]
+        assert ledger.balance(TEST_USER_ID) == 50
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
+
+@pytest.mark.asyncio
+async def test_generate_endpoint_402_before_any_model_call_when_out_of_credits(ledger):
+    ledger.set(TEST_USER_ID, 1)
+    override, db = make_mock_db()
+    jd, _ = _saved_jd_db(db)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                r = await c.post(f"/jd/{jd.id}/prep-questions", headers=make_auth_header())
+            r = await _post_prep(jd)
         assert r.status_code == 402
         assert "Interview questions costs 2 credits" in r.json()["detail"]
         gen.assert_not_awaited()

@@ -54,19 +54,30 @@ async def test_returns_existing_subscription_shape():
 
 
 @pytest.mark.asyncio
-async def test_creates_free_subscription_on_first_call():
-    override, s = _db(None)
-    app.dependency_overrides[get_db] = override
+async def test_creates_free_subscription_on_first_call(pg_session):
+    """On a real Postgres: the first call creates the free row (one atomic
+    insert, so simultaneous first calls can't make two), and a second call
+    finds it rather than making another."""
+    from sqlalchemy import select
+    from app.db.models import Subscription
+
+    async def real_db():
+        async with pg_session() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = real_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.get("/me/subscription", headers=auth())
-        assert r.status_code == 200
+            again = await c.get("/me/subscription", headers=auth())
+        assert r.status_code == again.status_code == 200
         body = r.json()
         assert body["plan"] == "free"
         assert body["credits_remaining"] == 50
         assert body["renews"] is False
-        s.add.assert_called_once()
-        s.commit.assert_awaited()
+        async with pg_session() as s:
+            rows = (await s.execute(select(Subscription))).scalars().all()
+        assert len(rows) == 1
     finally:
         app.dependency_overrides.pop(get_db, None)
 
