@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/jd",
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 // TopNav renders <CreditMeter/>, which fetches the subscription. Keep it
@@ -25,9 +26,9 @@ function renderTopNav() {
 }
 
 describe("TopNav", () => {
-  it("renders the search input and mobile nav items", () => {
+  it("renders the search box and mobile nav items", () => {
     renderTopNav();
-    expect(screen.getByPlaceholderText("Search resources...")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Search your résumés, jobs and pages/ })).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Interview")).toBeInTheDocument();
     expect(screen.getByText("Resume")).toBeInTheDocument();

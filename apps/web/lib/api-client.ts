@@ -8,6 +8,7 @@ import type {
   PrepQuestionWithJdOut,
   ResumeContent,
   LearningItem,
+  CareerMilestone,
   ExternalContact,
   JDDetails,
   CoverLetter,
@@ -498,6 +499,18 @@ export const apiClient = {
     request<PrepQuestionOut>("PATCH", `/ai/questions/${questionId}/practice`),
 
   // ── Learning Path ────────────────────────────────────────────────────────
+  // Career Path milestones the user added.
+  getCareerMilestones: (): Promise<CareerMilestone[]> =>
+    request<CareerMilestone[]>("GET", "/career/milestones"),
+  addCareerMilestone: (payload: { title: string; description?: string | null }): Promise<CareerMilestone> =>
+    request<CareerMilestone>("POST", "/career/milestones", payload),
+  updateCareerMilestone: (
+    id: string,
+    patch: Partial<Pick<CareerMilestone, "title" | "description" | "done">>,
+  ): Promise<CareerMilestone> => request<CareerMilestone>("PATCH", `/career/milestones/${id}`, patch),
+  deleteCareerMilestone: (id: string): Promise<void> =>
+    request<void>("DELETE", `/career/milestones/${id}`),
+
   getLearningItems: (): Promise<LearningItem[]> =>
     request<LearningItem[]>("GET", "/learning"),
 

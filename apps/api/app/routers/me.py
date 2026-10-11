@@ -15,6 +15,7 @@ from app.core.security import get_current_user
 from app.core.credits import resolve_subscription, subscription_public
 from app.db.models import (
     AiUsageEvent,
+    CareerMilestone,
     CoverLetter,
     ExternalContact,
     Feedback,
@@ -161,6 +162,7 @@ async def delete_my_account(
         JobDescription,
         Resume,
         LearningItem,
+        CareerMilestone,
         ExternalContact,
         Feedback,
         AiUsageEvent,

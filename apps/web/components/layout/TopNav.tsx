@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { DotsThreeOutline, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { DotsThreeOutline, X } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
+import { GlobalSearch } from "./GlobalSearch";
 import { FeedbackWidget } from "../feedback/FeedbackWidget";
 import { APP_NAV, PHONE_TABS, isActive } from "@/lib/nav";
 
@@ -40,15 +41,7 @@ export function TopNav() {
 
       {/* Desktop Top Bar — search + actions */}
       <header className="hidden md:flex justify-between items-center w-full px-lg h-14 bg-surface/80 backdrop-blur-md sticky top-0 z-30 border-b border-outline-variant/20 shrink-0">
-        <div className="flex items-center bg-surface-container-low rounded-full px-md h-10 ml-sm border border-outline-variant/30 w-80">
-          <MagnifyingGlass size={20} className="text-on-surface-variant shrink-0" />
-          <input
-            className="bg-transparent border-none focus:ring-0 text-body-sm text-on-surface w-full h-full ml-sm outline-none placeholder:text-on-surface-variant/60"
-            placeholder="Search resources..."
-            type="text"
-            readOnly
-          />
-        </div>
+        <GlobalSearch />
         <div className="flex items-center gap-md">
           <FeedbackWidget />
           <CreditMeter variant="compact" />

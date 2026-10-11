@@ -236,6 +236,19 @@ class LearningItem(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
 
+class CareerMilestone(Base):
+    """A roadmap milestone the user added on Career Path, next to the ones the
+    page works out from their activity (those aren't stored)."""
+    __tablename__ = "career_milestones"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+
+
 class Subscription(Base):
     """One row per user — their plan, credit balance, and (for paid plans)
     billing cycle. Credits are spent by app.core.credits.spend_credits at the

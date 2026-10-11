@@ -11,9 +11,9 @@ import {
   TrendUp,
   BookOpen,
   Certificate,
-  Plus,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { UserMilestones } from "@/components/career/UserMilestones";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
 import type { Resume, JobDescription } from "@career-copilot/types";
@@ -193,10 +193,9 @@ export default function CareerPathPage() {
                 </div>
               </div>
             ))}
+            {/* The user's own milestones, then "Add milestone". */}
+            <UserMilestones />
           </div>
-          <button className="flex items-center gap-sm text-label-md text-primary hover:text-primary-container transition-colors py-sm -mb-sm">
-            <Plus size={18} /> Add milestone
-          </button>
         </div>
 
         {/* Right Column */}
