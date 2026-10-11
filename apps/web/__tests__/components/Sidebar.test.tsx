@@ -39,8 +39,8 @@ function renderSidebar() {
 describe("Sidebar", () => {
   it("renders all nav links", () => {
     renderSidebar();
-    // Phase 1 nav — Career Path and Networking are intentionally hidden
-    // (see components/layout/Sidebar.tsx), not a regression.
+    // Networking is intentionally hidden for now (see lib/nav.ts), not a
+    // regression.
     for (const label of [
       "Dashboard",
       "My Profile",
@@ -48,6 +48,7 @@ describe("Sidebar", () => {
       "Resume Builder",
       "Cover Letter",
       "Interview Center",
+      "Career Path",
       "Analytics",
       "Account",
     ]) {
