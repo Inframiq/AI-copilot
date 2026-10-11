@@ -195,6 +195,18 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(screen.queryByRole("button", { name: "Next job description" })).not.toBeInTheDocument();
   });
 
+  it("says so when Mark as Practiced doesn't save, and undoes the tick", async () => {
+    vi.mocked(apiClient.markQuestionPracticed).mockRejectedValueOnce(new Error("500"));
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Mark as Practiced/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Couldn't mark this as practiced — it wasn't saved/);
+    expect(screen.getByRole("button", { name: /Mark as Practiced/ })).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 practiced")).toBeInTheDocument();
+  });
+
   it("asks before regenerating — the cost, and that practice progress starts over", async () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
       question("acme", { practiced_at: "2026-10-01T00:00:00Z" }),

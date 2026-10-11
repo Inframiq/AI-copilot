@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
-import { QuestionCard } from "@/components/interview/QuestionCard";
+import { QuestionCard, practiceSaveError } from "@/components/interview/QuestionCard";
 import { TopicList } from "@/components/interview/TopicList";
 import type { PrepQuestionOut, PrepQuestionWithJdOut } from "@career-copilot/types";
 import Link from "next/link";
@@ -29,6 +29,9 @@ export default function InterviewPage({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [activeIndex, setActiveIndex] = useState(0);
+  // A "Mark as practiced" that didn't save — shown under the buttons while
+  // that question is on screen.
+  const [markError, setMarkError] = useState<{ id: string; message: string } | null>(null);
 
   const { data: rawQuestions = [], isLoading } = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
@@ -83,6 +86,7 @@ export default function InterviewPage({
       queryClient.setQueryData<PrepQuestionOut[]>(["questions", sessionId], (list) =>
         list?.map((q) => (q.id === qId ? { ...q, practiced_at } : q)),
       );
+    setMarkError(null);
     flip(new Date().toISOString());
     try {
       const updated = await apiClient.markQuestionPracticed(qId);
@@ -90,6 +94,7 @@ export default function InterviewPage({
     } catch (err) {
       console.error("Failed to mark question practiced:", err);
       flip(null);
+      setMarkError({ id: qId, message: practiceSaveError() });
     } finally {
       queryClient.invalidateQueries({ queryKey: ["myQuestions"] });
     }
@@ -222,6 +227,9 @@ export default function InterviewPage({
                     </button>
                   )}
                 </div>
+                {markError?.id === active.id && (
+                  <p role="alert" className="-mt-xs sm:-mt-sm text-caption text-error">{markError.message}</p>
+                )}
               </>
             )}
           </div>

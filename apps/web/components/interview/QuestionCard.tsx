@@ -9,6 +9,13 @@ export function sourceLabel(source: string): string {
   return source === "overlap" ? "From your resume:" : source === "gap" ? "Bridging a gap:" : "From the JD:";
 }
 
+/** What to say when "Mark as practiced" didn't save (the tick is undone). */
+export function practiceSaveError(): string {
+  return typeof navigator !== "undefined" && !navigator.onLine
+    ? "You're offline — this wasn't marked as practiced. Try again once you're back online."
+    : "Couldn't mark this as practiced — it wasn't saved. Try again.";
+}
+
 /** The answer guide is "what a strong answer covers", then (from the
  * generator) "Likely follow-up: …" — shown as two parts. */
 function splitGuide(text: string): { covers: string; followUp: string | null } {

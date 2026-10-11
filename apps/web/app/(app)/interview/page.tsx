@@ -21,7 +21,7 @@ import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
-import { sourceLabel } from "@/components/interview/QuestionCard";
+import { sourceLabel, practiceSaveError } from "@/components/interview/QuestionCard";
 import type { PrepQuestionWithJdOut, Resume, JobDescription, Subscription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
@@ -50,6 +50,8 @@ export default function InterviewIndexPage() {
   const prepErrors = usePrepQuestionsStore((s) => s.errors);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
+  // A "Mark as Practiced" that didn't save — shown under that question.
+  const [markError, setMarkError]     = useState<{ id: string; message: string } | null>(null);
   // Each JD's questions are their own page — one JD in view at a time, picked
   // from the switcher. Seeded from ?jd= so a link (or the practice page's
   // back link) lands on the right one; null = the default JD below.
@@ -203,7 +205,9 @@ export default function InterviewIndexPage() {
   // deep-dive ("overlap") questions build on, and the skill gaps its "gap"
   // questions cover — still unpracticed ones first. A topic name used to
   // stand in here, but topics are now just the three tabs.
-  const unique = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))];
+  // Chips are skill names; a basis is sometimes a whole phrase ("root cause
+  // analysis of production errors"), which doesn't read as one — skip those.
+  const unique = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter((x) => x && x.length <= 32))];
   const overlapSkills = unique(
     scopedQuestions.filter((q) => q.source === "overlap").map((q) => q.basis.split(" — ")[0]),
   );
@@ -222,6 +226,7 @@ export default function InterviewIndexPage() {
     // actual practiced_at once the request resolves. Merge (not replace):
     // markQuestionPracticed's response has no jd_id/jd_title, so replacing
     // the whole item would drop it from its JD.
+    setMarkError(null);
     queryClient.setQueryData<PrepQuestionWithJdOut[]>(["myQuestions"], (list) =>
       list?.map((q) => (q.id === qId ? { ...q, practiced_at: new Date().toISOString() } : q))
     );
@@ -235,6 +240,7 @@ export default function InterviewIndexPage() {
       queryClient.setQueryData<PrepQuestionWithJdOut[]>(["myQuestions"], (list) =>
         list?.map((q) => (q.id === qId ? { ...q, practiced_at: null } : q))
       );
+      setMarkError({ id: qId, message: practiceSaveError() });
     }
   }
 
@@ -443,6 +449,9 @@ export default function InterviewIndexPage() {
                           </button>
                         )}
                       </div>
+                      {markError?.id === q.id && (
+                        <p role="alert" className="text-caption text-error mt-sm">{markError.message}</p>
+                      )}
                     </div>
                   );
                 })}
