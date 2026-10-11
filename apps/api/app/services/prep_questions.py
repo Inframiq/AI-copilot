@@ -16,7 +16,7 @@ saved résumé, but are written from the résumé as saved, edits included.
 import logging
 import uuid
 
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.usage import record_ai_usage
@@ -60,10 +60,14 @@ async def run_for_saved_resume(
 
 async def generate_for_session(
     db: AsyncSession, session: TailoringSession, jd: JobDescription, resume_content: dict,
+    *, replace: bool = False,
 ) -> list[PrepQuestion]:
     """Writes this run's questions, from the saved résumé. A run that already
     has a set keeps it — saving the same JD again must not replace questions
-    the user may already be practicing."""
+    the user may already be practicing — unless the user asked for a new set
+    (replace). Then the new set is made first and swapped in in one commit,
+    so a failed or empty generation leaves the old set as it was (and
+    returns [])."""
     async def existing() -> list[PrepQuestion]:
         return list(
             (
@@ -75,7 +79,7 @@ async def generate_for_session(
             ).scalars().all()
         )
 
-    if have := await existing():
+    if not replace and (have := await existing()):
         return have
 
     provider = get_ai_provider()
@@ -111,9 +115,13 @@ async def generate_for_session(
         )
         for q in questions
     ]
+    if replace:
+        if not rows:
+            return []  # nothing to swap in; the old set stays
+        await db.execute(delete(PrepQuestion).where(PrepQuestion.session_id == session.id))
     # The save's background task and the JD page's "Generate questions" can
     # overlap; whichever finishes second keeps the first one's set.
-    if have := await existing():
+    elif have := await existing():
         return have
     if rows:
         db.add_all(rows)

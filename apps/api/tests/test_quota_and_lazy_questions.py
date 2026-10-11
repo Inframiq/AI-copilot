@@ -295,6 +295,118 @@ async def test_generation_keeps_a_set_that_already_exists():
 
 
 @pytest.mark.asyncio
+async def test_regeneration_swaps_in_a_new_set_in_one_commit():
+    from app.services import prep_questions
+
+    sess = _session()
+    old = [PrepQuestion(id=uuid.uuid4(), session_id=sess.id, topic="Technical", question="Old",
+                        answer_framework="STAR", is_gap_based=False, source="requirement",
+                        basis="x", order_index=1)]
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars(old))
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
+
+    with patch.object(prep_questions, "get_or_generate_prep_questions",
+                      new=AsyncMock(return_value=_gen_out())) as gen,          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()),          patch.object(prep_questions, "record_ai_usage"):
+        rows = await prep_questions.generate_for_session(db, sess, jd, {}, replace=True)
+
+    gen.assert_awaited_once()  # an existing set doesn't short-circuit it
+    assert [r.question for r in rows] == ["Tell me about the pipeline."]
+    deletes = [c.args[0] for c in db.execute.call_args_list if "DELETE" in str(c.args[0]).upper()]
+    assert len(deletes) == 1 and "prep_questions" in str(deletes[0])
+    db.add_all.assert_called_once()
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_regeneration_that_makes_nothing_keeps_the_old_set():
+    from app.services import prep_questions
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars([]))
+    db.commit = AsyncMock(); db.add_all = MagicMock()
+    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
+
+    with patch.object(prep_questions, "get_or_generate_prep_questions", new=AsyncMock(return_value=[])),          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()),          patch.object(prep_questions, "record_ai_usage"):
+        rows = await prep_questions.generate_for_session(db, _session(), jd, {}, replace=True)
+
+    assert rows == []
+    assert not any("DELETE" in str(c.args[0]).upper() for c in db.execute.call_args_list)
+    db.add_all.assert_not_called()
+    db.commit.assert_not_awaited()
+
+
+def _regen_db(db, *, have, credits):
+    saved = make_resume()
+    jd = make_jd(); jd.tailored_resume_id = saved.id
+    sess = _session(); sess.jd_id = jd.id
+    jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
+    rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
+    run = MagicMock(); run.scalars.return_value.first.return_value = sess
+    count = MagicMock(); count.scalar_one.return_value = have
+    sub = _sub(credits=credits)
+    sr = MagicMock(); sr.scalar_one_or_none.return_value = sub
+    db.execute = AsyncMock(side_effect=[jr, rr, run, count, sr, sr])
+    return jd, sess, sub
+
+
+@pytest.mark.asyncio
+async def test_regenerate_replaces_an_existing_set_and_charges_for_it():
+    override, db = make_mock_db()
+    jd, sess, sub = _regen_db(db, have=10, credits=50)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session",
+                   new=AsyncMock(return_value=[MagicMock()] * 9)) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
+                                 headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json() == {"session_id": str(sess.id), "questions_total": 9}
+        assert gen.call_args.kwargs["replace"] is True
+        assert sub.credits_remaining == 48
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_402_before_any_model_call_when_out_of_credits():
+    override, db = make_mock_db()
+    jd, _, _ = _regen_db(db, have=10, credits=1)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
+                                 headers=make_auth_header())
+        assert r.status_code == 402
+        gen.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_that_makes_nothing_is_not_charged():
+    override, db = make_mock_db()
+    jd, _, sub = _regen_db(db, have=10, credits=50)
+
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.jd.generate_for_session", new=AsyncMock(return_value=[])):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.post(f"/jd/{jd.id}/prep-questions", json={"regenerate": True},
+                                 headers=make_auth_header())
+        assert r.status_code == 502
+        assert "unchanged" in r.json()["detail"]
+        assert sub.credits_remaining == 50
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_generate_endpoint_refuses_a_jd_that_was_only_analyzed():
     override, db = make_mock_db()
     jd = make_jd(); jd.tailored_resume_id = None

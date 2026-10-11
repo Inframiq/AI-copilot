@@ -14,14 +14,15 @@ import {
   CaretLeft,
   CaretRight,
   ArrowRight,
+  ArrowsClockwise,
 } from "@phosphor-icons/react";
-import { useShallow } from "zustand/react/shallow";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import { usePrepQuestionsStore } from "@/stores/prep-questions-store";
-import type { PrepQuestionWithJdOut, Resume, JobDescription } from "@career-copilot/types";
+import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
+import { sourceLabel } from "@/components/interview/QuestionCard";
+import type { PrepQuestionWithJdOut, Resume, JobDescription, Subscription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
 type Tab = (typeof TABS)[number];
@@ -43,8 +44,10 @@ export default function InterviewIndexPage() {
   const storeSessionId = useTailoringStore((s) => s.sessionId);
   const storeMatchedSkills = useTailoringStore((s) => s.matchedSkills);
   const storeMissingSkills = useTailoringStore((s) => s.missingSkills);
-  // Titles of JDs whose questions are being made right now (Save to JD).
-  const preparing = usePrepQuestionsStore(useShallow((s) => Object.values(s.pending)));
+  // JDs whose questions are being made right now (Save to JD or
+  // Regenerate) → their titles, and why a last attempt failed.
+  const pending = usePrepQuestionsStore((s) => s.pending);
+  const prepErrors = usePrepQuestionsStore((s) => s.errors);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
   // Each JD's questions are their own page — one JD in view at a time, picked
@@ -63,6 +66,8 @@ export default function InterviewIndexPage() {
     enabled: storeSessionId === null,
   });
   const sessionId = storeSessionId ?? latestSession?.session_id ?? null;
+  // The JD the latest run was for, when known without the questions list.
+  const latestRunJdIdFromSession = storeSessionId ? null : latestSession?.jd_id ?? null;
   const matchedSkills = storeSessionId ? storeMatchedSkills : latestSession?.matched_skills ?? storeMatchedSkills;
   const missingSkills = storeSessionId ? storeMissingSkills : latestSession?.missing_skills ?? storeMissingSkills;
 
@@ -88,6 +93,11 @@ export default function InterviewIndexPage() {
     queryFn:  () => apiClient.getJds(),
   });
   const jds = jdsQuery.data ?? [];
+  // Only for the price shown on Regenerate — the server charges what it charges.
+  const { data: subscription } = useQuery<Subscription>({
+    queryKey: ["subscription"],
+    queryFn: () => apiClient.getSubscription(),
+  });
 
   const connectionError =
     myQuestionsQuery.isError || resumesQuery.isError || jdsQuery.isError;
@@ -130,6 +140,20 @@ export default function InterviewIndexPage() {
     router.replace(`/interview?jd=${encodeURIComponent(jdId)}`, { scroll: false });
   }
 
+  // In flight: a first set for a JD that has none yet goes in the banner
+  // ("they'll appear here"); a new set for a JD that has one shows on its
+  // card when it's selected, or in the banner when it isn't.
+  const hasSet = new Set(jdOptions.map((o) => o.jd_id));
+  const preparing = Object.entries(pending).filter(([id]) => !hasSet.has(id)).map(([, title]) => title);
+  const regeneratingElsewhere = Object.entries(pending)
+    .filter(([id]) => hasSet.has(id) && id !== selectedJdId)
+    .map(([, title]) => title);
+
+  function regenerate() {
+    if (!selectedJd) return;
+    void startPrepQuestions(queryClient, selectedJd.jd_id, { title: selectedJd.jd_title, regenerate: true });
+  }
+
   // The selected JD's questions — everything below the switcher derives
   // from this, not myQuestions directly.
   const scopedQuestions = myQuestions.filter((q) => q.jd_id === selectedJdId);
@@ -138,6 +162,7 @@ export default function InterviewIndexPage() {
   // list). Only runs with questions appear here, so it never opens an
   // empty page.
   const practiceSessionId = scopedQuestions[0]?.session_id ?? null;
+  const firstUnpracticed = scopedQuestions.find((q) => !q.practiced_at);
   const practiceHref = (sid: string, qId?: string) =>
     `/interview/${sid}?${qId ? `q=${qId}&` : ""}jd=${encodeURIComponent(selectedJdId ?? "")}`;
 
@@ -174,8 +199,21 @@ export default function InterviewIndexPage() {
   };
 
   // Strengths / needs focus from real session topics, scoped to the JD filter
-  const answeredTopics   = [...new Set(scopedQuestions.filter((q) => answeredSet.has(q.id)).map((q) => q.topic))];
-  const unansweredTopics = [...new Set(scopedQuestions.filter((q) => !answeredSet.has(q.id)).map((q) => q.topic))];
+  // Strengths / needs focus, for the JD on screen: the résumé skills its
+  // deep-dive ("overlap") questions build on, and the skill gaps its "gap"
+  // questions cover — still unpracticed ones first. A topic name used to
+  // stand in here, but topics are now just the three tabs.
+  const unique = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))];
+  const overlapSkills = unique(
+    scopedQuestions.filter((q) => q.source === "overlap").map((q) => q.basis.split(" — ")[0]),
+  );
+  const gapQs = scopedQuestions.filter((q) => q.source === "gap");
+  const gapSkills = unique([
+    ...gapQs.filter((q) => !answeredSet.has(q.id)).map((q) => q.basis),
+    ...gapQs.map((q) => q.basis),
+  ]);
+  // The latest run's matched/missing skills only describe its own JD.
+  const runIsForThisJd = !selectedJdId || latestRunJdIdFromSession === selectedJdId;
 
   const tabQuestions = scopedQuestions.filter((q) => classifyTopic(q.topic) === activeTab);
 
@@ -207,8 +245,8 @@ export default function InterviewIndexPage() {
     { label: "Session started", done: !!sessionId },
     { label: "Questions practiced", done: answeredCount > 0 },
   ];
-  const strengths = (hasAnyQuestions && answeredTopics.length > 0 ? answeredTopics : matchedSkills).slice(0, 3);
-  const focus = (hasAnyQuestions && unansweredTopics.length > 0 ? unansweredTopics : missingSkills).slice(0, 3);
+  const strengths = (overlapSkills.length > 0 ? overlapSkills : runIsForThisJd ? matchedSkills : []).slice(0, 3);
+  const focus = (gapSkills.length > 0 ? gapSkills : runIsForThisJd ? missingSkills : []).slice(0, 3);
 
   return (
     <div className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col lg:flex-row gap-lg">
@@ -248,8 +286,33 @@ export default function InterviewIndexPage() {
             </span>
           </div>
         )}
+        {regeneratingElsewhere.length > 0 && (
+          <div
+            role="status"
+            className="flex items-center gap-sm rounded-2xl border border-primary/20 bg-primary/5 px-md py-sm text-body-sm text-on-surface"
+          >
+            <CircleNotch size={16} className="shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+            <span className="min-w-0">
+              Making a new set of questions for {regeneratingElsewhere.join(", ")}.
+            </span>
+          </div>
+        )}
 
-        {/* Phones: the laptop's right-hand rail, as a strip under the title —
+        {/* Which JD's questions are on screen — each JD is its own page. */}
+        {selectedJd && (
+          <JdSwitcher
+            key={selectedJd.jd_id}
+            options={jdOptions}
+            selected={selectedJd}
+            onSelect={selectJd}
+            onRegenerate={regenerate}
+            regenerating={selectedJd.jd_id in pending}
+            error={prepErrors[selectedJd.jd_id] ?? null}
+            cost={subscription?.costs?.prep_questions ?? 2}
+          />
+        )}
+
+        {/* Phones: the laptop's right-hand rail, as a strip under the JD card —
             below the questions it was out of sight. */}
         <div className="lg:hidden grid grid-cols-2 gap-sm">
           <div className="bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center gap-sm">
@@ -268,7 +331,7 @@ export default function InterviewIndexPage() {
             sessionId={practiceSessionId}
             ready={scopedQuestions.length}
             practiced={selectedJd?.practiced ?? 0}
-            onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId) : "/jd")}
+            onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId, firstUnpracticed?.id) : "/jd")}
             compact
           />
           {(strengths.length > 0 || focus.length > 0) && (
@@ -286,15 +349,6 @@ export default function InterviewIndexPage() {
             </div>
           )}
         </div>
-
-        {/* Which JD's questions are on screen — each JD is its own page. */}
-        {selectedJd && (
-          <JdSwitcher
-            options={jdOptions}
-            selected={selectedJd}
-            onSelect={selectJd}
-          />
-        )}
 
         {/* Tab Navigation */}
         <div className="flex items-center justify-between gap-md border-b border-outline-variant/30 flex-wrap">
@@ -352,37 +406,23 @@ export default function InterviewIndexPage() {
                       key={q.id}
                       className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
                     >
-                      <div className="flex justify-between items-start mb-sm sm:mb-md">
+                      <div className="flex justify-between items-center mb-sm sm:mb-md">
                         <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
                           <MicrophoneStage size={20} />
                         </div>
-                        <span className="bg-surface-container text-caption text-primary px-sm py-xs pill rounded-full">
-                          {q.topic}
-                        </span>
+                        {isPracticed && (
+                          <span className="inline-flex items-center gap-xs px-sm py-xs rounded-full bg-success-accent/10 text-success-accent text-label-sm">
+                            <Check size={12} weight="bold" /> Practiced
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
-                      {q.answer_framework && (
-                        <p className="text-body-sm text-on-surface-variant mb-sm">{q.answer_framework}</p>
-                      )}
                       {q.basis && (
                         <p className="text-caption text-primary/80 mb-md flex items-start gap-xs">
-                          <span className="shrink-0 font-semibold">
-                            {q.source === "overlap" ? "From your resume:" : q.source === "gap" ? "Bridging a gap:" : "From the JD:"}
-                          </span>
+                          <span className="shrink-0 font-semibold">{sourceLabel(q.source)}</span>
                           <span className="text-on-surface-variant">{q.basis}</span>
                         </p>
                       )}
-                      <div className="flex items-center gap-sm mb-md sm:mb-lg">
-                        <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all duration-500"
-                            style={{ width: isPracticed ? "100%" : "0%" }}
-                          />
-                        </div>
-                        <span className="text-label-sm text-on-surface-variant">
-                          {isPracticed ? "Practiced ✓" : "Not started"}
-                        </span>
-                      </div>
                       <div className="flex gap-sm">
                         <button
                           onClick={() => router.push(practiceHref(q.session_id, q.id))}
@@ -472,7 +512,7 @@ export default function InterviewIndexPage() {
             <div>
               <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
                 <ThumbsUp size={18} weight="fill" className="text-success-accent" /> Strengths
-                <InfoTooltip text="Topics from questions you've practiced, or skills your resume already matched in the JD — whichever you have." />
+                <InfoTooltip text="Skills your résumé already shows for this job — the ones its deep-dive questions build on." />
               </h4>
               <div className="flex flex-wrap gap-sm">
                 {strengths.length > 0 ? (
@@ -481,7 +521,7 @@ export default function InterviewIndexPage() {
                   ))
                 ) : (
                   <span className="text-caption text-on-surface-variant italic">
-                    {jds.length > 0 ? "Practice questions to reveal strengths" : "Analyze a JD to discover strengths"}
+                    {hasAnyQuestions ? "None of this job's questions build on a résumé skill" : jds.length > 0 ? "Save a tailored résumé to a JD to see them" : "Analyze a JD to discover strengths"}
                   </span>
                 )}
               </div>
@@ -491,7 +531,7 @@ export default function InterviewIndexPage() {
             <div>
               <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
                 <TrendDown size={18} weight="fill" className="text-error" /> Needs Focus
-                <InfoTooltip text="Topics from questions you haven't practiced yet, or skills the JD wanted that your resume was missing." />
+                <InfoTooltip text="Skills this job wants that your résumé doesn't show yet — practice their questions first." />
               </h4>
               <div className="flex flex-wrap gap-sm">
                 {focus.length > 0 ? (
@@ -500,7 +540,7 @@ export default function InterviewIndexPage() {
                   ))
                 ) : (
                   <span className="text-caption text-on-surface-variant italic">
-                    {jds.length > 0 ? "Start a session to identify gaps" : "Analyze a JD to find focus areas"}
+                    {hasAnyQuestions ? "No skill gaps in this job's questions" : jds.length > 0 ? "Save a tailored résumé to a JD to see them" : "Analyze a JD to find focus areas"}
                   </span>
                 )}
               </div>
@@ -512,7 +552,7 @@ export default function InterviewIndexPage() {
           sessionId={practiceSessionId}
           ready={scopedQuestions.length}
           practiced={selectedJd?.practiced ?? 0}
-          onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId) : "/jd")}
+          onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId, firstUnpracticed?.id) : "/jd")}
         />
       </aside>
     </div>
@@ -571,12 +611,12 @@ function NextMockCard({
         className="absolute top-0 right-0 w-32 h-32 bg-primary-container/50 rounded-full blur-2xl pointer-events-none"
         style={{ marginRight: "-2.5rem", marginTop: "-2.5rem" }}
       />
-      <h4 className="text-label-md font-bold mb-xs relative z-10">{compact ? "Next mock" : "Next Mock Interview"}</h4>
+      <h4 className="text-label-md font-bold mb-xs relative z-10">{compact ? "Practice" : "Practice Session"}</h4>
       <p className={`relative z-10 opacity-90 ${compact ? "text-caption" : "text-body-sm mb-md"}`}>
         {sessionId
           ? compact
             ? `${ready} ready · ${practiced} done`
-            : `${ready} questions ready · ${practiced} practiced`
+            : `${ready} questions · ${practiced} practiced`
           : compact
             ? "Save a tailored résumé first"
             : "Save a tailored résumé to a JD to get personalized questions"}
@@ -585,7 +625,7 @@ function NextMockCard({
         onClick={onGo}
         className={`w-full bg-surface-container-lowest text-primary text-label-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10 ${compact ? "py-xs" : "py-md"}`}
       >
-        {sessionId ? (compact ? "Join" : "Join Session") : compact ? "Go" : "Analyze a JD First"}
+        {sessionId ? (compact ? "Start" : "Start Practice") : compact ? "Go" : "Analyze a JD First"}
       </button>
     </div>
   );
@@ -597,11 +637,22 @@ function JdSwitcher({
   options,
   selected,
   onSelect,
+  onRegenerate,
+  regenerating,
+  error,
+  cost,
 }: {
   options: JdOption[];
   selected: JdOption;
   onSelect: (jdId: string) => void;
+  onRegenerate: () => void;
+  regenerating: boolean;
+  error: string | null;
+  cost: number;
 }) {
+  // Regenerate replaces the set (and its practice progress) and costs
+  // credits, so it asks first — inline, right where the button was.
+  const [confirming, setConfirming] = useState(false);
   const index = options.findIndex((o) => o.jd_id === selected.jd_id);
   const many = options.length > 1;
   const pct = selected.total > 0 ? Math.round((selected.practiced / selected.total) * 100) : 0;
@@ -614,11 +665,26 @@ function JdSwitcher({
         <label htmlFor="jd-switcher" className="text-label-sm text-on-surface-variant uppercase tracking-wider">
           Questions for
         </label>
-        {many && (
-          <span className="text-caption text-on-surface-variant">
-            JD {index + 1} of {options.length}
-          </span>
-        )}
+        <div className="flex items-center gap-sm sm:gap-md">
+          {many && (
+            <span className="text-caption text-on-surface-variant">
+              JD {index + 1} of {options.length}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            disabled={regenerating || confirming}
+            className="inline-flex items-center gap-xs py-sm -my-sm text-label-sm text-primary hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-default"
+          >
+            {regenerating ? (
+              <CircleNotch size={14} className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <ArrowsClockwise size={14} />
+            )}
+            {regenerating ? "Regenerating…" : "Regenerate"}
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-xs sm:gap-sm">
@@ -667,20 +733,56 @@ function JdSwitcher({
         )}
       </div>
 
-      <div className="flex items-center gap-sm sm:gap-md text-caption text-on-surface-variant">
-        <span className="shrink-0">
-          {selected.practiced} of {selected.total} practiced
-        </span>
-        <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+      {confirming ? (
+        <div className="rounded-xl border border-primary/25 bg-primary/5 p-sm sm:p-md flex flex-col sm:flex-row sm:items-center gap-sm">
+          <p className="flex-1 min-w-0 text-body-sm text-on-surface">
+            Replace these {selected.total} questions with a new set?{" "}
+            <span className="text-on-surface-variant">
+              Costs {cost} credit{cost !== 1 ? "s" : ""}
+              {selected.practiced > 0 ? `; your practice progress on this JD (${selected.practiced} done) starts over` : ""}.
+            </span>
+          </p>
+          <div className="flex gap-sm shrink-0">
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="flex-1 sm:flex-none px-md py-xs rounded-lg border border-outline-variant/40 text-label-sm text-on-surface hover:bg-surface-container"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                onRegenerate();
+              }}
+              className="flex-1 sm:flex-none px-md py-xs rounded-lg bg-primary text-on-primary text-label-sm shadow-sm hover:shadow-md"
+            >
+              Regenerate
+            </button>
+          </div>
         </div>
-        <Link
-          href={`/jd/${selected.jd_id}`}
-          className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline"
-        >
-          View JD <ArrowRight size={12} />
-        </Link>
-      </div>
+      ) : regenerating ? (
+        <p role="status" className="text-caption text-on-surface-variant">
+          Writing a new set — these questions stay until it&apos;s ready.
+        </p>
+      ) : (
+        <div className="flex items-center gap-sm sm:gap-md text-caption text-on-surface-variant">
+          <span className="shrink-0">
+            {selected.practiced} of {selected.total} practiced
+          </span>
+          <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          </div>
+          <Link
+            href={`/jd/${selected.jd_id}`}
+            className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline"
+          >
+            View JD <ArrowRight size={12} />
+          </Link>
+        </div>
+      )}
+      {error && !regenerating && <p className="text-caption text-error">{error}</p>}
     </section>
   );
 }

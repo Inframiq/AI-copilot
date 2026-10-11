@@ -20,6 +20,8 @@ vi.mock("@/lib/api-client", () => ({
     getJds: vi.fn().mockResolvedValue([]),
     markQuestionPracticed: vi.fn(),
     getLatestSession: vi.fn().mockResolvedValue({ session_id: null }),
+    getSubscription: vi.fn().mockResolvedValue({ costs: { prep_questions: 2 } }),
+    generateJdPrepQuestions: vi.fn().mockResolvedValue({ session_id: "s", questions_total: 10 }),
   },
 }));
 
@@ -191,6 +193,45 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(await screen.findByText("1 of 2 practiced")).toBeInTheDocument();
     // One JD — nothing to step between.
     expect(screen.queryByRole("button", { name: "Next job description" })).not.toBeInTheDocument();
+  });
+
+  it("asks before regenerating — the cost, and that practice progress starts over", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", { practiced_at: "2026-10-01T00:00:00Z" }),
+      question("acme", { id: "q-acme-2", question: "Second Acme question" }),
+    ]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    expect(screen.getByText(/Replace these 2 questions with a new set\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Costs 2 credits; your practice progress on this JD \(1 done\) starts over/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText(/Replace these 2 questions/)).not.toBeInTheDocument();
+    expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+  });
+
+  it("regenerates the selected JD's set once confirmed", async () => {
+    let finish!: () => void;
+    vi.mocked(apiClient.generateJdPrepQuestions).mockImplementation(
+      () => new Promise((resolve) => { finish = () => resolve({ session_id: "s", questions_total: 1 }); }),
+    );
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const confirm = screen.getAllByRole("button", { name: "Regenerate" }).at(-1)!;
+    await userEvent.click(confirm);
+
+    expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-acme", undefined, { regenerate: true });
+    // The old set stays on screen while the new one is written.
+    expect(await screen.findByText(/these questions stay until it's ready/)).toBeInTheDocument();
+    expect(screen.getByText("Acme technical question")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Regenerating/ })).toBeDisabled();
+
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Regenerate" })).toBeEnabled());
+    expect(apiClient.getMyQuestions).toHaveBeenCalledTimes(2); // refetched the new set
   });
 });
 

@@ -476,12 +476,16 @@ export const apiClient = {
    * called straight after Save to JD (with the run that was reviewed), and
    * from the JD page for a JD saved before that. Returns the existing set if
    * there is one; 409 for a JD that was only analyzed. */
+  // regenerate: replace the JD's existing set with a new one (charged)
+  // instead of getting the existing set back.
   generateJdPrepQuestions: (
     jdId: string,
     tailoringSessionId?: string,
+    opts: { regenerate?: boolean } = {},
   ): Promise<{ session_id: string; questions_total: number }> =>
     request("POST", `/jd/${jdId}/prep-questions`, {
       ...(tailoringSessionId ? { tailoring_session_id: tailoringSessionId } : {}),
+      ...(opts.regenerate ? { regenerate: true } : {}),
     }),
 
   // Every prep question generated across all of the user's JDs — one JD's

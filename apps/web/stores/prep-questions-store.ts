@@ -25,13 +25,15 @@ export const usePrepQuestionsStore = create<PrepQuestionsState>(() => ({
   errors: {},
 }));
 
-/** Make (or fetch the existing) interview questions for a saved JD. Resolves
- * once they exist; never rejects — a failure is kept in `errors`. A second
- * call while one is running for the same JD is a no-op. */
+/** Make (or fetch the existing) interview questions for a saved JD — or,
+ * with `regenerate`, a new set in place of the existing one. Resolves once
+ * they exist; never rejects — a failure is kept in `errors` (and a failed
+ * regenerate leaves the old set). A second call while one is running for the
+ * same JD is a no-op. */
 export async function startPrepQuestions(
   queryClient: QueryClient,
   jdId: string,
-  opts: { sessionId?: string | null; title?: string } = {},
+  opts: { sessionId?: string | null; title?: string; regenerate?: boolean } = {},
 ): Promise<void> {
   const { pending } = usePrepQuestionsStore.getState();
   if (jdId in pending) return;
@@ -41,7 +43,10 @@ export async function startPrepQuestions(
     return { pending: { ...s.pending, [jdId]: opts.title ?? "" }, errors };
   });
   try {
-    await apiClient.generateJdPrepQuestions(jdId, opts.sessionId ?? undefined);
+    const sessionId = opts.sessionId ?? undefined;
+    await (opts.regenerate
+      ? apiClient.generateJdPrepQuestions(jdId, sessionId, { regenerate: true })
+      : apiClient.generateJdPrepQuestions(jdId, sessionId));
   } catch (err) {
     usePrepQuestionsStore.setState((s) => ({
       errors: {
@@ -58,6 +63,8 @@ export async function startPrepQuestions(
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["jdDetails", jdId] }),
       queryClient.invalidateQueries({ queryKey: ["myQuestions"] }),
+      // A practice page's list (a regenerated set replaces it).
+      queryClient.invalidateQueries({ queryKey: ["questions"] }),
       // Making a set costs credits.
       queryClient.invalidateQueries({ queryKey: ["subscription"] }),
     ]);

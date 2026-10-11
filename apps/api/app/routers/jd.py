@@ -246,6 +246,9 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
 class PrepQuestionsRequest(BaseModel):
     # The tailoring run the saved résumé came out of; else the JD's latest.
     tailoring_session_id: uuid.UUID | None = None
+    # Replace the existing set with a new one (and charge for it) instead of
+    # returning it — the "Regenerate questions" action.
+    regenerate: bool = False
 
 
 @router.post("/{jd_id}/prep-questions")
@@ -260,8 +263,9 @@ async def generate_jd_prep_questions(
     """Interview prep questions for a JD whose tailored résumé is saved. The
     client calls this right after Save to JD and waits for it; the JD page
     also offers it for a JD saved before that was so. Returns the existing
-    set if there is one. Refuses a JD that was only analyzed: questions are
-    about the résumé you are applying with."""
+    set if there is one, unless regenerate asks for a new one in its place.
+    Refuses a JD that was only analyzed: questions are about the résumé you
+    are applying with."""
     uid = uuid.UUID(user["sub"])
     jd = (
         await db.execute(
@@ -285,16 +289,24 @@ async def generate_jd_prep_questions(
             status_code=409,
             detail="Tailor your résumé to this job and save it to the JD first — that is what interview questions are made from.",
         )
-    # An existing set is returned as it is, free. Making one is a model call,
-    # so it is charged — checked first, deducted only once it was made.
+    # An existing set is returned as it is, free. Making one — first time or
+    # regenerated — is a model call, so it is charged: checked first,
+    # deducted only once the new set was written.
+    regenerate = bool(body and body.regenerate)
     have = (
         await db.execute(select(func.count(PrepQuestion.id)).where(PrepQuestion.session_id == session.id))
     ).scalar_one()
+    makes_new = regenerate or not have
     email = user.get("email")
-    if not have:
+    if makes_new:
         await require_credits(db, uid, "prep_questions", email=email)
-    rows = await generate_for_session(db, session, jd, saved.content)
-    if not have and rows:
+    rows = await generate_for_session(db, session, jd, saved.content, replace=regenerate)
+    if regenerate and not rows:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't make a new set of questions — your current questions are unchanged. Try again.",
+        )
+    if makes_new and rows:
         await charge_credits(db, uid, "prep_questions", email=email)
         await db.commit()
     return {"session_id": str(session.id), "questions_total": len(rows)}
