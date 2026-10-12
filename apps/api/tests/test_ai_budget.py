@@ -49,7 +49,10 @@ async def test_the_jd_parser_sends_at_most_the_trimmed_text():
     with pytest.raises(RuntimeError):
         await tailoring._agent1_parse_jd("Needs Python.\n\n" * 10_000, provider)
     sent = provider.complete_structured.call_args.args[1]
-    assert len(sent) <= MAX_JD_CHARS_FOR_MODEL
+    # The posting goes inside <job_description> tags (security review M1).
+    jd = sent.removeprefix("<job_description>\n").removesuffix("\n</job_description>")
+    assert jd != sent
+    assert len(jd) <= MAX_JD_CHARS_FOR_MODEL
 
 
 # ── One call can't be oversized ─────────────────────────────────────────────
