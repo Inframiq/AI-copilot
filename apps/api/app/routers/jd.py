@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter, Resume
 from app.core.security import get_current_user
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.core.usage import record_ai_usage
 from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
@@ -254,6 +254,7 @@ class PrepQuestionsRequest(BaseModel):
 
 @router.post("/{jd_id}/prep-questions")
 @limiter.limit("10/minute")
+@ai_global_limit
 async def generate_jd_prep_questions(
     request: Request,
     jd_id: uuid.UUID,

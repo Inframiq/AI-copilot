@@ -2,6 +2,8 @@ import jwt
 from slowapi import Limiter
 from starlette.requests import Request
 
+from app.core.config import settings
+
 
 def client_ip(request: Request) -> str:
     """The visitor's IP address, not the proxy's.
@@ -38,4 +40,22 @@ def rate_limit_key(request: Request) -> str:
     return f"ip:{client_ip(request)}"
 
 
-limiter = Limiter(key_func=rate_limit_key)
+limiter = Limiter(key_func=rate_limit_key, storage_uri=settings.rate_limit_storage_uri)
+
+
+def _ai_global_limit() -> str:
+    return f"{settings.ai_global_requests_per_minute}/minute"
+
+
+# One bucket for the whole site, on every route that starts an AI action
+# (security review M6). Per-user limits stop one account; this stops many —
+# a swarm of free accounts can't saturate the OpenAI quota and stall the
+# site for everyone. It runs before the route, so a refused request is
+# never charged. Stack it under the route's own @limiter.limit; a test
+# checks every route that spends credits carries it.
+ai_global_limit = limiter.shared_limit(
+    _ai_global_limit,
+    scope="ai-global",
+    key_func=lambda request: "ai-global",
+    error_message="AI features are busy right now. Try again in a minute — you weren't charged.",
+)

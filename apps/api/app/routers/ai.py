@@ -9,7 +9,7 @@ from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
 from app.core.security import get_current_user
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ai_global_limit, limiter
 from app.core.usage import record_ai_usage
 from app.core.credits import spend_credits, refund_credits
 from app.schemas.ai import (
@@ -39,6 +39,7 @@ logger = logging.getLogger("app")
 
 @router.post("/analyze", response_model=AnalyzeOut)
 @limiter.limit("20/minute")
+@ai_global_limit
 async def analyze_jd(
     request: Request,
     body: AnalyzeRequest,
@@ -275,6 +276,7 @@ async def _run_tailoring_background(
 
 @router.post("/tailor", response_model=TailorStartOut, status_code=202)
 @limiter.limit("10/minute")
+@ai_global_limit
 async def tailor_resume(
     request: Request,
     body: TailorRequest,
@@ -381,6 +383,7 @@ async def tailor_resume(
 
 @router.post("/rewrite-bullet", response_model=RewriteBulletOut)
 @limiter.limit("30/minute")
+@ai_global_limit
 async def rewrite_bullet(
     request: Request,
     body: RewriteBulletRequest,
@@ -484,6 +487,7 @@ async def rewrite_bullet(
 
 @router.post("/restructure-notes", response_model=RestructureNotesOut)
 @limiter.limit("20/minute")
+@ai_global_limit
 async def restructure_notes(
     request: Request,
     body: RestructureNotesRequest,
@@ -526,7 +530,6 @@ async def restructure_notes(
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)
-@limiter.limit("60/minute")
 # Fires on every tick in the review (debounced 400ms) and is pure scoring —
 # no model call — so a user working through a list must never hit the cap.
 @limiter.limit("120/minute")

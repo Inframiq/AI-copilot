@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, TailoringSession, CoverLetter
 from app.core.security import get_current_user
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.schemas.cover_letter import (
     CoverLetterGenerateRequest, CoverLetterStartOut, CoverLetterOut, CoverLetterUpdate,
@@ -86,6 +86,7 @@ async def _run_cover_letter_background(
 
 @router.post("", response_model=CoverLetterStartOut, status_code=202)
 @limiter.limit("10/minute")
+@ai_global_limit
 async def generate_cover_letter(
     request: Request,
     body: CoverLetterGenerateRequest,

@@ -18,6 +18,17 @@ class Settings(BaseSettings):
     # ai_usage_events — see app.core.ai_budget. AI features pause once it's
     # reached. 0 turns it off. The busiest day so far (2026-10-11) was ~$0.19.
     ai_daily_spend_limit_usd: float = 10.0
+    # Site-wide cap on AI actions (tailor, analyze, rewrite…) started per
+    # minute, across every user — so a swarm of accounts can't saturate the
+    # OpenAI quota and stall the site for everyone. Checked before anything
+    # is charged. The busiest minute so far (2026-09-16) had 2 actions.
+    ai_global_requests_per_minute: int = 60
+    # Where rate-limit counters live. "memory://" (one process; they reset on
+    # deploy) is right for today's single uvicorn process. Before running
+    # more than one instance, point this at a shared store — e.g.
+    # "redis://host:6379" (and add the `redis` package) — or each instance
+    # counts on its own and every limit multiplies by the instance count.
+    rate_limit_storage_uri: str = "memory://"
     cors_extra_origins: str = ""  # comma-separated additional allowed origins
     # A regex for preview deployments' origins, e.g.
     # https://kripax-[a-z0-9-]+-inframiq\.vercel\.app — empty allows none.

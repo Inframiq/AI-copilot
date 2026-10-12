@@ -9,7 +9,7 @@ from sqlalchemy import select, text, update
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
@@ -568,6 +568,7 @@ async def render_resume_html_endpoint(
 
 @router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
+@ai_global_limit
 async def generate_resume_endpoint(
     request: Request,
     response: Response,
@@ -655,6 +656,7 @@ async def generate_resume_endpoint(
 
 @router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
+@ai_global_limit
 async def parse_and_create_resume(
     request: Request,
     response: Response,

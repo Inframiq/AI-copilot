@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import resumes, jd, ai, learning, career, contacts, cover_letters, me, plans, feedback, admin, data_requests
 from app.services.ai_engine.base import AIInputTooLargeError, AIPausedError
@@ -40,7 +39,21 @@ app.add_middleware(BodySizeLimitMiddleware)
 
 # Rate limiter
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limited_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """A rate limit, in words, where the web app reads errors (`detail`).
+
+    slowapi's own handler answered {"error": "Rate limit exceeded: 10 per 1
+    minute"}; the app reads `detail`, so every limit showed as a bare
+    "Request failed". A limit with its own message (the site-wide AI cap)
+    says it; the rest say to wait. Retry-After tells clients when.
+    """
+    message = getattr(exc.limit, "error_message", None) or (
+        "Too many requests — wait a minute and try again."
+    )
+    return JSONResponse(status_code=429, content={"detail": message}, headers={"Retry-After": "60"})
 
 
 
