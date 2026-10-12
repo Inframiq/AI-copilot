@@ -257,5 +257,35 @@ describe("PointsLedger", () => {
     const shown = screen.getAllByText(/^\+\d+ pts$/).map((n) => n.textContent);
     expect(shown.indexOf("+9 pts")).toBeLessThan(shown.indexOf("+1 pts"));
   });
+
+  // Testers: three rewrites on, each badged ±0, score down 4 — each rewrite
+  // dropped a keyword from the job that the original had.
+  it("shows a rewrite that costs points as a minus, not ±0", () => {
+    setup({ liveBulletDeltas: { exp0_b1: -3, exp0_b0: 0 } });
+    const cost = screen.getByText("−3 pts");
+    expect(cost.getAttribute("title")).toMatch(/lowers your score/i);
+    expect(screen.queryByText("+-3 pts")).toBeNull();
+  });
+
+  it("auto-select never switches on a rewrite that lowers the score", () => {
+    const p = setup({
+      decisions: { exp0_b1: "reject", exp0_b0: "reject" },
+      liveBulletDeltas: { exp0_b1: -2, exp0_b0: 3 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({ exp0_b0: "accept" });
+  });
+
+  it("auto-select uses the run's own figure before the first live score lands", () => {
+    const p = setup({
+      decisions: { exp0_b1: "reject", exp0_b0: "reject" },
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: ["Python"], score_delta: -1 },
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"] },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({ exp0_b0: "accept" });
+  });
 });
 

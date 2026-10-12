@@ -27,10 +27,27 @@ export function autoSelectDecisions(
   /** Rewrites the fact-lock flagged. Like AI-written points, each needs its
    * own yes: a bulk click must not switch on a number nobody checked. */
   flagged: ReadonlySet<string> = new Set(),
+  /** Each rewrite's points as its badge shows them. One worth less than
+   * nothing (it drops a keyword from the job) is never switched on in bulk —
+   * a button that lowers the score isn't an "auto-select". */
+  points: Readonly<Record<string, number | undefined>> = {},
 ): Record<string, Decision> {
   return Object.fromEntries(
-    changes.filter((c) => !flagged.has(c.key)).map((c) => [c.key, "accept" as const]),
+    changes
+      .filter((c) => !flagged.has(c.key) && (points[c.key] ?? 0) >= 0)
+      .map((c) => [c.key, "accept" as const]),
   );
+}
+
+/** Each rewrite's points as its badge shows them: the live re-score's value,
+ * else the one the tailoring run measured. */
+export function pointsByChange(
+  rationale: Readonly<Record<string, { score_delta?: number }>>,
+  live: Readonly<Record<string, number>> | undefined,
+): Record<string, number | undefined> {
+  const out: Record<string, number | undefined> = {};
+  for (const [key, r] of Object.entries(rationale ?? {})) out[key] = r?.score_delta;
+  return { ...out, ...(live ?? {}) };
 }
 
 /** Clear all: every point off, AI-written and the profile's Miscellaneous
@@ -245,7 +262,7 @@ export function PointsLedger({
           </span>
           <button
             type="button"
-            onClick={() => onBulk(autoSelectDecisions(changes, flaggedKeys))}
+            onClick={() => onBulk(autoSelectDecisions(changes, flaggedKeys, pointsByChange(rationale, liveBulletDeltas)))}
             title="Turns on every point built on your own bullets. AI-written points stay as they are."
             className={`flex items-center gap-1 rounded-xl bg-primary px-md py-xs text-label-sm font-semibold text-on-primary active:brightness-90 ${PRESS} ${FOCUS_RING}`}
           >
@@ -414,6 +431,16 @@ export function CardHeader({
           points > 0 ? (
             <span className="tabular rounded-full bg-primary/10 px-sm py-0.5 text-label-sm font-semibold text-primary">
               +{points} pts
+            </span>
+          ) : points < 0 ? (
+            // A rewrite can cost points — usually it dropped a keyword from
+            // the job that the original had. Shown as "±0" before, so the
+            // total fell while every point claimed to change nothing.
+            <span
+              title="Keeping this lowers your score — it drops a keyword from the job that your original had."
+              className="tabular rounded-full bg-error/10 px-sm py-0.5 text-label-sm font-semibold text-error"
+            >
+              −{Math.abs(points)} pts
             </span>
           ) : (
             <span

@@ -618,11 +618,66 @@ def verdicts_with_rewrites(
     out = dict(before)
     for bid in accepted_bullet_ids:
         r = rationale.get(bid) or {}
-        for term in [r.get("responsibility") or ""] + list(r.get("keywords") or []):
+        # "carried" (see with_carried_terms): JD terms the original bullet
+        # matched word for word. A rewrite that keeps one's meaning in other
+        # words earns the after-verdict for it; without this, rewording
+        # "Oracle Fusion" to "the platform" scored as losing it outright.
+        terms = [r.get("responsibility") or ""] + list(r.get("keywords") or []) + list(r.get("carried") or [])
+        for term in terms:
             k = term.strip().lower()
             verdict = after.get(k)
             if k and verdict and _VERDICT_RANK.get(verdict, 0) > _VERDICT_RANK.get(out.get(k, "missing"), 0):
                 out[k] = verdict
+    return out
+
+
+def _scored_terms(jd_analysis) -> list[str]:
+    """The JD terms the score matches against résumé text: required tools,
+    methodologies and phrases, and nice-to-haves."""
+    return _dedupe_ci(
+        jd_analysis.exact_technical_tools,
+        jd_analysis.methodologies_and_frameworks,
+        jd_analysis.ats_filter_phrases,
+        jd_analysis.nice_to_have_skills,
+    )
+
+
+def lost_jd_terms(original: str, rewritten: str, jd_analysis) -> list[str]:
+    """JD terms *original* matches word for word that *rewritten* no longer
+    does, by the same matcher the score uses. Pure.
+
+    A rewrite that drops one can lower the score while looking like an
+    improvement — the "adding a tailored point reduced my score" testers hit.
+    """
+    terms = _scored_terms(jd_analysis)
+    if not terms or not (original or "").strip():
+        return []
+    had = {t.lower() for t in compute_delta(terms, original).matched}
+    if not had:
+        return []
+    kept = {t.lower() for t in compute_delta(terms, rewritten or "").matched}
+    return [t for t in terms if t.lower() in had and t.lower() not in kept]
+
+
+def with_carried_terms(
+    rationale: dict[str, dict],
+    original_by_id: dict[str, str],
+    jd_analysis,
+) -> dict[str, dict]:
+    """*rationale* with every rewritten bullet's "carried" terms — the JD
+    terms its original text matched word for word. Pure; returns a copy.
+
+    Every bullet in *original_by_id* gets an entry, even one the mapping plan
+    gave no target terms: it is still a rewrite, and the score and its badge
+    must still account for what it might drop. verdicts_with_rewrites credits
+    a kept rewrite with the after-verdict for these, so a faithful paraphrase
+    keeps the term's credit and only a real loss costs points.
+    """
+    terms = _scored_terms(jd_analysis)
+    out = {bid: dict(r or {}) for bid, r in (rationale or {}).items()}
+    for bid, original in (original_by_id or {}).items():
+        entry = out.setdefault(bid, {"responsibility": "", "keywords": []})
+        entry["carried"] = list(compute_delta(terms, original).matched) if terms and original else []
     return out
 
 
@@ -698,15 +753,19 @@ def bullet_deltas(
         original, tailored = original_by_id.get(bid), tailored_by_id.get(bid)
         if original is None or tailored is None:
             continue
+        # Signed: a rewrite that drops a JD term the original had costs
+        # points, and the badge must say so. Clamping at 0 badged such a
+        # rewrite "±0" while the total fell — testers saw every kept point
+        # at ±0 and the score down 4.
         if bid in accepted_set:
             variant = _replace_bullet(merged, bid, original)
             others = [b for b in accepted if b != bid]
-            out[bid] = max(0, base - review_score(
-                variant, jd_analysis, before, after, rationale, others, fixes))
+            out[bid] = base - review_score(
+                variant, jd_analysis, before, after, rationale, others, fixes)
         else:
             variant = _replace_bullet(merged, bid, tailored)
-            out[bid] = max(0, review_score(
-                variant, jd_analysis, before, after, rationale, accepted + [bid], fixes) - base)
+            out[bid] = review_score(
+                variant, jd_analysis, before, after, rationale, accepted + [bid], fixes) - base
     return out
 
 

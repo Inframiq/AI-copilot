@@ -13,6 +13,7 @@ import { SummaryCard } from "@/components/studio/review/SummaryCard";
 import {
   PointsLedger,
   autoSelectDecisions,
+  pointsByChange,
   clearDecisions,
   countPointsOn,
 } from "@/components/studio/review/PointsLedger";
@@ -257,7 +258,8 @@ export function ReviewShell({
       miscIds.filter((id) => bulletDecisions[`misc:${id}`] === "accept").length,
     pointsTotal: bulletChanges.length + aiFixes.length + miscIds.length,
     skillsAdded,
-    onAutoSelect: () => applyBulletDecisions(autoSelectDecisions(bulletChanges, flaggedKeys)),
+    onAutoSelect: () =>
+      applyBulletDecisions(autoSelectDecisions(bulletChanges, flaggedKeys, pointsByChange(bulletRationale, bulletDeltas))),
     onClear: () => applyBulletDecisions(clearDecisions(bulletChanges, aiFixes, miscIds)),
     onApply: handleApply,
     canApply: !!pendingContent && !!originalContent,

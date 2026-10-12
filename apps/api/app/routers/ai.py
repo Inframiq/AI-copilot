@@ -29,7 +29,7 @@ from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
-    verdicts_with_rewrites,
+    verdicts_with_rewrites, with_carried_terms,
 )
 from app.services.resume_spec import HARD_LIMITS
 
@@ -577,10 +577,18 @@ async def project_score(
     # rewrites, credit each kept rewrite for what it targeted. Without them
     # (older sessions, older clients) fall back to the JD's cached verdicts.
     stored = session.score_verdicts or {}
+    # Every rewrite on screen, with the JD terms its original matched word
+    # for word ("carried"): a kept rewrite that rewords one keeps its credit
+    # if the after-check found it still there, and loses it only if it
+    # really went. Computed here from the originals the client sends, so
+    # sessions stored before this get it too.
+    rationale = session.bullet_rationale or {}
+    if body.original_bullets:
+        rationale = with_carried_terms(rationale, body.original_bullets, jd_analysis)
     if body.accepted_bullet_ids is not None and stored.get("before") is not None:
         verdicts = verdicts_with_rewrites(
             stored.get("before") or {}, stored.get("after") or {},
-            session.bullet_rationale or {}, body.accepted_bullet_ids,
+            rationale, body.accepted_bullet_ids,
         )
 
     all_fixes = [AtsFix(**f) for f in (session.ats_fixes or [])]
@@ -605,7 +613,6 @@ async def project_score(
     # than the pipeline's all-accepted hypothetical.
     rewrite_deltas: dict[str, int] = {}
     if body.original_bullets and body.accepted_bullet_ids is not None and stored.get("before") is not None:
-        rationale = session.bullet_rationale or {}
         tailored_by_id = {
             bid: text
             for bid in rationale

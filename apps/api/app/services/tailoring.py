@@ -26,7 +26,7 @@ from app.services.ai_engine.base import AIProvider
 from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
-    bullet_already_present, verdicts_with_rewrites,
+    bullet_already_present, verdicts_with_rewrites, lost_jd_terms, with_carried_terms,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
@@ -367,6 +367,7 @@ def _guard_writer_output(
     indexed_resume: dict,
     writer: WriterOutput,
     mapping_plan: "MappingPlan | None" = None,
+    jd_analysis: "JDAnalysis | None" = None,
 ) -> tuple[WriterOutput, list[dict]]:
     """Fact-check Agent 3's rewrites and flag the ones the candidate must OK.
 
@@ -406,6 +407,16 @@ def _guard_writer_output(
             guarded.append(rb)
             continue
         text, reasons = guard_rewrite(original, rb.rewritten_text, metrics.get(rb.bullet_id, []))
+        # A "tailored" rewrite that loses a JD term the original matched can
+        # lower the score — flagged like the rest, so it starts switched off.
+        if jd_analysis is not None and text != original:
+            lost = lost_jd_terms(original, text, jd_analysis)
+            if lost:
+                quoted = " and ".join(f'"{t}"' for t in lost[:3]) + (" and more" if len(lost) > 3 else "")
+                reasons = reasons + [
+                    f"drops {quoted}, {'a keyword' if len(lost) == 1 else 'keywords'} "
+                    "from the job that your original had"
+                ]
         if reasons:
             reverted.append({
                 "bullet_id": rb.bullet_id,
@@ -1927,7 +1938,9 @@ async def run_tailoring_pipeline(
     # flagged: the review starts it unticked and says why. (A JD term the
     # résumé never mentions is flagged the same way by the review itself —
     # lib/point-kind.ts.)
-    guarded, reverted_bullets = _guard_writer_output(indexed_resume, tailored_raw, mapping_plan)
+    guarded, reverted_bullets = _guard_writer_output(
+        indexed_resume, tailored_raw, mapping_plan, analysis.jd_analysis,
+    )
     if reverted_bullets:
         logger.info(
             "fact-lock flagged %d/%d rewritten bullet(s): %s",
@@ -2061,6 +2074,19 @@ async def run_tailoring_pipeline(
     # rewrites lands on the before-score.
     before_verdicts = dict(analysis.semantic_verdicts)
     after_verdicts = dict(post.semantic_verdicts)
+    # Every rewrite gets an entry, with the JD terms its original matched
+    # word for word — so a rewrite that drops one is priced, not ignored.
+    bullet_rationale = with_carried_terms(
+        bullet_rationale,
+        {
+            rb.bullet_id: original
+            for rb in guarded.rewritten_bullets
+            # Only real changes: a bullet handed back as it was is no rewrite.
+            if (original := _bullet_text(resume_content, rb.bullet_id)) is not None
+            and _bullet_text(tailored_content, rb.bullet_id) not in (None, original)
+        },
+        analysis.jd_analysis,
+    )
     rewritten_ids = [
         bid for bid in bullet_rationale
         if _bullet_text(tailored_content, bid) not in (None, _bullet_text(resume_content, bid))
@@ -2076,7 +2102,8 @@ async def run_tailoring_pipeline(
                 [b for b in rewritten_ids if b != bid],
             ),
         ).ats_score
-        bullet_rationale[bid]["score_delta"] = max(0, full_score - without)
+        # Signed: a rewrite that loses a JD term is worth negative points.
+        bullet_rationale[bid]["score_delta"] = full_score - without
 
     for f in fixes:
         f.score_delta = estimate_fix_delta(
