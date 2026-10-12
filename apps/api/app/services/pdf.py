@@ -8,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
 from app.services.rich_text import sanitize_inline
+from app.services import sandbox
 
 from app.core.config import settings
 
@@ -318,7 +319,16 @@ def _as_data_uri(image: bytes | None) -> str | None:
         content_type = next((t for sig, t in _IMAGE_SIGNATURES if image.startswith(sig)), None)
     if not content_type:
         return None
-    return f"data:{content_type};base64,{base64.b64encode(image).decode('ascii')}"
+    # The photo came straight from the user's browser into storage, so its
+    # bytes are untrusted, and WeasyPrint would decode them right here in
+    # the API with Pillow's C decoders. Decoded in the sandbox instead
+    # (app/services/sandbox.py), only a freshly encoded copy reaches the
+    # render — and its EXIF/GPS metadata doesn't.
+    cleaned = sandbox.clean_image(image)
+    if cleaned is None:
+        return None
+    clean_bytes, clean_type = cleaned
+    return f"data:{clean_type};base64,{base64.b64encode(clean_bytes).decode('ascii')}"
 
 
 # Every stack ends in a bare generic (sans-serif/serif) deliberately — the

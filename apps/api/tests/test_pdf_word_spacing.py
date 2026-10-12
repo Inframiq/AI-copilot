@@ -21,6 +21,7 @@ pdfminer_high_level = pytest.importorskip("pdfminer.high_level")
 pdfminer_layout = pytest.importorskip("pdfminer.layout")
 
 from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+from tests.images import ONE_PIXEL_PNG
 
 TRUSTED_HOST = "https://test-project.supabase.co"
 
@@ -49,7 +50,7 @@ def _resume(template_id: str, avatar_store) -> dict:
     if template_id not in TEMPLATES_REQUIRING_PHOTO:
         return RESUME
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
-    avatar_store.put(photo_url, b"\x89PNG\r\n\x1a\nfake-png-bytes")
+    avatar_store.put(photo_url, ONE_PIXEL_PNG)
     return {**RESUME, "contact": {**RESUME["contact"], "photo_url": photo_url}}
 
 

@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db.session import get_db
 from app.main import app
+from tests.images import ONE_PIXEL_PNG
 from tests.test_routers import make_auth_header, make_mock_db
 
 
@@ -120,16 +121,46 @@ def test_a_resume_cannot_borrow_someone_elses_photo(our_host):
     assert photo_owned_by(elsewhere, ME)["contact"]["photo_url"] is None
 
 
+def _encoded(fmt: str, mode: str = "RGB", **save) -> bytes:
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new(mode, (40, 30), (10, 120, 200, 255)[: len(mode)]).save(buf, fmt, **save)
+    return buf.getvalue()
+
+
 def test_only_real_images_become_data_uris():
+    # Each photo is decoded and re-encoded in the sandbox; only that fresh
+    # copy is inlined for the render.
     from app.services.pdf import _MAX_PHOTO_BYTES, _as_data_uri
 
-    png = bytes.fromhex("89504e470d0a1a0a") + b"rest"
-    assert _as_data_uri(png).startswith("data:image/png;base64,")
-    assert _as_data_uri(bytes.fromhex("ffd8ffe0") + b"rest").startswith("data:image/jpeg;")
-    assert _as_data_uri(b"RIFF\x00\x00\x00\x00WEBPVP8 ").startswith("data:image/webp;")
+    assert _as_data_uri(ONE_PIXEL_PNG).startswith("data:image/png;base64,")  # keeps transparency
+    assert _as_data_uri(_encoded("JPEG")).startswith("data:image/jpeg;base64,")
+    assert _as_data_uri(_encoded("WEBP")).startswith("data:image/jpeg;base64,")
+    # Signatures alone aren't images, whatever they claim.
+    assert _as_data_uri(bytes.fromhex("89504e470d0a1a0a") + b"rest") is None
+    assert _as_data_uri(bytes.fromhex("ffd8ffe0") + b"<script>") is None
     assert _as_data_uri(b"<svg onload=alert(1)>") is None
-    assert _as_data_uri(png + b"x" * _MAX_PHOTO_BYTES) is None
+    assert _as_data_uri(ONE_PIXEL_PNG + b"x" * _MAX_PHOTO_BYTES) is None
     assert _as_data_uri(None) is None
+
+
+def test_a_photo_loses_its_location_before_it_is_embedded():
+    import base64
+    import io
+    from PIL import Image
+    from app.services.pdf import _as_data_uri
+
+    exif = Image.Exif()
+    exif[0x8825] = {2: (51.0, 30.0, 0.0), 4: (0.0, 7.0, 0.0)}  # GPS: somewhere in London
+    exif[0x010F] = "PhoneMaker"
+    photo = _encoded("JPEG", exif=exif.tobytes())
+    assert Image.open(io.BytesIO(photo)).getexif()  # it went in with metadata
+
+    uri = _as_data_uri(photo)
+    embedded = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1])))
+    assert not embedded.getexif()
 
 
 @pytest.mark.asyncio

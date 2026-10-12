@@ -3,13 +3,21 @@ import io
 import re
 import json
 import zipfile
-from typing import NamedTuple
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.tailoring import _looks_like_a_skill
+# PDF text extraction lives apart so the sandbox can load it without the app
+# (see app/services/pdf_text.py); re-exported here for callers and tests.
+from app.services.pdf_text import (  # noqa: F401
+    MAX_PDF_PAGES as _MAX_PDF_PAGES,
+    MAX_TEXT_CHARS as _MAX_TEXT_CHARS,
+    PdfRejected,
+    _Link,
+    _append_link_hints,
+    _extract_links,
+    extract_text_from_pdf,
+)
 
-_MAX_PDF_PAGES = 50
-_MAX_TEXT_CHARS = 100_000
 # A host with a dot (github.com/x, odtect.app), or an explicit scheme.
 _URL_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*://|[a-z0-9-]\.[a-z]{2,}", re.IGNORECASE)
 
@@ -46,111 +54,6 @@ class ParsedResume(BaseModel):
     skills: list[str]
     languages: list[dict] | None = None
     certifications: list[str] | None = None
-
-
-class _Link(NamedTuple):
-    """A hyperlink's destination, plus what the reader saw: the clickable
-    text ("GitHub", "Live") and the whole line it sat on. The URL alone
-    can't say which project a link belongs to, or whether it is the repo
-    or the running app."""
-    url: str
-    anchor: str = ""
-    line: str = ""
-
-
-def _page_fragments(page) -> list[tuple[float, float, str]]:
-    """Every run of text on the page with where it starts, in page space."""
-    fragments: list[tuple[float, float, str]] = []
-
-    def visit(text, cm, tm, _font, _size):
-        if not text or not text.strip():
-            return
-        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
-        y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
-        fragments.append((x, y, text.replace("\n", " ")))
-
-    try:
-        page.extract_text(visitor_text=visit)
-    except Exception:
-        return []
-    return fragments
-
-
-def _join(fragments) -> str:
-    return re.sub(r"\s+", " ", " ".join(t for _, _, t in sorted(fragments))).strip()
-
-
-def _extract_links(page) -> list[_Link]:
-    """PDF hyperlinks (e.g. the word "GitHub" linking to a profile/repo URL)
-    never show up in page.extract_text() — it only returns the visible
-    anchor text, never the destination. Pulling the URIs straight from the
-    page's link annotations lets the parser prompt see the real URL instead
-    of just the word "GitHub"/"LinkedIn"/"Portfolio"; the text under each
-    link's rectangle, and the line around it, say what it was for."""
-    links: list[_Link] = []
-    fragments: list[tuple[float, float, str]] | None = None
-    for annot_ref in page.get("/Annots") or []:
-        try:
-            annot = annot_ref.get_object()
-            if annot.get("/Subtype") != "/Link":
-                continue
-            action = annot.get("/A")
-            uri = action.get("/URI") if action and action.get("/S") == "/URI" else None
-            if not uri:
-                continue
-            if fragments is None:
-                fragments = _page_fragments(page)
-            x0, y0, x1, y1 = (float(v) for v in annot.get("/Rect"))
-            x0, x1 = min(x0, x1), max(x0, x1)
-            y0, y1 = min(y0, y1), max(y0, y1)
-            # A run's origin sits on its baseline, just above the rect's
-            # bottom edge; a little slack keeps a tight rect from missing it.
-            anchor = _join(f for f in fragments if x0 - 2 <= f[0] < x1 - 1 and y0 - 2 <= f[1] <= y1)
-            line = _join(f for f in fragments if y0 - 2 <= f[1] <= y1)
-            links.append(_Link(str(uri), anchor, line))
-        except Exception:
-            continue
-    return links
-
-
-def _append_link_hints(text: str, links: list[_Link]) -> str:
-    """Same hint block for both PDF and DOCX extraction — see
-    _extract_links' docstring for why this exists at all."""
-    if not links:
-        return text
-    seen: set[str] = set()
-    unique = [link for link in links if not (link.url in seen or seen.add(link.url))]
-
-    def hint(link: _Link) -> str:
-        out = f'- "{link.anchor}" -> {link.url}' if link.anchor and link.anchor != link.url else f"- {link.url}"
-        if link.line and link.line != link.anchor:
-            out += f' (on the line: "{link.line[:160]}")'
-        return out
-
-    return (
-        text
-        + '\n\nHyperlinks found in this document (the real destination behind clickable '
-        + 'text like "GitHub", "LinkedIn" or "Live", with the text it was shown as and the '
-        + "line it sat on — match each to the right field by its domain and that line):\n"
-        + "\n".join(hint(link) for link in unique)
-    )
-
-
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    try:
-        import pypdf  # type: ignore
-        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-        if len(reader.pages) > _MAX_PDF_PAGES:
-            raise ValueError(f"PDF exceeds maximum page count ({_MAX_PDF_PAGES} pages).")
-        pages = []
-        links: list[_Link] = []
-        for page in reader.pages:
-            pages.append(page.extract_text() or "")
-            links.extend(_extract_links(page))
-        text = "\n".join(pages).strip()
-        return _append_link_hints(text, links)[:_MAX_TEXT_CHARS]
-    except ImportError:
-        raise RuntimeError("pypdf is not installed. Add 'pypdf' to requirements.txt.")
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:

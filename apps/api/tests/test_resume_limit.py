@@ -170,7 +170,7 @@ async def test_an_upload_at_the_limit_is_refused_before_any_credit_or_storage(Se
 async def test_replacing_a_resume_by_upload_is_not_limited(Session, ledger):
     ids = await _resumes(Session, 5)
     with patch("app.routers.resumes._supabase"), \
-         patch("app.routers.resumes.extract_text", return_value="Jane Doe, engineer"), \
+         patch("app.routers.resumes.sandbox.extract_pdf_text", return_value="Jane Doe, engineer"), \
          patch("app.routers.resumes.parse_resume_text", new=AsyncMock(return_value={"contact": {"name": "Jane"}})):
         r = await _post("/resumes/parse-upload",
                         files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},

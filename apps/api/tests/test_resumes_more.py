@@ -370,7 +370,7 @@ async def test_parse_upload_creates_resume(ledger):
     try:
         mock_sb = MagicMock()
         with patch(
-            "app.routers.resumes.extract_text", return_value="Test Candidate\nSenior Engineer\n..."
+            "app.routers.resumes.sandbox.extract_pdf_text", return_value="Test Candidate\nSenior Engineer\n..."
         ), patch(
             "app.routers.resumes.parse_resume_text",
             new=AsyncMock(
@@ -478,7 +478,7 @@ async def test_parse_upload_dedupes_title_on_collision():
     try:
         mock_sb = MagicMock()
         with patch(
-            "app.routers.resumes.extract_text", return_value="Test Candidate\n..."
+            "app.routers.resumes.sandbox.extract_pdf_text", return_value="Test Candidate\n..."
         ), patch(
             "app.routers.resumes.parse_resume_text",
             new=AsyncMock(return_value={
@@ -536,7 +536,9 @@ async def test_parse_upload_fails_when_storage_upload_fails(ledger):
     try:
         mock_sb = MagicMock()
         mock_sb.storage.from_.return_value.upload.side_effect = Exception("storage down")
-        with patch("app.routers.resumes._supabase", return_value=mock_sb):
+        # The file is read (in the sandbox) before it's stored.
+        with patch("app.routers.resumes._supabase", return_value=mock_sb), \
+             patch("app.routers.resumes.sandbox.extract_pdf_text", return_value="Test Candidate"):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/resumes/parse-upload",
@@ -590,23 +592,18 @@ async def test_parse_upload_rejects_unsupported_extension():
 
 @pytest.mark.asyncio
 async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch, ledger):
-    """A pathological file that makes extract_text hang must not hang the request."""
-    import time
-    from app.routers import resumes as resumes_module
+    """A file that takes too long to parse is killed (the real sandbox, given
+    less time than it takes to start), refused, refunded — and never stored."""
+    from app.services import sandbox
 
-    monkeypatch.setattr(resumes_module, "_PARSE_TIMEOUT_SECONDS", 0.05)
-
-    def slow_extract_text(*args, **kwargs):
-        time.sleep(1)
-        return "should never get here"
+    monkeypatch.setattr(sandbox, "PDF_TIMEOUT_SECONDS", 0.01)
+    storage = MagicMock()
 
     limiter.reset()
     override, mock_session = make_mock_db()
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.resumes.extract_text", side_effect=slow_extract_text), patch(
-            "app.routers.resumes._supabase", return_value=MagicMock()
-        ):
+        with patch("app.routers.resumes._supabase", return_value=storage):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 r = await client.post(
                     "/resumes/parse-upload",
@@ -617,6 +614,7 @@ async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch, ledger)
         assert r.status_code == 422
         assert "too long" in r.json()["detail"].lower()
         assert ledger.refunded == ["parse_resume"]
+        storage.storage.from_.return_value.upload.assert_not_called()
     finally:
         app.dependency_overrides.pop(get_db, None)
 

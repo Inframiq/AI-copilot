@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +14,22 @@ from app.core.security import get_optional_user_email, is_admin_only_email
 
 logger = logging.getLogger("app")
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Uploaded PDFs and photos are opened only in the sandbox process
+    (app/services/sandbox.py). If it can't run on this host, say so in the
+    log at startup rather than on someone's first upload. Off the startup
+    path: the check spawns a process."""
+    import threading
+    from app.services import sandbox
+
+    threading.Thread(target=sandbox.self_check, name="sandbox-self-check", daemon=True).start()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="KripaX API",
     version="1.0.0",
     docs_url="/docs" if settings.enable_api_docs else None,
@@ -25,6 +41,8 @@ app.add_middleware(BodySizeLimitMiddleware)
 # Rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 
 
 # The OpenAI cost bounds (app.core.ai_budget), in words. Credits are already

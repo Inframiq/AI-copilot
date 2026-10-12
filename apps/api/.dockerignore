@@ -1,0 +1,11 @@
+# Never bake local secrets into an image: `COPY . .` would otherwise take
+# whatever .env sits on the machine that runs the build.
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+evals/

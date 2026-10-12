@@ -17,7 +17,8 @@ from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
     render_resume_html_with_meta, PhotoRequiredError, photo_owned_by,
 )
-from app.services.resume_parser import extract_text, parse_resume_text
+from app.services.resume_parser import parse_resume_text
+from app.services import sandbox
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
 from supabase import create_client
@@ -25,8 +26,6 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 logger = logging.getLogger("app")
-
-_PARSE_TIMEOUT_SECONDS = 15
 
 # Singleton Supabase service-role client — one connection pool per process
 _sb_client = None
@@ -714,10 +713,33 @@ async def parse_and_create_resume(
         # can be uploaded to its final storage path before the Resume row exists.
         resume_id = existing_resume.id if existing_resume is not None else uuid.uuid4()
 
-        # Store the untouched original — this is the user's master copy, shown
-        # verbatim in Preview. Synchronous and required (unlike the best-effort
-        # background upload used for generated preview PDFs): if this fails, the
-        # whole upload fails rather than leaving a Resume row with no master file.
+        try:
+            # Opened only in the sandbox (app/services/sandbox.py): a separate
+            # process with none of the API's secrets, locked down and killed
+            # outright on timeout — a thread could only be stopped waiting
+            # for (security review M5). It also refuses a PDF carrying
+            # scripts, launch actions or embedded files.
+            raw_text = await asyncio.to_thread(sandbox.extract_pdf_text, raw_bytes)
+        except sandbox.SandboxRejected as exc:
+            # Too long, password-protected, or active content: the reason.
+            raise HTTPException(status_code=422, detail=str(exc))
+        except sandbox.SandboxTimeout:
+            raise HTTPException(status_code=422, detail="File took too long to process.")
+        except sandbox.SandboxBusy:
+            raise HTTPException(status_code=503, detail="Too many uploads right now. Try again in a minute.")
+        except Exception:
+            logger.warning("upload text extraction failed", exc_info=True)
+            raise HTTPException(status_code=422, detail="Could not extract text from the file.")
+
+        if not raw_text.strip():
+            raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+
+        # Stored only now, once the sandbox has read it and found nothing
+        # active in it — a refused file never reaches storage. This is the
+        # user's master copy, shown verbatim in Preview. Synchronous and
+        # required (unlike the best-effort background upload used for
+        # generated preview PDFs): if this fails, the whole upload fails
+        # rather than leaving a Resume row with no master file.
         original_path = f"resumes/{user['sub']}/{resume_id}/original.pdf"
         try:
             _supabase().storage.from_("resumes").upload(
@@ -725,28 +747,6 @@ async def parse_and_create_resume(
             )
         except Exception:
             raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
-
-        try:
-            # Run off the event loop with a hard deadline — a pathologically
-            # crafted PDF can make parsing take a long time, and this call is
-            # synchronous CPU work that would otherwise block every other
-            # concurrent request on this worker for its duration.
-            raw_text = await asyncio.wait_for(
-                # The magic bytes said PDF, so parse it as one, whatever type the
-                # client claimed it was.
-                asyncio.to_thread(extract_text, raw_bytes, "application/pdf"),
-                timeout=_PARSE_TIMEOUT_SECONDS,
-            )
-        except ValueError as exc:
-            # Surface user-facing constraint violations (e.g. page count exceeded)
-            raise HTTPException(status_code=422, detail=str(exc))
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=422, detail="File took too long to process.")
-        except Exception:
-            raise HTTPException(status_code=422, detail="Could not extract text from the file.")
-
-        if not raw_text.strip():
-            raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
 
         provider = get_ai_provider()
         parsed = await parse_resume_text(raw_text, provider)

@@ -14,6 +14,7 @@ import pytest
 weasyprint = pytest.importorskip("weasyprint")
 
 from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, generate_pdf  # noqa: E402
+from tests.images import ONE_PIXEL_PNG
 
 # ats_sidebar/ats_professional refuse to render without a real, fetchable
 # photo (see PhotoRequiredError in pdf.py) — attach one for any template
@@ -25,7 +26,7 @@ def _resume_for_template(template_id: str, base: dict, avatar_store) -> dict:
     if template_id not in TEMPLATES_REQUIRING_PHOTO:
         return base
     photo_url = f"{TRUSTED_HOST}/storage/v1/object/public/avatars/u/r.png"
-    avatar_store.put(photo_url, b"\x89PNG\r\n\x1a\nfake-png-bytes")
+    avatar_store.put(photo_url, ONE_PIXEL_PNG)
     return {**base, "contact": {**base["contact"], "photo_url": photo_url}}
 
 RESUME_WITH_TWO_ROLES = {
