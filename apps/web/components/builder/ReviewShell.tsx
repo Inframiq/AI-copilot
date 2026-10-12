@@ -284,7 +284,7 @@ export function ReviewShell({
         </h1>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-y-contain">
         <div
           className={`mx-auto grid w-full gap-xl px-md py-lg sm:px-lg lg:py-xl ${
             reviewing

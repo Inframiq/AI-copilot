@@ -1,5 +1,6 @@
 import { PlanTracker } from "@/components/analytics/PlanTracker";
 import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
+import { ViewportLock } from "@/components/layout/ViewportLock";
 
 /**
  * The Builder and Studio own the full viewport — no app sidebar, no top nav.
@@ -11,7 +12,9 @@ import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
  */
 export default function BuilderLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-on-background">
+    <div data-app-shell className="flex h-dvh flex-col overflow-hidden bg-background text-on-background">
+      {/* The page under this one-screen layout never scrolls — see ViewportLock. */}
+      <ViewportLock />
       {children}
       <PlanTracker />
       <PolicyUpdatePrompt />

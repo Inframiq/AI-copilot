@@ -253,6 +253,20 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Full-screen app layouts ([data-app-shell]: the app and the builder) are
+   one screen tall and scroll inside their own panes, so the page itself
+   must never scroll. Without this, anything that makes the page taller —
+   a browser extension's injected elements, something portaled to <body> —
+   let a scroll past the end of a pane carry on into the page, sliding the
+   whole app up over blank space (testers' "infinite scroll" on the
+   tailoring review). ViewportLock undoes any scroll done from code.
+   Marketing, legal and auth pages have no shell and scroll as normal. */
+html:has([data-app-shell]),
+html:has([data-app-shell]) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* ── Page shell: quick fade prevents flash between routes ────────────────── */
 @keyframes page-fade {
   from { opacity: 0; }

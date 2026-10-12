@@ -378,7 +378,7 @@ export default function StudioPreviewPage({
           Couldn&apos;t export: {exportError}
         </p>
       )}
-      <div className="relative flex-1 overflow-y-auto bg-surface-container-low p-sm sm:p-xl">
+      <div className="relative flex-1 overflow-y-auto overscroll-y-contain bg-surface-container-low p-sm sm:p-xl">
         {/* In the gutter the centred page leaves. Sticky rather than fixed so
             it travels with the document. Below xl there is no gutter, so the
             same buttons sit above the page instead — phones edit too. */}
