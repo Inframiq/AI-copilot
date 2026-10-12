@@ -193,8 +193,14 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
 
     jd = None
     if body.jd_id:
+        # Locked until this save commits: Save and Export pressed together, or
+        # Save twice, send two of these at once. Unlocked, both saw no linked
+        # résumé and made one each; now the second waits, then finds the
+        # first's résumé linked and updates it.
         result = await db.execute(
-            select(JobDescription).where(JobDescription.id == body.jd_id, JobDescription.user_id == uid)
+            select(JobDescription)
+            .where(JobDescription.id == body.jd_id, JobDescription.user_id == uid)
+            .with_for_update()
         )
         jd = result.scalar_one_or_none()
         if not jd:
@@ -223,11 +229,14 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
     await _ensure_room_for_a_new_resume(db, uid)
     resume = Resume(user_id=uid, **payload)
     db.add(resume)
-    await db.commit()
-    await db.refresh(resume)
+    # One commit for the résumé and the JD's link to it: committing the
+    # résumé first released the JD lock before the link existed, and a
+    # failure in between left a résumé the JD didn't know about.
+    await db.flush()
     if jd:
         jd.tailored_resume_id = resume.id
-        await db.commit()
+    await db.commit()
+    await db.refresh(resume)
     return resume
 
 

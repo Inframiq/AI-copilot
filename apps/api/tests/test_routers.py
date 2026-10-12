@@ -161,6 +161,14 @@ async def test_create_resume_with_jd_id_links_new_resume_to_the_jd():
 
     mock_session.refresh = fake_refresh
 
+    # The id is the database's at flush — which is when the JD link is
+    # written, in the same commit as the résumé.
+    async def fake_flush():
+        for call in mock_session.add.call_args_list:
+            call.args[0].id = created_resume.id
+
+    mock_session.flush = fake_flush
+
     app.dependency_overrides[get_db] = override
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -272,6 +280,12 @@ async def test_create_resume_with_jd_id_never_overwrites_the_master_resume():
         obj.updated_at = datetime.now(timezone.utc)
 
     mock_session.refresh = fake_refresh
+
+    async def fake_flush():
+        for call in mock_session.add.call_args_list:
+            call.args[0].id = new_id
+
+    mock_session.flush = fake_flush
 
     app.dependency_overrides[get_db] = override
     try:
