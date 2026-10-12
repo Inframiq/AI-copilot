@@ -56,6 +56,7 @@ export function useHydratedResume(
         resume.accent_color,
         resume.heading_size_delta,
         resume.body_size_delta,
+        resume.updated_at,
       );
     }
   }, [resume, resumeId, loaded, setResume]);

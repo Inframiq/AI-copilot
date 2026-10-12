@@ -1117,6 +1117,8 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           template_id: resumeStore.templateId,
           font_choice: resumeStore.fontChoice,
           accent_color: resumeStore.accentColor,
+          // Refused if another device saved this résumé since it loaded.
+          expected_updated_at: resumeStore.resumeId === resumeId ? resumeStore.updatedAt : null,
         });
       } else {
         // jd_id links this save to the JD it was tailored for — the backend
@@ -1133,7 +1135,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         });
         targetId = created.id;
       }
-      const { signed_url, underfilled } = await apiClient.generatePdf(
+      const { signed_url, underfilled, updated_at } = await apiClient.generatePdf(
         targetId,
         resumeStore.templateId,
         undefined,
@@ -1154,7 +1156,12 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         resumeStore.lineSpacing,
         resumeStore.paragraphSpacing,
         resumeStore.fontChoice,
-        resumeStore.accentColor
+        resumeStore.accentColor,
+        undefined,
+        undefined,
+        // The version after the export saved its settings, which this
+        // device's next autosave has to carry.
+        updated_at,
       );
       useResumeStore.getState().setPdfSignedUrl(signed_url);
       useResumeStore.getState().setPreviewUnderfilled(underfilled ?? false);

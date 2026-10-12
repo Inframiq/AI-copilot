@@ -57,6 +57,16 @@ export class ApiError extends Error {
   }
 }
 
+/** The refusal of a save made from an out-of-date copy of a résumé — another
+ * device saved it since this one loaded it. Carries that save's updated_at,
+ * which "keep mine" sends to save over exactly it. */
+export function isResumeChanged(err: unknown): { updated_at: string } | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const d = err.detail as { code?: unknown; updated_at?: unknown } | null;
+  if (!d || typeof d !== "object" || d.code !== "resume_changed" || typeof d.updated_at !== "string") return null;
+  return { updated_at: d.updated_at };
+}
+
 /** A server `detail` as words: itself when it's a string, its `message`
  * when it's a structured one. */
 function detailMessage(detail: unknown, fallback: string): string {
@@ -169,7 +179,12 @@ export const apiClient = {
         | "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing"
         | "font_choice" | "accent_color" | "heading_size_delta" | "body_size_delta"
       >
-    >
+    > & {
+      /** The résumé's updated_at as this device last saw it. If another
+       * device has saved since, the server refuses with 409
+       * `resume_changed` instead of overwriting — see isResumeChanged. */
+      expected_updated_at?: string | null;
+    }
   ): Promise<Resume> => request<Resume>("PATCH", `/resumes/${id}`, payload),
 
   deleteResume: (id: string): Promise<void> =>
@@ -221,8 +236,11 @@ export const apiClient = {
     // page_count / page_fill / underfilled: "resume is shorter than a page"
     // advisory. underfilled is true only for a single-page resume that leaves
     // a visible empty band at the bottom.
-  ): Promise<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean }> =>
-    request<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean }>("POST", `/resumes/${id}/pdf`, {
+    // updated_at: the résumé's version after this call — saving the template
+    // or spacing moves it, and a device that keeps the old one has its next
+    // autosave refused as stale.
+  ): Promise<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean; updated_at?: string | null }> =>
+    request<{ signed_url: string; page_count?: number; page_fill?: number; underfilled?: boolean; updated_at?: string | null }>("POST", `/resumes/${id}/pdf`, {
       template_id: templateId,
       ...(contentOverride ? { content: contentOverride } : {}),
       ...(lineSpacing !== undefined ? { line_spacing: lineSpacing } : {}),

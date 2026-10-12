@@ -4,6 +4,7 @@ import { queryClient } from "@/lib/query-client";
 import { MotionConfig } from "motion/react";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import { ResumeLimitModal } from "@/components/resume/ResumeLimitModal";
+import { ResumeConflictModal } from "@/components/resume/ResumeConflictModal";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -13,6 +14,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <OfflineBanner />
         {/* Asks before a new résumé pushes an old one out. */}
         <ResumeLimitModal />
+        {/* Asks which copy to keep when another device saved first. */}
+        <ResumeConflictModal />
       </QueryClientProvider>
     </MotionConfig>
   );

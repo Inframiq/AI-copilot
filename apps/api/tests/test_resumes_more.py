@@ -190,7 +190,10 @@ async def test_generate_pdf_returns_signed_url():
         assert resume.template_id == "ats_modern"
         # Storage persistence happens in a background task, after the response is sent.
         mock_upload.assert_called_once()
-        assert resume.pdf_url == "resumes/user/resume.pdf"
+        # Written as an UPDATE that leaves updated_at alone (a cached export
+        # isn't an edit) — the real-DB proof is in test_resume_conflict.py.
+        stmt = background_session.execute.call_args.args[0]
+        assert stmt.compile().params["pdf_url"] == "resumes/user/resume.pdf"
         background_session.commit.assert_called_once()
     finally:
         app.dependency_overrides.pop(get_db, None)

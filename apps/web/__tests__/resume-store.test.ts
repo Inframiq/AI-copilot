@@ -7,6 +7,8 @@ vi.mock("@/lib/api-client", () => ({
     updateResume: vi.fn().mockResolvedValue({}),
     generatePdf: vi.fn().mockResolvedValue({ signed_url: "https://example.com/resume.pdf" }),
   },
+  // Conflicts (another device saved first) are covered in resume-conflict.test.ts.
+  isResumeChanged: () => null,
 }));
 
 // Import after mock is registered

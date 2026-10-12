@@ -2,9 +2,10 @@ import asyncio
 import base64
 import logging
 import uuid
+from datetime import timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
@@ -287,13 +288,32 @@ async def update_resume(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Locked, so two saves made from the same version can't both pass the
+    # check below: the second waits, then sees the first's updated_at.
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+        select(Resume)
+        .where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+        .with_for_update()
     )
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    for field, value in body.model_dump(exclude_none=True).items():
+    expected = body.expected_updated_at
+    if expected is not None:
+        if expected.tzinfo is None:
+            expected = expected.replace(tzinfo=timezone.utc)
+        if resume.updated_at != expected:
+            # Another device saved since this one loaded the résumé. Its
+            # updated_at goes back so "keep mine" can save over exactly that.
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "resume_changed",
+                    "message": "This résumé was changed on another device.",
+                    "updated_at": resume.updated_at.isoformat(),
+                },
+            )
+    for field, value in body.model_dump(exclude_none=True, exclude={"expected_updated_at"}).items():
         setattr(resume, field, value)
     await db.commit()
     await db.refresh(resume)
@@ -374,11 +394,15 @@ async def _persist_pdf_to_storage(pdf_bytes: bytes, user_id: str, resume_id: uui
     sb = _supabase()
     path = await upload_pdf(pdf_bytes, user_id, str(resume_id), sb)
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Resume).where(Resume.id == resume_id))
-        resume = result.scalar_one_or_none()
-        if resume:
-            resume.pdf_url = path
-            await session.commit()
+        # updated_at set to itself: a cached export isn't an edit. Bumping it
+        # would make the device's next autosave look stale (see update_resume)
+        # and reorder the résumé list on a download.
+        await session.execute(
+            update(Resume)
+            .where(Resume.id == resume_id)
+            .values(pdf_url=path, updated_at=Resume.updated_at)
+        )
+        await session.commit()
 
 
 @router.post("/{resume_id}/pdf")
@@ -467,7 +491,13 @@ async def generate_resume_pdf(
     # page_count / page_fill / underfilled drive the "resume is shorter than a
     # page" advisory banner in Studio's preview pane and the tailoring review
     # panel (both render through this endpoint).
-    return {"signed_url": data_url, "expires_in": None, **page_meta}
+    # updated_at: saving the template or spacing above moves the résumé's
+    # version, and the device must carry the new one or its next autosave is
+    # refused as stale.
+    return {
+        "signed_url": data_url, "expires_in": None, **page_meta,
+        "updated_at": resume.updated_at.isoformat() if resume.updated_at else None,
+    }
 
 
 def _given(body, field: str, saved):

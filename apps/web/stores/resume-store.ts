@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
-import { apiClient } from "@/lib/api-client";
-import type { ResumeContent } from "@career-copilot/types";
+import { apiClient, isResumeChanged } from "@/lib/api-client";
+import { queryClient } from "@/lib/query-client";
+import type { Resume, ResumeContent } from "@career-copilot/types";
 
 const DEFAULT_LINE_SPACING = 1.25;
 const DEFAULT_PARAGRAPH_SPACING = 12;
@@ -72,6 +73,15 @@ interface ResumeState {
   draftJdId: string | null;
   /** What the draft was built on, restored by discardDraft. */
   _draftBase: DraftBase | null;
+  /** The résumé's updated_at as this device last got it from the server.
+   *  Every save sends it, so a save made from an out-of-date copy is refused
+   *  rather than overwriting what another device saved in between. */
+  updatedAt: string | null;
+  /** Set when a save was refused because the résumé changed on another
+   *  device: that device's version. Autosave holds (edits keep piling up
+   *  here, unsaved) until ResumeConflictModal's choice — keepMine or
+   *  loadTheirs. */
+  conflictUpdatedAt: string | null;
 
   setResume: (
     id: string,
@@ -82,7 +92,8 @@ interface ResumeState {
     fontChoice?: string,
     accentColor?: string | null,
     headingSizeDelta?: number,
-    bodySizeDelta?: number
+    bodySizeDelta?: number,
+    updatedAt?: string | null,
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   /** Load a tailored résumé as an unsaved draft for this JD. The résumé it
@@ -111,11 +122,31 @@ interface ResumeState {
    *  the backend to be caught up before doing something else (e.g. a PDF
    *  regen right after AI tailoring writes new content). */
   saveNow: () => Promise<void>;
+  /** After a conflict: save this device's copy over the other device's. */
+  keepMine: () => Promise<void>;
+  /** After a conflict: drop this device's unsaved edits and load the résumé
+   *  as the other device saved it. */
+  loadTheirs: () => Promise<void>;
   /** Internal — exposed for testing */
   _triggerAutoSave: () => void;
 }
 
 const AUTO_SAVE_DELAY_MS = 2000;
+
+/** The save in flight, if any. Saves go one at a time: each sends the
+ *  version the previous one got back, so two of this device's own saves
+ *  overlapping would have the server refuse the second as stale. */
+let inFlightSave: Promise<void> | null = null;
+
+/** Keep the cached copies in step with a save, so reopening the résumé from
+ *  cache doesn't load what this device has already saved over — and then
+ *  look like another device's change on the next save. */
+function cacheSaved(saved: Resume) {
+  queryClient.setQueryData<Resume>(["resume", saved.id], saved);
+  queryClient.setQueryData<Resume[]>(["resumes"], (list) =>
+    list?.map((r) => (r.id === saved.id ? { ...r, ...saved } : r)),
+  );
+}
 
 export const useResumeStore = create<ResumeState>((set, get) => ({
   resumeId: null,
@@ -138,14 +169,18 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   _saveTimer: null,
   draftJdId: null,
   _draftBase: null,
+  updatedAt: null,
+  conflictUpdatedAt: null,
 
   setResume: (
     id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor,
-    headingSizeDelta, bodySizeDelta,
+    headingSizeDelta, bodySizeDelta, updatedAt,
   ) =>
     set({
       draftJdId: null,
       _draftBase: null,
+      updatedAt: updatedAt ?? null,
+      conflictUpdatedAt: null,
       resumeId: id,
       content,
       templateId,
@@ -231,8 +266,9 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       });
       get().setResume(
         saved.id, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-        accentColor, headingSizeDelta, bodySizeDelta,
+        accentColor, headingSizeDelta, bodySizeDelta, saved.updated_at,
       );
+      cacheSaved(saved);
       return saved.id;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save";
@@ -302,12 +338,15 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       _saveTimer: null,
       draftJdId: null,
       _draftBase: null,
+      updatedAt: null,
+      conflictUpdatedAt: null,
     });
   },
 
   _triggerAutoSave: () => {
-    // A draft is saved only by saveDraftToJd; see draftJdId.
-    if (get().draftJdId) return;
+    // A draft is saved only by saveDraftToJd; see draftJdId. During a
+    // conflict nothing saves until the user chooses; see conflictUpdatedAt.
+    if (get().draftJdId || get().conflictUpdatedAt) return;
     const prev = get()._saveTimer;
     if (prev !== null) clearTimeout(prev);
     const timer = setTimeout(() => {
@@ -324,30 +363,87 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     if (timer !== null) clearTimeout(timer);
     set({ _saveTimer: null });
 
-    const {
-      resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-      accentColor, headingSizeDelta, bodySizeDelta, draftJdId,
-    } = get();
-    // resumeId is the draft's source (usually the master) — never write it.
-    if (!resumeId || !content || draftJdId) return;
-    set({ isSaving: true });
+    // Wait out a save already going: this one must send the version it
+    // returns. No await between the loop and claiming inFlightSave, so two
+    // waiters woken together still go one after the other.
+    while (inFlightSave) await inFlightSave.catch(() => {});
+
+    const run = async () => {
+      const {
+        resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
+        accentColor, headingSizeDelta, bodySizeDelta, draftJdId, updatedAt, conflictUpdatedAt,
+      } = get();
+      // resumeId is the draft's source (usually the master) — never write it.
+      if (!resumeId || !content || draftJdId) return;
+      // Saving now would overwrite the other device's work, or be refused
+      // again. The conflict popup is already asking which to keep.
+      if (conflictUpdatedAt) throw new Error("This résumé was changed on another device.");
+      set({ isSaving: true });
+      try {
+        const saved = await apiClient.updateResume(resumeId, {
+          content,
+          template_id: templateId,
+          line_spacing: lineSpacing,
+          paragraph_spacing: paragraphSpacing,
+          font_choice: fontChoice,
+          accent_color: accentColor,
+          heading_size_delta: headingSizeDelta,
+          body_size_delta: bodySizeDelta,
+          expected_updated_at: updatedAt,
+        });
+        // The user may have switched résumés while this was in flight.
+        if (get().resumeId === resumeId) {
+          set({ isDirty: false, isSaving: false, saveError: null, updatedAt: saved?.updated_at ?? updatedAt });
+        }
+        if (saved?.id) cacheSaved(saved);
+      } catch (err) {
+        const changed = isResumeChanged(err);
+        if (get().resumeId !== resumeId) {
+          // Switched to another résumé meanwhile: this one's refusal isn't
+          // about what's on screen now.
+        } else if (changed) {
+          // Not a failure to report: ResumeConflictModal opens on this and
+          // asks which copy to keep. isDirty stays true — nothing was saved.
+          set({ isSaving: false, saveError: null, conflictUpdatedAt: changed.updated_at });
+        } else {
+          const message = err instanceof Error ? err.message : "Failed to save";
+          console.error("Save failed:", err);
+          set({ isSaving: false, saveError: message });
+        }
+        throw err;
+      }
+    };
+
+    const save = run();
+    inFlightSave = save;
     try {
-      await apiClient.updateResume(resumeId, {
-        content,
-        template_id: templateId,
-        line_spacing: lineSpacing,
-        paragraph_spacing: paragraphSpacing,
-        font_choice: fontChoice,
-        accent_color: accentColor,
-        heading_size_delta: headingSizeDelta,
-        body_size_delta: bodySizeDelta,
-      });
-      set({ isDirty: false, isSaving: false, saveError: null });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save";
-      console.error("Save failed:", err);
-      set({ isSaving: false, saveError: message });
-      throw err;
+      await save;
+    } finally {
+      if (inFlightSave === save) inFlightSave = null;
     }
+  },
+
+  keepMine: async () => {
+    const theirs = get().conflictUpdatedAt;
+    if (!theirs) return;
+    // Saving over exactly the version the user was told about: if a third
+    // save lands meanwhile, this is refused and they are asked again.
+    set({ updatedAt: theirs, conflictUpdatedAt: null });
+    await get().saveNow();
+  },
+
+  loadTheirs: async () => {
+    const { resumeId, conflictUpdatedAt } = get();
+    if (!resumeId || !conflictUpdatedAt) return;
+    const r = await apiClient.getResume(resumeId);
+    // A queued autosave would otherwise land these discarded edits after all.
+    const timer = get()._saveTimer;
+    if (timer !== null) clearTimeout(timer);
+    set({ _saveTimer: null });
+    get().setResume(
+      r.id, r.content, r.template_id, r.line_spacing, r.paragraph_spacing, r.font_choice,
+      r.accent_color, r.heading_size_delta, r.body_size_delta, r.updated_at,
+    );
+    cacheSaved(r);
   },
 }));

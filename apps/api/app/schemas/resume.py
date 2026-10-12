@@ -67,6 +67,10 @@ class ResumeUpdate(BaseModel):
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
     heading_size_delta: int | None = Field(default=None, ge=-1, le=1)
     body_size_delta: int | None = Field(default=None, ge=-1, le=1)
+    # The résumé's updated_at as this device last saw it. When the résumé has
+    # changed since (another device saved), the save is refused rather than
+    # overwriting that work. Omitted: no check — a tab opened before this.
+    expected_updated_at: datetime | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

@@ -20,10 +20,14 @@ export function BuilderHeader({
   const isDirty = useResumeStore((s) => s.isDirty);
   const isSaving = useResumeStore((s) => s.isSaving);
   const saveError = useResumeStore((s) => s.saveError);
+  const conflict = useResumeStore((s) => s.conflictUpdatedAt !== null);
 
   // Error first: a failed write matters more than whatever else is pending,
-  // and showing "Saving…" over a failure would be a lie.
-  const status = saveError
+  // and showing "Saving…" over a failure would be a lie. A conflict (saved
+  // on another device; ResumeConflictModal is asking) holds every save.
+  const status = conflict
+    ? { icon: <WarningCircle size={14} weight="fill" />, text: "Not saved — changed on another device", tone: "text-error" }
+    : saveError
     ? { icon: <WarningCircle size={14} weight="fill" />, text: saveError, tone: "text-error" }
     : isSaving
       ? {
