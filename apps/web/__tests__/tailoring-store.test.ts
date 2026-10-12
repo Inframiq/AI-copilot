@@ -494,11 +494,12 @@ describe("useTailoringStore", () => {
     expect(mergedContent?.skills).toEqual(fewOriginalSkills);
   });
 
-  it("generatePreview keeps none of a resume's existing skills by default once they already exceed MAX_MERGED_SKILLS, until the user explicitly picks some", async () => {
-    // A resume parsed/uploaded with more skills than the cap (e.g. 34) must
-    // never have any of them auto-selected — that's an auto-populate in
-    // disguise (the first N would get picked FOR the user via the merge's
-    // trailing slice). The user has to explicitly keep the ones they want.
+  it("over the skills cap, the review starts with the job's skills kept — never none of them", async () => {
+    // It used to start with none of a 34-skill résumé's skills kept until
+    // the user picked. "Before" counts every skill, so every JD term found
+    // only in the skills list dropped out: the score fell after tailoring,
+    // and Apply carried the empty list into the résumé. Now it starts the
+    // way "Add in ATS order" would: the job's skills first, then the rest.
     const manyOriginalSkills = Array.from({ length: MAX_MERGED_SKILLS + 14 }, (_, i) => `Original Skill ${i}`);
     const original: ResumeContent = {
       ...SAMPLE_CONTENT,
@@ -509,6 +510,8 @@ describe("useTailoringStore", () => {
     useTailoringStore.getState().setJd("jd-001", "raw text");
     vi.mocked(apiClient.getSession).mockResolvedValueOnce({
       ...mockCompletedSession,
+      // Two skills the job asks for, listed late on the résumé.
+      matched_skills: ["Original Skill 30", "original skill 33"],
       suggested_skills: ["Kubernetes"],
       tailored_content: {
         ...mockCompletedSession.tailored_content,
@@ -516,22 +519,52 @@ describe("useTailoringStore", () => {
       },
     });
     await useTailoringStore.getState().runTailoring("resume-abc");
-    useTailoringStore.getState().setBulletDecision("skill_add:Kubernetes", "accept");
-
-    // No skill_keep decisions made — none of the 34 should be pre-selected.
     await useTailoringStore.getState().generatePreview("resume-abc");
 
     let mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
-    expect(mergedContent?.skills).toEqual(["Kubernetes"]);
+    expect(mergedContent?.skills).toHaveLength(MAX_MERGED_SKILLS);
+    // The job's skills are in, however late the résumé lists them; the
+    // other 18 slots go to the résumé's first skills; and the list keeps
+    // the résumé's own order.
+    expect(mergedContent?.skills).toEqual([
+      ...Array.from({ length: MAX_MERGED_SKILLS - 2 }, (_, i) => `Original Skill ${i}`),
+      "Original Skill 30",
+      "Original Skill 33",
+    ]);
+    // No room left, so the suggestion starts off rather than showing on
+    // while the merge silently drops it.
+    expect(useTailoringStore.getState().bulletDecisions["skill_add:Kubernetes"]).toBe("reject");
 
-    // Explicitly keeping a couple of the original skills adds exactly
-    // those, and only those.
-    useTailoringStore.getState().setBulletDecision("skill_keep:Original Skill 0", "accept");
-    useTailoringStore.getState().setBulletDecision("skill_keep:Original Skill 5", "accept");
+    // Still the user's choice: drop one, add the suggestion.
+    useTailoringStore.getState().setBulletDecision("skill_keep:Original Skill 0", "reject");
+    useTailoringStore.getState().setBulletDecision("skill_add:Kubernetes", "accept");
     await useTailoringStore.getState().generatePreview("resume-abc");
-
     mergedContent = vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2];
-    expect(mergedContent?.skills).toEqual(["Original Skill 0", "Original Skill 5", "Kubernetes"]);
+    expect(mergedContent?.skills).not.toContain("Original Skill 0");
+    expect(mergedContent?.skills.at(-1)).toBe("Kubernetes");
+  });
+
+  it("under the cap, additions start on only while there's room", async () => {
+    const original: ResumeContent = {
+      ...SAMPLE_CONTENT,
+      skills: Array.from({ length: MAX_MERGED_SKILLS - 1 }, (_, i) => `Mine ${i}`),
+      experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff"] }],
+    };
+    useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+    useTailoringStore.getState().setJd("jd-001", "raw text");
+    vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+      ...mockCompletedSession,
+      suggested_skills: ["Kubernetes", "Terraform"],
+      tailored_content: {
+        ...mockCompletedSession.tailored_content,
+        skills: original.skills,
+        experience: [{ company: "Acme", title: "Engineer", start: "2020", bullets: ["Did stuff, tailored"] }],
+      },
+    });
+    await useTailoringStore.getState().runTailoring("resume-abc");
+    const d = useTailoringStore.getState().bulletDecisions;
+    expect(d["skill_add:Kubernetes"]).toBe("accept");
+    expect(d["skill_add:Terraform"]).toBe("reject");
   });
 
   it("generatePreview leaves the summary untouched by default, since the tailoring pass never rewrites it", async () => {

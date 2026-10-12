@@ -79,6 +79,26 @@ export function defaultSkillKeepDecision(originalSkillsCount: number): BulletDec
   return originalSkillsCount <= MAX_MERGED_SKILLS ? "accept" : "reject";
 }
 
+/** The résumé's own skills a review starts with kept, up to the cap: the
+ *  ones the job asks for first, then the rest in the résumé's order — the
+ *  same order "Add in ATS order" uses (SkillsCard's rankForAts).
+ *
+ *  Over the cap, the review used to start with none kept (see
+ *  defaultSkillKeepDecision) until the user picked. "Before" is scored with
+ *  every skill, so every JD term matched only in the skills list dropped
+ *  out and the score fell — 7 of the first 72 runs were on such résumés —
+ *  and Apply carried the empty list into the tailored résumé. A skill the
+ *  job asks for is never left out, so the cap can't cost points. */
+export function startingSkills(original: string[], matched: string[]): Set<string> {
+  const isMatched = new Set(matched.map((m) => m.toLowerCase()));
+  return new Set(
+    [
+      ...original.filter((s) => isMatched.has(s.toLowerCase())),
+      ...original.filter((s) => !isMatched.has(s.toLowerCase())),
+    ].slice(0, MAX_MERGED_SKILLS),
+  );
+}
+
 export interface BulletChange {
   key: string; // e.g. "exp0_b2" or "skills"
   jobIdx: number; // -1 for skills
@@ -937,22 +957,39 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
               initialDecisions[change.key] =
                 kind === "reworded" && !flagged.has(change.key) ? "accept" : "reject";
             }
-            const originalSkillsSet = new Set(originalContent.skills || []);
+            const originalSkills = originalContent.skills || [];
+            const originalSkillsSet = new Set(originalSkills);
             const tailoredSkillsSet = new Set(session.tailored_content.skills || []);
-            for (const s of session.tailored_content.skills || []) {
-              if (!originalSkillsSet.has(s)) initialDecisions[`skill_add:${s}`] = "accept";
+            // Over the cap, start with the job's skills kept rather than none
+            // — see startingSkills. Under it, every skill stays (the default).
+            if (originalSkills.length > MAX_MERGED_SKILLS) {
+              const kept = startingSkills(originalSkills, session.matched_skills ?? []);
+              for (const s of originalSkills) {
+                initialDecisions[`skill_keep:${s}`] = kept.has(s) ? "accept" : "reject";
+              }
             }
-            for (const s of originalContent.skills || []) {
+            // Additions start on only while there's room: past the cap the
+            // merge drops them anyway, and showing them on misstated the list.
+            let room = MAX_MERGED_SKILLS - Math.min(originalSkills.length, MAX_MERGED_SKILLS);
+            const additions = [
+              ...(session.tailored_content.skills || []),
+              ...(session.suggested_skills || []),
+            ].filter((s, i, all) => !originalSkillsSet.has(s) && all.indexOf(s) === i);
+            for (const s of additions) {
+              // suggested_skills are the skills Agent 2 judged plausible from
+              // the résumé itself. They start accepted: with them off, the
+              // "after" score measured rewording alone. The user can untick any.
+              initialDecisions[`skill_add:${s}`] = room > 0 ? "accept" : "reject";
+              if (room > 0) room--;
+            }
+            for (const s of originalSkills) {
               if (!tailoredSkillsSet.has(s)) initialDecisions[`skill_rm:${s}`] = "reject";
             }
           }
         }
-
-        // suggested_skills are the skills Agent 2 judged plausible from the
-        // résumé itself. They start accepted: with them off, the "after"
-        // score measured rewording alone. The user can still untick any.
+        // No original to measure room against: suggestions start on, as before.
         for (const s of session.suggested_skills || []) {
-          initialDecisions[`skill_add:${s}`] = "accept";
+          if (!(`skill_add:${s}` in initialDecisions)) initialDecisions[`skill_add:${s}`] = "accept";
         }
 
         // Seed each gap → fix decision from the backend's default_accept

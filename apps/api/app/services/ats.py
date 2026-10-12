@@ -589,10 +589,12 @@ def fix_deltas(
     for fix in fixes:
         if fix.id in accepted_ids:
             without = [f for f in accepted if f.id != fix.id]
-            out[fix.id] = max(0, base - score_of(_without_fix(merged, fix), without))
+            # Signed, like the rewrite badges: a fix can cost points (a
+            # headline that matches the job title worse than the current one).
+            out[fix.id] = base - score_of(_without_fix(merged, fix), without)
         else:
             withit = accepted + [fix]
-            out[fix.id] = max(0, score_of(apply_fix(merged, fix), withit) - base)
+            out[fix.id] = score_of(apply_fix(merged, fix), withit) - base
     return out
 
 
@@ -698,7 +700,8 @@ def estimate_fix_delta(
         jd_analysis,
         verdicts_with_fixes(semantic_verdicts, [fix]),
     ).ats_score
-    return max(0, after - base_score)
+    # Signed: a fix that lowers the score must say so, not read as ±0.
+    return after - base_score
 
 
 def review_score(
