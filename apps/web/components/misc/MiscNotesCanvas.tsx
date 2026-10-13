@@ -119,7 +119,7 @@ export function MiscNotesCanvas({ className = "" }: { className?: string } = {})
           Add a note
         </h2>
         <p className="text-body-sm text-on-surface-variant">
-          A skill, win or detail. We&rsquo;ll save it to your profile for any résumé.
+          Capture a skill, achievement or detail to reuse in any résumé.
         </p>
       </header>
 
