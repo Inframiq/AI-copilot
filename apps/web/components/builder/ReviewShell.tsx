@@ -24,7 +24,7 @@ import { WordingChecks } from "@/components/studio/review/WordingChecks";
 import { findRepetition, listBullets, numberGaps, quantifiedShare } from "@/lib/wording-checks";
 import { ScoreRail, ScoreDock, RunAgain, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
-import { TailoringStar } from "./TailoringStar";
+import { TailoringProgress } from "./TailoringProgress";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
 /**
@@ -433,51 +433,6 @@ export function ReviewShell({
           <ScoreDock {...rail} />
         </footer>
       )}
-    </div>
-  );
-}
-
-/**
- * While the pipeline runs (typically 30–90 s). Honest about what it is
- * doing and for how long, without pretending to know which step it is on.
- */
-function TailoringProgress() {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const steps = [
-    "Reading the job description",
-    "Matching it to your experience",
-    "Rewriting the bullets that can honestly speak to it",
-    "Fact-checking every rewrite",
-    "Scoring the result",
-  ];
-  return (
-    <div className="flex flex-col gap-lg" aria-busy="true">
-      <div className="flex flex-col items-center gap-sm rounded-3xl border border-outline-variant/30 bg-surface-container-lowest px-lg py-xl text-center shadow-sm">
-        <TailoringStar />
-        <p className="text-body-lg font-semibold text-on-surface">Tailoring your résumé</p>
-        <p className="tabular text-caption text-on-surface-variant">
-          {seconds}s · usually 30–90 seconds
-        </p>
-        <ul className="mt-sm flex flex-col gap-1 text-left text-body-sm text-on-surface-variant">
-          {steps.map((s) => (
-            <li key={s} className="flex items-center gap-sm">
-              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary/50" />
-              {s}
-            </li>
-          ))}
-        </ul>
-      </div>
-      {[0, 1, 2].map((i) => (
-        <div key={i} aria-hidden className="flex flex-col gap-sm rounded-3xl border border-outline-variant/20 p-lg">
-          <div className="skeleton h-4 w-40 rounded-full" />
-          <div className="skeleton h-4 w-full rounded-full" />
-          <div className="skeleton h-4 w-2/3 rounded-full" />
-        </div>
-      ))}
     </div>
   );
 }

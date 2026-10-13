@@ -621,6 +621,71 @@ html:has([data-app-shell]) body {
   animation: skeleton-shimmer 1.6s linear infinite;
 }
 
+/* Tailoring progress (TailoringProgress): each stage slides in, its ring
+   spins while open, a light sweeps its label, and the tick pops in when it
+   is done. The bar carries a slow sheen. */
+@keyframes tp-step-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tp-step { animation: tp-step-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+.tp-ring { animation: tp-spin 0.9s linear infinite; }
+
+@keyframes tp-check-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.tp-check { animation: tp-check-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes tp-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+.tp-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-on-surface) 40%,
+    var(--color-primary) 50%,
+    var(--color-on-surface) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: tp-shimmer 2.2s linear infinite;
+}
+
+@keyframes tp-sheen {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(250%); }
+}
+.tp-bar { position: relative; overflow: hidden; }
+.tp-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  animation: tp-sheen 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-step,
+  .tp-ring,
+  .tp-check,
+  .tp-bar::after {
+    animation: none !important;
+  }
+  .tp-shimmer {
+    animation: none !important;
+    background: none;
+    color: var(--color-on-surface);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .score-pop,
   .point-flash,
