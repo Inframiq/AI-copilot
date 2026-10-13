@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from supabase import create_client
 from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
@@ -24,6 +24,16 @@ def letter_title(jd_title: str, company: str | None) -> str:
     if company and company.strip():
         name += f", {company.strip()}"
     return name[:255]
+
+
+def first_free_title(base: str, taken: "set[str | None]") -> str:
+    """*base*, or the first "*base* (n)" from 2 up that *taken* lacks."""
+    if base not in taken:
+        return base
+    n = 2
+    while (name := f"{base[:245]} ({n})") in taken:
+        n += 1
+    return name
 
 
 # A draft nobody saved within this long was abandoned: cleared out the next
@@ -229,21 +239,23 @@ async def update_cover_letter(
     title = body.title.strip() if body.title and body.title.strip() else letter.title
     # Saved for the first time under the name it was given, beside other
     # saved letters for the same job: numbered, so they can be told apart
-    # ("… (2)"). Counted at save, so drafts nobody kept use no numbers, and
-    # a name the user chose is left as they wrote it.
+    # ("… (2)"). The lowest free name is used, so a deleted letter's number
+    # is reused rather than doubled up. Done at save, so drafts nobody kept
+    # use no numbers, and a name the user chose is left as they wrote it.
     if letter.saved_at is None and title and title == letter.title:
-        others = (
-            await db.execute(
-                select(func.count()).select_from(CoverLetter).where(
-                    CoverLetter.user_id == letter.user_id,
-                    CoverLetter.jd_id == letter.jd_id,
-                    CoverLetter.saved_at.is_not(None),
-                    CoverLetter.id != letter.id,
+        taken = set(
+            (
+                await db.execute(
+                    select(CoverLetter.title).where(
+                        CoverLetter.user_id == letter.user_id,
+                        CoverLetter.jd_id == letter.jd_id,
+                        CoverLetter.saved_at.is_not(None),
+                        CoverLetter.id != letter.id,
+                    )
                 )
-            )
-        ).scalar_one()
-        if others:
-            title = f"{title} ({others + 1})"[:255]
+            ).scalars().all()
+        )
+        title = first_free_title(title, taken)
     letter.title = title
     letter.saved_at = datetime.now(timezone.utc)
     await db.commit()

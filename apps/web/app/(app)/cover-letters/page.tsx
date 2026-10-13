@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { EnvelopeSimple, FilePdf, Sparkle, WarningCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
@@ -8,10 +8,12 @@ import { getCareerProfile } from "@/lib/career-profile-client";
 import { Card } from "@/components/ui/Card";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { DeleteLetter } from "@/components/cover-letter/DeleteLetter";
 import type { CoverLetter, Resume, JobDescription } from "@career-copilot/types";
 
 export default function CoverLettersPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [jdId, setJdId] = useState("");
   // The resume to generate against is never a separate user choice — it's
   // fully derived from the selected JD (see the effect below), so there's
@@ -90,6 +92,12 @@ export default function CoverLettersPage() {
   }, [jdId, careerProfile?.master_resume_id]);
 
   const resolvedResumeTitle = resumes.find((r) => r.id === resolvedResumeId)?.title ?? null;
+
+  async function handleDelete(letter: CoverLetter) {
+    await apiClient.deleteCoverLetter(letter.id);
+    queryClient.setQueryData<CoverLetter[]>(["coverLetters"], (list) => list?.filter((l) => l.id !== letter.id));
+    queryClient.invalidateQueries({ queryKey: ["jdCoverLetter", letter.jd_id] });
+  }
 
   async function handleGenerate() {
     if (!resolvedResumeId || !jdId) return;
@@ -174,18 +182,26 @@ export default function CoverLettersPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
           {letters.map((letter) => (
-            <button
+            <div
               key={letter.id}
-              onClick={() => router.push(`/cover-letters/${letter.id}`)}
-              className="text-left p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all"
+              className="flex flex-col rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all"
             >
-              <p className="text-label-md text-on-surface font-semibold">
-                {letter.status === "pending" ? "Generating…" : letter.status === "failed" ? "Generation failed" : letter.title || "Cover Letter"}
-              </p>
-              <p className="text-caption text-on-surface-variant mt-xs">
-                {new Date(letter.created_at).toLocaleDateString()}
-              </p>
-            </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/cover-letters/${letter.id}`)}
+                className="text-left px-md pt-md pb-xs rounded-t-xl"
+              >
+                <p className="text-label-md text-on-surface font-semibold">
+                  {letter.status === "pending" ? "Generating…" : letter.status === "failed" ? "Generation failed" : letter.title || "Cover Letter"}
+                </p>
+              </button>
+              <div className="flex items-center justify-between gap-sm px-md pb-sm">
+                <p className="text-caption text-on-surface-variant">
+                  {new Date(letter.created_at).toLocaleDateString()}
+                </p>
+                <DeleteLetter compact onDelete={() => handleDelete(letter)} />
+              </div>
+            </div>
           ))}
         </div>
       )}

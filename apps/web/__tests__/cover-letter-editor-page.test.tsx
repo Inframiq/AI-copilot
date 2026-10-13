@@ -15,6 +15,7 @@ vi.mock("@/lib/api-client", () => ({
     updateCoverLetter: vi.fn(),
     generateCoverLetterPdf: vi.fn(),
     generateCoverLetter: vi.fn(),
+    deleteCoverLetter: vi.fn(),
   },
 }));
 
@@ -235,5 +236,21 @@ describe("CoverLetterEditorPage", () => {
 
     expect(await screen.findByText(/Could not load this cover letter/)).toBeInTheDocument();
     expect(screen.queryByText(/Writing your cover letter/)).not.toBeInTheDocument();
+  });
+
+  it("deletes the letter after a confirm, then returns to the list", async () => {
+    vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Body", humanize_level: 50, pdf_url: null, status: "completed",
+      created_at: "2026-01-01T00:00:00Z", saved_at: "2026-01-01T00:00:00Z", title: "Cover letter — X",
+    });
+    vi.mocked(apiClient.deleteCoverLetter).mockResolvedValue(undefined);
+    await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Delete letter" }));
+    expect(apiClient.deleteCoverLetter).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(apiClient.deleteCoverLetter).toHaveBeenCalledWith("cl-1"));
+    expect(mockPush).toHaveBeenCalledWith("/cover-letters");
   });
 });

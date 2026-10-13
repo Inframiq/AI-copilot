@@ -9,6 +9,7 @@ import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
 import { CoverLetterWriting } from "@/components/cover-letter/CoverLetterWriting";
+import { DeleteLetter } from "@/components/cover-letter/DeleteLetter";
 import type { CoverLetter } from "@career-copilot/types";
 
 export default function CoverLetterEditorPage({
@@ -158,6 +159,17 @@ export default function CoverLetterEditorPage({
     }
   }
 
+  async function handleDelete() {
+    await apiClient.deleteCoverLetter(id);
+    // Deleted on purpose: nothing left to warn about on the way out.
+    setSavedNow(true);
+    setSavedContent(draft);
+    setSavedTitle(title.trim());
+    queryClient.invalidateQueries({ queryKey: ["coverLetters"] });
+    queryClient.invalidateQueries({ queryKey: ["jdCoverLetter", letter?.jd_id] });
+    router.push("/cover-letters");
+  }
+
   async function handleCopy() {
     await navigator.clipboard.writeText(draft);
     setCopied(true);
@@ -272,6 +284,9 @@ export default function CoverLetterEditorPage({
             <Sparkle size={16} className={isRegenerating ? "animate-pulse" : ""} />
             {isRegenerating ? "Regenerating…" : "Regenerate"}
           </button>
+          <div className="sm:ml-auto">
+            <DeleteLetter onDelete={handleDelete} />
+          </div>
         </div>
       </Card>
     </div>

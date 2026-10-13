@@ -550,13 +550,13 @@ async def test_save_can_rename_the_letter_and_a_blank_name_keeps_it():
         app.dependency_overrides.pop(get_db, None)
 
 
-async def _first_save(letter, others: int, title: str | None = None):
+async def _first_save(letter, taken: list, title: str | None = None):
     override, mock_session = make_mock_db()
     found = MagicMock()
     found.scalar_one_or_none.return_value = letter
-    counted = MagicMock()
-    counted.scalar_one.return_value = others
-    mock_session.execute = AsyncMock(side_effect=[found, counted])
+    titles = MagicMock()
+    titles.scalars.return_value.all.return_value = taken
+    mock_session.execute = AsyncMock(side_effect=[found, titles])
     app.dependency_overrides[get_db] = override
     try:
         body = {"content": "x"} if title is None else {"content": "x", "title": title}
@@ -569,14 +569,26 @@ async def _first_save(letter, others: int, title: str | None = None):
 @pytest.mark.asyncio
 async def test_a_second_letter_for_the_same_job_is_numbered_when_saved():
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
-    await _first_save(letter, others=1, title="Cover letter — Backend Engineer")
+    await _first_save(letter, ["Cover letter — Backend Engineer"], title="Cover letter — Backend Engineer")
+    assert letter.title == "Cover letter — Backend Engineer (2)"
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_letters_number_is_reused_not_doubled():
+    # Letters "X" and "X (2)" existed; "X" was deleted. The next is "X", not
+    # a second "X (2)".
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
+    await _first_save(letter, ["Cover letter — Backend Engineer (2)"])
+    assert letter.title == "Cover letter — Backend Engineer"
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
+    await _first_save(letter, ["Cover letter — Backend Engineer", "Cover letter — Backend Engineer (3)"])
     assert letter.title == "Cover letter — Backend Engineer (2)"
 
 
 @pytest.mark.asyncio
 async def test_the_first_letter_for_a_job_keeps_its_plain_name():
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
-    await _first_save(letter, others=0)
+    await _first_save(letter, [])
     assert letter.title == "Cover letter — Backend Engineer"
 
 

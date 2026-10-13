@@ -22,6 +22,7 @@ vi.mock("@/lib/api-client", () => ({
     ]),
     getJdDetails: vi.fn(),
     generateCoverLetter: vi.fn(),
+    deleteCoverLetter: vi.fn(),
   },
 }));
 
@@ -132,5 +133,40 @@ describe("CoverLettersPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/can't reach the server/i);
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("names each letter, and deletes one only after a confirm", async () => {
+    vi.mocked(apiClient.getCoverLetters).mockResolvedValueOnce([
+      { id: "cl-1", resume_id: "r1", jd_id: "jd-1", tailoring_session_id: null, content: "x", humanize_level: 50,
+        pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z", saved_at: "2026-01-01T00:00:00Z",
+        title: "Cover letter — Backend Engineer" },
+      { id: "cl-2", resume_id: "r1", jd_id: "jd-1", tailoring_session_id: null, content: "x", humanize_level: 50,
+        pdf_url: null, status: "completed", created_at: "2026-01-02T00:00:00Z", saved_at: "2026-01-02T00:00:00Z",
+        title: "Cover letter — Backend Engineer (2)" },
+    ]);
+    vi.mocked(apiClient.deleteCoverLetter).mockResolvedValue(undefined);
+    renderWithQueryClient(<CoverLettersPage />);
+
+    expect(await screen.findByText("Cover letter — Backend Engineer (2)")).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete letter" })[1]);
+    // Nothing is deleted on the first click.
+    expect(apiClient.deleteCoverLetter).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(apiClient.deleteCoverLetter).toHaveBeenCalledWith("cl-2"));
+    await waitFor(() => expect(screen.queryByText("Cover letter — Backend Engineer (2)")).not.toBeInTheDocument());
+    expect(screen.getByText("Cover letter — Backend Engineer")).toBeInTheDocument();
+  });
+
+  it("keeps the letter when the delete is cancelled", async () => {
+    vi.mocked(apiClient.getCoverLetters).mockResolvedValueOnce([
+      { id: "cl-1", resume_id: "r1", jd_id: "jd-1", tailoring_session_id: null, content: "x", humanize_level: 50,
+        pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z", saved_at: "2026-01-01T00:00:00Z",
+        title: "Cover letter — Backend Engineer" },
+    ]);
+    renderWithQueryClient(<CoverLettersPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete letter" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(apiClient.deleteCoverLetter).not.toHaveBeenCalled();
+    expect(screen.getByText("Cover letter — Backend Engineer")).toBeInTheDocument();
   });
 });
