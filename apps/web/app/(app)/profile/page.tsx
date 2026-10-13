@@ -915,7 +915,7 @@ export default function ProfilePage() {
                           <label htmlFor={`exp-end-${exp.id}`} className="text-caption text-on-surface-variant">End</label>
                           {exp.current ? (
                             <input id={`exp-end-${exp.id}`} value="Present" readOnly tabIndex={-1}
-                              className={`${inputCls} text-on-surface-variant cursor-default`} />
+                              className={`${inputCls} bg-surface-container-high! focus:bg-surface-container-high! hover:border-outline-variant/40 text-on-surface-variant cursor-default`} />
                           ) : (
                             <input id={`exp-end-${exp.id}`} value={exp.end === "Present" ? "" : exp.end ?? ""}
                               onChange={e => updateExp(exp.id, "end", e.target.value)}
