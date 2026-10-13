@@ -201,7 +201,7 @@ export default function AccountPage() {
           {/* Costs */}
           <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
             <h2 className="text-headline-md text-on-surface font-semibold mb-md flex items-center gap-sm">
-              What credits cost
+              Credit Utilization
               <InfoTooltip text="How many credits each action deducts from your balance." />
             </h2>
             <div className="flex flex-col divide-y divide-outline-variant/20">
