@@ -112,6 +112,8 @@ export interface JobDescription {
   ats_score: number | null;
   /** The tailored résumé saved for this JD from the Studio, if any. */
   tailored_resume_id?: string | null;
+  /** The target company saved for this JD, if any. */
+  company_name?: string | null;
 }
 
 export interface ExternalContact {

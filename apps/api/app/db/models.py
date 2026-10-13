@@ -90,6 +90,9 @@ class JobDescription(Base):
     parsed: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # not_applied -> applied -> interview -> final_round -> offer -> accepted, or rejected at any point
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_applied")
+    # The target company the user saved for this JD (the field beside Tailor),
+    # so it prefills next time. Null until saved.
+    company_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # The resume the user explicitly saved (Studio's "Save tailored resume")
     # for this JD, distinct from TailoringSession.resume_id (the resume
     # tailoring was RUN against, i.e. the input). Null until the user saves

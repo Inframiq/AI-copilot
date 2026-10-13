@@ -739,6 +739,75 @@ async def test_update_jd_status_404_when_not_owned():
         app.dependency_overrides.pop(get_db, None)
 
 
+def _owned_jd():
+    from app.db.models import JobDescription
+    from datetime import datetime, timezone
+    return JobDescription(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), title="Senior Engineer",
+        raw_text="...", parsed={}, status="not_applied", created_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_jd_company_saves_it_trimmed():
+    override, mock_session = make_mock_db()
+    jd = _owned_jd()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = jd
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{jd.id}/company", json={"company_name": "  Stripe "}, headers=make_auth_header(),
+            )
+        assert r.status_code == 200
+        assert r.json()["company_name"] == "Stripe"
+        assert jd.company_name == "Stripe"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_update_jd_company_blank_clears_it():
+    override, mock_session = make_mock_db()
+    jd = _owned_jd()
+    jd.company_name = "Stripe"
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = jd
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{jd.id}/company", json={"company_name": "   "}, headers=make_auth_header(),
+            )
+        assert r.status_code == 200
+        assert jd.company_name is None
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_update_jd_company_404_when_not_owned():
+    override, mock_session = make_mock_db()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(
+                f"/jd/{uuid.uuid4()}/company", json={"company_name": "Stripe"}, headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 @pytest.mark.asyncio
 async def test_get_questions_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

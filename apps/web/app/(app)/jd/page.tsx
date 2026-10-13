@@ -151,6 +151,17 @@ export default function JDIndexPage() {
     queryFn: () => apiClient.getJds(),
   });
   const jds = jdsQuery.data ?? [];
+  // The saved JD this page is on, if any — only a saved JD can keep a company.
+  const savedJd = jdId ? jds.find((j) => j.id === jdId) : undefined;
+
+  async function saveCompany(value: string) {
+    if (!savedJd) return;
+    const updated = await apiClient.updateJdCompany(savedJd.id, value);
+    queryClient.setQueryData<JobDescription[]>(["jds"], (list) =>
+      list?.map((j) => (j.id === updated.id ? { ...j, company_name: updated.company_name } : j))
+    );
+    queryClient.setQueryData(["jd", updated.id], updated);
+  }
 
   async function handleJdStatusChange(id: string, status: JDStatus) {
     const jd = jds.find((j) => j.id === id);
@@ -223,7 +234,7 @@ export default function JDIndexPage() {
       return;
     }
     setJdText(jd.raw_text);
-    if (jd.id !== jdId) setCompany("");
+    if (jd.id !== jdId) setCompany(jd.company_name ?? "");
     setJd(jd.id, jd.raw_text);
     setIsSubmitting(true);
     setError(null);
@@ -563,7 +574,8 @@ export default function JDIndexPage() {
               Navigates to Resume Builder where the user configures and runs tailoring. */}
           {jdText.trim() && (
             <div className="flex flex-col gap-xs">
-              <TargetCompanyField id="jd-company" value={company} onChange={setCompany} />
+              <TargetCompanyField id="jd-company" value={company} onChange={setCompany}
+                savedValue={savedJd?.company_name} onSave={savedJd ? saveCompany : undefined} />
               {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
               <button
                 type="button"

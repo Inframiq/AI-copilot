@@ -303,6 +303,9 @@ export const apiClient = {
   updateJdTitle: (id: string, title: string): Promise<JobDescription> =>
     request<JobDescription>("PATCH", `/jd/${id}/title`, { title }),
 
+  updateJdCompany: (id: string, companyName: string): Promise<JobDescription> =>
+    request<JobDescription>("PATCH", `/jd/${id}/company`, { company_name: companyName }),
+
   getLatestJdSession: (id: string): Promise<{ session_id: string | null }> =>
     request<{ session_id: string | null }>("GET", `/jd/${id}/latest-session`),
 

@@ -46,6 +46,19 @@ export default function JDPage({
     queryFn: () => apiClient.getJd(jdId),
   });
 
+  // Once the JD loads, an empty field takes the company saved for it.
+  const [prefilled, setPrefilled] = useState(false);
+  if (jd && !prefilled) {
+    setPrefilled(true);
+    if (!company && jd.company_name) setCompany(jd.company_name);
+  }
+
+  async function saveCompany(value: string) {
+    const updated = await apiClient.updateJdCompany(jdId, value);
+    queryClient.setQueryData(["jd", jdId], updated);
+    void queryClient.invalidateQueries({ queryKey: ["jds"] });
+  }
+
   const { data: careerProfile } = useQuery<CareerProfile | null>({
     queryKey: ["careerProfile"],
     queryFn: () => getCareerProfile(),
@@ -337,7 +350,8 @@ export default function JDPage({
                   sit beside it called the same handleOpen as the one in
                   "Generated for This JD" below — and that one sits next to the
                   resume it opens, which this one did not. */}
-              <TargetCompanyField id="jd-detail-company" value={company} onChange={setCompany} />
+              <TargetCompanyField id="jd-detail-company" value={company} onChange={setCompany}
+                savedValue={jd?.company_name} onSave={saveCompany} />
 
               <div className="flex mt-xs">
                 <button

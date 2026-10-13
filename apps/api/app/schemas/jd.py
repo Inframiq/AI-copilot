@@ -19,6 +19,11 @@ class JDTitleUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
 
 
+class JDCompanyUpdate(BaseModel):
+    # Blank clears it.
+    company_name: str = Field(max_length=200)
+
+
 class JDOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
@@ -35,6 +40,8 @@ class JDOut(BaseModel):
     ats_score: int | None = None
     # The tailored résumé the user saved for this JD from the Studio, if any.
     tailored_resume_id: uuid.UUID | None = None
+    # The target company saved for this JD, if any.
+    company_name: str | None = None
     model_config = {"from_attributes": True}
 
     @computed_field

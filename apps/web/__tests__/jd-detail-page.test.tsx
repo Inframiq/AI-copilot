@@ -23,6 +23,7 @@ vi.mock("@/lib/api-client", () => ({
     getJdCoverLetter: vi.fn().mockResolvedValue({ cover_letter_id: null, status: null, created_at: null }),
     generateCoverLetter: vi.fn(),
     generateJdPrepQuestions: vi.fn(),
+    updateJdCompany: vi.fn(),
   },
 }));
 
@@ -160,6 +161,27 @@ describe("JDPage — Tailor with a target company", () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review"));
     expect(useTailoringStore.getState().jdId).toBe("jd-1");
     expect(useTailoringStore.getState().companyName).toBe("Stripe");
+  });
+
+  it("prefills the company saved for this JD", async () => {
+    vi.mocked(apiClient.getJd).mockResolvedValue({ ...JD, company_name: "Stripe" } as any);
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+    await waitFor(() => expect(screen.getByLabelText(/Target Company/)).toHaveValue("Stripe"));
+    expect(screen.getByRole("button", { name: /Saved/ })).toBeDisabled();
+  });
+
+  it("saves the typed company to this JD", async () => {
+    vi.mocked(apiClient.updateJdCompany).mockResolvedValue({ ...JD, company_name: "Stripe" } as any);
+    await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
+
+    const field = await screen.findByLabelText(/Target Company/);
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    await userEvent.type(field, " Stripe ");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(apiClient.updateJdCompany).toHaveBeenCalledWith("jd-1", "Stripe");
+    await screen.findByRole("button", { name: /Saved/ });
   });
 });
 

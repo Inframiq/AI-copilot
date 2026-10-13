@@ -10,7 +10,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.core.usage import record_ai_usage
-from app.schemas.jd import JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
+from app.schemas.jd import JDCompanyUpdate, JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.prep_questions import (
     generate_for_session, latest_session_with_questions, run_for_saved_resume,
 )
@@ -126,6 +126,7 @@ async def list_jds(user=Depends(get_current_user), db: AsyncSession = Depends(ge
             parsed=jd.parsed, status=jd.status, created_at=jd.created_at,
             ats_score=latest_scores.get(jd.id),
             tailored_resume_id=jd.tailored_resume_id,
+            company_name=jd.company_name,
         )
         for jd in jds
     ]
@@ -382,6 +383,29 @@ async def update_jd_title(
     if not jd:
         raise HTTPException(status_code=404, detail="JD not found")
     jd.title = body.title
+    await db.commit()
+    await db.refresh(jd)
+    return jd
+
+
+@router.patch("/{jd_id}/company", response_model=JDOut)
+async def update_jd_company(
+    jd_id: uuid.UUID,
+    body: JDCompanyUpdate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save the target company for this JD, so tailoring it again prefills it."""
+    result = await db.execute(
+        select(JobDescription).where(
+            JobDescription.id == jd_id,
+            JobDescription.user_id == uuid.UUID(user["sub"]),
+        )
+    )
+    jd = result.scalar_one_or_none()
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD not found")
+    jd.company_name = body.company_name.strip() or None
     await db.commit()
     await db.refresh(jd)
     return jd
