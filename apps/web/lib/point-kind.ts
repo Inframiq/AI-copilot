@@ -28,9 +28,18 @@ function resumeText(content: ResumeContent): string {
 }
 
 /**
- * `jdTerms` — every phrase the JD is scored on (the session's matched and
- * missing lists). Checking only the keywords the rewrite said it targeted
- * missed a JD term it slipped in anyway, which then read as a mere rewording.
+ * The server's `new_terms` decide it when the session has them: the JD terms
+ * the score had not already credited the original with, by the score's own
+ * matcher. The text check below called a rewrite of "automated deployment
+ * pipelines" into "CI/CD" an added term — the résumé never says "CI/CD" —
+ * though the score had already credited it, so the point sat under "Adds JD
+ * term" and moved the score by nothing. Only terms still in the text count,
+ * so an edit that removes one moves the point back to "Reworded".
+ *
+ * Older sessions fall back to the text check. `jdTerms` — every phrase the
+ * JD is scored on (the session's matched and missing lists). Checking only
+ * the keywords the rewrite said it targeted missed a JD term it slipped in
+ * anyway, which then read as a mere rewording.
  */
 export function classifyChange(
   change: BulletChange,
@@ -38,6 +47,10 @@ export function classifyChange(
   original: ResumeContent,
   jdTerms: string[] = [],
 ): { kind: PointKind; newTerms: string[] } {
+  if (Array.isArray(rationale?.new_terms)) {
+    const newTerms = rationale.new_terms.filter((t) => hasTerm(change.tailored, t));
+    return { kind: newTerms.length > 0 ? "adds_terms" : "reworded", newTerms };
+  }
   const text = resumeText(original);
   const seen = new Set<string>();
   const newTerms: string[] = [];

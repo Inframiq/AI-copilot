@@ -27,6 +27,7 @@ from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
     bullet_already_present, verdicts_with_rewrites, lost_jd_terms, with_carried_terms,
+    credited_terms, new_jd_terms,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
@@ -2091,6 +2092,17 @@ async def run_tailoring_pipeline(
         bid for bid in bullet_rationale
         if _bullet_text(tailored_content, bid) not in (None, _bullet_text(resume_content, bid))
     ]
+    # The JD terms each rewrite brings that the original got no credit for —
+    # what the review files under "Adds JD term". Measured with the score's
+    # own matcher and verdicts, so that group only holds rewrites that can
+    # actually move the score, and a reworded paraphrase stays "Reworded".
+    credited = credited_terms(
+        resume_content, analysis.jd_analysis, analysis.matched_skills, before_verdicts,
+    )
+    for bid in rewritten_ids:
+        bullet_rationale[bid]["new_terms"] = new_jd_terms(
+            _bullet_text(tailored_content, bid) or "", analysis.jd_analysis, credited,
+        )
     full_verdicts = verdicts_with_rewrites(before_verdicts, after_verdicts, bullet_rationale, rewritten_ids)
     full_score = score_content(tailored_content, analysis.jd_analysis, full_verdicts).ats_score
     for bid in rewritten_ids:

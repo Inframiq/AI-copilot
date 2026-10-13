@@ -37,6 +37,28 @@ describe("classifyChange", () => {
     expect(r).toEqual({ kind: "adds_terms", newTerms: ["Kubernetes", "Terraform"] });
   });
 
+  it("trusts the server's new_terms: a term the score already credited is a rewording", () => {
+    // The text check alone would call "Kubernetes" new — the résumé never
+    // says it — but the score credited it from the original in other words.
+    const r = classifyChange(
+      change("Ran the Kubernetes deploy process."),
+      { responsibility: "", keywords: ["Kubernetes"], new_terms: [] },
+      ORIGINAL,
+      ["Kubernetes"],
+    );
+    expect(r).toEqual({ kind: "reworded", newTerms: [] });
+  });
+
+  it("names the server's new_terms that are still in the text", () => {
+    const r = classifyChange(
+      change("Ran Terraform deploys."),
+      { responsibility: "", keywords: [], new_terms: ["Terraform", "Kubernetes"] },
+      ORIGINAL,
+    );
+    // Kubernetes was edited out of the bullet, so it no longer counts.
+    expect(r).toEqual({ kind: "adds_terms", newTerms: ["Terraform"] });
+  });
+
   it("matches whole terms only, case-insensitively", () => {
     const r = classifyChange(
       change("Managed deploys using go-to-market tooling in PYTHON."),

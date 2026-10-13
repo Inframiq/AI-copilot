@@ -1467,6 +1467,8 @@ async def test_pipeline_returns_the_responsibility_and_keywords_per_bullet():
     rationale = result.bullet_rationale["exp0_b0"]
     assert rationale["responsibility"] == "own end-to-end delivery of the checkout pipeline"
     assert rationale["keywords"] == ["Python", "checkout pipeline"]
+    # Python is scored and the original never earned it: an added JD term.
+    assert rationale["new_terms"] == ["Python"]
 
 
 @pytest.mark.asyncio

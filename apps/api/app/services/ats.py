@@ -661,6 +661,39 @@ def lost_jd_terms(original: str, rewritten: str, jd_analysis) -> list[str]:
     return [t for t in terms if t.lower() in had and t.lower() not in kept]
 
 
+def credited_terms(
+    original_content: dict,
+    jd_analysis,
+    matched: "list[str]",
+    before_verdicts: dict[str, str],
+) -> set[str]:
+    """Lowercased JD terms the score already credits the original résumé
+    with: matched word for word, or found in other words by the semantic
+    pass (matched or partial). Pure."""
+    out = {t.strip().lower() for t in matched or [] if t and t.strip()}
+    out |= {k for k, v in (before_verdicts or {}).items() if v in ("matched", "partial")}
+    terms = _scored_terms(jd_analysis)
+    if terms:
+        out |= {t.lower() for t in compute_delta(terms, original_content).matched}
+    return out
+
+
+def new_jd_terms(rewritten: str, jd_analysis, credited: set[str]) -> list[str]:
+    """Scored JD terms *rewritten* brings that the original résumé got no
+    credit for, by the same matcher the score uses. Pure.
+
+    This is what "adds a JD term" has to mean. A literal "the résumé never
+    says this word" check called a rewrite of "automated deployment
+    pipelines" into "CI/CD" an added term, though the score had already
+    credited CI/CD from the original — so it sat under "Adds JD term" and
+    moved the score by nothing.
+    """
+    terms = _scored_terms(jd_analysis)
+    if not terms or not (rewritten or "").strip():
+        return []
+    return [t for t in compute_delta(terms, rewritten).matched if t.lower() not in credited]
+
+
 def with_carried_terms(
     rationale: dict[str, dict],
     original_by_id: dict[str, str],

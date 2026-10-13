@@ -113,6 +113,9 @@ export interface BulletRationale {
   keywords: string[];
   /** Points this rewrite adds on its own. Absent on older sessions. */
   score_delta?: number;
+  /** Scored JD terms this rewrite brings that the original résumé got no
+   * credit for, by the score's own matcher. Absent on older sessions. */
+  new_terms?: string[];
 }
 
 /** One rewrite the server's fact-lock flagged, with the reason(s) — e.g. a

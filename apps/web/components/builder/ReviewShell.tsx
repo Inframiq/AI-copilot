@@ -134,18 +134,20 @@ export function ReviewShell({
   );
   // The résumé exactly as the current picks would produce it — what a
   // checker would read — for the numbers and repetition checks.
-  const finalBullets = useMemo(
+  const merged = useMemo(
     () =>
       pendingContent && originalContent
-        ? listBullets(
-            buildMergedContent(
-              pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
-              { points: miscPoints, destinations: miscDestinations },
-            ),
+        ? buildMergedContent(
+            pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
+            { points: miscPoints, destinations: miscDestinations },
           )
-        : [],
+        : null,
     [pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscPoints, miscDestinations],
   );
+  const finalBullets = useMemo(() => (merged ? listBullets(merged) : []), [merged]);
+  // The skills the résumé will list: a point adding a term already here
+  // earns nothing for it, since the score counts each term once.
+  const mergedSkills = useMemo(() => merged?.skills ?? [], [merged]);
   const repetition = useMemo(() => findRepetition(finalBullets), [finalBullets]);
   const gaps = useMemo(() => numberGaps(finalBullets, quantifyPrompts), [finalBullets, quantifyPrompts]);
 
@@ -339,6 +341,7 @@ export function ReviewShell({
                     rationale={bulletRationale}
                     original={originalContent}
                     jdTerms={jdTerms}
+                    skills={mergedSkills}
                     aiFixes={aiFixes}
                     roles={roles}
                     fixExperienceIndex={fixExperienceIndex}

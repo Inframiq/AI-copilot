@@ -95,6 +95,7 @@ export function PointsLedger({
   rationale,
   original,
   jdTerms = [],
+  skills = [],
   aiFixes,
   roles,
   fixExperienceIndex,
@@ -120,6 +121,8 @@ export function PointsLedger({
   original: ResumeContent;
   /** Every phrase the JD is scored on — see classifyChange. */
   jdTerms?: string[];
+  /** The skills the résumé will list with the current picks. */
+  skills?: string[];
   /** The AI-written fixes: new bullets and the headline. */
   aiFixes: AtsFix[];
   /** "Title · Company" per experience entry, for placing a new bullet. */
@@ -221,6 +224,7 @@ export function PointsLedger({
       change={change}
       provenance={provenance}
       newTerms={newTerms}
+      inSkills={newTerms?.filter((t) => skills.some((s) => s.trim().toLowerCase() === t.trim().toLowerCase()))}
       points={liveBulletDeltas?.[change.key] ?? rationale[change.key]?.score_delta}
       // Same rule as buildMergedContent: a rewrite with no decision yet is
       // applied, so it must show as on (runTailoring seeds every key).
@@ -496,6 +500,7 @@ function ChangeCard({
   change,
   provenance,
   newTerms = [],
+  inSkills = [],
   points,
   on,
   busy,
@@ -508,6 +513,8 @@ function ChangeCard({
   change: BulletChange;
   provenance: Provenance;
   newTerms?: string[];
+  /** Of newTerms, the ones the skills list already carries. */
+  inSkills?: string[];
   points?: number;
   on: boolean;
   busy: "rewrite" | "humanize" | null;
@@ -546,6 +553,15 @@ function ChangeCard({
             </span>
           ))}
         </div>
+      )}
+      {/* The score counts each term once. When the skills list already
+          carries every term this point adds, the point is worth nothing on
+          its own, and the card says why rather than showing a bare +0. */}
+      {newTerms.length > 0 && inSkills.length === newTerms.length && (points ?? 0) <= 0 && (
+        <p className="text-caption text-on-surface-variant">
+          {inSkills.join(", ")} {inSkills.length === 1 ? "is" : "are"} already counted from your skills list, so this
+          point adds no score on its own.
+        </p>
       )}
 
       {editing ? (

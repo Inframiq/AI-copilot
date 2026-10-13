@@ -120,6 +120,30 @@ describe("PointsLedger", () => {
     expect(screen.getByText("adds: Terraform")).toBeTruthy();
   });
 
+  it("files a rewrite under Reworded when the score already credited its term", () => {
+    setup({
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: ["Python"], score_delta: 4 },
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"], new_terms: [] },
+      },
+      jdTerms: ["Kubernetes"],
+    });
+    const reworded = screen.getByRole("region", { name: /reworded from your résumé/i });
+    expect(within(reworded).getAllByText((_, el) => el?.textContent === "Managed Kubernetes deploys.").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("region", { name: /adds a job-description term/i })).toBeNull();
+  });
+
+  it("says why an added term earns nothing when the skills list already carries it", () => {
+    setup({
+      rationale: {
+        exp0_b1: { responsibility: "", keywords: ["Python"], score_delta: 4 },
+        exp0_b0: { responsibility: "", keywords: ["Kubernetes"], new_terms: ["Kubernetes"], score_delta: 0 },
+      },
+      skills: ["Python", "Kubernetes"],
+    });
+    expect(screen.getByText(/Kubernetes is already counted from your skills list/)).toBeTruthy();
+  });
+
   it("shows why a point's rewrite failed", () => {
     setup({ rewriteErrors: { exp0_b1: "Couldn't rewrite this point — Out of credits." } });
     expect(screen.getByRole("alert").textContent).toMatch(/out of credits/i);
