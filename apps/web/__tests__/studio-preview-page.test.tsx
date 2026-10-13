@@ -5,7 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const push = vi.fn();
 const replace = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace }) }));
+let searchParams = new URLSearchParams();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace }),
+  useSearchParams: () => searchParams,
+}));
 vi.mock("@/lib/api-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-client")>()),
   apiClient: {
@@ -14,6 +18,9 @@ vi.mock("@/lib/api-client", async (importOriginal) => ({
     })),
     generatePdf: vi.fn(async () => ({ signed_url: "u", underfilled: false })),
     generateJdPrepQuestions: vi.fn(async () => ({ session_id: "sess-9", questions_total: 10 })),
+    getJd: vi.fn(async () => ({ id: "jd1", title: "Platform Engineer", tailored_resume_id: null })),
+    getJdCoverLetter: vi.fn(async () => ({ cover_letter_id: null, status: null, created_at: null })),
+    generateCoverLetter: vi.fn(async () => ({ cover_letter_id: "cl-1" })),
     getResume: vi.fn(async () => ({
       id: "r1", content: { contact: {}, summary: "Fetched.", experience: [], education: [], skills: [] },
       template_id: "ats_clean", line_spacing: 1.25, paragraph_spacing: 12,
@@ -53,6 +60,8 @@ async function renderPage() {
 describe("Studio preview page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    searchParams = new URLSearchParams();
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: null } as never);
     useResumeStore.getState().resetStore();
     useTailoringStore.getState().resetStore();
     useResumeStore.setState({
@@ -145,7 +154,7 @@ describe("Studio preview page", () => {
       await renderPage();
       await waitFor(() => screen.getByRole("button", { name: /export pdf/i }));
       fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
-      await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/saved-1/preview"));
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/saved-1/preview?done=exported"));
       expect(order).toEqual(["save", "pdf"]);
       // The save starts the JD's interview questions, for the run reviewed.
       expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd1", "sess-9");
@@ -154,6 +163,41 @@ describe("Studio preview page", () => {
     } finally {
       click.mockRestore();
     }
+  });
+
+  // After Save to JD or Export the journey goes on to the cover letter,
+  // instead of ending at a way back.
+  it("offers the cover letter next, written from the résumé just saved", async () => {
+    searchParams = new URLSearchParams("done=saved");
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: "r1" } as never);
+    await renderPage();
+    const next = await screen.findByRole("region", { name: /next steps/i });
+    expect(within(next).getByText(/next, the cover letter/i)).toBeTruthy();
+    fireEvent.click(within(next).getByRole("button", { name: /write cover letter/i }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/cover-letters/cl-1"));
+    expect(apiClient.generateCoverLetter).toHaveBeenCalledWith("r1", "jd1", 50);
+  });
+
+  it("opens the job's cover letter rather than writing a second one", async () => {
+    searchParams = new URLSearchParams("done=saved");
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: "r1" } as never);
+    vi.mocked(apiClient.getJdCoverLetter).mockResolvedValueOnce(
+      { cover_letter_id: "cl-old", status: "completed", created_at: "" } as never,
+    );
+    await renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /open cover letter/i }));
+    expect(push).toHaveBeenCalledWith("/cover-letters/cl-old");
+    expect(apiClient.generateCoverLetter).not.toHaveBeenCalled();
+  });
+
+  it("shows no next step before anything is saved or exported", async () => {
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: "r1" } as never);
+    await renderPage();
+    await waitFor(() => expect(apiClient.renderResumeHtml).toHaveBeenCalled());
+    expect(screen.queryByRole("region", { name: /next steps/i })).toBeNull();
   });
 
   it("exports nothing when saving the draft first fails, and says why", async () => {

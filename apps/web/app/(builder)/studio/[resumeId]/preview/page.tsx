@@ -2,7 +2,7 @@
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { use, useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CircleNotch, FileDashed, WarningCircle } from "@phosphor-icons/react";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useResumeStore } from "@/stores/resume-store";
@@ -19,6 +19,7 @@ import { StudioHeader, type StudioMode } from "@/components/studio/StudioHeader"
 import { PhotoPrompt } from "@/components/resume/PhotoPrompt";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
 import { SaveToJd } from "@/components/studio/SaveToJd";
+import { NextSteps } from "@/components/studio/NextSteps";
 import { startPrepQuestions } from "@/stores/prep-questions-store";
 
 /**
@@ -64,6 +65,20 @@ export default function StudioPreviewPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [pages, setPages] = useState(1);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // After Save to JD or Export: the cover letter and interview questions as
+  // the next step, instead of a way back. Carried in the URL across the
+  // switch to the saved copy, which is a new page.
+  const searchParams = useSearchParams();
+  const [done, setDone] = useState<"saved" | "exported" | null>(null);
+  useEffect(() => {
+    const d = searchParams.get("done");
+    if (d !== "saved" && d !== "exported") return;
+    setDone(d);
+    // Read once, then dropped, so a refresh doesn't bring the bar back.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("done");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search);
+  }, [searchParams]);
 
   // The JD this Studio is working for: a draft's, or the analyzer's. Its
   // tailored_resume_id says whether the résumé open here is the saved one.
@@ -113,7 +128,7 @@ export default function StudioPreviewPage({
     try {
       const savedId = await saveDraftToJd();
       // The Studio now edits the JD's own copy, and autosaves into it.
-      router.replace(`/studio/${savedId}/preview`);
+      router.replace(`/studio/${savedId}/preview?done=saved`);
     } catch (err) {
       if (isResumeLimitCancelled(err)) return;
       setSaveError(err instanceof Error ? err.message : "Couldn't save. Please try again.");
@@ -215,7 +230,8 @@ export default function StudioPreviewPage({
       // workbench was removed, so the button spun and then did nothing.
       await downloadFile(signed_url, resumeFileName(content?.contact?.name));
       // The Studio now edits the JD's own copy, as after Save to JD.
-      if (savedFromDraft) router.replace(`/studio/${savedFromDraft}/preview`);
+      if (savedFromDraft) router.replace(`/studio/${savedFromDraft}/preview?done=exported`);
+      else setDone("exported");
     } catch (err) {
       if (isResumeLimitCancelled(err)) return;
       // Previously a bare finally: a failed export reset the button and said
@@ -338,6 +354,15 @@ export default function StudioPreviewPage({
           ) : undefined
         }
       />
+      {done && savedToJd && linkedJdId && (
+        <NextSteps
+          jdId={linkedJdId}
+          jdTitle={jd?.title}
+          resumeId={resumeId}
+          done={done}
+          onDismiss={() => setDone(null)}
+        />
+      )}
       {draftJdId && (
         <p
           role="status"
