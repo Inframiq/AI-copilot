@@ -1,7 +1,7 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
 import type { ResumeContent } from "@career-copilot/types";
-import { MAX_MISC_POINTS, type MiscPoint } from "@/lib/misc-points";
+import { MAX_MISC_POINTS, resumeContentToMiscPoints, type MiscPoint } from "@/lib/misc-points";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,6 +183,19 @@ export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfi
     );
   }
   return setMiscPoints(next);
+}
+
+/** Save what an uploaded résumé holds that the profile has no field for
+ * (awards, summary, languages…) into Miscellaneous — see
+ * resumeContentToMiscPoints. Adds only; nothing saved there is touched.
+ * Resolves null when the database has no Miscellaneous yet. */
+export async function keepResumeExtrasInMisc(content: ResumeContent): Promise<CareerProfile | null> {
+  const current = await getCareerProfile();
+  if (!current) throw new NoProfileError();
+  if (!Array.isArray(current.miscellaneous)) return null;
+  const points = resumeContentToMiscPoints(content, current.miscellaneous);
+  if (points.length === 0) return current;
+  return setMiscPoints([...current.miscellaneous, ...points]);
 }
 
 export async function setProfileMasterResume(resumeId: string): Promise<void> {

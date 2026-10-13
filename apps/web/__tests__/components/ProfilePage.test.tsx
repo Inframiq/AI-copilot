@@ -9,14 +9,15 @@ vi.mock("@/components/resume/ResumePreviewModal", () => ({ ResumePreviewModal: (
 
 // vi.hoisted keeps these fn refs available inside the hoisted vi.mock factories
 // below without tripping the "cannot access before initialization" TDZ error.
-const { getCareerProfile, upsertCareerProfile, uploadProfilePhoto } = vi.hoisted(() => ({
+const { getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc, uploadProfilePhoto } = vi.hoisted(() => ({
   getCareerProfile: vi.fn(),
   upsertCareerProfile: vi.fn(),
+  keepResumeExtrasInMisc: vi.fn(),
   uploadProfilePhoto: vi.fn(),
 }));
 vi.mock("@/lib/career-profile-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
-  return { ...actual, getCareerProfile, upsertCareerProfile };
+  return { ...actual, getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc };
 });
 
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto, uploadResumePhoto: vi.fn() }));
@@ -126,8 +127,9 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     });
     (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "r1", title: "Jane's Resume", template_id: "ats_modern",
-      content: { contact: { name: "Jane Parsed" }, skills: ["Python"] },
+      content: { contact: { name: "Jane Parsed" }, skills: ["Python"], awards: ["Spot Award"] },
     });
+    keepResumeExtrasInMisc.mockResolvedValue(null);
     global.fetch = vi.fn().mockResolvedValue({
       ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
     }) as unknown as typeof fetch;
@@ -140,6 +142,10 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
       expect(apiClient.parseResumeFile).toHaveBeenCalledWith(expect.any(File), "ats_modern", "r1"),
     );
     expect(apiClient.getOriginalResumeFile).toHaveBeenCalledWith("r1");
+    // What the profile has no field for lands in Miscellaneous.
+    await waitFor(() =>
+      expect(keepResumeExtrasInMisc).toHaveBeenCalledWith(expect.objectContaining({ awards: ["Spot Award"] })),
+    );
   });
 
   it("prompts before leaving once the form has unsaved edits", async () => {

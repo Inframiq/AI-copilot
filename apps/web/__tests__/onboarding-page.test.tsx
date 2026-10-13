@@ -20,6 +20,7 @@ vi.mock("@/lib/career-profile-client", () => ({
   upsertCareerProfile: vi.fn().mockResolvedValue({}),
   setProfileMasterResume: vi.fn(),
   resumeContentToCareerProfileInput: vi.fn(),
+  keepResumeExtrasInMisc: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("@/lib/api-client", () => ({
   apiClient: { getPlans: vi.fn(), parseResumeFile: vi.fn() },

@@ -10,6 +10,7 @@ import {
   upsertCareerProfile,
   setProfileMasterResume,
   resumeContentToCareerProfileInput,
+  keepResumeExtrasInMisc,
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { PlansComparison } from "@/components/plans/PlansComparison";
@@ -119,6 +120,11 @@ export default function OnboardingPage() {
         role_status: roleStatus || null,
       });
       await setProfileMasterResume(resume.id);
+      // Awards, summary, languages… have no profile field — keep them in
+      // Miscellaneous. A failure here loses nothing: they're still on the résumé.
+      await keepResumeExtrasInMisc(resume.content).catch((err) =>
+        console.error("Couldn't keep résumé extras in Miscellaneous:", err),
+      );
       setStep("plan");
     } catch (err) {
       if (isResumeLimitCancelled(err)) { setUploading(false); return; }

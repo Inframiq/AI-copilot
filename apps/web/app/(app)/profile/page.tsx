@@ -37,6 +37,8 @@ import {
 import {
   getCareerProfile,
   upsertCareerProfile,
+  keepResumeExtrasInMisc,
+  NoProfileError,
   inferExpType,
   sameCompany,
   formatRoleDuration,
@@ -54,6 +56,7 @@ import {
   type ExpType,
   type RoleStatus,
 } from "@/lib/career-profile-client";
+import type { ResumeContent } from "@career-copilot/types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
@@ -144,6 +147,9 @@ export default function ProfilePage() {
   const [education, setEducation] = useState<EducationEntry[]>([]);
   const [certifications, setCertifications] = useState<CertEntry[]>([]);
   const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
+  // An uploaded résumé whose awards, summary… are waiting for the profile's
+  // first save before they can go into Miscellaneous (see keepResumeExtras).
+  const pendingExtrasRef = useRef<ResumeContent | null>(null);
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
   // True when master_resume_id points at a resume that's since been deleted
@@ -274,6 +280,11 @@ export default function ProfilePage() {
         photo_path: photoPath,
       };
       await upsertCareerProfile(profileInput);
+      if (pendingExtrasRef.current) {
+        const extras = pendingExtrasRef.current;
+        pendingExtrasRef.current = null;
+        await keepResumeExtras(extras);
+      }
       // Everything in the form now matches the DB — clear the dirty flag so
       // the unsaved-changes guards stand down.
       savedSnapshotRef.current = formSnapshot;
@@ -301,6 +312,19 @@ export default function ProfilePage() {
   }
 
   // ── resume upload ──────────────────────────────────────────────────────────
+  // What the profile has no field for (awards, summary, languages…) goes
+  // into Miscellaneous. Never fails the upload or save: it's all still on
+  // the résumé itself.
+  async function keepResumeExtras(content: ResumeContent) {
+    try {
+      const updated = await keepResumeExtrasInMisc(content);
+      if (updated) queryClient.setQueryData<CareerProfile | null>(["careerProfile"], updated);
+    } catch (err) {
+      if (err instanceof NoProfileError) pendingExtrasRef.current = content;
+      else console.error("Couldn't keep résumé extras in Miscellaneous:", err);
+    }
+  }
+
   const acceptFile = useCallback((f: File) => {
     if (!f.name.match(/\.pdf$/i)) {
       setError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return;
@@ -330,6 +354,7 @@ export default function ProfilePage() {
         location: (c.contact?.location as string) ?? "",
         linkedin: (c.contact?.linkedin as string) ?? "",
         github: (c.contact?.github as string) ?? "",
+        website: (c.contact?.website as string) ?? "",
       };
       const newHeadline = (c.headline as string) ?? "";
       const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
@@ -378,6 +403,10 @@ export default function ProfilePage() {
       setMasterResumeId(resume.id);
       setMasterResumeTitle(resume.title);
       setMasterResumeTemplateId(resume.template_id);
+      // Unlike the form, Miscellaneous only ever gains points, so these are
+      // kept now rather than at "Save Profile" — unless there's no profile
+      // row to keep them in yet.
+      await keepResumeExtras(c);
 
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
