@@ -811,7 +811,12 @@ export default function ProfilePage() {
             <span className="text-label-sm">Add your first experience</span>
           </button>
         ) : (
-          <div className="relative pl-lg md:pl-xl flex flex-col gap-md before:content-[''] before:absolute before:left-[7px] md:before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-outline-variant/30">
+          <div className="relative [--rail:24px] md:[--rail:32px] pl-[var(--rail)] flex flex-col gap-md">
+            {/* The timeline: one width, --rail, places both the line and the
+                dots, so they stay centred on each other at every size (they
+                were set with separate numbers and drifted 3-13px apart). Each
+                entry draws the line from its own dot down to the next one's,
+                so it starts and ends on a dot. */}
             {experiences.map((exp, idx) => {
               const collapsed = collapsedExp[exp.id] ?? false;
               const roleDuration = formatRoleDuration(exp.start, exp.current ? undefined : exp.end, exp.current);
@@ -837,7 +842,16 @@ export default function ProfilePage() {
               }
               return (
                 <div key={exp.id} className="relative">
-                  <div className={`absolute -left-[27px] md:-left-[31px] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`} />
+                  {idx < experiences.length - 1 && (
+                    <div
+                      aria-hidden
+                      className="absolute left-[calc(var(--rail)_/_-2_-_1px)] top-7 h-[calc(100%_+_var(--spacing-md))] w-0.5 bg-outline-variant/30"
+                    />
+                  )}
+                  <div
+                    aria-hidden
+                    className={`absolute left-[calc(var(--rail)_/_-2_-_8px)] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`}
+                  />
                   {isStartOfMultiRoleGroup && (
                     <p className="text-caption text-primary/80 font-medium mb-xs flex items-center gap-xs">
                       <Buildings size={11} />
