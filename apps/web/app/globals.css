@@ -672,6 +672,40 @@ html:has([data-app-shell]) body {
   animation: tp-sheen 1.8s ease-in-out infinite;
 }
 
+/* Cover letter being written (CoverLetterWriting): each line of the page
+   draws in from the left in turn, holds, and fades, so the page keeps
+   filling while the letter is written. The nib above bobs gently. */
+@keyframes cl-write {
+  0%        { transform: scaleX(0); opacity: 1; background-color: var(--color-primary); }
+  9%        { transform: scaleX(1); opacity: 1; background-color: var(--color-primary); }
+  20%       { background-color: color-mix(in srgb, var(--color-on-surface) 15%, transparent); }
+  80%       { transform: scaleX(1); opacity: 1; }
+  92%, 100% { transform: scaleX(1); opacity: 0; }
+}
+.cl-line {
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: cl-write 7s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes cl-bob {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50%      { transform: translateY(-4px) rotate(4deg); }
+}
+.cl-nib { animation: cl-bob 2.4s ease-in-out infinite; }
+
+/* The finished letter settles in. */
+@keyframes cl-arrive {
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+.cl-arrive { animation: cl-arrive 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cl-line { animation: none !important; transform: none; }
+  .cl-nib,
+  .cl-arrive { animation: none !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tp-step,
   .tp-ring,

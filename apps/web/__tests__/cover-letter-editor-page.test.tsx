@@ -47,7 +47,7 @@ describe("CoverLetterEditorPage", () => {
 
     await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
 
-    expect(await screen.findByText(/Generating your cover letter/)).toBeInTheDocument();
+    expect(await screen.findByText(/Writing your cover letter/)).toBeInTheDocument();
     // The page polls via refetchInterval every 3000ms while status is
     // "pending" — the default findBy/waitFor timeout (1000ms) is shorter
     // than that, so it must be extended here or this assertion times out
@@ -189,6 +189,6 @@ describe("CoverLetterEditorPage", () => {
     await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-missing" })} />);
 
     expect(await screen.findByText(/Could not load this cover letter/)).toBeInTheDocument();
-    expect(screen.queryByText(/Generating your cover letter/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Writing your cover letter/)).not.toBeInTheDocument();
   });
 });

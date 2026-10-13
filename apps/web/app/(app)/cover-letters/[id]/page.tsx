@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api-client";
 import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
+import { CoverLetterWriting } from "@/components/cover-letter/CoverLetterWriting";
 import type { CoverLetter } from "@career-copilot/types";
 
 export default function CoverLetterEditorPage({
@@ -155,22 +156,8 @@ export default function CoverLetterEditorPage({
 
   if (!letter || letter.status === "pending") {
     return (
-      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
-        <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <p className="text-body-md text-on-surface-variant">Generating your cover letter…</p>
-        {pollingStalled && (
-          <>
-            <p className="text-body-sm text-on-surface-variant max-w-[24rem]">
-              This is taking longer than expected — it may already be done.
-            </p>
-            <button
-              onClick={() => refetch()}
-              className="text-label-md text-primary hover:underline"
-            >
-              Check again
-            </button>
-          </>
-        )}
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl py-xxl">
+        <CoverLetterWriting slow={pollingStalled} onCheck={() => refetch()} />
       </div>
     );
   }
@@ -197,7 +184,7 @@ export default function CoverLetterEditorPage({
         </h1>
       </section>
 
-      <Card className="flex flex-col gap-md">
+      <Card className="cl-arrive flex flex-col gap-md">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
