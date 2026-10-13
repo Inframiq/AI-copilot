@@ -33,11 +33,14 @@ class CoverLetterOut(BaseModel):
     created_at: datetime
     # Null while the letter is an unsaved draft.
     saved_at: datetime | None = None
+    title: str | None = None
     model_config = {"from_attributes": True}
 
 
 class CoverLetterUpdate(BaseModel):
     content: str = Field(max_length=20000)
+    # A new name; omitted or blank keeps the current one.
+    title: str | None = Field(default=None, max_length=255)
 
 
 class CoverLetterPdfRequest(BaseModel):

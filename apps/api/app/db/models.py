@@ -201,6 +201,8 @@ class CoverLetter(Base):
     # user reads it and presses Save. Drafts stay out of the Cover Letters list
     # and the JD's letter.
     saved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # Named after its JD when written; the user can rename it.
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class PrepQuestion(Base):

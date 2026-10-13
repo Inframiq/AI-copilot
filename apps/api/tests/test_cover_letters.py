@@ -112,6 +112,9 @@ async def test_generate_creates_pending_row_and_returns_202():
         assert added.status == "pending"
         assert added.resume_id == resume.id
         assert added.jd_id == jd.id
+        # A draft, named after its job.
+        assert added.saved_at is None
+        assert added.title == "Cover letter — Backend Engineer"
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -515,5 +518,82 @@ async def test_a_draft_downloads_the_text_on_screen_and_keeps_nothing():
         upload.assert_not_called()
         assert letter.content == "Dear Hiring Manager, body."
         assert letter.saved_at is None
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_a_letter_is_named_after_its_job():
+    from app.routers.cover_letters import letter_title
+    assert letter_title("Platform Engineer", "Stripe") == "Cover letter — Platform Engineer, Stripe"
+    assert letter_title(" Platform Engineer ", "  ") == "Cover letter — Platform Engineer"
+    assert len(letter_title("x" * 400, None)) == 255
+
+
+@pytest.mark.asyncio
+async def test_save_can_rename_the_letter_and_a_blank_name_keeps_it():
+    override, mock_session = make_mock_db()
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=datetime.now(timezone.utc))
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = letter
+    mock_session.execute = AsyncMock(return_value=result)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.patch(f"/cover-letters/{letter.id}", json={"content": "x", "title": "   "}, headers=make_auth_header())
+            assert letter.title == "Cover letter — Backend Engineer"
+            r = await client.patch(
+                f"/cover-letters/{letter.id}", json={"content": "x", "title": " Stripe letter "}, headers=make_auth_header(),
+            )
+        assert letter.title == "Stripe letter"
+        assert r.json()["title"] == "Stripe letter"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+async def _first_save(letter, others: int, title: str | None = None):
+    override, mock_session = make_mock_db()
+    found = MagicMock()
+    found.scalar_one_or_none.return_value = letter
+    counted = MagicMock()
+    counted.scalar_one.return_value = others
+    mock_session.execute = AsyncMock(side_effect=[found, counted])
+    app.dependency_overrides[get_db] = override
+    try:
+        body = {"content": "x"} if title is None else {"content": "x", "title": title}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.patch(f"/cover-letters/{letter.id}", json=body, headers=make_auth_header())
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_a_second_letter_for_the_same_job_is_numbered_when_saved():
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
+    await _first_save(letter, others=1, title="Cover letter — Backend Engineer")
+    assert letter.title == "Cover letter — Backend Engineer (2)"
+
+
+@pytest.mark.asyncio
+async def test_the_first_letter_for_a_job_keeps_its_plain_name():
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
+    await _first_save(letter, others=0)
+    assert letter.title == "Cover letter — Backend Engineer"
+
+
+@pytest.mark.asyncio
+async def test_a_name_the_user_chose_is_not_numbered():
+    letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
+    override, mock_session = make_mock_db()
+    found = MagicMock()
+    found.scalar_one_or_none.return_value = letter
+    mock_session.execute = AsyncMock(return_value=found)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.patch(
+                f"/cover-letters/{letter.id}", json={"content": "x", "title": "For Stripe"}, headers=make_auth_header(),
+            )
+        assert letter.title == "For Stripe"
+        assert mock_session.execute.await_count == 1  # no count: nothing to number
     finally:
         app.dependency_overrides.pop(get_db, None)

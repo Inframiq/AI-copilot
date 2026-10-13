@@ -59,14 +59,19 @@ export default function CoverLetterEditorPage({
   // What the server holds — the Save button reads "Saved" while the draft
   // matches it, so a click visibly lands instead of flashing back to "Save".
   const [savedContent, setSavedContent] = useState("");
+  // The letter's name: after its JD, renamed in place in the heading.
+  const [title, setTitle] = useState("");
+  const [savedTitle, setSavedTitle] = useState("");
   useEffect(() => {
     if (letter?.status === "completed" && letter.content !== null && seededFor !== id) {
       setDraft(letter.content);
       setSavedContent(letter.content);
+      setTitle(letter.title ?? "");
+      setSavedTitle(letter.title ?? "");
       setSeededFor(id);
     }
   }, [letter, id, seededFor]);
-  const isDirty = draft !== savedContent;
+  const isDirty = draft !== savedContent || title.trim() !== savedTitle;
   // A generated letter is a draft: nothing keeps it but the Save button.
   const [savedNow, setSavedNow] = useState(false);
   const isSaved = !!letter?.saved_at || savedNow;
@@ -84,8 +89,12 @@ export default function CoverLetterEditorPage({
   async function persistDraft(): Promise<boolean> {
     const content = draft;
     try {
-      await apiClient.updateCoverLetter(id, content);
+      const saved = await apiClient.updateCoverLetter(id, content, title.trim() || undefined);
       setSavedContent(content);
+      // The server may number it ("… (2)") beside the job's other letters.
+      const name = saved?.title ?? title.trim();
+      setTitle(name);
+      setSavedTitle(name);
       setSavedNow(true);
       queryClient.invalidateQueries({ queryKey: ["coverLetters"] });
       queryClient.invalidateQueries({ queryKey: ["jdCoverLetter", letter?.jd_id] });
@@ -193,8 +202,17 @@ export default function CoverLetterEditorPage({
         >
           <ArrowLeft size={14} /> Cover Letters
         </Link>
-        <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
-          Cover Letter
+        <h1 className="mb-xs">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Cover letter"
+            maxLength={255}
+            aria-label="Letter name"
+            title="Rename this letter"
+            className="w-full min-w-0 rounded-lg border border-transparent bg-transparent px-xs -mx-xs text-headline-xl font-bold text-on-surface outline-none transition-colors hover:border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+            style={{ letterSpacing: "-0.02em" }}
+          />
         </h1>
       </section>
 

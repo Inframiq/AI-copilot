@@ -74,7 +74,7 @@ describe("CoverLetterEditorPage", () => {
     await userEvent.type(textarea, "Edited body");
     await userEvent.click(screen.getByText("Save"));
 
-    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Edited body"));
+    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Edited body", undefined));
   });
 
   it("reads Saved until the draft changes, then Saved again once the save lands", async () => {
@@ -143,9 +143,9 @@ describe("CoverLetterEditorPage", () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Fresh letter", humanize_level: 50, pdf_url: null, status: "completed",
-      created_at: "2026-01-01T00:00:00Z", saved_at: null,
+      created_at: "2026-01-01T00:00:00Z", saved_at: null, title: "Cover letter — Platform Engineer",
     });
-    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({} as never);
+    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({ title: "Cover letter — Platform Engineer (2)" } as never);
 
     await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
 
@@ -153,9 +153,30 @@ describe("CoverLetterEditorPage", () => {
     expect(apiClient.updateCoverLetter).not.toHaveBeenCalled();
     // Unchanged, and still savable: a draft is not kept until the user says so.
     await userEvent.click(screen.getByRole("button", { name: "Save letter" }));
-    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Fresh letter"));
+    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Fresh letter", "Cover letter — Platform Engineer"));
     expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
     expect(screen.queryByText(/Draft, not saved/)).not.toBeInTheDocument();
+    // Named after its job, numbered by the server beside the job's other letters.
+    expect(screen.getByLabelText("Letter name")).toHaveValue("Cover letter — Platform Engineer (2)");
+  });
+
+  it("renames the letter in its heading, and Save keeps the new name", async () => {
+    vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Body", humanize_level: 50, pdf_url: null, status: "completed",
+      created_at: "2026-01-01T00:00:00Z", saved_at: "2026-01-01T00:00:00Z", title: "Cover letter — Platform Engineer",
+    });
+    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({ title: "For Stripe" } as never);
+
+    await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
+
+    const name = await screen.findByLabelText("Letter name");
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    await userEvent.clear(name);
+    await userEvent.type(name, "For Stripe");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Body", "For Stripe"));
+    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
   });
 
   it("clicking Regenerate once results in exactly one generateCoverLetter call", async () => {

@@ -180,7 +180,7 @@ export default function CoverLettersPage() {
               className="text-left p-md rounded-xl border border-outline-variant/20 hover:border-primary/40 hover:bg-surface-container transition-all"
             >
               <p className="text-label-md text-on-surface font-semibold">
-                {letter.status === "pending" ? "Generating…" : letter.status === "failed" ? "Generation failed" : "Cover Letter"}
+                {letter.status === "pending" ? "Generating…" : letter.status === "failed" ? "Generation failed" : letter.title || "Cover Letter"}
               </p>
               <p className="text-caption text-on-surface-variant mt-xs">
                 {new Date(letter.created_at).toLocaleDateString()}

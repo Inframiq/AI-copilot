@@ -170,6 +170,8 @@ export interface CoverLetter {
   created_at: string;
   /** Null while the letter is a draft: kept only once the user saves it. */
   saved_at?: string | null;
+  /** Named after its JD when written; the user can rename it. */
+  title?: string | null;
 }
 
 export interface CoverLetterStart {

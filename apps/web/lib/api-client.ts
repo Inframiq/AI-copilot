@@ -344,8 +344,9 @@ export const apiClient = {
   getJdCoverLetter: (jdId: string): Promise<JDCoverLetter> =>
     request<JDCoverLetter>("GET", `/jd/${jdId}/cover-letter`),
 
-  updateCoverLetter: (id: string, content: string): Promise<CoverLetter> =>
-    request<CoverLetter>("PATCH", `/cover-letters/${id}`, { content }),
+  // Save: keeps the letter (and its name, when given).
+  updateCoverLetter: (id: string, content: string, title?: string): Promise<CoverLetter> =>
+    request<CoverLetter>("PATCH", `/cover-letters/${id}`, title !== undefined ? { content, title } : { content }),
 
   // With `content`, renders that text as is and keeps nothing on the server —
   // how an unsaved draft downloads without being saved.

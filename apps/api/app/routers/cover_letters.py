@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from supabase import create_client
 from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
@@ -17,6 +17,14 @@ from app.schemas.cover_letter import (
     CoverLetterGenerateRequest, CoverLetterStartOut, CoverLetterOut, CoverLetterUpdate,
     CoverLetterPdfRequest,
 )
+
+def letter_title(jd_title: str, company: str | None) -> str:
+    """A letter's name, after the job it is for."""
+    name = f"Cover letter — {jd_title.strip()}"
+    if company and company.strip():
+        name += f", {company.strip()}"
+    return name[:255]
+
 
 # A draft nobody saved within this long was abandoned: cleared out the next
 # time the same user generates a letter, so unsaved drafts don't pile up.
@@ -152,6 +160,7 @@ async def generate_cover_letter(
         tailoring_session_id=body.tailoring_session_id,
         humanize_level=body.humanize_level,
         status="pending",
+        title=letter_title(jd_row.title, body.company_name or jd_row.company_name),
     )
     db.add(letter)
     await db.commit()
@@ -217,6 +226,25 @@ async def update_cover_letter(
         raise HTTPException(status_code=404, detail="Cover letter not found")
     # The editor's Save: the only thing that keeps a letter.
     letter.content = body.content
+    title = body.title.strip() if body.title and body.title.strip() else letter.title
+    # Saved for the first time under the name it was given, beside other
+    # saved letters for the same job: numbered, so they can be told apart
+    # ("… (2)"). Counted at save, so drafts nobody kept use no numbers, and
+    # a name the user chose is left as they wrote it.
+    if letter.saved_at is None and title and title == letter.title:
+        others = (
+            await db.execute(
+                select(func.count()).select_from(CoverLetter).where(
+                    CoverLetter.user_id == letter.user_id,
+                    CoverLetter.jd_id == letter.jd_id,
+                    CoverLetter.saved_at.is_not(None),
+                    CoverLetter.id != letter.id,
+                )
+            )
+        ).scalar_one()
+        if others:
+            title = f"{title} ({others + 1})"[:255]
+    letter.title = title
     letter.saved_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(letter)
