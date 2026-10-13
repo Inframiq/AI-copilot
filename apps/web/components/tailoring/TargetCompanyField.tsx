@@ -11,7 +11,9 @@ import { Check, FloppyDisk } from "@phosphor-icons/react";
  * page opens, so this is the last place a company can be given.
  *
  * With `onSave`, a saved JD's pages also get a Save button, so the company
- * stays with that JD (`savedValue`) and prefills the next time.
+ * stays with that JD (`savedValue`) and prefills the next time. A JD not
+ * saved yet passes `unsavedNote` instead: the button still shows, greyed,
+ * with the note saying when the company will be kept.
  */
 export function TargetCompanyField({
   id,
@@ -19,6 +21,7 @@ export function TargetCompanyField({
   onChange,
   savedValue,
   onSave,
+  unsavedNote,
   className = "",
 }: {
   id: string;
@@ -26,6 +29,7 @@ export function TargetCompanyField({
   onChange: (value: string) => void;
   savedValue?: string | null;
   onSave?: (value: string) => Promise<void>;
+  unsavedNote?: string;
   className?: string;
 }) {
   const [saving, setSaving] = useState(false);
@@ -68,15 +72,15 @@ export function TargetCompanyField({
           autoComplete="organization"
           className="w-full min-w-0 rounded-xl border border-outline-variant/50 bg-surface px-sm py-xs text-body-sm text-on-surface transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:px-md sm:py-sm sm:text-body-md"
         />
-        {onSave && (
+        {(onSave || unsavedNote) && (
           // A square icon on phones, where the JD card is too narrow for a
           // label beside the input; "Save" / "Saved" from sm up.
           <button
             type="button"
             onClick={() => void save()}
-            disabled={unchanged || saving}
-            aria-label={saved ? "Saved" : saving ? "Saving" : "Save"}
-            title={saved ? "Saved to this job" : "Save the company to this job"}
+            disabled={!onSave || unchanged || saving}
+            aria-label={saved ? "Company saved" : saving ? "Saving company" : "Save company"}
+            title={!onSave ? unsavedNote : saved ? "Saved to this job" : "Save the company to this job"}
             className={`flex w-9 shrink-0 items-center justify-center gap-xs rounded-xl text-label-sm transition-colors sm:w-auto sm:min-w-[5.5rem] sm:px-md ${
               saved
                 ? "text-success cursor-default"
@@ -88,6 +92,9 @@ export function TargetCompanyField({
           </button>
         )}
       </div>
+      {!onSave && unsavedNote && value.trim() && (
+        <p className="text-caption text-on-surface-variant">{unsavedNote}</p>
+      )}
       {error && <p className="text-caption text-error">Couldn&apos;t save the company. Try again.</p>}
     </div>
   );

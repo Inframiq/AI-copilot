@@ -41,6 +41,14 @@ describe("JDIndexPage — Tailor Resume", () => {
     vi.clearAllMocks();
   });
 
+  it("shows the company Save before the JD is saved, and says when the company is kept", async () => {
+    renderWithQueryClient(<JDIndexPage />);
+    const save = await screen.findByRole("button", { name: "Save company" });
+    expect(save).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/Target Company/), "Stripe");
+    expect(screen.getByText("Saved with this job when you analyze it.")).toBeTruthy();
+  });
+
   // Regression: clicking "Tailor Resume" right after a completed analysis
   // wiped the just-computed ATS score / matched / missing skills before
   // navigating to Studio, because handleTailor's defensive setJd() re-sync
@@ -66,7 +74,7 @@ describe("JDIndexPage — Tailor Resume", () => {
 
     renderWithQueryClient(<JDIndexPage />);
 
-    await userEvent.click(await screen.findByText("Tailor Resume"));
+    await userEvent.click(await screen.findByRole("button", { name: /^Tailor$/ }));
 
     const state = useTailoringStore.getState();
     expect(state.atsScore).toBe(72);
@@ -133,12 +141,12 @@ describe("JDIndexPage — Tailor Resume", () => {
     // Pasted, as the placeholder asks — not typed. Typing re-renders the
     // whole page once per keystroke, which pushed this test past vitest's
     // 5s limit when the full suite ran in parallel.
-    await user.click(screen.getByPlaceholderText(/Paste the full job description here/));
+    await user.click(screen.getByPlaceholderText(/Paste the full job posting here/));
     await user.paste("Backend Engineer role needing Python and AWS.");
-    await user.click(screen.getByText("Analyze Description"));
+    await user.click(screen.getByRole("button", { name: /^Analyze$/ }));
 
     // Save-As modal — brand-new JD text, so it must be named before analysis runs.
-    await user.click(await screen.findByRole("button", { name: /save/i }));
+    await user.click(await screen.findByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(useTailoringStore.getState().atsScore).toBe(40));
     expect(useTailoringStore.getState().jdId).toBe("jd-1");
@@ -147,7 +155,7 @@ describe("JDIndexPage — Tailor Resume", () => {
     // tailoring closes is decided on the review screen, ranked by ATS gain.
     expect(screen.getByText("AWS").closest("[aria-pressed]")).toBeNull();
 
-    await user.click(screen.getByText("Tailor Resume"));
+    await user.click(screen.getByRole("button", { name: /^Tailor$/ }));
     expect(mockPush).toHaveBeenCalledWith("/studio/resume-1/review");
 
     // Simulate navigating away to Studio and back to JD Analyzer — the
@@ -173,12 +181,12 @@ describe("JDIndexPage — Tailor Resume", () => {
 
     renderWithQueryClient(<JDIndexPage />);
 
-    const jdTextarea = screen.getByPlaceholderText(/Paste the full job description here/);
+    const jdTextarea = screen.getByPlaceholderText(/Paste the full job posting here/);
     await user.clear(jdTextarea);
     await user.click(jdTextarea);
     await user.paste("Frontend Engineer role needing React and TypeScript.");
-    await user.click(screen.getByText("Analyze Description"));
-    await user.click(await screen.findByRole("button", { name: /save/i }));
+    await user.click(screen.getByRole("button", { name: /^Analyze$/ }));
+    await user.click(await screen.findByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(useTailoringStore.getState().atsScore).toBe(85));
 
@@ -187,7 +195,7 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(state.matchedSkills).toEqual(["React", "TypeScript"]);
     expect(state.missingSkills).toEqual(["GraphQL"]);
 
-    await user.click(screen.getByText("Tailor Resume"));
+    await user.click(screen.getByRole("button", { name: /^Tailor$/ }));
 
     const finalState = useTailoringStore.getState();
     expect(finalState.atsScore).toBe(85);

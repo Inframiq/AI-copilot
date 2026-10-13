@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ClipboardText,
-  ListDashes,
   MagnifyingGlass,
   Target,
   CheckCircle,
@@ -334,6 +333,23 @@ export default function JDIndexPage() {
     }
   }
 
+  function handleJdTextChange(val: string) {
+    setJdText(val);
+    if (storedJdText && val.trim() !== storedJdText.trim()) {
+      setJd("", val);
+    }
+  }
+
+  async function handlePasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) { handleJdTextChange(text); return; }
+    } catch {
+      // No clipboard access (denied, or not offered): typing still works.
+    }
+    document.getElementById("jd-text")?.focus();
+  }
+
   function handleClearJd() {
     setJdText("");
     setJd("", "");
@@ -523,74 +539,85 @@ export default function JDIndexPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter items-start">
         {/* Input Area — 2 cols; on phones half the row, beside Match */}
         <div className="min-w-0 lg:col-span-2 flex flex-col gap-sm sm:gap-md bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl hover:shadow-on-surface/10 transition-shadow relative overflow-hidden">
-          <div className="flex justify-between items-center gap-xs sm:mb-xs">
+          <div className="flex justify-between items-center gap-xs">
             <h2 className="text-headline-md text-on-surface flex items-center gap-xs sm:gap-sm font-semibold min-w-0">
               <ClipboardText size={20} className="text-primary shrink-0" />
               <span className="sm:hidden">Paste JD</span>
-              <span className="hidden sm:inline">Job Description Input</span>
-              <InfoTooltip text="Paste the full posting text — Analyze compares it against your resume, and Tailor rewrites your resume's bullets to fit it." />
+              <span className="hidden sm:inline">Job Description</span>
+              <InfoTooltip text="Paste the full posting text. Analyze compares it against your resume, and Tailor rewrites your resume's bullets to fit it." />
             </h2>
-            <div className="flex items-center gap-xs">
-              {jdText.trim() && (
-                <button
-                  type="button"
-                  onClick={handleClearJd}
-                  className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption font-semibold text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-all duration-300"
-                >
-                  <Trash size={14} />
-                  <span className="hidden sm:inline">Clear</span>
-                </button>
-              )}
-              <button className="hidden sm:block p-xs rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-high/40 transition-all duration-300">
-                <ListDashes size={20} />
+            {jdText.trim() && (
+              <button
+                type="button"
+                onClick={handleClearJd}
+                className="flex items-center gap-xs px-sm py-xs rounded-lg text-caption font-semibold text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-all duration-300"
+              >
+                <Trash size={14} />
+                <span className="hidden sm:inline">Clear</span>
               </button>
-            </div>
+            )}
           </div>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-md flex-1">
-            <div className="relative flex-1 min-h-[220px] sm:min-h-[300px]">
-              <textarea
-                value={jdText}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setJdText(val);
-                  if (storedJdText && val.trim() !== storedJdText.trim()) {
-                    setJd("", val);
-                  }
-                }}
-                className="w-full h-full p-md bg-surface-container-lowest/50 border border-outline-variant/50 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none text-body-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none min-h-[220px] sm:min-h-[300px]"
-                placeholder={`Paste the full job description here...\n\ne.g., 'Looking for a Senior Product Designer with 5+ years of experience in Figma, design systems, and user testing...'`}
-              />
+
+          {/* The company first: it is context for the posting below, and the
+              Save beside it is always in sight. A JD not saved yet keeps the
+              company when Analyze saves the JD. */}
+          <TargetCompanyField id="jd-company" value={company} onChange={setCompany}
+            savedValue={savedJd?.company_name} onSave={savedJd ? saveCompany : undefined}
+            unsavedNote="Saved with this job when you analyze it." />
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-sm sm:gap-md flex-1">
+            <div className="relative flex flex-col gap-xs">
+              <label htmlFor="jd-text" className="text-label-caps text-on-surface-variant">Job posting</label>
+              <div className="relative">
+                <textarea
+                  id="jd-text"
+                  value={jdText}
+                  onChange={(e) => handleJdTextChange(e.target.value)}
+                  className="block w-full min-h-[180px] sm:min-h-[240px] p-sm sm:p-md pb-lg sm:pb-xl bg-surface border border-outline-variant/50 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y text-caption sm:text-body-sm leading-relaxed text-on-surface placeholder:text-on-surface-variant/60 outline-none transition-all"
+                  placeholder="Paste the full job posting here…"
+                />
+                {!jdText && (
+                  <button
+                    type="button"
+                    onClick={handlePasteFromClipboard}
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-xs rounded-full border border-primary/30 bg-surface-container-lowest px-sm sm:px-md py-xs sm:py-sm text-caption sm:text-label-sm font-semibold text-primary shadow-sm hover:bg-primary/5 transition-colors whitespace-nowrap"
+                  >
+                    <ClipboardText size={16} />
+                    <span className="sm:hidden">Paste</span>
+                    <span className="hidden sm:inline">Paste from clipboard</span>
+                  </button>
+                )}
+                {jdText.trim() && (
+                  <span className="pointer-events-none absolute bottom-xs right-sm hidden sm:block tabular text-caption text-on-surface-variant/70">
+                    {jdText.trim().split(/\s+/).length} words
+                  </span>
+                )}
+              </div>
             </div>
             {error && <p className="text-body-sm text-error">{error}</p>}
-            <button
-              type="submit"
-              disabled={isSubmitting || !jdText.trim()}
-              className="w-full py-sm sm:py-md text-label-md text-on-primary rounded-xl bg-primary shadow-[0_4px_12px_rgba(0,88,201,0.3)] hover:shadow-[0_8px_20px_rgba(0,88,201,0.4)] hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm mt-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-            >
-              <MagnifyingGlass size={18} />
-              {isSubmitting ? "Analyzing…" : <><span className="sm:hidden">Analyze</span><span className="hidden sm:inline">Analyze Description</span></>}
-            </button>
-          </form>
+            {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
 
-          {/* Tailor Resume — always available once there's JD text.
-              Navigates to Resume Builder where the user configures and runs tailoring. */}
-          {jdText.trim() && (
-            <div className="flex flex-col gap-xs">
-              <TargetCompanyField id="jd-company" value={company} onChange={setCompany}
-                savedValue={savedJd?.company_name} onSave={savedJd ? saveCompany : undefined} />
-              {tailorError && <p className="text-body-sm text-error">{tailorError}</p>}
+            {/* Analyze is the quieter step (a score); Tailor is the main one. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-xs sm:gap-sm mt-auto">
+              <button
+                type="submit"
+                disabled={isSubmitting || !jdText.trim()}
+                className="flex items-center justify-center gap-xs sm:gap-sm py-sm text-label-md text-primary rounded-xl border border-primary/40 bg-surface-container-lowest hover:bg-primary/5 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:active:scale-100"
+              >
+                <MagnifyingGlass size={18} />
+                {isSubmitting ? "Analyzing…" : "Analyze"}
+              </button>
               <button
                 type="button"
                 onClick={handleTailor}
-                disabled={!activeResumeId}
-                className="w-full py-sm sm:py-md text-label-md text-on-primary rounded-xl bg-success-accent shadow-md hover:shadow-lg hover:scale-[0.98] active:scale-95 transition-all duration-300 flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                disabled={!activeResumeId || !jdText.trim()}
+                className="flex items-center justify-center gap-xs sm:gap-sm py-sm text-label-md text-on-primary rounded-xl bg-primary shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
               >
                 <Sparkle size={18} />
-                <span className="sm:hidden">{sessionId ? "Re-tailor" : "Tailor"}</span>
-                <span className="hidden sm:inline">{sessionId ? "Re-tailor Resume" : "Tailor Resume"}</span>
+                {sessionId ? "Re-tailor" : "Tailor"}
               </button>
             </div>
-          )}
+          </form>
         </div>
 
         {/* Profile Match + Keywords — 2 cols, beside the Input card in the same row */}

@@ -167,7 +167,7 @@ describe("JDPage — Tailor with a target company", () => {
     vi.mocked(apiClient.getJd).mockResolvedValue({ ...JD, company_name: "Stripe" } as any);
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
     await waitFor(() => expect(screen.getByLabelText(/Target Company/)).toHaveValue("Stripe"));
-    expect(screen.getByRole("button", { name: /Saved/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /company saved/i })).toBeDisabled();
   });
 
   it("saves the typed company to this JD", async () => {
@@ -175,13 +175,13 @@ describe("JDPage — Tailor with a target company", () => {
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
 
     const field = await screen.findByLabelText(/Target Company/);
-    const save = screen.getByRole("button", { name: "Save" });
+    const save = screen.getByRole("button", { name: "Save company" });
     expect(save).toBeDisabled();
     await userEvent.type(field, " Stripe ");
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save company" }));
 
     expect(apiClient.updateJdCompany).toHaveBeenCalledWith("jd-1", "Stripe");
-    await screen.findByRole("button", { name: /Saved/ });
+    await screen.findByRole("button", { name: /company saved/i });
   });
 });
 
