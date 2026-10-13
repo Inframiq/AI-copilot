@@ -12,10 +12,14 @@ import type { Plan } from "@career-copilot/types";
 
 const CATALOG: { plans: Plan[] } = {
   plans: [
-    { id: "free", name: "Free", price_usd: 0, period: null, credits: 50, refills: false,
-      features: ["50 credits, one-time", "About 5 resume tailors", "Cover letters and bullet rewrites", "Free JD analysis"] },
-    { id: "premium", name: "Premium", price_usd: 5, period: "month", credits: 600, refills: true,
-      features: ["600 credits every month", "About 60 resume tailors", "Everything in Free", "Priority support"] },
+    { id: "free", name: "Free", tagline: "Get started with résumé tailoring.", price_usd: 0, period: null,
+      credits: 50, refills: false,
+      features: ["Up to 5 résumé tailoring runs", "Job description analysis with an ATS match score",
+        "Includes cover letters, interview questions and bullet rewrites"] },
+    { id: "premium", name: "Premium", tagline: "For an active, ongoing job search.", price_usd: 5, period: "month",
+      credits: 600, refills: true,
+      features: ["Everything in Free, plus:", "Up to 60 résumé tailoring runs per month",
+        "Credits refresh every 30 days", "Priority support"] },
   ],
 };
 
@@ -58,5 +62,17 @@ describe("PlansComparison", () => {
     expect(onChoosePlan).not.toHaveBeenCalled();
     // premium button is still active
     expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeEnabled();
+  });
+
+  it("reads like a pricing page: who each plan is for, ceilings, and a lead-in", async () => {
+    vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
+    renderIt();
+    expect(await screen.findByText("For an active, ongoing job search.")).toBeInTheDocument();
+    expect(screen.getByText("50 credits, one-time")).toBeInTheDocument();
+    expect(screen.getByText("600 credits per month")).toBeInTheDocument();
+    // The lead-in heads the list rather than being ticked off as a feature.
+    const leadIn = screen.getByText("Everything in Free, plus:");
+    expect(leadIn.querySelector("svg")).toBeNull();
+    expect(screen.getByText("Up to 60 résumé tailoring runs per month").closest("li")?.querySelector("svg")).not.toBeNull();
   });
 });

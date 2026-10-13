@@ -35,7 +35,7 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
         const isPremium = plan.id === "premium";
         // The credits line is printed above the list already; the catalog
         // also lists it as a feature, which showed it twice on every card.
-        const creditsLine = `${plan.credits} credits${plan.refills ? " per month" : " (one-time)"}`;
+        const creditsLine = `${plan.credits} credits${plan.refills ? " per month" : ", one-time"}`;
         const listed = plan.features.filter(
           (f) => !f.trim().toLowerCase().startsWith(`${plan.credits} credits`),
         );
@@ -65,6 +65,10 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
               )}
             </div>
 
+            {plan.tagline && (
+              <p className="text-body-sm text-on-surface-variant mt-xs leading-snug">{plan.tagline}</p>
+            )}
+
             <div className="mt-xs sm:mt-sm flex flex-wrap items-baseline gap-x-xs">
               <span className="text-headline-xl text-on-surface font-bold">
                 {plan.price_usd === 0 ? "Free" : `$${plan.price_usd}`}
@@ -79,12 +83,19 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             </p>
 
             <ul className="mt-sm sm:mt-md flex flex-col gap-xs sm:gap-sm flex-1">
-              {features.map((f) => (
-                <li key={f} className="flex items-start gap-xs sm:gap-sm text-body-sm text-on-surface leading-snug">
-                  <Check size={14} weight="bold" className="text-success-accent shrink-0 mt-[2px]" />
-                  {f}
-                </li>
-              ))}
+              {features.map((f) =>
+                f.trim().endsWith(":") ? (
+                  // A lead-in such as "Everything in Free, plus:" heads the items below it.
+                  <li key={f} className="text-body-sm text-on-surface font-semibold leading-snug">
+                    {f}
+                  </li>
+                ) : (
+                  <li key={f} className="flex items-start gap-xs sm:gap-sm text-body-sm text-on-surface leading-snug">
+                    <Check size={14} weight="bold" className="text-success-accent shrink-0 mt-[2px]" />
+                    {f}
+                  </li>
+                ),
+              )}
             </ul>
 
             <button

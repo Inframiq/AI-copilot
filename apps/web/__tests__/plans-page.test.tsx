@@ -37,9 +37,19 @@ describe("Plans page", () => {
     });
   });
 
-  it("opens the upgrade modal when Get Premium is clicked", async () => {
+  it("opens the upgrade modal when Upgrade to Premium is clicked", async () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: "Upgrade to Premium" }));
     expect(await screen.findByText(/premium is not yet available/i)).toBeInTheDocument();
+  });
+
+  it("explains how credits are used, from the account's real rates", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue({
+      plan: "free", status: "active", credits_remaining: 50, credits_allotment: 50,
+      current_period_end: null, renews: false, costs: { tailor: 10, analyze: 1 },
+    } as never);
+    renderPage();
+    expect(await screen.findByText(/10 per résumé tailoring run and 1 per job description analysis/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Account" }).getAttribute("href")).toBe("/account");
   });
 });

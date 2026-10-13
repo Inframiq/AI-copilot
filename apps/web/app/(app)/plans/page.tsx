@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import type { Subscription } from "@career-copilot/types";
@@ -34,6 +35,17 @@ export default function PlansPage() {
           if (id === "premium") setShowUpgrade(true);
         }}
       />
+
+      {sub?.costs && (
+        <p className="text-caption text-on-surface-variant -mt-md">
+          Credits are used per action
+          {sub.costs.tailor !== undefined && sub.costs.analyze !== undefined
+            ? ` (for example, ${sub.costs.tailor} per résumé tailoring run and ${sub.costs.analyze} per job description analysis)`
+            : ""}
+          . Full rates are listed under Credit Utilization in{" "}
+          <Link href="/account" className="text-primary hover:underline">Account</Link>.
+        </p>
+      )}
 
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>

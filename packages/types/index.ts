@@ -322,5 +322,8 @@ export interface Plan {
   period: "month" | null;
   credits: number;
   refills: boolean;
+  /** One line under the plan name: who the plan is for. */
+  tagline?: string;
+  /** A feature ending in ":" is a lead-in ("Everything in Free, plus:"). */
   features: string[];
 }
