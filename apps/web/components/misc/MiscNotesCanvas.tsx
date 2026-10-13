@@ -116,11 +116,10 @@ export function MiscNotesCanvas({ className = "" }: { className?: string } = {})
       <header className="flex flex-col gap-xs">
         <h2 className="flex items-center gap-sm text-body-lg font-semibold text-on-surface">
           <NotePencil size={20} className="text-primary" />
-          Remembered something about yourself?
+          Add a note
         </h2>
         <p className="text-body-sm text-on-surface-variant">
-          Write it here — for this job or not. It&rsquo;s tidied up and kept in your profile, ready to add to any
-          résumé you tailor.
+          A skill, win or detail. We&rsquo;ll save it to your profile for any résumé.
         </p>
       </header>
 
