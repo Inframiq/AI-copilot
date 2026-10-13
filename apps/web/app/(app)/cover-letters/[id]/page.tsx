@@ -201,9 +201,9 @@ export default function CoverLetterEditorPage({
       {!isSaved && (
         <p
           role="status"
-          className="-mt-md flex items-center gap-xs rounded-xl border border-tertiary/30 bg-tertiary-container/50 px-md py-sm text-body-sm text-on-tertiary-container"
+          className="-mt-md flex items-center gap-xs rounded-xl border border-primary/20 bg-primary/5 px-md py-sm text-body-sm text-on-surface"
         >
-          <WarningCircle size={16} weight="fill" className="shrink-0" />
+          <WarningCircle size={16} weight="fill" className="shrink-0 text-primary" />
           Draft, not saved. Read it through, then save it to keep it with this job.
         </p>
       )}
