@@ -104,9 +104,12 @@ Return a JSON object with EXACTLY this shape:
     "phone": "optional phone string",
     "location": "City, State/Country if present",
     "linkedin": "linkedin URL if present",
-    "github": "github URL if present"
+    "github": "github URL if present",
+    "website": "personal site or portfolio URL if present"
   },
+  "headline": "the one-line professional title printed at the top near the name, verbatim, else null",
   "summary": "professional summary paragraph if present, else null",
+  "objective": "career objective paragraph if present, else null",
   "experience": [
     {
       "company": "Company Name",
@@ -140,12 +143,33 @@ Return a JSON object with EXACTLY this shape:
   ],
   "skills": ["Skill1", "Skill2"],
   "languages": [{"name": "language exactly as printed", "level": "level as printed, or null"}],
-  "certifications": ["Cert name if any"]
+  "certifications": ["Cert name if any"],
+  "awards": ["award as printed"],
+  "achievements": ["achievement as printed"],
+  "leadership": ["leadership role or activity as printed"],
+  "volunteer": ["volunteer role or activity as printed"]
 }
 
 Rules:
 - Return only the JSON object, no markdown fences.
 - Keep all original bullet text verbatim — do not rewrite.
+- "headline" is the short title line at the top of the resume, beside or
+  just under the name — a role and/or specialty, often with separators
+  ("|", "·", "•", "–"). Copy it exactly as printed. It is not a contact
+  detail and not a sentence from the summary. Never build one from the
+  latest job title in Experience: a resume with no title line at the top
+  gives "headline": null.
+- "summary" vs "objective": a paragraph under an "Objective" / "Career
+  Objective" heading goes in "objective"; one under "Summary", "Profile",
+  "About Me" or "Professional Summary" goes in "summary". A paragraph with
+  no heading at the top of the resume is the summary. Never put the same
+  text in both.
+- "awards", "achievements", "leadership", "volunteer": take these only from
+  a section with that heading or a close equivalent ("Honors & Awards",
+  "Key Achievements", "Positions of Responsibility", "Extracurriculars",
+  "Volunteering"). One entry per item, copied verbatim. Never move an
+  Experience bullet into them, and never leave a section like this out —
+  if it is on the resume, it belongs in one of these lists.
 - LINKS: the resume text may end with a "Hyperlinks found in this document"
   block — these are the real destination URLs behind clickable text that
   otherwise only shows as a bare word like "GitHub", "LinkedIn", or
@@ -218,26 +242,44 @@ Rules:
 """
 
 
+class ResumeUnreadable(ValueError):
+    """The model's answer wasn't a résumé we could read (cut off, or not JSON)."""
+
+
+# Optional one-line text fields and plain lists of lines the prompt asks for.
+_TEXT_FIELDS = ("headline", "summary", "objective")
+_LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer")
+
+
 async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
-    raw = await provider.complete(PARSE_SYSTEM, raw_text, model_tier="fast")
+    raw = await provider.complete(PARSE_SYSTEM, raw_text, model_tier="fast", call_name="parse_resume")
     cleaned = _strip_json_fence(raw)
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Return a minimal skeleton so the caller can still create a resume
-        data = {
-            "contact": {"name": "", "email": ""},
-            "experience": [],
-            "projects": [],
-            "education": [],
-            "skills": [],
-        }
+        data = None
+    # An empty résumé used to stand in here, created and charged for as if
+    # the read had worked — the person just saw every field blank. Failing
+    # lets the caller refund and say so.
+    if not isinstance(data, dict):
+        raise ResumeUnreadable("model output was not a JSON object")
     # Ensure required keys exist
-    data.setdefault("contact", {"name": "", "email": ""})
+    if not isinstance(data.get("contact"), dict):
+        data["contact"] = {"name": "", "email": ""}
     data.setdefault("experience", [])
     data.setdefault("projects", [])
     data.setdefault("education", [])
     data.setdefault("skills", [])
+    for key in _TEXT_FIELDS:
+        value = data.get(key)
+        data[key] = value.strip() if isinstance(value, str) and value.strip() else None
+    for key in _LINE_LISTS:
+        value = data.get(key)
+        data[key] = [s.strip() for s in value if isinstance(s, str) and s.strip()] if isinstance(value, list) else []
+    # The prompt says never both; a model that copies the paragraph into
+    # each would print it twice.
+    if data["objective"] and data["objective"] == data["summary"]:
+        data["objective"] = None
     # Defense-in-depth against the model pulling a responsibility/summary
     # sentence into "skills" despite the prompt rule against it — same
     # prose-vs-skill-name filter tailoring.py applies to AI-suggested skills.

@@ -219,6 +219,7 @@ export function resumeContentToCareerProfileInput(
       location: c.contact?.location ?? "",
       linkedin: c.contact?.linkedin ?? "",
       github: c.contact?.github ?? "",
+      website: c.contact?.website ?? "",
     },
     headline: c.headline ?? null,
     skills: Array.isArray(c.skills) ? c.skills : [],

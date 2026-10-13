@@ -1,5 +1,6 @@
 import { createBrowserClient } from "@/lib/supabase";
 import { withResumeRoom } from "@/stores/resume-limit-store";
+import { confirmHeadline } from "@/stores/headline-confirm-store";
 import type {
   Resume,
   JobDescription,
@@ -277,7 +278,11 @@ export const apiClient = {
         throw new ApiError(res.status, detailMessage(err.detail, "Upload failed"), err.detail);
       }
       return res.json() as Promise<Resume>;
-    }),
+    }).then(
+      // Every upload asks the person to check the headline the parser
+      // read, so each caller gets the résumé back with it confirmed.
+      confirmHeadline
+    ),
 
   // ── Job Descriptions ──────────────────────────────────────────────────────
   getJds: (): Promise<JobDescription[]> =>

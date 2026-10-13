@@ -555,6 +555,34 @@ async def test_parse_upload_fails_when_storage_upload_fails(ledger):
 
 
 @pytest.mark.asyncio
+async def test_parse_upload_unreadable_model_output_refunds_and_creates_nothing(ledger):
+    """A cut-off or non-JSON parse used to become a blank résumé, charged
+    for. Now nothing is created and the credit comes back."""
+    from app.services.resume_parser import ResumeUnreadable
+
+    limiter.reset()
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.resumes._supabase", return_value=MagicMock()), \
+             patch("app.routers.resumes.sandbox.extract_pdf_text", return_value="Test Candidate"), \
+             patch("app.routers.resumes.parse_resume_text", new=AsyncMock(side_effect=ResumeUnreadable("x"))):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 502
+        assert "refunded" in r.json()["detail"]
+        mock_session.add.assert_not_called()
+        assert ledger.spent == ["parse_resume"] and ledger.refunded == ["parse_resume"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_parse_upload_rejects_bad_magic_bytes():
     limiter.reset()
     override, mock_session = make_mock_db()

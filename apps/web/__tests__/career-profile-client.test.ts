@@ -324,6 +324,19 @@ describe("career-profile-client", () => {
       expect(result.experience[1].type).toBe("full-time");
     });
 
+    it("carries the headline and personal website in from a parsed résumé", () => {
+      const result = resumeContentToCareerProfileInput(
+        {
+          contact: { name: "Jane Doe", email: "jane@example.com", website: "https://jane.dev" },
+          headline: "Supply Chain Analyst | SAP",
+          experience: [], education: [], skills: [],
+        } as any,
+        null
+      );
+      expect(result.contact.website).toBe("https://jane.dev");
+      expect(result.headline).toBe("Supply Chain Analyst | SAP");
+    });
+
     // Both mappings rebuild each entry field by field, so anything they do
     // not name is dropped the first time a résumé passes through the profile.
     it("carries the role location in from a résumé", () => {

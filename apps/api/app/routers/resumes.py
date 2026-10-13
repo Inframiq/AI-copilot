@@ -17,7 +17,7 @@ from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
     render_resume_html_with_meta, PhotoRequiredError, photo_owned_by,
 )
-from app.services.resume_parser import parse_resume_text
+from app.services.resume_parser import ResumeUnreadable, parse_resume_text
 from app.services import sandbox
 from app.services.resume_generator import generate_resume
 from app.services.ai_engine.factory import get_ai_provider
@@ -751,7 +751,14 @@ async def parse_and_create_resume(
             raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
 
         provider = get_ai_provider()
-        parsed = await parse_resume_text(raw_text, provider)
+        try:
+            parsed = await parse_resume_text(raw_text, provider)
+        except ResumeUnreadable:
+            logger.warning("upload parse returned unreadable output")
+            raise HTTPException(
+                status_code=502,
+                detail="We couldn't read your résumé this time. Your credit was refunded — please try again.",
+            )
 
         # Derive a sensible title from the candidate's name
         name = parsed.get("contact", {}).get("name", "").strip()
