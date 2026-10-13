@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { CheckCircle, Sparkle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { useTailoringStore } from "@/stores/tailoring-store";
@@ -35,9 +36,16 @@ export function SourcePanel() {
   const error = useTailoringStore((s) => s.error);
 
   const hasJdContext = !!jdId;
+  // The pasted JD stays here until Tailor is clicked. Written to the store on
+  // every keystroke, the first character already counted as "a JD": the
+  // review page starts a run the moment the store has JD text, so typing one
+  // letter spent a credit tailoring against it.
+  const [draft, setDraft] = useState(jdText);
 
   function handleTailor() {
-    if (resumeId) runTailoring(resumeId);
+    if (!resumeId) return;
+    if (!hasJdContext) setJd("", draft);
+    runTailoring(resumeId);
   }
 
   const companyField = (
@@ -49,7 +57,7 @@ export function SourcePanel() {
       <button
         type="button"
         onClick={handleTailor}
-        disabled={isLoading || !resumeId || (!hasJdContext && !jdText.trim())}
+        disabled={isLoading || !resumeId || (!hasJdContext && !draft.trim())}
         className="flex w-full items-center justify-center gap-sm rounded-xl bg-primary py-md text-label-md text-on-primary shadow-md transition-all hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Sparkle size={18} />
@@ -133,8 +141,8 @@ export function SourcePanel() {
             </label>
             <textarea
               id="source-jd"
-              value={jdText}
-              onChange={(e) => setJd("", e.target.value)}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
               placeholder="Paste the job description here — AI will rewrite your bullets to match it…"
               rows={10}
               className="w-full resize-none rounded-xl border border-outline-variant/50 bg-surface px-md py-md text-body-md leading-relaxed text-on-surface transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"

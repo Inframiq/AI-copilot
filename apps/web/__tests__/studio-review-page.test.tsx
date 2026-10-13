@@ -92,6 +92,21 @@ describe("Studio review page", () => {
     expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
   });
 
+  it("typing a JD into the paste form starts nothing until Tailor is clicked", async () => {
+    useTailoringStore.setState({ jdId: null, jdText: "" } as never);
+    await renderPage();
+    const box = screen.getByLabelText(/job description/i);
+    fireEvent.change(box, { target: { value: "S" } });
+    fireEvent.change(box, { target: { value: "Senior engineer, Python" } });
+    // Still the paste form, and no run.
+    expect(screen.getByText(/tailor to a job description/i)).toBeTruthy();
+    expect(useTailoringStore.getState().runTailoring).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /tailor resume/i }));
+    await waitFor(() => expect(useTailoringStore.getState().runTailoring).toHaveBeenCalledWith("r1"));
+    expect(useTailoringStore.getState().jdText).toBe("Senior engineer, Python");
+  });
+
   it("lists the rewritten bullets to accept or reject", async () => {
     useTailoringStore.setState({ pendingContent: TAILORED } as never);
     await renderPage();
