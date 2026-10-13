@@ -65,7 +65,7 @@ async def test_generate_creates_pending_row_and_returns_202():
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, MagicMock()])  # + the stale-draft clean-up
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -131,7 +131,7 @@ async def test_generate_deducts_three_credits(ledger):
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, MagicMock()])  # + the stale-draft clean-up
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -188,7 +188,7 @@ async def test_generate_refunds_credits_when_pipeline_fails(ledger):
     resume_result.scalar_one_or_none.return_value = resume
     jd_result = MagicMock()
     jd_result.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result])
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, MagicMock()])  # + the stale-draft clean-up
 
     async def fake_refresh(obj):
         obj.id = obj.id or uuid.uuid4()
@@ -399,7 +399,7 @@ async def test_generate_pdf_returns_data_url_and_persists_in_background():
         id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID),
         resume_id=uuid.uuid4(), jd_id=uuid.uuid4(),
         content="Dear Hiring Manager,\n\nBody.\n\nSincerely,\nJane Doe",
-        status="completed", created_at=datetime.now(timezone.utc),
+        status="completed", created_at=datetime.now(timezone.utc), saved_at=datetime.now(timezone.utc),
     )
     resume = Resume(
         id=letter.resume_id, user_id=uuid.UUID(TEST_USER_ID), title="R",
@@ -439,5 +439,81 @@ async def test_generate_pdf_returns_data_url_and_persists_in_background():
         mock_gen.assert_called_once()
         mock_upload.assert_called_once()
         assert letter.pdf_url == "cover-letters/user/letter.pdf"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+# ── A letter is a draft until the user saves it ──────────────────────────────
+
+def _letter(**kw):
+    from app.db.models import CoverLetter
+    base = dict(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), resume_id=uuid.uuid4(), jd_id=uuid.uuid4(),
+        content="Dear Hiring Manager, body.", status="completed", humanize_level=50,
+        created_at=datetime.now(timezone.utc),
+    )
+    base.update(kw)
+    return CoverLetter(**base)
+
+
+@pytest.mark.asyncio
+async def test_save_marks_the_letter_saved():
+    override, mock_session = make_mock_db()
+    letter = _letter()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = letter
+    mock_session.execute = AsyncMock(return_value=result)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.patch(f"/cover-letters/{letter.id}", json={"content": "Edited."}, headers=make_auth_header())
+        assert r.status_code == 200
+        assert letter.content == "Edited."
+        assert letter.saved_at is not None
+        assert r.json()["saved_at"] is not None
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_the_list_shows_saved_letters_only():
+    override, mock_session = make_mock_db()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_session.execute = AsyncMock(return_value=result)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/cover-letters", headers=make_auth_header())
+        assert r.status_code == 200
+        stmt = str(mock_session.execute.call_args.args[0])
+        assert "cover_letters.saved_at IS NOT NULL" in stmt
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_a_draft_downloads_the_text_on_screen_and_keeps_nothing():
+    override, mock_session = make_mock_db()
+    letter = _letter(saved_at=None)
+    letter_result = MagicMock()
+    letter_result.scalar_one_or_none.return_value = letter
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = None
+    mock_session.execute = AsyncMock(side_effect=[letter_result, resume_result])
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.cover_letters.generate_letter_pdf", return_value=b"%PDF-fake") as gen, patch(
+            "app.routers.cover_letters.upload_letter_pdf", new=AsyncMock()
+        ) as upload:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    f"/cover-letters/{letter.id}/pdf", json={"content": "On screen."}, headers=make_auth_header(),
+                )
+        assert r.status_code == 200
+        assert gen.call_args.args[2] == "On screen."
+        upload.assert_not_called()
+        assert letter.content == "Dear Hiring Manager, body."
+        assert letter.saved_at is None
     finally:
         app.dependency_overrides.pop(get_db, None)

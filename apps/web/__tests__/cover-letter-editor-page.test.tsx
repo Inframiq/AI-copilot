@@ -60,6 +60,7 @@ describe("CoverLetterEditorPage", () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+      saved_at: "2026-01-01T00:00:00Z",
     });
     vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
@@ -80,6 +81,7 @@ describe("CoverLetterEditorPage", () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+      saved_at: "2026-01-01T00:00:00Z",
     });
     vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
@@ -99,10 +101,11 @@ describe("CoverLetterEditorPage", () => {
     expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
   });
 
-  it("downloads the PDF from the data: URL without fetching it, saving unsaved edits first", async () => {
+  it("downloads the text on screen from the data: URL without fetching it, and saves nothing", async () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+      saved_at: "2026-01-01T00:00:00Z",
     });
     vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
@@ -125,10 +128,10 @@ describe("CoverLetterEditorPage", () => {
       await userEvent.click(screen.getByText("Download PDF"));
 
       await waitFor(() => expect(names).toEqual(["Cover Letter.pdf"]));
-      expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Original body!");
-      expect(
-        vi.mocked(apiClient.updateCoverLetter).mock.invocationCallOrder[0]
-      ).toBeLessThan(vi.mocked(apiClient.generateCoverLetterPdf).mock.invocationCallOrder[0]);
+      // Downloading is not saving: the PDF is the text on screen, and
+      // nothing is written back.
+      expect(apiClient.generateCoverLetterPdf).toHaveBeenCalledWith("cl-1", "Original body!");
+      expect(apiClient.updateCoverLetter).not.toHaveBeenCalled();
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       clickSpy.mockRestore();
@@ -136,10 +139,30 @@ describe("CoverLetterEditorPage", () => {
     }
   });
 
+  it("a freshly written letter is a draft: kept only when Save is pressed", async () => {
+    vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
+      id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
+      content: "Fresh letter", humanize_level: 50, pdf_url: null, status: "completed",
+      created_at: "2026-01-01T00:00:00Z", saved_at: null,
+    });
+    vi.mocked(apiClient.updateCoverLetter).mockResolvedValue({} as never);
+
+    await renderWithQueryClient(<CoverLetterEditorPage params={Promise.resolve({ id: "cl-1" })} />);
+
+    expect(await screen.findByText(/Draft, not saved/)).toBeInTheDocument();
+    expect(apiClient.updateCoverLetter).not.toHaveBeenCalled();
+    // Unchanged, and still savable: a draft is not kept until the user says so.
+    await userEvent.click(screen.getByRole("button", { name: "Save letter" }));
+    await waitFor(() => expect(apiClient.updateCoverLetter).toHaveBeenCalledWith("cl-1", "Fresh letter"));
+    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
+    expect(screen.queryByText(/Draft, not saved/)).not.toBeInTheDocument();
+  });
+
   it("clicking Regenerate once results in exactly one generateCoverLetter call", async () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+      saved_at: "2026-01-01T00:00:00Z",
     });
     vi.mocked(apiClient.generateCoverLetter).mockResolvedValue({ cover_letter_id: "cl-new", status: "pending" });
 
@@ -156,6 +179,7 @@ describe("CoverLetterEditorPage", () => {
     vi.mocked(apiClient.getCoverLetter).mockResolvedValue({
       id: "cl-1", resume_id: "r1", jd_id: "jd1", tailoring_session_id: null,
       content: "Original body", humanize_level: 50, pdf_url: null, status: "completed", created_at: "2026-01-01T00:00:00Z",
+      saved_at: "2026-01-01T00:00:00Z",
     });
     // Distinct id from the page's own "cl-1" — proves navigation targets the
     // NEW row the backend created, not a refetch/invalidate of the old one.

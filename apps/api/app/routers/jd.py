@@ -336,13 +336,14 @@ async def generate_jd_prep_questions(
 
 @router.get("/{jd_id}/cover-letter")
 async def get_jd_cover_letter(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Latest cover letter for this JD, regardless of status — the JD detail
-    page's "Generated for This JD" card uses this to show a pending/failed/
-    completed letter, or offer to generate one if there's none yet."""
+    """Latest saved cover letter for this JD — the JD detail page's
+    "Generated for This JD" card and the Studio's next step use this to open
+    it, or offer to write one if there's none yet. An unsaved draft is not
+    the JD's letter."""
     uid = uuid.UUID(user["sub"])
     result = await db.execute(
         select(CoverLetter)
-        .where(CoverLetter.jd_id == jd_id, CoverLetter.user_id == uid)
+        .where(CoverLetter.jd_id == jd_id, CoverLetter.user_id == uid, CoverLetter.saved_at.is_not(None))
         .order_by(CoverLetter.created_at.desc())
         .limit(1)
     )

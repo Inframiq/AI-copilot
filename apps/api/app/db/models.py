@@ -197,6 +197,10 @@ class CoverLetter(Base):
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
+    # Null while the letter is a draft: generating one keeps nothing until the
+    # user reads it and presses Save. Drafts stay out of the Cover Letters list
+    # and the JD's letter.
+    saved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
 
 class PrepQuestion(Base):

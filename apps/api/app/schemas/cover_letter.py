@@ -31,8 +31,16 @@ class CoverLetterOut(BaseModel):
     pdf_url: str | None
     status: str
     created_at: datetime
+    # Null while the letter is an unsaved draft.
+    saved_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
 class CoverLetterUpdate(BaseModel):
     content: str = Field(max_length=20000)
+
+
+class CoverLetterPdfRequest(BaseModel):
+    # The text on screen, rendered as is and stored nowhere: downloading a
+    # draft must not save it. Omitted, the stored letter is rendered.
+    content: str | None = Field(default=None, max_length=20000)

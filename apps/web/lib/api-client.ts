@@ -347,8 +347,10 @@ export const apiClient = {
   updateCoverLetter: (id: string, content: string): Promise<CoverLetter> =>
     request<CoverLetter>("PATCH", `/cover-letters/${id}`, { content }),
 
-  generateCoverLetterPdf: (id: string): Promise<{ signed_url: string }> =>
-    request<{ signed_url: string }>("POST", `/cover-letters/${id}/pdf`),
+  // With `content`, renders that text as is and keeps nothing on the server —
+  // how an unsaved draft downloads without being saved.
+  generateCoverLetterPdf: (id: string, content?: string): Promise<{ signed_url: string }> =>
+    request<{ signed_url: string }>("POST", `/cover-letters/${id}/pdf`, content !== undefined ? { content } : undefined),
 
   deleteCoverLetter: (id: string): Promise<void> =>
     request<void>("DELETE", `/cover-letters/${id}`),

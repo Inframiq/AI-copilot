@@ -2,10 +2,10 @@ import asyncio
 import base64
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from supabase import create_client
 from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
@@ -15,7 +15,12 @@ from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.schemas.cover_letter import (
     CoverLetterGenerateRequest, CoverLetterStartOut, CoverLetterOut, CoverLetterUpdate,
+    CoverLetterPdfRequest,
 )
+
+# A draft nobody saved within this long was abandoned: cleared out the next
+# time the same user generates a letter, so unsaved drafts don't pile up.
+_DRAFT_TTL = timedelta(days=1)
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import write_cover_letter, analyze_jd_match, JDAnalysis
 from app.services.pdf import generate_letter_pdf, upload_letter_pdf
@@ -132,6 +137,14 @@ async def generate_cover_letter(
             except Exception:
                 cached_jd_analysis = None
 
+    await db.execute(
+        delete(CoverLetter).where(
+            CoverLetter.user_id == uid,
+            CoverLetter.saved_at.is_(None),
+            CoverLetter.created_at < datetime.now(timezone.utc) - _DRAFT_TTL,
+        )
+    )
+    # A draft: nothing is kept until the user saves it (PATCH below).
     letter = CoverLetter(
         user_id=uid,
         resume_id=body.resume_id,
@@ -178,9 +191,10 @@ async def get_cover_letter(
 
 @router.get("", response_model=list[CoverLetterOut])
 async def list_cover_letters(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Saved letters only: a draft is the user's to keep or leave.
     result = await db.execute(
         select(CoverLetter)
-        .where(CoverLetter.user_id == uuid.UUID(user["sub"]))
+        .where(CoverLetter.user_id == uuid.UUID(user["sub"]), CoverLetter.saved_at.is_not(None))
         .order_by(CoverLetter.created_at.desc())
     )
     return result.scalars().all()
@@ -201,7 +215,9 @@ async def update_cover_letter(
     letter = result.scalar_one_or_none()
     if not letter:
         raise HTTPException(status_code=404, detail="Cover letter not found")
+    # The editor's Save: the only thing that keeps a letter.
     letter.content = body.content
+    letter.saved_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(letter)
     return letter
@@ -240,6 +256,7 @@ async def generate_cover_letter_pdf(
     request: Request,
     cover_letter_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    body: CoverLetterPdfRequest | None = None,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -249,7 +266,8 @@ async def generate_cover_letter_pdf(
             select(CoverLetter).where(CoverLetter.id == cover_letter_id, CoverLetter.user_id == uid)
         )
     ).scalar_one_or_none()
-    if not letter or not letter.content:
+    content = (body.content if body and body.content is not None else letter.content) if letter else None
+    if not letter or not content:
         raise HTTPException(status_code=404, detail="Cover letter not found or not yet generated")
     resume_row = (
         await db.execute(select(Resume).where(Resume.id == letter.resume_id, Resume.user_id == uid))
@@ -258,7 +276,10 @@ async def generate_cover_letter_pdf(
     now = datetime.now(timezone.utc)
     date_str = f"{now:%B} {now.day}, {now:%Y}"
 
-    pdf_bytes = await asyncio.to_thread(generate_letter_pdf, contact, date_str, letter.content)
-    background_tasks.add_task(_persist_letter_pdf_to_storage, pdf_bytes, str(uid), cover_letter_id)
+    pdf_bytes = await asyncio.to_thread(generate_letter_pdf, contact, date_str, content)
+    # Only a saved letter, as saved, gets its PDF kept: a draft's download is
+    # stored nowhere.
+    if letter.saved_at is not None and content == letter.content:
+        background_tasks.add_task(_persist_letter_pdf_to_storage, pdf_bytes, str(uid), cover_letter_id)
     data_url = f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}"
     return {"signed_url": data_url, "expires_in": None}

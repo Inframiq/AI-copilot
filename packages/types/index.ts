@@ -168,6 +168,8 @@ export interface CoverLetter {
   pdf_url: string | null;
   status: "pending" | "completed" | "failed";
   created_at: string;
+  /** Null while the letter is a draft: kept only once the user saves it. */
+  saved_at?: string | null;
 }
 
 export interface CoverLetterStart {
