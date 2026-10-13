@@ -234,16 +234,6 @@ export interface PrepQuestionWithJdOut extends PrepQuestionOut {
   jd_title: string;
 }
 
-// A roadmap milestone the user added on Career Path (the built-in ones are
-// worked out from activity and never stored).
-export interface CareerMilestone {
-  id: string;
-  title: string;
-  description: string | null;
-  done: boolean;
-  created_at: string;
-}
-
 export interface LearningItem {
   id: string;
   skill: string;

@@ -48,7 +48,6 @@ describe("Sidebar", () => {
       "Resume Builder",
       "Cover Letter",
       "Interview Center",
-      "Career Path",
       "Analytics",
       "Account",
     ]) {

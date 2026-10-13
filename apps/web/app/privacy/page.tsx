@@ -244,8 +244,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-headline-md text-on-surface font-semibold">7. Cookies and local storage</h2>
             <p className="text-body-md text-on-surface-variant">
               We use cookies only to keep you signed in (Supabase Auth session cookies), and browser local
-              storage only to remember choices you make in the app: whether the side menu is collapsed,
-              whether you have seen the guided tour, and your in-progress target role on the Career Path page.
+              storage only to remember choices you make in the app: whether the side menu is collapsed and
+              whether you have seen the guided tour.
               None of these are used for advertising or cross-site tracking. Our{" "}
               <Link href="/cookies" className="text-primary hover:underline">Cookie Policy</Link> lists each
               one by name, with its purpose and duration.

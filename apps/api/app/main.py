@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
-from app.routers import resumes, jd, ai, learning, career, contacts, cover_letters, me, plans, feedback, admin, data_requests
+from app.routers import resumes, jd, ai, learning, contacts, cover_letters, me, plans, feedback, admin, data_requests
 from app.services.ai_engine.base import AIInputTooLargeError, AIPausedError
 from app.core.rate_limit import limiter
 from app.core.body_limit import BodySizeLimitMiddleware
@@ -168,8 +168,6 @@ app.include_router(resumes.router)
 app.include_router(jd.router)
 app.include_router(ai.router)
 app.include_router(learning.router)
-app.include_router(career.router)
-app.include_router(career.plan_router)
 app.include_router(contacts.router)
 app.include_router(cover_letters.router)
 app.include_router(me.router)

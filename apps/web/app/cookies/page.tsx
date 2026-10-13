@@ -104,11 +104,6 @@ export default function CookiePolicyPage() {
                     <td className="py-xs pr-md">Remembers that you finished or skipped the guided tour, so it isn&apos;t shown again.</td>
                     <td className="py-xs">Until you clear your browser storage.</td>
                   </tr>
-                  <tr className="align-top">
-                    <td className="py-xs pr-md"><code>career-copilot-target-role</code></td>
-                    <td className="py-xs pr-md">Keeps the target role you typed on the Career Path page while you work on it.</td>
-                    <td className="py-xs">Until you clear your browser storage.</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
