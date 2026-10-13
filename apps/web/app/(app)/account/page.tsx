@@ -3,11 +3,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass } from "@phosphor-icons/react";
+import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass, Question } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { signOutHere } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/components/support/HelpButton";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import type { Subscription } from "@career-copilot/types";
 
@@ -271,6 +272,21 @@ export default function AccountPage() {
         <SignOut size={18} weight="bold" />
         Sign out
       </button>
+
+      {/* Help */}
+      <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
+        <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">
+          <Question size={22} className="text-primary" />
+          Help &amp; support
+        </h2>
+        <p className="text-body-sm text-on-surface-variant mt-xs">
+          Questions about your account, credits or a feature? Email{" "}
+          <a href={SUPPORT_MAILTO} className="text-primary font-semibold hover:underline">
+            {SUPPORT_EMAIL}
+          </a>
+          .
+        </p>
+      </div>
 
       {/* Danger zone */}
       <div className="rounded-2xl p-lg border border-error/40 bg-error/5">
