@@ -210,7 +210,7 @@ export default function CoverLetterEditorPage({
             maxLength={255}
             aria-label="Letter name"
             title="Rename this letter"
-            className="w-full min-w-0 rounded-lg border border-transparent bg-transparent px-xs -mx-xs text-headline-xl font-bold text-on-surface outline-none transition-colors hover:border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full min-w-0 rounded-lg border border-transparent bg-transparent px-xs -mx-xs text-headline-lg font-bold text-on-surface outline-none transition-colors hover:border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
             style={{ letterSpacing: "-0.02em" }}
           />
         </h1>
