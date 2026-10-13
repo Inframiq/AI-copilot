@@ -293,6 +293,10 @@ export default function PrivacyPolicyPage() {
               <li>Encrypted database backups: rolled over on a cycle of no more than 90 days.</li>
               <li>Deletion requests: a record of the request (the email address, what was asked, and what we
                 did) for 3 years, to show it was handled. It never contains the data that was deleted.</li>
+              <li>Free-credit records: when an account is deleted, a keyed one-way fingerprint of its email
+                address and the number of free credits it had left, for 12 months, so the free credit allowance
+                cannot be claimed again by re-registering (fraud prevention, Section 3). The fingerprint cannot be
+                turned back into the email address.</li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
               When you delete your account, we remove your resumes, profile, job descriptions, generated

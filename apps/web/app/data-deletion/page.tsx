@@ -99,6 +99,13 @@ export default function DataDeletionPage() {
                 asked for, and what we did. We keep it for 3 years to show that we handled it. It doesn&apos;t
                 contain the data we deleted.
               </li>
+              <li>
+                <strong className="text-on-surface">A one-way fingerprint of your email address</strong> and the
+                number of free credits your account had left, for 12 months. The fingerprint cannot be turned back
+                into your email address. It ensures the free credit allowance is granted once per email address: a
+                new account created with the same address starts with the credits that were left, not a fresh
+                allowance.
+              </li>
             </ul>
             <p className="text-body-md text-on-surface-variant">
               Text already sent to our AI provider before the deletion may be kept by that provider for a limited

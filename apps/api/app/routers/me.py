@@ -12,7 +12,8 @@ from supabase import create_client
 from app.db.session import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
-from app.core.credits import resolve_subscription, subscription_public
+from app.core.credits import PLAN_CREDITS, resolve_subscription, subscription_public
+from app.core.free_grant import record_deleted_account
 from app.db.models import (
     AiUsageEvent,
     CareerMilestone,
@@ -50,7 +51,7 @@ async def get_my_subscription(
 ):
     """The signed-in user's plan + credit balance + per-action costs. Creates
     a default free subscription on first call."""
-    sub = await resolve_subscription(db, uuid.UUID(user["sub"]))
+    sub = await resolve_subscription(db, uuid.UUID(user["sub"]), user.get("email"))
     await db.commit()  # persist a first-touch free row / any rollover
     return subscription_public(sub)
 
@@ -153,6 +154,18 @@ async def delete_my_account(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not delete your account. Please try again or contact support.",
         )
+
+    # ── Remember the free credits left, against a one-way fingerprint of the
+    #    email (never the email), so signing up again with the same address
+    #    resumes this balance instead of a fresh free grant. ───────────────────
+    sub_row = (
+        await db.execute(select(Subscription).where(Subscription.user_id == uid))
+    ).scalar_one_or_none()
+    free_left = (
+        sub_row.credits_remaining if sub_row is not None and sub_row.plan == "free"
+        else (0 if sub_row is not None else PLAN_CREDITS["free"])
+    )
+    await record_deleted_account(db, user.get("email"), free_left)
 
     # ── Wipe application data. prep_questions rows go via their FK's
     #    ON DELETE CASCADE off tailoring_sessions (enforced by Postgres,

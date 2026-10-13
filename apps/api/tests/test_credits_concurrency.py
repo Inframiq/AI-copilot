@@ -48,8 +48,8 @@ def lockstep(monkeypatch):
         barrier = asyncio.Barrier(n)
         original = credits.resolve_subscription
 
-        async def resolve_then_wait(db, user_id):
-            sub = await original(db, user_id)
+        async def resolve_then_wait(db, user_id, email=None):
+            sub = await original(db, user_id, email)
             try:
                 await asyncio.wait_for(barrier.wait(), timeout=2)
             except (asyncio.TimeoutError, asyncio.BrokenBarrierError):

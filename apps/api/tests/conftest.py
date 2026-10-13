@@ -125,15 +125,16 @@ def pg_uri():
 
 @pytest.fixture
 async def pg_session(pg_uri):
-    """A sessionmaker on an empty `subscriptions` table."""
+    """A sessionmaker on empty `subscriptions` and `free_grant_ledger` tables."""
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from app.db.models import Subscription
+    from app.db.models import FreeGrantLedger, Subscription
 
     engine = create_async_engine(pg_uri, pool_size=20, max_overflow=0)
     async with engine.begin() as conn:
         await conn.run_sync(lambda c: Subscription.__table__.create(c, checkfirst=True))
-        await conn.execute(text("TRUNCATE subscriptions"))
+        await conn.run_sync(lambda c: FreeGrantLedger.__table__.create(c, checkfirst=True))
+        await conn.execute(text("TRUNCATE subscriptions, free_grant_ledger"))
     yield async_sessionmaker(engine, expire_on_commit=False)
     await engine.dispose()
 

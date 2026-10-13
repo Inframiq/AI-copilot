@@ -309,6 +309,19 @@ class PolicyAcceptance(Base):
     accepted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class FreeGrantLedger(Base):
+    """The free credits a deleted account had left, keyed by a keyed one-way
+    fingerprint of its email (app.core.free_grant), never the email itself.
+    A new account with the same email resumes this balance instead of a fresh
+    free grant. Kept 12 months after the deletion."""
+
+    __tablename__ = "free_grant_ledger"
+
+    email_fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    credits_remaining: Mapped[int] = mapped_column(Integer, nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, nullable=False)
+
+
 class AiUsageEvent(Base):
     """Append-only ledger — one row per LLM API call, written from the
     provider via app.core.usage.record_ai_usage(). Powers per-user cost

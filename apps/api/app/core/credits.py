@@ -151,9 +151,14 @@ async def _load(db: AsyncSession, user_id) -> Subscription | None:
     ).scalar_one_or_none()
 
 
-async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:
+async def resolve_subscription(db: AsyncSession, user_id, email: str | None = None) -> Subscription:
     """Return the user's subscription, creating a default free row on first
     touch and rolling a paid plan's credits over if its period has elapsed.
+
+    The first-touch row's balance is the free grant for *email*: the full
+    grant, or what that address had left when an earlier account of theirs
+    was deleted (app.core.free_grant), so deleting and re-registering never
+    hands out the free credits twice.
 
     The first-touch insert is ON CONFLICT DO NOTHING, so a new user's first
     requests arriving together make one row (it used to be two inserts and a
@@ -163,13 +168,15 @@ async def resolve_subscription(db: AsyncSession, user_id) -> Subscription:
     sub = await _load(db, user_id)
     if sub is None:
         now = utcnow()
+        from app.core.free_grant import free_grant_for
+
         await db.execute(
             pg_insert(Subscription)
             .values(
                 user_id=user_id,
                 plan="free",
                 status="active",
-                credits_remaining=PLAN_CREDITS["free"],
+                credits_remaining=await free_grant_for(db, email, PLAN_CREDITS["free"]),
                 credits_allotment=PLAN_CREDITS["free"],
                 current_period_start=now,
                 current_period_end=None,
@@ -220,7 +227,7 @@ async def spend_credits(db: AsyncSession, user_id, action: str, email: str | Non
     long model call (and refund_credits if that fails), or the row stays
     locked — and the user's other paid requests wait — until it ends.
     """
-    sub = await resolve_subscription(db, user_id)
+    sub = await resolve_subscription(db, user_id, email)
     cost = CREDIT_COSTS.get(action, 0)
     if _exempt(action, cost, email):
         return sub
