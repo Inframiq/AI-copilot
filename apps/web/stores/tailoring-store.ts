@@ -778,7 +778,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       }
       try {
         const title = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
-        const jd = await apiClient.createJd({ title, raw_text: jdText });
+        // The company typed with a pasted JD is saved to it, so it prefills next time.
+        const jd = await apiClient.createJd({
+          title, raw_text: jdText, ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
+        });
         if (get().jdText !== startedForJdText) return;
         jdId = jd.id;
         set({ jdId });
@@ -848,7 +851,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       }
       try {
         const title = jdText.trim().split("\n")[0].slice(0, 120) || "Untitled JD";
-        const jd = await apiClient.createJd({ title, raw_text: jdText });
+        // The company typed with a pasted JD is saved to it, so it prefills next time.
+        const jd = await apiClient.createJd({
+          title, raw_text: jdText, ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
+        });
         jdId = jd.id;
         set({ jdId });
       } catch (e: unknown) {

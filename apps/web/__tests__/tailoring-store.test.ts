@@ -289,6 +289,16 @@ describe("useTailoringStore", () => {
     );
   });
 
+  it("runTailoring saves the company typed with a pasted JD to the new JD", async () => {
+    useResumeStore.getState().setResume("resume-abc", SAMPLE_CONTENT, "ats_clean");
+    useTailoringStore.getState().setJd("", "Senior TypeScript Engineer\nWe need 5+ years of React.");
+    useTailoringStore.getState().setCompanyName("  Stripe ");
+
+    await useTailoringStore.getState().runTailoring("resume-abc");
+
+    expect(apiClient.createJd).toHaveBeenCalledWith(expect.objectContaining({ company_name: "Stripe" }));
+  });
+
   it("runTailoring creates a JD from pasted text when only jdText is set (the editor's JD Context box never has a jdId)", async () => {
     useResumeStore
       .getState()

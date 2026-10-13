@@ -9,6 +9,8 @@ JDStatus = Literal["not_applied", "applied", "interview", "final_round", "offer"
 class JDCreate(BaseModel):
     raw_text: str = Field(max_length=50_000)
     title: str | None = Field(default=None, max_length=255)
+    # The target company typed with it (Studio's paste form), saved to the JD.
+    company_name: str | None = Field(default=None, max_length=200)
 
 
 class JDStatusUpdate(BaseModel):

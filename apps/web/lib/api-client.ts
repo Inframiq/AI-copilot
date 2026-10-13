@@ -294,6 +294,7 @@ export const apiClient = {
   createJd: (payload: {
     title: string;
     raw_text: string;
+    company_name?: string;
   }): Promise<JobDescription> =>
     request<JobDescription>("POST", "/jd", payload),
 

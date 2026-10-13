@@ -174,6 +174,67 @@ async def test_create_jd_renames_existing_entry_on_content_match_with_new_title(
 
 
 @pytest.mark.asyncio
+async def test_create_jd_saves_the_company_typed_with_it():
+    """Studio's paste form creates the JD as tailoring starts; the company
+    typed there is saved to it, so the JD opens with it next time."""
+    override, mock_session = make_mock_db()
+
+    async def fake_refresh(obj):
+        obj.id = uuid.uuid4()
+        obj.created_at = datetime.now(timezone.utc)
+        obj.status = "not_applied"
+
+    mock_session.refresh = fake_refresh
+    no_match = MagicMock()
+    no_match.scalars.return_value.first.return_value = None
+    mock_session.execute.return_value = no_match
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/jd",
+                json={"raw_text": "We need a senior engineer.", "company_name": "  Stripe "},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 201
+        assert r.json()["company_name"] == "Stripe"
+        assert mock_session.add.call_args.args[0].company_name == "Stripe"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_create_jd_on_content_match_takes_a_typed_company_but_blank_keeps_the_saved_one():
+    override, mock_session = make_mock_db()
+    existing_jd = JobDescription(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), title="Senior Engineer",
+        raw_text="We need a senior engineer.", parsed={}, status="applied",
+        created_at=datetime.now(timezone.utc), company_name="Stripe",
+    )
+    found = MagicMock()
+    found.scalars.return_value.first.return_value = existing_jd
+    mock_session.execute.return_value = found
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/jd", json={"raw_text": "We need a senior engineer."}, headers=make_auth_header())
+            assert r.json()["company_name"] == "Stripe"
+            mock_session.commit.assert_not_called()
+
+            r = await client.post(
+                "/jd", json={"raw_text": "We need a senior engineer.", "company_name": "Adyen"},
+                headers=make_auth_header(),
+            )
+        assert r.json()["company_name"] == "Adyen"
+        assert existing_jd.company_name == "Adyen"
+        mock_session.commit.assert_called_once()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_create_jd_handles_pre_existing_duplicate_rows():
     """Accounts that used the app before this dedup check existed can already
     have MULTIPLE rows with identical raw_text. The lookup must tolerate

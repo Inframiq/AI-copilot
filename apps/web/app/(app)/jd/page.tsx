@@ -317,7 +317,9 @@ export default function JDIndexPage() {
     setIsSubmitting(true);
     try {
       if (replaceId) await apiClient.deleteJd(replaceId);
-      const jd = await apiClient.createJd({ title: name, raw_text: text });
+      const jd = await apiClient.createJd({
+        title: name, raw_text: text, ...(company.trim() ? { company_name: company.trim() } : {}),
+      });
       // Use the local jdText we sent — don't rely on the backend echoing it back
       setJd(jd.id, text);
       // Read-only analysis only — this does NOT touch the resume. Tailoring

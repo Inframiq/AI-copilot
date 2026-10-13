@@ -29,6 +29,7 @@ async def create_jd(
 ):
     uid = uuid.UUID(user["sub"])
     raw_text = body.raw_text.strip()
+    company_name = (body.company_name or "").strip() or None
 
     # Re-submitting the same JD text (e.g. clicking "Analyze Description"
     # again on unchanged text) must not silently create a duplicate entry —
@@ -59,8 +60,15 @@ async def create_jd(
         # effect (or show up anywhere) whenever the pasted text happened to
         # match a previously saved JD, which is exactly what "Save As" is
         # supposed to prevent being confusing about.
+        # Same for a company typed with it: blank leaves the saved one alone.
+        changed = False
         if body.title and body.title.strip() and body.title.strip() != existing.title:
             existing.title = body.title.strip()[:255]
+            changed = True
+        if company_name and company_name != existing.company_name:
+            existing.company_name = company_name
+            changed = True
+        if changed:
             await db.commit()
             await db.refresh(existing)
         response.status_code = status.HTTP_200_OK
@@ -77,6 +85,7 @@ async def create_jd(
         title=title,
         raw_text=raw_text,
         parsed={},
+        company_name=company_name,
     )
     db.add(jd)
     await db.commit()
