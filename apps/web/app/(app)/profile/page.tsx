@@ -64,6 +64,7 @@ import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
 import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
+import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -138,6 +139,12 @@ export default function ProfilePage() {
 
   // ── form state ─────────────────────────────────────────────────────────────
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
+  // The email is the sign-in email: shown and saved as that, never edited.
+  const accountEmail = useAccountEmail();
+  // Read at upload time: handleUpload is reached through a callback made
+  // once (acceptFile), so a plain value here would be the first render's.
+  const accountEmailRef = useRef(accountEmail);
+  accountEmailRef.current = accountEmail;
   const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -272,7 +279,7 @@ export default function ProfilePage() {
     try {
       const profileInput: CareerProfileInput = {
         master_resume_id: masterResumeId,
-        contact,
+        contact: { ...contact, email: lockedEmail(contact.email, accountEmail) },
         headline: headline || null,
         experience: experiences,
         projects,
@@ -350,16 +357,10 @@ export default function ProfilePage() {
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.
       const c = resume.content;
-      const newContact: ContactInfo = {
-        ...emptyContact(),
-        name: (c.contact?.name as string) ?? "",
-        email: (c.contact?.email as string) ?? "",
-        phone: (c.contact?.phone as string) ?? "",
-        location: (c.contact?.location as string) ?? "",
-        linkedin: (c.contact?.linkedin as string) ?? "",
-        github: (c.contact?.github as string) ?? "",
-        website: (c.contact?.website as string) ?? "",
-      };
+      // Contact details are the user's own, not the résumé's: a parsed value
+      // only fills a field that is still empty, and the email stays the
+      // sign-in email (lib/contact-lock.ts). Everything else is replaced.
+      const parsedContact = c.contact as Partial<ContactInfo> | undefined;
       const newHeadline = (c.headline as string) ?? "";
       const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
       const newExperiences: ExperienceEntry[] = Array.isArray(c.experience)
@@ -397,7 +398,13 @@ export default function ProfilePage() {
       // can review what the AI extracted is not. It persists when they click
       // "Save Profile" — leaving with these changes unsaved triggers the
       // unsaved-changes prompt, same as any other edit here.
-      setContact(newContact);
+      // Merged against the contact as it is now, not as this handler's
+      // closure saw it on first render (that read empty, and the parsed
+      // résumé then replaced everything).
+      setContact((prev) => ({
+        ...emptyContact(),
+        ...mergeParsedContact(prev, parsedContact, accountEmailRef.current),
+      }));
       setHeadline(newHeadline);
       setSkills(newSkills);
       setExperiences(newExperiences);
@@ -714,9 +721,13 @@ export default function ProfilePage() {
               placeholder="Senior Software Engineer · Open to Work" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
-            <label className={fieldLabelCls}><EnvelopeSimple size={14} className="text-primary/70" /> Email Address</label>
-            <input type="email" value={contact.email ?? ""} onChange={e => setContact(p => ({ ...p, email: e.target.value }))}
-              placeholder="jane@example.com" className={inputCls} />
+            <label htmlFor="profile-email" className={fieldLabelCls}><EnvelopeSimple size={14} className="text-primary/70" /> Email Address</label>
+            <input id="profile-email" type="email" value={lockedEmail(contact.email, accountEmail)} readOnly
+              aria-describedby="profile-email-note"
+              className={`${inputCls} bg-surface-container-high! text-on-surface-variant cursor-default`} />
+            <p id="profile-email-note" className="text-caption text-on-surface-variant">
+              The sign-in email for this account. It cannot be changed.
+            </p>
           </div>
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><Phone size={14} className="text-primary/70" /> Phone Number</label>

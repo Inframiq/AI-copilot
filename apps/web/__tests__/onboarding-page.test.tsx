@@ -101,3 +101,39 @@ describe("Onboarding — details step", () => {
     expect("phone" in saved.contact).toBe(false);
   });
 });
+
+describe("Onboarding — a résumé never replaces the details from step 1", () => {
+  it("keeps the typed name, sign-in email, phone and role when a résumé is dropped", async () => {
+    const { upsertCareerProfile, resumeContentToCareerProfileInput } = await import("../lib/career-profile-client");
+    vi.mocked(upsertCareerProfile).mockClear();
+    vi.mocked(apiClient.parseResumeFile).mockResolvedValue({ id: "r1", content: {} } as never);
+    vi.mocked(resumeContentToCareerProfileInput).mockReturnValue({
+      contact: { name: "J. Smith", email: "old@work.com", phone: "555-0100", linkedin: "linkedin.com/in/jane" },
+      experience: [], projects: [], education: [], skills: [], certifications: [],
+    } as never);
+    const user = userEvent.setup();
+    renderOnboarding();
+    await screen.findByDisplayValue("Jane");
+    // The email is the sign-in email, shown read-only.
+    expect((screen.getByDisplayValue("jane@example.com") as HTMLInputElement).readOnly).toBe(true);
+    await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "+91 98765 43210");
+    await user.selectOptions(screen.getByRole("combobox"), "working");
+    await user.click(screen.getByRole("button", { name: /^continue$/i }));
+    await screen.findByText("Upload your resume");
+
+    const { fireEvent } = await import("@testing-library/react");
+    // The drop zone is the label wrapping the hidden file input.
+    const zone = document.querySelector('input[type="file"]')!.closest("label")!;
+    const file = new File(["%PDF"], "resume.pdf", { type: "application/pdf" });
+    fireEvent.drop(zone, { dataTransfer: { files: [file] } });
+
+    await vi.waitFor(() => expect(vi.mocked(upsertCareerProfile).mock.calls.length).toBe(2));
+    const saved = vi.mocked(upsertCareerProfile).mock.calls[1][0] as unknown as {
+      contact: Record<string, string>; role_status: string | null;
+    };
+    expect(saved.contact).toEqual({
+      name: "Jane", email: "jane@example.com", phone: "+91 98765 43210", linkedin: "linkedin.com/in/jane",
+    });
+    expect(saved.role_status).toBe("working");
+  });
+});

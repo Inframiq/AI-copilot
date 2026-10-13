@@ -1,6 +1,6 @@
 "use client";
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { UploadSimple, FilePdf, FileDoc, Spinner, ArrowRight, User, EnvelopeSimple, Phone, Briefcase } from "@phosphor-icons/react";
@@ -14,6 +14,7 @@ import {
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { PlansComparison } from "@/components/plans/PlansComparison";
+import { mergeParsedContact } from "@/lib/contact-lock";
 import { UpgradeModal } from "@/components/plans/UpgradeModal";
 
 const inputCls = "w-full px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary placeholder:text-on-surface-variant/50 transition-all";
@@ -109,14 +110,9 @@ export default function OnboardingPage() {
       const parsed = resumeContentToCareerProfileInput(resume.content, resume.id);
       await upsertCareerProfile({
         ...parsed,
-        // Keep what was already entered in step 1 — don't let a resume parse
-        // that missed a field (e.g. no phone number on the page) clobber it.
-        contact: {
-          ...parsed.contact,
-          name: parsed.contact.name || name,
-          email: parsed.contact.email || email,
-          phone: parsed.contact.phone || phone,
-        },
+        // The details from step 1 are the user's own: a parsed value only
+        // fills a field still empty, and the email stays the sign-in email.
+        contact: mergeParsedContact({ name, email, phone }, parsed.contact, email),
         role_status: roleStatus || null,
       });
       await setProfileMasterResume(resume.id);
@@ -133,13 +129,15 @@ export default function OnboardingPage() {
     }
   }
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  // A plain function, not a once-made useCallback: that kept step 1's
+  // first-render values (all empty), so a dropped résumé replaced the
+  // details the user had just typed and dropped their job role.
+  function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
     const f = e.dataTransfer.files?.[0];
     if (f) handleFile(f);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   if (step === "details") {
     return (
@@ -164,8 +162,11 @@ export default function OnboardingPage() {
             </div>
             <div className="flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><EnvelopeSimple size={14} /> Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
-                placeholder="jane@example.com" className={inputCls} />
+              <input type="email" value={email} readOnly required aria-describedby="onboarding-email-note"
+                className={`${inputCls} text-on-surface-variant cursor-default`} />
+              <p id="onboarding-email-note" className="text-caption text-on-surface-variant">
+                The sign-in email for this account. It cannot be changed.
+              </p>
             </div>
             <div className="flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Phone size={14} /> Phone Number <span className="font-normal">(optional)</span></label>

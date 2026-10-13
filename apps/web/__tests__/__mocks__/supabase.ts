@@ -6,6 +6,7 @@ export function createBrowserClient() {
       getSession: async () => ({
         data: { session: { access_token: "test-token" } },
       }),
+      getUser: async () => ({ data: { user: null } }),
     },
   };
 }
