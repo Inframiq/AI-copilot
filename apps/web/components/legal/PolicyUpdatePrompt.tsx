@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Scales } from "@phosphor-icons/react";
 import { apiClient, type PolicyAcceptance } from "@/lib/api-client";
-import { createBrowserClient } from "@/lib/supabase";
+import { signOutHere } from "@/lib/supabase";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
 
 /**
@@ -51,11 +51,7 @@ export function PolicyUpdatePrompt() {
   }
 
   async function signOut() {
-    try {
-      await createBrowserClient().auth.signOut();
-    } catch {
-      // ignore — treat as signed out either way
-    }
+    await signOutHere();
     queryClient.clear();
     router.push("/login");
   }

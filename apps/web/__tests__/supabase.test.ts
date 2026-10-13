@@ -10,7 +10,7 @@ vi.mock("@supabase/ssr", () => ({
 
 // Import the real file by relative path — the vitest.config alias only
 // intercepts "@/lib/supabase" imports elsewhere, not this direct import.
-import { createBrowserClient, createServerClient } from "../lib/supabase";
+import { createBrowserClient, createServerClient, signOutHere } from "../lib/supabase";
 
 describe("lib/supabase", () => {
   beforeEach(() => {
@@ -41,5 +41,17 @@ describe("lib/supabase", () => {
 
     options.cookies.setAll([{ name: "new-cookie", value: "xyz", options: {} }]);
     expect(cookieStore.set).toHaveBeenCalledWith("new-cookie", "xyz", {});
+  });
+});
+
+describe("signOutHere", () => {
+  it("always ends the session in this browser, even when the server sign-out fails", async () => {
+    const signOut = vi.fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ error: null });
+    createBrowserClientMock.mockReturnValue({ auth: { signOut } });
+    await signOutHere();
+    expect(signOut).toHaveBeenNthCalledWith(1);
+    expect(signOut).toHaveBeenNthCalledWith(2, { scope: "local" });
   });
 });

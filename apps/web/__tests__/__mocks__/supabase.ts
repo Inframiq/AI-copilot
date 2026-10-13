@@ -13,3 +13,5 @@ export function createBrowserClient() {
 export function createServerClient() {
   return {};
 }
+
+export async function signOutHere() {}

@@ -15,7 +15,7 @@ vi.mock("@/lib/api-client", () => ({
     acceptPolicies: (t: string, p: string) => acceptPolicies(t, p),
   },
 }));
-vi.mock("@/lib/supabase", () => ({ createBrowserClient: () => ({ auth: { signOut } }) }));
+vi.mock("@/lib/supabase", () => ({ createBrowserClient: () => ({ auth: { signOut } }), signOutHere: () => signOut() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 import { PolicyUpdatePrompt } from "../../components/legal/PolicyUpdatePrompt";

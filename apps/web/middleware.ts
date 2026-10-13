@@ -16,6 +16,9 @@ const NEW_HOST = "kripax.inframiq.com";
 // normal page shell before its first API call 403s.
 const ADMIN_ONLY_EMAILS = ["bharathrockz.k@gmail.com", "tanishqkundrapu@gmail.com"];
 
+// Pages only a signed-out visitor needs: someone signed in is sent to the app.
+const SIGNED_IN_ELSEWHERE = ["/", "/login", "/register"];
+
 export async function middleware(request: NextRequest) {
   if (OLD_DOMAIN_CUTOVER_LIVE) {
     const host = request.headers.get("host") ?? "";
@@ -94,6 +97,20 @@ export async function middleware(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((prefix) =>
     pathname === prefix || pathname.startsWith(prefix + "/")
   );
+
+  // Signed in, the home page and the sign-in screens are the wrong place to
+  // land: the KripaX logo on the legal pages (linked from Account) points at
+  // "/", and the marketing page's "Sign In" there read as being logged out.
+  // Their place is the app.
+  if (user && SIGNED_IN_ELSEWHERE.includes(pathname)) {
+    const appUrl = request.nextUrl.clone();
+    appUrl.pathname = user.email && ADMIN_ONLY_EMAILS.includes(user.email.toLowerCase()) ? "/admin" : "/dashboard";
+    appUrl.search = "";
+    const redirectResponse = NextResponse.redirect(appUrl);
+    // Keep any session cookies Supabase just refreshed on `response`.
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  }
 
   // Auth redirect disabled in placeholder/preview mode
   if (!isPlaceholder && !isPublic && isProtected && !user) {

@@ -40,3 +40,23 @@ export function createServerClient(
     },
   });
 }
+
+/**
+ * Sign out, and always end the session in this browser. A failed server
+ * sign-out (network down) left Supabase's session in place, and signed-in
+ * visitors to /login are sent back to the app (middleware.ts), so the user
+ * could not log out at all. The local sign-out needs no network.
+ */
+export async function signOutHere() {
+  const supabase = createBrowserClient();
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // fall through to the local sign-out
+  }
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // nothing left to clear
+  }
+}

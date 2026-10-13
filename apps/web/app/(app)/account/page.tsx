@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
-import { createBrowserClient } from "@/lib/supabase";
+import { signOutHere } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -46,7 +46,6 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 export default function AccountPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const supabase = createBrowserClient();
   const [showDelete, setShowDelete] = useState(false);
 
   const { data: sub, isLoading: subLoading, isError: subError } = useQuery<Subscription>({
@@ -59,11 +58,7 @@ export default function AccountPage() {
   });
 
   async function handleSignOut() {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore — treat as signed out either way
-    }
+    await signOutHere();
     queryClient.clear();
     router.push("/login");
   }

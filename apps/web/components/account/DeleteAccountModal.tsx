@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Warning } from "@phosphor-icons/react";
-import { createBrowserClient } from "@/lib/supabase";
+import { signOutHere } from "@/lib/supabase";
 import { apiClient, ApiError } from "@/lib/api-client";
 
 // What a deletion actually removes — shown in the dialog so "permanent" is
@@ -21,7 +21,6 @@ const CONFIRM_WORD = "DELETE";
 export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const supabase = createBrowserClient();
 
   const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState("");
@@ -54,11 +53,7 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
     }
 
     // Data + auth user are gone — tear down the local session and state.
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // already invalid server-side; nothing to do
-    }
+    await signOutHere();
     queryClient.clear();
     setPhase("done");
     setTimeout(() => router.replace("/login"), 1200);

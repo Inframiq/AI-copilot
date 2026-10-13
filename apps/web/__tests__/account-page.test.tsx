@@ -17,6 +17,7 @@ vi.mock("@/lib/api-client", () => ({
 }));
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({ auth: { signOut: signOutMock, getUser: getUserMock } }),
+  signOutHere: () => signOutMock(),
 }));
 vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: vi.fn() }));
 
