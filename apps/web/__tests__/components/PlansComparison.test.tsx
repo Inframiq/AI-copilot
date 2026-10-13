@@ -14,12 +14,13 @@ const CATALOG: { plans: Plan[] } = {
   plans: [
     { id: "free", name: "Free", tagline: "Get started with résumé tailoring.", price_usd: 0, period: null,
       credits: 50, refills: false,
-      features: ["Up to 5 résumé tailoring runs", "Job description analysis with an ATS match score",
-        "Includes cover letters, interview questions and bullet rewrites"] },
+      features: ["Includes:", "Résumé tailoring with an ATS match score",
+        "Cover letters, interview questions and bullet rewrites",
+        "Credits cover up to:", "5 résumé tailoring runs", "16 cover letters", "50 job description analyses"] },
     { id: "premium", name: "Premium", tagline: "For an active, ongoing job search.", price_usd: 5, period: "month",
       credits: 600, refills: true,
-      features: ["Everything in Free, plus:", "Up to 60 résumé tailoring runs per month",
-        "Credits refresh every 30 days", "Priority support"] },
+      features: ["Everything in Free, plus:", "Credits refresh every 30 days", "Priority support",
+        "Monthly credits cover up to:", "60 résumé tailoring runs", "200 cover letters", "600 job description analyses"] },
   ],
 };
 
@@ -64,15 +65,28 @@ describe("PlansComparison", () => {
     expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeEnabled();
   });
 
-  it("reads like a pricing page: who each plan is for, ceilings, and a lead-in", async () => {
+  it("reads like a pricing page: who each plan is for, and labelled sections", async () => {
     vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
     renderIt();
     expect(await screen.findByText("For an active, ongoing job search.")).toBeInTheDocument();
     expect(screen.getByText("50 credits, one-time")).toBeInTheDocument();
     expect(screen.getByText("600 credits per month")).toBeInTheDocument();
-    // The lead-in heads the list rather than being ticked off as a feature.
-    const leadIn = screen.getByText("Everything in Free, plus:");
-    expect(leadIn.querySelector("svg")).toBeNull();
-    expect(screen.getByText("Up to 60 résumé tailoring runs per month").closest("li")?.querySelector("svg")).not.toBeNull();
+    // Headings head their sections rather than being ticked off as features.
+    for (const heading of ["Everything in Free, plus:", "Monthly credits cover up to:", "Credits cover up to:"]) {
+      expect(screen.getByText(heading).querySelector("svg")).toBeNull();
+    }
+    expect(screen.getByText("200 cover letters").closest("li")?.querySelector("svg")).not.toBeNull();
+  });
+
+  it("shows only the first section on the compact onboarding cards", async () => {
+    vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PlansComparison variant="compact" onChoosePlan={vi.fn()} />
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("Priority support")).toBeInTheDocument();
+    expect(screen.queryByText("Monthly credits cover up to:")).toBeNull();
   });
 });

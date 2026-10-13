@@ -75,8 +75,20 @@ ACTION_LABELS: dict[str, str] = {
 # sets current_period_end.
 PLAN_CREDITS: dict[str, int] = {"free": 50, "premium": 600}
 
+def _covers(credits: int) -> list[str]:
+    """What a credit allowance covers, per action on its own — worked out
+    from CREDIT_COSTS so a price change can never leave the page wrong."""
+    return [
+        f"{credits // CREDIT_COSTS['tailor']} résumé tailoring runs",
+        f"{credits // CREDIT_COSTS['cover_letter']} cover letters",
+        f"{credits // CREDIT_COSTS['analyze']} job description analyses",
+    ]
+
+
 # Static catalog served by GET /plans and rendered by the pricing UI.
 # Credit amounts come from PLAN_CREDITS above so there's one number to change.
+# A feature ending in ":" is a section heading over the items after it
+# (rendered without a tick), so each card reads in labelled sections.
 PLANS: list[dict] = [
     {
         "id": "free",
@@ -86,13 +98,12 @@ PLANS: list[dict] = [
         "period": None,
         "credits": PLAN_CREDITS["free"],
         "refills": False,
-        # A feature ending in ":" is a lead-in ("Everything in Free, plus:"),
-        # shown as a heading over the items after it. Counts are ceilings —
-        # PLAN_CREDITS / CREDIT_COSTS["tailor"] — so they read "Up to".
         "features": [
-            f"Up to {PLAN_CREDITS['free'] // CREDIT_COSTS['tailor']} résumé tailoring runs",
-            "Job description analysis with an ATS match score",
-            "Includes cover letters, interview questions and bullet rewrites",
+            "Includes:",
+            "Résumé tailoring with an ATS match score",
+            "Cover letters, interview questions and bullet rewrites",
+            "Credits cover up to:",
+            *_covers(PLAN_CREDITS["free"]),
         ],
     },
     {
@@ -105,9 +116,10 @@ PLANS: list[dict] = [
         "refills": True,
         "features": [
             "Everything in Free, plus:",
-            f"Up to {PLAN_CREDITS['premium'] // CREDIT_COSTS['tailor']} résumé tailoring runs per month",
             "Credits refresh every 30 days",
             "Priority support",
+            "Monthly credits cover up to:",
+            *_covers(PLAN_CREDITS["premium"]),
         ],
     },
 ]

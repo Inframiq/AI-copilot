@@ -38,11 +38,8 @@ export default function PlansPage() {
 
       {sub?.costs && (
         <p className="text-caption text-on-surface-variant -mt-md">
-          Credits are used per action
-          {sub.costs.tailor !== undefined && sub.costs.analyze !== undefined
-            ? ` (for example, ${sub.costs.tailor} per résumé tailoring run and ${sub.costs.analyze} per job description analysis)`
-            : ""}
-          . Full rates are listed under Credit Utilization in{" "}
+          Credits are shared across all actions; each figure above assumes the whole allowance is used
+          for that action alone. Full rates are listed under Credit Utilization in{" "}
           <Link href="/account" className="text-primary hover:underline">Account</Link>.
         </p>
       )}

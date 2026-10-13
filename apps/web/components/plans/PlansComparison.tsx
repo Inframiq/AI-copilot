@@ -39,7 +39,11 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
         const listed = plan.features.filter(
           (f) => !f.trim().toLowerCase().startsWith(`${plan.credits} credits`),
         );
-        const features = compact ? listed.slice(0, 3) : listed;
+        // A feature ending in ":" heads a section. The compact cards (the
+        // onboarding step) show the first section only.
+        const isHeading = (f: string) => f.trim().endsWith(":");
+        const secondHeading = listed.findIndex((f, i) => i > 0 && isHeading(f));
+        const features = compact && secondHeading > 0 ? listed.slice(0, secondHeading) : listed;
         const label = isCurrent
           ? "Current plan"
           : isPremium
@@ -83,10 +87,10 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             </p>
 
             <ul className="mt-sm sm:mt-md flex flex-col gap-xs sm:gap-sm flex-1">
-              {features.map((f) =>
-                f.trim().endsWith(":") ? (
-                  // A lead-in such as "Everything in Free, plus:" heads the items below it.
-                  <li key={f} className="text-body-sm text-on-surface font-semibold leading-snug">
+              {features.map((f, i) =>
+                isHeading(f) ? (
+                  // A section heading ("Everything in Free, plus:", "Credits cover up to:").
+                  <li key={f} className={`text-body-sm text-on-surface font-semibold leading-snug ${i > 0 ? "mt-xs sm:mt-sm" : ""}`}>
                     {f}
                   </li>
                 ) : (
