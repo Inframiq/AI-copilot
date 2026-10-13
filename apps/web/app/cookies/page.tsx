@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { LegalBackLink } from "@/components/legal/LegalBackLink";
 
 const LAST_UPDATED = "September 19, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
@@ -18,9 +19,7 @@ export default function CookiePolicyPage() {
         <Link href="/" aria-label="KripaX home" className="flex shrink-0 items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={128} height={28} loading="eager" />
         </Link>
-        <Link href="/" className="text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
-          Back to home
-        </Link>
+        <LegalBackLink />
       </nav>
 
       <main className="flex-1 px-gutter py-xxl">
