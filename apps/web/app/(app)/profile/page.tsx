@@ -115,6 +115,10 @@ const cardCls = "bg-surface-container-lowest/80 backdrop-blur-xl rounded-2xl p-l
 // ── Input / Textarea helpers ───────────────────────────────────────────────────
 const inputCls = "w-full px-sm sm:px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
 const textareaCls = `${inputCls} resize-none`;
+// A field with an icon drawn at its left. The left padding is repeated at
+// sm: because inputCls's own sm:px-md comes later in the CSS and would
+// otherwise win there, sliding the text under the icon.
+const iconInputCls = `${inputCls} pl-[2.75rem] sm:pl-[2.75rem]`;
 const fieldLabelCls = "text-label-sm text-on-surface-variant/90 flex items-center gap-xs font-semibold tracking-wide";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -730,12 +734,12 @@ export default function ProfilePage() {
               <div className="relative">
                 <LinkedinLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
                 <input type="url" value={contact.linkedin ?? ""} onChange={e => setContact(p => ({ ...p, linkedin: e.target.value }))}
-                  placeholder="linkedin.com/in/you" className={`${inputCls} pl-[2.75rem]`} />
+                  placeholder="linkedin.com/in/you" className={iconInputCls} />
               </div>
               <div className="relative">
                 <GithubLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
                 <input type="url" value={contact.github ?? ""} onChange={e => setContact(p => ({ ...p, github: e.target.value }))}
-                  placeholder="github.com/you" className={`${inputCls} pl-[2.75rem]`} />
+                  placeholder="github.com/you" className={iconInputCls} />
               </div>
             </div>
           </div>
@@ -757,7 +761,7 @@ export default function ProfilePage() {
               <input value={skillDraft} onChange={e => setSkillDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
                 placeholder="Add a skill — e.g. React, AWS, Figma…"
-                className={`${inputCls} pl-[2.75rem]`} />
+                className={iconInputCls} />
             </div>
             <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
