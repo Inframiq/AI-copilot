@@ -23,7 +23,7 @@ export default function PlansPage() {
           Plans
         </h1>
         <p className="text-body-md sm:text-body-lg text-on-surface-variant">
-          Pick the plan that fits how much you tailor.
+          Compare credit allowances and included features.
         </p>
       </section>
 

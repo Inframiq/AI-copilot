@@ -35,14 +35,16 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
         const isPremium = plan.id === "premium";
         // The credits line is printed above the list already; the catalog
         // also lists it as a feature, which showed it twice on every card.
-        const creditsLine = `${plan.credits} credits${plan.refills ? " every month" : ", one-time"}`;
-        const listed = plan.features.filter((f) => f.trim().toLowerCase() !== creditsLine.toLowerCase());
+        const creditsLine = `${plan.credits} credits${plan.refills ? " per month" : " (one-time)"}`;
+        const listed = plan.features.filter(
+          (f) => !f.trim().toLowerCase().startsWith(`${plan.credits} credits`),
+        );
         const features = compact ? listed.slice(0, 3) : listed;
         const label = isCurrent
           ? "Current plan"
           : isPremium
-          ? "Get Premium"
-          : "Continue on Free";
+          ? "Upgrade to Premium"
+          : "Continue with Free";
 
         return (
           <div

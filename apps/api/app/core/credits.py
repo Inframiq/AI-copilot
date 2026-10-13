@@ -86,10 +86,10 @@ PLANS: list[dict] = [
         "credits": PLAN_CREDITS["free"],
         "refills": False,
         "features": [
-            "50 credits, one-time",
-            "About 5 resume tailors",
-            "Cover letters, interview prep and rewrites",
-            "JD analysis from 1 credit",
+            "50 credits (one-time)",
+            "Approximately 5 résumé tailoring runs",
+            "Cover letters, interview preparation and bullet rewrites",
+            "Job description analysis at 1 credit each",
         ],
     },
     {
@@ -100,9 +100,9 @@ PLANS: list[dict] = [
         "credits": PLAN_CREDITS["premium"],
         "refills": True,
         "features": [
-            "600 credits every month",
-            "About 60 resume tailors",
-            "Everything in Free",
+            "600 credits per month",
+            "Approximately 60 résumé tailoring runs per month",
+            "All Free plan features",
             "Priority support",
         ],
     },

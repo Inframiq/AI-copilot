@@ -39,7 +39,7 @@ describe("Plans page", () => {
 
   it("opens the upgrade modal when Get Premium is clicked", async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "Get Premium" }));
-    expect(await screen.findByText(/payments are launching soon/i)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Upgrade to Premium" }));
+    expect(await screen.findByText(/premium is not yet available/i)).toBeInTheDocument();
   });
 });

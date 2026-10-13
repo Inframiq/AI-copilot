@@ -45,7 +45,7 @@ describe("PlansComparison", () => {
   it("fires onChoosePlan with the plan id", async () => {
     vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
     const { onChoosePlan } = renderIt();
-    await userEvent.click(await screen.findByRole("button", { name: "Get Premium" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Upgrade to Premium" }));
     expect(onChoosePlan).toHaveBeenCalledWith("premium");
   });
 
@@ -57,6 +57,6 @@ describe("PlansComparison", () => {
     await userEvent.click(currentBtn);
     expect(onChoosePlan).not.toHaveBeenCalled();
     // premium button is still active
-    expect(screen.getByRole("button", { name: "Get Premium" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeEnabled();
   });
 });

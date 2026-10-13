@@ -18,7 +18,7 @@ export function UpgradeModal({ onClose }: { onClose: () => void }) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Payments are launching soon"
+          aria-label="Premium is not yet available"
           className="pointer-events-auto w-full max-w-[26rem] bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-lg"
         >
           <div className="flex items-start justify-between gap-md">
@@ -34,17 +34,16 @@ export function UpgradeModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
           <h2 className="text-headline-md text-on-surface font-semibold mt-md">
-            Payments are launching soon
+            Premium is not yet available
           </h2>
           <p className="text-body-sm text-on-surface-variant mt-xs">
-            Premium isn&apos;t purchasable yet — you&apos;re on the Free plan for now.
-            We&apos;ll let you know the moment it opens.
+            Premium purchases will open soon. The account remains on the Free plan until then.
           </p>
           <button
             onClick={onClose}
             className="mt-lg w-full py-md rounded-xl text-label-md font-semibold bg-primary text-on-primary hover:opacity-90 transition-colors"
           >
-            Got it
+            OK
           </button>
         </div>
       </div>
