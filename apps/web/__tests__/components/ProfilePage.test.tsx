@@ -164,3 +164,46 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(dirty.defaultPrevented).toBe(true);
   });
 });
+
+describe("My Profile — experience dates", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+    getCareerProfile.mockResolvedValue({
+      user_id: "u1", master_resume_id: null,
+      contact: { name: "Jane", email: "j@x.com" },
+      experience: [{
+        id: "e1", type: "full-time", company: "Acme", title: "Engineer", location: "",
+        start: "Jan 2022", end: "Dec 2023", current: false,
+        responsibilities: "", achievements: "", projects: "", impact: "",
+      }],
+      projects: [], education: [], skills: [], certifications: [],
+      headline: null, role_status: null, photo_url: null, photo_path: null,
+      created_at: "", updated_at: "",
+    });
+  });
+
+  it("'I work here now' shows Present, and unticking brings back the typed end date", async () => {
+    renderPage();
+    const end = (await screen.findByLabelText("End")) as HTMLInputElement;
+    expect(end.value).toBe("Dec 2023");
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "I work here now" }));
+    expect((screen.getByLabelText("End") as HTMLInputElement).value).toBe("Present");
+    expect((screen.getByLabelText("End") as HTMLInputElement).readOnly).toBe(true);
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "I work here now" }));
+    expect((screen.getByLabelText("End") as HTMLInputElement).value).toBe("Dec 2023");
+  });
+
+  it("saves a ticked role as current", async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole("checkbox", { name: "I work here now" }));
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() =>
+      expect(upsertCareerProfile).toHaveBeenCalledWith(expect.objectContaining({
+        experience: [expect.objectContaining({ current: true })],
+      })),
+    );
+  });
+});

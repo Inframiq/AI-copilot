@@ -897,48 +897,37 @@ export default function ProfilePage() {
                           <input value={exp.title ?? ""} onChange={e => updateExp(exp.id, "title", e.target.value)}
                             placeholder="Software Engineer" className={inputCls} />
                         </div>
-                        <div className="flex flex-col gap-xs">
+                        <div className="flex flex-col gap-xs col-span-2">
                           <label className="text-caption text-on-surface-variant">Location</label>
                           <input value={exp.location ?? ""} onChange={e => updateExp(exp.id, "location", e.target.value)}
                             placeholder="London, UK or Remote" className={inputCls} />
                         </div>
+                        {/* Start and End side by side, with one plain checkbox
+                            under them for a role that hasn't ended. Ticking it
+                            leaves the typed end date alone, so unticking brings
+                            it back instead of leaving "Present" in the box. */}
                         <div className="flex flex-col gap-xs">
-                          <div className="flex items-center h-[18px]">
-                            <label className="text-caption text-on-surface-variant">Start</label>
-                          </div>
-                          <input value={exp.start ?? ""} onChange={e => updateExp(exp.id, "start", e.target.value)}
+                          <label htmlFor={`exp-start-${exp.id}`} className="text-caption text-on-surface-variant">Start</label>
+                          <input id={`exp-start-${exp.id}`} value={exp.start ?? ""} onChange={e => updateExp(exp.id, "start", e.target.value)}
                             placeholder="Jan 2022" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
-                          <div className="flex items-center gap-sm h-[18px]">
-                            <label className="text-caption text-on-surface-variant">End</label>
-                            {/* Currently working toggle — sits right after the label */}
-                            {/* A real button: reachable by keyboard and named for
-                                screen readers. The ::before widens the 18px-tall
-                                track to a finger-sized target without moving it. */}
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={exp.current}
-                              aria-label="Currently working here"
-                              onClick={() => {
-                                updateExp(exp.id, "current", !exp.current);
-                                if (!exp.current) updateExp(exp.id, "end", "Present");
-                              }}
-                              className={`relative before:absolute before:-inset-x-[4px] before:-inset-y-[5px] before:content-[''] w-8 h-[18px] rounded-full flex items-center px-[3px] cursor-pointer transition-colors duration-200 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${exp.current ? "bg-primary" : "bg-surface-variant"}`}
-                            >
-                              <span className={`w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${exp.current ? "translate-x-[14px]" : "translate-x-0"}`} />
-                            </button>
-                            <span className="text-caption text-on-surface-variant">Current</span>
-                          </div>
-                          <input
-                            value={exp.current ? "Present" : exp.end ?? ""}
-                            onChange={e => updateExp(exp.id, "end", e.target.value)}
-                            disabled={exp.current}
-                            placeholder="Dec 2023"
-                            className={`${inputCls} ${exp.current ? "opacity-40 cursor-not-allowed bg-surface-container-high" : ""}`}
-                          />
+                          <label htmlFor={`exp-end-${exp.id}`} className="text-caption text-on-surface-variant">End</label>
+                          {exp.current ? (
+                            <input id={`exp-end-${exp.id}`} value="Present" readOnly tabIndex={-1}
+                              className={`${inputCls} text-on-surface-variant cursor-default`} />
+                          ) : (
+                            <input id={`exp-end-${exp.id}`} value={exp.end === "Present" ? "" : exp.end ?? ""}
+                              onChange={e => updateExp(exp.id, "end", e.target.value)}
+                              placeholder="Dec 2023" className={inputCls} />
+                          )}
                         </div>
+                        <label className="col-span-2 -mt-xs flex items-center gap-sm self-start min-h-8 pr-sm cursor-pointer text-body-sm text-on-surface">
+                          <input type="checkbox" checked={exp.current}
+                            onChange={e => updateExp(exp.id, "current", e.target.checked)}
+                            className="w-4 h-4 shrink-0 accent-primary cursor-pointer" />
+                          I work here now
+                        </label>
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
