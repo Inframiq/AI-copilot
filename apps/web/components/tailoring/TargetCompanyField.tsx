@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Check } from "@phosphor-icons/react";
+import { Check, FloppyDisk } from "@phosphor-icons/react";
 
 /**
  * The optional "target company" for a tailoring run. With one set, the
@@ -31,6 +31,7 @@ export function TargetCompanyField({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const unchanged = value.trim() === (savedValue ?? "");
+  const saved = unchanged && !!savedValue;
 
   async function save() {
     if (!onSave) return;
@@ -68,17 +69,22 @@ export function TargetCompanyField({
           className="w-full min-w-0 rounded-xl border border-outline-variant/50 bg-surface px-sm py-xs text-body-sm text-on-surface transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:px-md sm:py-sm sm:text-body-md"
         />
         {onSave && (
+          // A square icon on phones, where the JD card is too narrow for a
+          // label beside the input; "Save" / "Saved" from sm up.
           <button
             type="button"
             onClick={() => void save()}
             disabled={unchanged || saving}
-            className={`flex shrink-0 items-center gap-xs rounded-xl px-sm text-label-sm transition-colors sm:px-md ${
-              unchanged && savedValue
+            aria-label={saved ? "Saved" : saving ? "Saving" : "Save"}
+            title={saved ? "Saved to this job" : "Save the company to this job"}
+            className={`flex w-9 shrink-0 items-center justify-center gap-xs rounded-xl text-label-sm transition-colors sm:w-auto sm:min-w-[5.5rem] sm:px-md ${
+              saved
                 ? "text-success cursor-default"
                 : "border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             }`}
           >
-            {unchanged && savedValue ? <><Check size={14} weight="bold" />Saved</> : saving ? "Saving…" : "Save"}
+            {saved ? <Check size={16} weight="bold" /> : <FloppyDisk size={16} className="sm:hidden" />}
+            <span className="hidden sm:inline">{saved ? "Saved" : saving ? "Saving…" : "Save"}</span>
           </button>
         )}
       </div>
