@@ -18,4 +18,5 @@ def get_ai_provider() -> AIProvider:
         premium_model=settings.openai_model_premium,
         standard_model=settings.openai_model_standard,
         max_output_tokens=settings.openai_max_output_tokens,
+        research_model=settings.openai_model_research,
     )

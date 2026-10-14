@@ -33,6 +33,9 @@ logger = logging.getLogger("app")
 MAX_JD_CHARS_FOR_MODEL = 12_000
 MAX_MODEL_INPUT_CHARS = 60_000
 
+# The pseudo-model a web-search tool call is recorded under (see below).
+WEB_SEARCH_MODEL = "web-search-call"
+
 # USD per 1M tokens (input, output), OpenAI list prices. A model's versioned
 # name ("gpt-4.1-mini-2025-04-14") is matched by its longest listed prefix.
 _PRICES_PER_MILLION: dict[str, tuple[float, float]] = {
@@ -43,6 +46,10 @@ _PRICES_PER_MILLION: dict[str, tuple[float, float]] = {
     "gpt-5.6-terra": (2.00, 12.00),
     "gpt-5.6-sol": (4.00, 20.00),
     "gpt-5.5": (5.00, 30.00),
+    # One web-search tool call costs $10 per 1,000 calls. Recorded as its own
+    # usage row with input_tokens = number of searches, so the per-million
+    # price here works out to $0.01 a search. See OpenAIProvider.
+    WEB_SEARCH_MODEL: (10_000.00, 0.0),
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
     "gpt-4.1-nano": (0.10, 0.40),

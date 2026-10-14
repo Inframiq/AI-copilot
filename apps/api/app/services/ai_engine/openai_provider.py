@@ -7,7 +7,9 @@ from app.services.ai_engine.base import (
     AIRefusalError,
     AITruncatedError,
 )
-from app.core.ai_budget import check_input_size, ensure_ai_budget, note_spend
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from app.core.ai_budget import WEB_SEARCH_MODEL, check_input_size, ensure_ai_budget, note_spend
 
 logger = logging.getLogger("app")
 
@@ -20,12 +22,15 @@ class OpenAIProvider(AIProvider):
         premium_model: str,
         max_output_tokens: int = 4096,
         standard_model: str | None = None,
+        research_model: str | None = None,
     ):
         self._client = AsyncOpenAI(api_key=api_key)
         self._fast_model = fast_model
         self._premium_model = premium_model
         # The "standard" tier; the fast model when not set.
         self._standard_model = standard_model or fast_model
+        # The model for live web research; the fast model when not set.
+        self._research_model = research_model or fast_model
         self._max_output_tokens = max_output_tokens
 
     # "fast" and "pro" both resolve to the budget model — deliberate, not an
@@ -140,6 +145,72 @@ class OpenAIProvider(AIProvider):
         if not response.output_text:
             self._raise_for_empty(response, call_name, model, budget)
         return response.output_text
+
+    async def complete_structured_with_web(
+        self,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        max_output_tokens: int | None = None,
+        call_name: str = "unknown",
+    ) -> tuple[BaseModel, list[str]]:
+        """Structured output from live web research: the model must search
+        (tool_choice "required") before it answers, and the URLs it read come
+        back with the result. Each search is a billed tool call, recorded as
+        its own usage row so the daily spend ceiling sees it."""
+        check_input_size(system, user)
+        await ensure_ai_budget()
+        model = self._research_model
+        response = await self._client.responses.parse(
+            model=model,
+            instructions=system,
+            input=user,
+            tools=[{"type": "web_search"}],
+            tool_choice="required",
+            include=["web_search_call.action.sources"],
+            text_format=schema,
+            max_output_tokens=max_output_tokens or self._max_output_tokens,
+            store=False,
+        )
+        self._log_usage(call_name, "research", model, getattr(response, "usage", None))
+        searches = [i for i in (getattr(response, "output", None) or []) if getattr(i, "type", "") == "web_search_call"]
+        if searches:
+            self._log_search_calls(call_name, len(searches))
+        budget = max_output_tokens or self._max_output_tokens
+        if response.output_parsed is None:
+            self._raise_for_empty(response, call_name, model, budget)
+        return response.output_parsed, self._sources(searches)
+
+    def _log_search_calls(self, call_name: str, count: int) -> None:
+        """Bill `count` web-search tool calls: a usage row whose input_tokens
+        is the number of searches, priced per call in ai_budget."""
+        note_spend(WEB_SEARCH_MODEL, count, 0)
+        try:
+            from app.core.usage import record_call
+
+            record_call(
+                call_name=f"{call_name}:web_search", model=WEB_SEARCH_MODEL, model_tier="research",
+                input_tokens=count, output_tokens=0, reasoning_tokens=0, total_tokens=count,
+            )
+        except Exception:
+            logger.debug("record_call failed", exc_info=True)
+
+    @staticmethod
+    def _sources(searches: list) -> list[str]:
+        """The URLs the searches read, in order, de-duplicated, without the
+        utm_* tracking parameters the tool appends."""
+        out: list[str] = []
+        for item in searches:
+            for src in getattr(getattr(item, "action", None), "sources", None) or []:
+                url = getattr(src, "url", None) or (src.get("url") if isinstance(src, dict) else None)
+                if not url:
+                    continue
+                parts = urlsplit(url)
+                query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith("utm_")])
+                clean = urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+                if clean not in out:
+                    out.append(clean)
+        return out
 
     async def complete_structured(
         self,

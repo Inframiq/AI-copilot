@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # which a user pays for one at a time and reads closely. 5.6-terra is
     # ~10x luna and half of sol per token.
     openai_model_standard: str = "gpt-5.6-terra"
+    # Company intel with live web search (Agent 0). Compared 2026-10-13 on the
+    # same lookup: 5.6-luna ~1c but one loose search on aggregator sites;
+    # 5.6-terra ~4c, ~10s, every source the company's own and its published
+    # values exact; 5.6-sol ~12c; 5.5 ~25c and ~19s. Cached per company.
+    openai_model_research: str = "gpt-5.6-terra"
     # Site-wide ceiling on OpenAI spend per UTC day (USD), priced from
     # ai_usage_events — see app.core.ai_budget. AI features pause once it's
     # reached. 0 turns it off. The busiest day so far (2026-10-11) was ~$0.19.

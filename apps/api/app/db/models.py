@@ -329,6 +329,19 @@ class FreeGrantLedger(Base):
     deleted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, nullable=False)
 
 
+class CompanyIntelCache(Base):
+    """Agent 0's live web research on one company, kept so it is looked up
+    once a month rather than on every run. company_key is the name
+    lowercased with spaces collapsed. Shared across users: it describes the
+    company, not anyone's résumé."""
+
+    __tablename__ = "company_intel_cache"
+
+    company_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    intel: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, nullable=False)
+
+
 class AiUsageEvent(Base):
     """Append-only ledger — one row per LLM API call, written from the
     provider via app.core.usage.record_ai_usage(). Powers per-user cost

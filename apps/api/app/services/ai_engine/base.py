@@ -69,6 +69,23 @@ class AIProvider(ABC):
         estimated. Never affects behavior.
         """
 
+    async def complete_structured_with_web(
+        self,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        max_output_tokens: int | None = None,
+        call_name: str = "unknown",
+    ) -> tuple[BaseModel, list[str]]:
+        """Like complete_structured, but the model must search the live web
+        first. Returns (result, the URLs it read). A provider without web
+        search answers without it and reports no sources."""
+        result = await self.complete_structured(
+            system, user, schema, model_tier="fast",
+            max_output_tokens=max_output_tokens, call_name=call_name,
+        )
+        return result, []
+
     @abstractmethod
     async def complete_structured(
         self,
