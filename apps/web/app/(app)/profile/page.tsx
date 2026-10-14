@@ -307,7 +307,7 @@ export default function ProfilePage() {
       // (this page, used by JD Analyzer/tailoring) are intentionally
       // separate — Preview/Open must show the resume exactly as stored.
       // Invalidate resumes cache so Resume Builder sees the latest, and
-      // careerProfile so JD Analyzer / Networking pick up the change too
+      // careerProfile so JD Analyzer picks up the change too
       // instead of showing stale data until a hard refresh.
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["careerProfile"] });

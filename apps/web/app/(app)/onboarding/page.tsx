@@ -145,7 +145,7 @@ export default function OnboardingPage() {
         <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-xl max-w-[32rem] w-full">
           <h1 className="text-headline-lg text-on-surface font-bold mb-xs">Welcome to KripaX</h1>
           <p className="text-body-md text-on-surface-variant mb-lg">
-            A few quick details before we get started — used across Resume Builder, JD Analyzer, and Networking.
+            A few quick details before we get started — used across Resume Builder and JD Analyzer.
           </p>
 
           {detailsError && (

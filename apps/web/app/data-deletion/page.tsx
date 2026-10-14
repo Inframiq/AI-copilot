@@ -83,7 +83,7 @@ export default function DataDeletionPage() {
             <h2 className="text-headline-md text-on-surface font-semibold">4. What is deleted, and what we keep</h2>
             <p className="text-body-md text-on-surface-variant">
               Deleting an account removes your profile, resumes, uploaded files and photos, job descriptions,
-              cover letters, interview preparation, contacts, feedback, and generated content. We keep only:
+              cover letters, interview preparation, feedback, and generated content. We keep only:
             </p>
             <ul className="list-disc pl-lg text-body-md text-on-surface-variant flex flex-col gap-xs">
               <li>

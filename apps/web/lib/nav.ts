@@ -22,9 +22,8 @@ export interface NavItem {
 // the phone shows four as tabs and the rest under "More". One list, so a page
 // added for one is never missing from the other.
 //
-// Networking (/networking) is intentionally left out for now — its page and
-// backend code are intact and come back later. Career Path was removed on
-// 2026-10-14, to return as a separate release.
+// Career Path was removed on 2026-10-14 and Networking on 2026-10-15; both
+// may return as separate releases.
 export const APP_NAV: NavItem[] = [
   { href: "/dashboard", icon: SquaresFour, label: "Dashboard" },
   { href: "/profile", icon: IdentificationCard, label: "My Profile", short: "Profile" },

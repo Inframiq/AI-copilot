@@ -17,7 +17,6 @@ export default function robots(): MetadataRoute.Robots {
         "/studio",
         "/jd",
         "/interview",
-        "/networking",
         "/analytics",
         "/profile",
         "/onboarding",

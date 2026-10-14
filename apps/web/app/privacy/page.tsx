@@ -84,16 +84,6 @@ export default function PrivacyPolicyPage() {
                 reuse your past results within the Service.
               </li>
               <li>
-                <strong className="text-on-surface">Networking data</strong> — if you use the Networking
-                feature: the networking profile you choose to create (name, headline, bio, location, skills,
-                availability, and LinkedIn/GitHub links), your connection requests, and any contacts you add
-                to your own list. A networking profile is visible to other signed-in users in Discover, and the
-                form says so before you save it; you can remove it at any time. Contacts you add are visible
-                only to you. These are fields you type in yourself, not data obtained from a third-party login
-                or by us visiting those profiles on your behalf. If you add someone else&apos;s details as a
-                contact, please add only what you need and have a legitimate reason to keep.
-              </li>
-              <li>
                 <strong className="text-on-surface">Plan and credit data</strong> — your subscription tier
                 and remaining credit balance. If and when paid plans involve a card payment, the payment
                 itself is collected and processed directly by a PCI-compliant third-party payment processor;

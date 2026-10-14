@@ -39,8 +39,6 @@ function renderSidebar() {
 describe("Sidebar", () => {
   it("renders all nav links", () => {
     renderSidebar();
-    // Networking is intentionally hidden for now (see lib/nav.ts), not a
-    // regression.
     for (const label of [
       "Dashboard",
       "My Profile",

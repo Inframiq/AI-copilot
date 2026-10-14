@@ -17,7 +17,6 @@ from app.core.free_grant import record_deleted_account
 from app.db.models import (
     AiUsageEvent,
     CoverLetter,
-    ExternalContact,
     Feedback,
     JobDescription,
     LearningItem,
@@ -185,7 +184,6 @@ async def delete_my_account(
         JobDescription,
         Resume,
         LearningItem,
-        ExternalContact,
         Feedback,
         AiUsageEvent,
         Subscription,

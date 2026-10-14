@@ -254,7 +254,7 @@ export default function JDIndexPage() {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Career profile — same query key as the profile page and Networking so a
+  // Career profile — same query key as the profile page so a
   // profile save (which invalidates ["careerProfile"]) is reflected here too,
   // instead of this page only ever seeing what was loaded on mount.
   const { data: careerProfile, isLoading: profileLoading } = useQuery<CareerProfile | null>({

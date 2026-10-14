@@ -103,7 +103,7 @@ cd apps/api && source .venv/Scripts/activate && pytest
   empty-string env vars when `NEXT_PUBLIC_SUPABASE_URL` /
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` aren't set, so the app boots, but
   `middleware.ts` still redirects every route under `app/(app)/*`
-  (dashboard, profile, JD analyzer, networking, etc.) to `/login` for
+  (dashboard, profile, JD analyzer, etc.) to `/login` for
   an unauthenticated session. The driver's flow (landing → Sign In →
   login form) is the deepest path reachable without real credentials.
   To go further, supply real Supabase env vars in `apps/web/.env.local`

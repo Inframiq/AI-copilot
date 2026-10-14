@@ -11,7 +11,6 @@ import type {
   PrepFollowupOut,
   ResumeContent,
   LearningItem,
-  ExternalContact,
   JDDetails,
   CoverLetter,
   CoverLetterStart,
@@ -355,29 +354,6 @@ export const apiClient = {
 
   deleteCoverLetter: (id: string): Promise<void> =>
     request<void>("DELETE", `/cover-letters/${id}`),
-
-  // ── External Contacts ───────────────────────────────────────────────────────
-  getContacts: (): Promise<ExternalContact[]> =>
-    request<ExternalContact[]>("GET", "/contacts"),
-
-  addContact: (payload: {
-    name: string;
-    role: string;
-    company: string;
-    status?: ExternalContact["status"];
-    notes?: string;
-    email?: string;
-    linkedin_url?: string;
-  }): Promise<ExternalContact> => request<ExternalContact>("POST", "/contacts", payload),
-
-  updateContactStatus: (
-    id: string,
-    status: ExternalContact["status"]
-  ): Promise<ExternalContact> =>
-    request<ExternalContact>("PATCH", `/contacts/${id}/status`, { status }),
-
-  deleteContact: (id: string): Promise<void> =>
-    request<void>("DELETE", `/contacts/${id}`),
 
   // ── AI ────────────────────────────────────────────────────────────────────
   analyzeJd: (

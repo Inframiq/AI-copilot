@@ -381,26 +381,6 @@ class Feedback(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow, index=True)
 
 
-class ExternalContact(Base):
-    """People tracked outside the platform (not KripaX users) —
-    distinct from Networking's Profile/connection_requests, which is for
-    in-platform users."""
-
-    __tablename__ = "external_contacts"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(255), nullable=False)
-    company: Mapped[str] = mapped_column(String(255), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
-    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    linkedin_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    last_contact: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
-
-
 class DeletionRequest(Base):
     """A request to delete someone's personal data, sent from the public
     /data-deletion page. It's for people who can't use Account -> Delete

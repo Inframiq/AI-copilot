@@ -116,19 +116,6 @@ export interface JobDescription {
   company_name?: string | null;
 }
 
-export interface ExternalContact {
-  id: string;
-  name: string;
-  role: string;
-  company: string;
-  status: "new" | "following-up" | "connected";
-  notes: string;
-  email: string;
-  linkedin_url: string;
-  last_contact: string;
-  created_at: string;
-}
-
 export interface TailorOut {
   session_id: string;
   ats_score: number;
