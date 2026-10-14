@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # one for cost reasons decided against real per-call token estimates.
     openai_model_fast: str = "gpt-5.6-luna"
     openai_model_premium: str = "gpt-5.6-sol"
+    # The "standard" tier, between the two: interview follow-up answers,
+    # which a user pays for one at a time and reads closely. 5.6-terra is
+    # ~10x luna and half of sol per token.
+    openai_model_standard: str = "gpt-5.6-terra"
     # Site-wide ceiling on OpenAI spend per UTC day (USD), priced from
     # ai_usage_events — see app.core.ai_budget. AI features pause once it's
     # reached. 0 turns it off. The busiest day so far (2026-10-11) was ~$0.19.

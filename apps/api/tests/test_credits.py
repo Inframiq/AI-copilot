@@ -165,7 +165,7 @@ async def test_spend_names_the_action_in_words_when_out_of_credits(pg_session):
     user = await _seed(pg_session, credits_remaining=1)
     with pytest.raises(HTTPException) as ei:
         await _spend(pg_session, user, "prep_questions")
-    assert ei.value.detail == "Out of credits: Interview questions costs 2 credits and you have 1."
+    assert ei.value.detail == "Out of credits: Interview questions costs 3 credits and you have 1."
 
 
 async def test_spend_is_a_noop_for_unlimited_credit_email(pg_session, monkeypatch):

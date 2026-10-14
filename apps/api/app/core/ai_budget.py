@@ -36,6 +36,13 @@ MAX_MODEL_INPUT_CHARS = 60_000
 # USD per 1M tokens (input, output), OpenAI list prices. A model's versioned
 # name ("gpt-4.1-mini-2025-04-14") is matched by its longest listed prefix.
 _PRICES_PER_MILLION: dict[str, tuple[float, float]] = {
+    # GPT-5.6 / 5.5 list prices (short context), developers.openai.com
+    # pricing, 2026-10-13. Unlisted, they fell to _UNKNOWN_PRICE and the
+    # day's spend was overstated ~25x for the fast tier.
+    "gpt-5.6-luna": (0.20, 1.20),
+    "gpt-5.6-terra": (2.00, 12.00),
+    "gpt-5.6-sol": (4.00, 20.00),
+    "gpt-5.5": (5.00, 30.00),
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
     "gpt-4.1-nano": (0.10, 0.40),

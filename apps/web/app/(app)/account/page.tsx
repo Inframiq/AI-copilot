@@ -19,6 +19,7 @@ const ACTION_LABELS: Record<string, string> = {
   generate_resume: "Generate a resume from your profile",
   cover_letter: "Generate a cover letter",
   prep_questions: "Make interview prep questions for a job",
+  followup_answer: "Answer an interview follow-up",
   rewrite_bullet: "Rewrite or humanize a bullet",
   restructure_notes: "Tidy your notes into resume points",
   analyze: "Analyze a job description",
@@ -27,7 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 // Order the cost table so the headline action is first.
 const ACTION_ORDER = [
-  "tailor", "generate_resume", "cover_letter", "prep_questions",
+  "tailor", "generate_resume", "cover_letter", "prep_questions", "followup_answer",
   "rewrite_bullet", "restructure_notes", "analyze", "parse_resume",
 ];
 

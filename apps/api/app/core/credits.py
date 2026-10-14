@@ -45,8 +45,12 @@ CREDIT_COSTS: dict[str, int] = {
     # Three model calls: relevance filter, writer, compressor.
     "generate_resume": 3,
     "cover_letter": 3,
-    # One pro-tier call writing ~10-15 questions with answer frameworks.
-    "prep_questions": 2,
+    # One premium-tier call writing up to 15 questions, each with a likely
+    # answer and its first follow-up.
+    "prep_questions": 3,
+    # The likely answer to one follow-up, on request (standard tier), with
+    # the next follow-up.
+    "followup_answer": 3,
     "rewrite_bullet": 1,
     # The notes canvas: one fast call that tidies what the user typed into
     # points for the profile's Miscellaneous section.
@@ -64,6 +68,7 @@ ACTION_LABELS: dict[str, str] = {
     "generate_resume": "Generating a résumé",
     "cover_letter": "A cover letter",
     "prep_questions": "Interview questions",
+    "followup_answer": "A follow-up answer",
     "rewrite_bullet": "A rewrite",
     "restructure_notes": "Tidying your notes",
     "analyze": "Analyzing a job description",

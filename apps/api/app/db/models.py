@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, Text, ARRAY, ForeignKey, Float, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from app.db.session import Base
@@ -214,7 +214,13 @@ class PrepQuestion(Base):
     )
     topic: Mapped[str] = mapped_column(String(255), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    # What a strong answer covers — sets made before likely answers. New
+    # sets leave it "" and fill likely_answer instead.
     answer_framework: Mapped[str] = mapped_column(Text, nullable=False)
+    # A tailored answer this candidate could give, in a coaching voice: short
+    # "Label: text" lines, built from the résumé, hedged ("for example…")
+    # where the résumé is silent. Written with the question set.
+    likely_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_gap_based: Mapped[bool] = mapped_column(Boolean, default=True)
     # "requirement" (seeded from a JD core_responsibilities entry) |
     # "overlap" (seeded from a matched_skill + real resume evidence) |
@@ -231,6 +237,30 @@ class PrepQuestion(Base):
     practiced_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     session: Mapped["TailoringSession"] = relationship(back_populates="questions")
+
+
+class PrepFollowup(Base):
+    """One step of a question's follow-up chain. The interviewer's next
+    question is shown free; its likely answer is written only when the user
+    asks (and pays) for it, and writing it adds the next follow-up — so the
+    chain goes as deep as the user keeps asking."""
+    __tablename__ = "prep_followups"
+    __table_args__ = (UniqueConstraint("question_id", "position", name="uq_prep_followups_question_position"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("prep_questions.id", ondelete="CASCADE"), index=True
+    )
+    # 1 for the follow-up to the question itself, then 2, 3, …
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # Null until the user asks for it.
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set while an answer is being written, so a double click or a second tab
+    # can't charge twice. A claim older than a few minutes is stale (the
+    # request died) and may be taken over.
+    claimed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=utcnow)
 
 
 class LearningItem(Base):

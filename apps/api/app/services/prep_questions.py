@@ -15,14 +15,20 @@ saved résumé, but are written from the résumé as saved, edits included.
 """
 import logging
 import uuid
+from datetime import timedelta
 
-from sqlalchemy import delete, select, func
+from fastapi import HTTPException
+from sqlalchemy import delete, select, func, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.credits import refund_credits, spend_credits
 from app.core.usage import record_ai_usage
-from app.db.models import JobDescription, PrepQuestion, TailoringSession
+from app.db.models import JobDescription, PrepFollowup, PrepQuestion, Resume, TailoringSession, utcnow
 from app.services.ai_engine.factory import get_ai_provider
-from app.services.tailoring import JDAnalysis, _agent1_parse_jd, get_or_generate_prep_questions
+from app.services.tailoring import (
+    JDAnalysis, _agent1_parse_jd, answer_followup, get_or_generate_prep_questions,
+)
 
 logger = logging.getLogger("app")
 
@@ -109,11 +115,17 @@ async def generate_for_session(
         )
     rows = [
         PrepQuestion(
-            session_id=session.id, topic=q.topic, question=q.question,
-            answer_framework=q.answer_framework, is_gap_based=q.is_gap_based,
-            source=q.source, basis=q.basis, order_index=q.order_index,
+            id=uuid.uuid4(), session_id=session.id, topic=q.topic, question=q.question,
+            answer_framework=q.answer_framework, likely_answer=q.likely_answer or None,
+            is_gap_based=q.is_gap_based, source=q.source, basis=q.basis, order_index=q.order_index,
         )
         for q in questions
+    ]
+    # Each question's first follow-up: shown with it, answered on request.
+    followups = [
+        PrepFollowup(question_id=row.id, position=1, question=q.follow_up)
+        for row, q in zip(rows, questions)
+        if q.follow_up
     ]
     if replace:
         if not rows:
@@ -125,6 +137,8 @@ async def generate_for_session(
         return have
     if rows:
         db.add_all(rows)
+        await db.flush()  # the questions exist before their follow-ups point at them
+        db.add_all(followups)
         await db.commit()
         for r in rows:
             await db.refresh(r)
@@ -168,3 +182,161 @@ def latest_with_questions_per_jd(user_id: uuid.UUID):
         .group_by(TailoringSession.jd_id)
         .subquery()
     )
+
+
+async def followups_by_question(
+    db: AsyncSession, question_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[PrepFollowup]]:
+    """Each question's follow-up chain, in order."""
+    if not question_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(PrepFollowup)
+            .where(PrepFollowup.question_id.in_(question_ids))
+            .order_by(PrepFollowup.question_id, PrepFollowup.position)
+        )
+    ).scalars().all()
+    out: dict[uuid.UUID, list[PrepFollowup]] = {}
+    for r in rows:
+        out.setdefault(r.question_id, []).append(r)
+    return out
+
+
+# A claim older than this belongs to a request that died mid-answer.
+_STALE_CLAIM = timedelta(minutes=3)
+
+
+async def answer_followup_for_user(
+    db: AsyncSession, user_id: uuid.UUID, email: str | None, followup_id: uuid.UUID,
+) -> list[PrepFollowup]:
+    """Writes the likely answer to one follow-up and adds the next follow-up.
+    Returns the question's whole chain.
+
+    Charged ("followup_answer") only when an answer is written: one already
+    written comes back free. The row is claimed first, in its own commit, so
+    a double click or a second tab can't pay twice for the same answer; a
+    failed answer gives the credits back and releases the claim."""
+    found = (
+        await db.execute(
+            select(PrepFollowup, PrepQuestion, TailoringSession)
+            .join(PrepQuestion, PrepFollowup.question_id == PrepQuestion.id)
+            .join(TailoringSession, PrepQuestion.session_id == TailoringSession.id)
+            .where(PrepFollowup.id == followup_id, TailoringSession.user_id == user_id)
+        )
+    ).first()
+    if found is None:
+        raise HTTPException(status_code=404, detail="Follow-up not found")
+    followup, question, session = found
+    # Plain values: a rollback below expires the ORM objects.
+    fid, qid, position = followup.id, question.id, followup.position
+
+    async def chain() -> list[PrepFollowup]:
+        return (await followups_by_question(db, [qid])).get(qid, [])
+
+    if followup.answer:
+        return await chain()
+
+    claimed = (
+        await db.execute(
+            update(PrepFollowup)
+            .where(
+                PrepFollowup.id == fid,
+                PrepFollowup.answer.is_(None),
+                (PrepFollowup.claimed_at.is_(None)) | (PrepFollowup.claimed_at < utcnow() - _STALE_CLAIM),
+            )
+            .values(claimed_at=utcnow())
+            .returning(PrepFollowup.id)
+            .execution_options(synchronize_session=False)
+        )
+    ).first()
+    await db.commit()
+    if claimed is None:
+        await db.refresh(followup)
+        if followup.answer:
+            return await chain()
+        raise HTTPException(status_code=409, detail="This answer is already being written.")
+
+    async def release() -> None:
+        await db.execute(
+            update(PrepFollowup).where(PrepFollowup.id == fid).values(claimed_at=None)
+            .execution_options(synchronize_session=False)
+        )
+
+    try:
+        await spend_credits(db, user_id, "followup_answer", email=email)
+    except HTTPException:
+        await db.rollback()
+        await release()
+        await db.commit()
+        raise
+    await db.commit()
+
+    try:
+        jd = (
+            await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
+        ).scalar_one_or_none()
+        resume_content = session.tailored_content or {}
+        if jd is not None and jd.tailored_resume_id:
+            saved = (
+                await db.execute(
+                    select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == user_id)
+                )
+            ).scalar_one_or_none()
+            if saved is not None and saved.content:
+                resume_content = saved.content
+        jd_analysis: JDAnalysis | None = None
+        raw_cached = ((jd.parsed if jd else None) or {}).get("agent1")
+        if raw_cached:
+            try:
+                jd_analysis = JDAnalysis(**raw_cached)
+            except Exception:
+                jd_analysis = None
+        earlier = [
+            (f.question, f.answer)
+            for f in await chain()
+            if f.position < position and f.answer
+        ]
+        async with record_ai_usage(user_id, "followup_answer"):
+            result = await answer_followup(
+                jd_analysis=jd_analysis,
+                jd_text=jd.raw_text if jd else "",
+                matched_skills=session.matched_skills or [],
+                missing_skills=session.missing_skills or [],
+                resume_content=resume_content,
+                question=question.question,
+                likely_answer=question.likely_answer or question.answer_framework,
+                earlier=earlier,
+                follow_up=followup.question,
+                provider=get_ai_provider(),
+            )
+        answer = result.likely_answer.strip()
+        if not answer:
+            raise ValueError("empty follow-up answer")
+    except Exception:
+        logger.exception("follow-up answer failed (followup=%s)", fid)
+        await db.rollback()
+        await refund_credits(db, user_id, "followup_answer", email=email)
+        await release()
+        await db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't write this answer. No credits were used — try again.",
+        )
+
+    await db.execute(
+        update(PrepFollowup).where(PrepFollowup.id == fid)
+        .values(answer=answer, claimed_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    next_question = result.next_follow_up.strip()
+    if next_question:
+        await db.execute(
+            pg_insert(PrepFollowup)
+            .values(id=uuid.uuid4(), question_id=qid, position=position + 1,
+                    question=next_question, created_at=utcnow())
+            .on_conflict_do_nothing(constraint="uq_prep_followups_question_position")
+        )
+    await db.commit()
+    db.expire_all()
+    return await chain()

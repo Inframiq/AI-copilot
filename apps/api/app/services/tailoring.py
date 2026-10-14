@@ -54,7 +54,9 @@ _MAX_TOKENS_SEMANTIC_MAP = 16384
 _MAX_TOKENS_BULLET_WRITE = 16384
 _MAX_TOKENS_COVER_LETTER = 3000
 _MAX_TOKENS_SEMANTIC_VERIFY = 4000
-_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 6000
+# Up to 15 questions, each with a likely answer and a follow-up.
+_MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 12000
+_MAX_TOKENS_FOLLOWUP_ANSWER = 3000
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -176,7 +178,10 @@ class CoverLetterOutput(BaseModel):
 class PrepQuestionData(BaseModel):
     topic: str
     question: str
-    answer_framework: str
+    # Older sets only; new ones write likely_answer and follow_up instead.
+    answer_framework: str = ""
+    likely_answer: str = ""
+    follow_up: str = ""
     is_gap_based: bool = True
     source: str = "requirement"
     basis: str = ""
@@ -201,7 +206,8 @@ class InterviewQuestionData(BaseModel):
     basis: str
     topic: str
     question: str
-    answer_framework: str
+    likely_answer: str
+    follow_up: str
 
 
 class InterviewQuestionsWrapper(BaseModel):
@@ -1584,13 +1590,116 @@ practice are "Technical". A past example about people, conflict, \
 failure, ambiguity or influence is "Behavioral". "HR & Culture" is ONLY \
 motivation for this role/company and working-style fit — at most one \
 or two, still specific.
-8. ANSWER FRAMEWORK — what a strong answer at this level covers, in 2-3 \
-short sentences: the specific points an interviewer listens for (for \
-behavioral questions, which part of a STAR answer carries the signal), \
-then "Likely follow-up:" and the one probing follow-up the interviewer \
-would ask next. Not a model answer, not a restatement of the question.
-9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+8. LIKELY ANSWER — the answer THIS candidate could give, written as a \
+coach talking to them ("you"), 80-140 words, as 3-4 short lines separated \
+by newlines. Each line starts with a 1-3 word label and a colon, then one \
+or two sentences. Labels by question type:
+   - Behavioral: "Situation:", "What you did:", "Result:", "Takeaway:".
+   - Deep dive: "Context:", "Your choice:", "Why:", "What you'd change:".
+   - Scenario / design: "First move:", "Approach:", "Trade-off:", \
+"How you'd close:".
+   - HR & Culture: "Why this role:", "Evidence:", "Close:".
+   Build it from resume_content: name the real project, tool, metric or \
+employer it draws on. Where the résumé does not say (a detail, a number, \
+how a disagreement went), never state it as fact — frame it for the \
+candidate to fill in or imagine: "for example…", "imagine you…", "name \
+the metric you tracked". A gap answer bridges from the adjacent skill \
+they DO have and says plainly what they would still need to learn; never \
+claim a missing skill. The points to make, in the order to make them — \
+not a script to memorize.
+9. FOLLOW-UP — the one probing question the interviewer asks next after \
+hearing that answer: one sentence, aimed at its most testable point (a \
+number, a trade-off, a decision, what could fail). Never a restatement \
+of the question.
+10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>"""
+
+
+_FOLLOWUP_ANSWER_SYSTEM = """\
+<system_role>
+You are an interview coach preparing this candidate for the onsite round. \
+The interviewer asked a question, heard an answer, and is now probing \
+deeper. You write the likely answer to the latest follow-up, and the next \
+follow-up the interviewer would ask.
+</system_role>
+
+<rules>
+1. ANSWER ONLY current_follow_up. Build on original_likely_answer and the \
+earlier_follow_ups answers; never repeat or contradict them.
+2. VOICE: a coach talking to the candidate ("you"), 60-120 words, as 2-4 \
+short lines separated by newlines. Each line starts with a 1-3 word label \
+and a colon ("Direct answer:", "Detail:", "Trade-off:", "Close:"). Lead \
+with the direct answer to what was asked.
+3. FACT LOCK: only use facts from resume_content. Where the résumé does \
+not say, never state it as fact — frame it for the candidate to fill in \
+or imagine ("for example…", "imagine you…", "name the number you saw"). \
+Never claim a skill in missing_skills.
+4. LEVEL: answer at the level the role hires for (jd_target_job_titles, \
+jd_seniority_indicators): trade-offs, cost and risk for senior roles; \
+clear reasoning and fundamentals for junior ones.
+5. NEXT FOLLOW-UP: one sentence — the question the interviewer asks after \
+this answer, one level deeper (a number, a failure mode, a trade-off, what \
+they would do differently). It must not repeat or rephrase any question \
+already in the chain.
+6. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+</rules>"""
+
+
+class FollowupAnswerData(BaseModel):
+    likely_answer: str
+    next_follow_up: str
+
+
+# Earlier steps of a chain sent with each follow-up answer. A deep chain
+# would otherwise grow the input without bound; the latest steps are the
+# ones the next answer builds on.
+_FOLLOWUP_CONTEXT_STEPS = 6
+
+
+async def answer_followup(
+    *,
+    jd_analysis: "JDAnalysis | None",
+    jd_text: str,
+    matched_skills: list[str],
+    missing_skills: list[str],
+    resume_content: dict,
+    question: str,
+    likely_answer: str,
+    earlier: list[tuple[str, str]],
+    follow_up: str,
+    provider: AIProvider,
+) -> FollowupAnswerData:
+    """The likely answer to one follow-up in a question's chain, and the
+    follow-up after it. Paid per answer (credits "followup_answer"), on the
+    "standard" tier."""
+    payload: dict = {
+        "matched_skills": _sanitize_skill_list(matched_skills)[:15],
+        "missing_skills": _sanitize_skill_list(missing_skills)[:10],
+        "resume_content": resume_content,
+        "original_question": question,
+        "original_likely_answer": likely_answer,
+        "earlier_follow_ups": [
+            {"question": q, "answer": a} for q, a in earlier[-_FOLLOWUP_CONTEXT_STEPS:]
+        ],
+        "current_follow_up": follow_up,
+    }
+    if jd_analysis is not None:
+        payload.update({
+            "jd_target_job_titles": jd_analysis.target_job_titles,
+            "jd_seniority_indicators": jd_analysis.seniority_indicators,
+            "jd_core_responsibilities": jd_analysis.core_responsibilities,
+            "jd_exact_technical_tools": jd_analysis.exact_technical_tools,
+        })
+    else:
+        payload["jd_text"] = jd_for_model(jd_text)
+    return await provider.complete_structured(
+        _FOLLOWUP_ANSWER_SYSTEM,
+        json.dumps(payload),
+        FollowupAnswerData,
+        model_tier="standard",
+        max_output_tokens=_MAX_TOKENS_FOLLOWUP_ANSWER,
+        call_name="prep_followup_answer",
+    )
 
 
 async def _agent4_generate_interview_questions(
@@ -1668,7 +1777,8 @@ async def get_or_generate_prep_questions(
         result.append(PrepQuestionData(
             topic=q.topic if q.topic in _TOPIC_VALUES else "Technical",
             question=q.question,
-            answer_framework=q.answer_framework,
+            likely_answer=q.likely_answer.strip(),
+            follow_up=q.follow_up.strip(),
             is_gap_based=(source == "gap"),
             source=source,
             basis=q.basis,

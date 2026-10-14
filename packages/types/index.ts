@@ -209,12 +209,27 @@ export interface AtsFix {
   default_accept: boolean;
 }
 
+// One step of a question's follow-up chain. The question is shown free; its
+// likely answer is written on request (charged "followup_answer"), which
+// also adds the next follow-up.
+export interface PrepFollowupOut {
+  id: string;
+  position: number;
+  question: string;
+  answer: string | null;
+}
+
 export interface PrepQuestionOut {
   id: string;
   session_id: string;
   topic: string;
   question: string;
+  // Sets made before likely answers: what a strong answer covers. "" on newer sets.
   answer_framework: string;
+  // "Label: text" lines in a coaching voice; null on older sets.
+  likely_answer?: string | null;
+  // The follow-up chain, in order. Only the last one can be unanswered.
+  followups?: PrepFollowupOut[];
   is_gap_based: boolean;
   // "requirement" | "overlap" | "gap" — which of the three generation
   // categories this question came from (see PrepQuestion.source, backend).

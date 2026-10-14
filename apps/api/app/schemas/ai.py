@@ -51,12 +51,26 @@ class AnalyzeOut(BaseModel):
     importance: dict[str, str] = {}  # {jd_term_lowercased: "high"|"medium"|"low"}
 
 
+class PrepFollowupOut(BaseModel):
+    id: uuid.UUID
+    position: int
+    question: str
+    # Null until the user asks (and pays) for it.
+    answer: str | None = None
+    model_config = {"from_attributes": True}
+
+
 class PrepQuestionOut(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
     topic: str
     question: str
+    # Sets made before likely answers; "" on newer ones.
     answer_framework: str
+    # "Label: text" lines in a coaching voice; null on older sets.
+    likely_answer: str | None = None
+    # The follow-up chain, in order. Only the last one can be unanswered.
+    followups: list[PrepFollowupOut] = []
     is_gap_based: bool
     # "requirement" | "overlap" | "gap" — see PrepQuestion.source in models.py.
     source: str

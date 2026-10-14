@@ -19,10 +19,13 @@ class OpenAIProvider(AIProvider):
         fast_model: str,
         premium_model: str,
         max_output_tokens: int = 4096,
+        standard_model: str | None = None,
     ):
         self._client = AsyncOpenAI(api_key=api_key)
         self._fast_model = fast_model
         self._premium_model = premium_model
+        # The "standard" tier; the fast model when not set.
+        self._standard_model = standard_model or fast_model
         self._max_output_tokens = max_output_tokens
 
     # "fast" and "pro" both resolve to the budget model — deliberate, not an
@@ -37,8 +40,13 @@ class OpenAIProvider(AIProvider):
     # (_agent4_generate_interview_questions: screening-level on the budget
     # model, and one call per Save to JD rather than per run) do too.
     # Everything else keeps requesting "pro" and gets the budget model.
+    # "standard" sits between them: interview follow-up answers.
     def _model_for(self, model_tier: str) -> str:
-        return self._premium_model if model_tier == "premium" else self._fast_model
+        if model_tier == "premium":
+            return self._premium_model
+        if model_tier == "standard":
+            return self._standard_model
+        return self._fast_model
 
     def _log_usage(self, call_name: str, model_tier: str, model: str, usage) -> None:
         if usage is None:

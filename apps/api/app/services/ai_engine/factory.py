@@ -16,5 +16,6 @@ def get_ai_provider() -> AIProvider:
         api_key=settings.openai_api_key,
         fast_model=settings.openai_model_fast,
         premium_model=settings.openai_model_premium,
+        standard_model=settings.openai_model_standard,
         max_output_tokens=settings.openai_max_output_tokens,
     )

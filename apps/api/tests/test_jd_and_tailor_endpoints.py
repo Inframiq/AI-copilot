@@ -1210,7 +1210,7 @@ async def test_tailor_resume_requires_auth():
 
 @pytest.mark.asyncio
 async def test_get_my_questions_annotates_each_question_with_its_jd():
-    from app.db.models import PrepQuestion
+    from app.db.models import PrepFollowup, PrepQuestion
     from types import SimpleNamespace
 
     uid = uuid.UUID(TEST_USER_ID)
@@ -1236,7 +1236,12 @@ async def test_get_my_questions_annotates_each_question_with_its_jd():
     ]
     questions_result = MagicMock()
     questions_result.scalars.return_value.all.return_value = [question]
-    mock_session.execute = AsyncMock(side_effect=[sessions_result, questions_result])
+    followups_result = MagicMock()
+    followups_result.scalars.return_value.all.return_value = [
+        PrepFollowup(id=uuid.uuid4(), question_id=question.id, position=1,
+                     question="How did you handle partitions?", answer=None),
+    ]
+    mock_session.execute = AsyncMock(side_effect=[sessions_result, questions_result, followups_result])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -1248,6 +1253,9 @@ async def test_get_my_questions_annotates_each_question_with_its_jd():
         assert body[0]["question"] == "Tell me about a distributed systems project."
         assert body[0]["jd_id"] == str(jd_id)
         assert body[0]["jd_title"] == "Senior Backend Engineer — Acme"
+        assert [(f["position"], f["question"], f["answer"]) for f in body[0]["followups"]] == [
+            (1, "How did you handle partitions?", None)
+        ]
     finally:
         app.dependency_overrides.pop(get_db, None)
 

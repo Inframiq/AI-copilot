@@ -7,13 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import attributes
 from app.db.session import get_db, AsyncSessionLocal
-from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion
+from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, PrepFollowup
 from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
 from app.core.usage import record_ai_usage
 from app.core.credits import spend_credits, refund_credits
 from app.schemas.ai import (
-    TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, AnalyzeRequest, AnalyzeOut,
+    TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, PrepFollowupOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
     RestructureNotesRequest, RestructureNotesOut,
     ProjectScoreRequest, ProjectScoreOut,
@@ -24,7 +24,9 @@ from app.services.tailoring import (
     build_single_bullet_system, tailor_fingerprint, _bullet_text,
 )
 from app.services.bullet_guard import guard_rewrite
-from app.services.prep_questions import latest_with_questions_per_jd
+from app.services.prep_questions import (
+    answer_followup_for_user, followups_by_question, latest_with_questions_per_jd,
+)
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
@@ -263,6 +265,7 @@ async def _run_tailoring_background(
                     topic=q.topic,
                     question=q.question,
                     answer_framework=q.answer_framework,
+                    likely_answer=q.likely_answer or None,
                     is_gap_based=q.is_gap_based,
                     source=q.source,
                     basis=q.basis,
@@ -734,13 +737,32 @@ async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), d
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    return (
+    questions = (
         await db.execute(
             select(PrepQuestion)
             .where(PrepQuestion.session_id == session_id)
             .order_by(PrepQuestion.order_index)
         )
     ).scalars().all()
+    chains = await followups_by_question(db, [q.id for q in questions])
+    return [_question_out(q, chains.get(q.id, [])) for q in questions]
+
+
+def _question_out(q: PrepQuestion, followups: list[PrepFollowup]) -> PrepQuestionOut:
+    return PrepQuestionOut(
+        id=q.id,
+        session_id=q.session_id,
+        topic=q.topic,
+        question=q.question,
+        answer_framework=q.answer_framework,
+        likely_answer=q.likely_answer,
+        followups=[PrepFollowupOut.model_validate(f) for f in followups],
+        is_gap_based=q.is_gap_based,
+        source=q.source,
+        basis=q.basis,
+        order_index=q.order_index,
+        practiced_at=q.practiced_at,
+    )
 
 
 @router.get("/questions/mine", response_model=list[PrepQuestionWithJdOut])
@@ -769,27 +791,21 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
     if not session_jd:
         return []
 
-    questions_result = await db.execute(
-        select(PrepQuestion)
-        .where(PrepQuestion.session_id.in_(session_jd.keys()))
-        .order_by(PrepQuestion.order_index)
-    )
+    questions = (
+        await db.execute(
+            select(PrepQuestion)
+            .where(PrepQuestion.session_id.in_(session_jd.keys()))
+            .order_by(PrepQuestion.order_index)
+        )
+    ).scalars().all()
+    chains = await followups_by_question(db, [q.id for q in questions])
     return [
         PrepQuestionWithJdOut(
-            id=q.id,
-            session_id=q.session_id,
-            topic=q.topic,
-            question=q.question,
-            answer_framework=q.answer_framework,
-            is_gap_based=q.is_gap_based,
-            source=q.source,
-            basis=q.basis,
-            order_index=q.order_index,
-            practiced_at=q.practiced_at,
+            **_question_out(q, chains.get(q.id, [])).model_dump(),
             jd_id=session_jd[q.session_id][0],
             jd_title=session_jd[q.session_id][1],
         )
-        for q in questions_result.scalars().all()
+        for q in questions
     ]
 
 
@@ -812,4 +828,22 @@ async def mark_question_practiced(
     question.practiced_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(question)
-    return question
+    chains = await followups_by_question(db, [question.id])
+    return _question_out(question, chains.get(question.id, []))
+
+
+@router.post("/followups/{followup_id}/answer", response_model=list[PrepFollowupOut])
+@limiter.limit("20/minute")
+@ai_global_limit
+async def answer_prep_followup(
+    request: Request,
+    followup_id: uuid.UUID,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The likely answer to one follow-up, written on request, and the next
+    follow-up after it. Charged once per answer ("followup_answer"); asking
+    again for one already written returns it free. Returns the question's
+    whole follow-up chain."""
+    chain = await answer_followup_for_user(db, uuid.UUID(user["sub"]), user.get("email"), followup_id)
+    return [PrepFollowupOut.model_validate(f) for f in chain]

@@ -170,21 +170,22 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
                 basis="Own the payments reconciliation pipeline",
                 topic="Technical",
                 question="Tell me about a time you owned a reconciliation pipeline.",
-                answer_framework="Use STAR",
+                likely_answer="Situation: the reconciliation pipeline.",
+                follow_up="How did you catch mismatches?",
             ),
             InterviewQuestionData(
                 source="overlap",
                 basis="AWS — built the payments ingestion service on AWS Lambda",
                 topic="Technical",
                 question="Walk me through how you built that AWS Lambda ingestion service.",
-                answer_framework="Use STAR",
+                likely_answer="A", follow_up="F",
             ),
             InterviewQuestionData(
                 source="gap",
                 basis="Kubernetes",
                 topic="Technical",
                 question="Tell me about a time your Docker experience would carry over to Kubernetes.",
-                answer_framework="Use STAR",
+                likely_answer="A", follow_up="F",
             ),
         ]),
     })
@@ -203,12 +204,14 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
     assert gap_q.basis == "Kubernetes"
     req_q = next(q for q in result if q.source == "requirement")
     assert req_q.is_gap_based is False
+    assert req_q.likely_answer == "Situation: the reconciliation pipeline."
+    assert req_q.follow_up == "How did you catch mismatches?"
 
 
 def _make_interview_question(source: str, i: int) -> InterviewQuestionData:
     return InterviewQuestionData(
         source=source, basis=f"{source}-{i}", topic="Technical",
-        question=f"{source} question {i}", answer_framework="Use STAR",
+        question=f"{source} question {i}", likely_answer="A", follow_up="F",
     )
 
 
@@ -784,7 +787,7 @@ async def test_run_tailoring_pipeline_returns_result():
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(
             questions=[InterviewQuestionData(
                 source="requirement", basis="Python", topic="Technical",
-                question="Tell me about a time you used Python.", answer_framework="A",
+                question="Tell me about a time you used Python.", likely_answer="A", follow_up="F",
             )]
         ),
     }

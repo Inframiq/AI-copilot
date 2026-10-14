@@ -8,6 +8,7 @@ import type {
   AnalyzeOut,
   PrepQuestionOut,
   PrepQuestionWithJdOut,
+  PrepFollowupOut,
   ResumeContent,
   LearningItem,
   ExternalContact,
@@ -550,6 +551,13 @@ export const apiClient = {
 
   markQuestionPracticed: (questionId: string): Promise<PrepQuestionOut> =>
     request<PrepQuestionOut>("PATCH", `/ai/questions/${questionId}/practice`),
+
+  /** The likely answer to one follow-up, written on request (charged once;
+   * one already written comes back free), plus the next follow-up. Returns
+   * the question's whole chain. 402 when out of credits, 409 while another
+   * request is writing the same answer. */
+  answerFollowup: (followupId: string): Promise<PrepFollowupOut[]> =>
+    request<PrepFollowupOut[]>("POST", `/ai/followups/${followupId}/answer`),
 
   // ── Learning Path ────────────────────────────────────────────────────────
 

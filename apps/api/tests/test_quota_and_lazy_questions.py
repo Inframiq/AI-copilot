@@ -159,7 +159,8 @@ _AGENT1 = {
 def _gen_out():
     from app.services.tailoring import PrepQuestionData
     return [PrepQuestionData(topic="Technical", question="Tell me about the pipeline.",
-                             answer_framework="STAR", is_gap_based=False, source="requirement",
+                             likely_answer="Context: the pipeline.", follow_up="How did you test it?",
+                             is_gap_based=False, source="requirement",
                              basis="Own the pipeline", order_index=1)]
 
 
@@ -201,7 +202,7 @@ async def test_viewing_returns_the_existing_set():
                              answer_framework="STAR", is_gap_based=False, source="requirement",
                              basis="x", order_index=1)]
     sr = MagicMock(); sr.scalar_one_or_none.return_value = sess
-    db.execute = AsyncMock(side_effect=[sr, _scalars(existing)])
+    db.execute = AsyncMock(side_effect=[sr, _scalars(existing), _scalars([])])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -225,7 +226,7 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
 
     db = MagicMock()
     db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
-    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
     sess = _session()
     saved = {"experience": ["as saved"]}
@@ -243,7 +244,13 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
     args, kwargs = gen.call_args
     assert args[0] == ["AWS"] and args[1] == saved  # the résumé as saved, not the raw run
     assert kwargs["jd_analysis"].core_responsibilities == ["Own the pipeline"]
-    db.add_all.assert_called_once()
+    (questions,), (followups,) = [c.args for c in db.add_all.call_args_list]
+    assert questions == rows
+    # Each question's first follow-up is stored with it, unanswered.
+    assert [(f.question_id, f.position, f.question, f.answer) for f in followups] == [
+        (rows[0].id, 1, "How did you test it?", None)
+    ]
+    assert rows[0].likely_answer == "Context: the pipeline."
 
 
 @pytest.mark.asyncio
@@ -255,7 +262,7 @@ async def test_generation_parses_the_jd_when_no_analysis_is_cached():
 
     db = MagicMock()
     db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
-    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {}
 
     with patch.object(prep_questions, "get_or_generate_prep_questions",
@@ -299,7 +306,7 @@ async def test_regeneration_swaps_in_a_new_set_in_one_commit():
                         basis="x", order_index=1)]
     db = MagicMock()
     db.execute = AsyncMock(return_value=_scalars(old))
-    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.add_all = MagicMock()
+    db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
 
     with patch.object(prep_questions, "get_or_generate_prep_questions",
@@ -310,7 +317,7 @@ async def test_regeneration_swaps_in_a_new_set_in_one_commit():
     assert [r.question for r in rows] == ["Tell me about the pipeline."]
     deletes = [c.args[0] for c in db.execute.call_args_list if "DELETE" in str(c.args[0]).upper()]
     assert len(deletes) == 1 and "prep_questions" in str(deletes[0])
-    db.add_all.assert_called_once()
+    assert db.add_all.call_args_list[0].args[0] == rows
     db.commit.assert_awaited_once()
 
 
@@ -394,7 +401,7 @@ async def test_regenerate_replaces_an_existing_set_and_charges_for_it(ledger):
         assert r.status_code == 200
         assert r.json() == {"session_id": str(sess.id), "questions_total": 9}
         assert gen.call_args.kwargs["replace"] is True
-        assert ledger.balance(TEST_USER_ID) == 48 and ledger.refunded == []
+        assert ledger.balance(TEST_USER_ID) == 47 and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -478,7 +485,7 @@ async def test_generate_endpoint_makes_questions_for_a_saved_jd(ledger):
         gen.assert_awaited_once()
         assert gen.call_args.args[3] == {"experience": ["saved"]}
         # Making the set is a model call, so it is charged.
-        assert ledger.balance(TEST_USER_ID) == 48 and ledger.refunded == []
+        assert ledger.balance(TEST_USER_ID) == 47 and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -547,7 +554,7 @@ async def test_generate_endpoint_402_before_any_model_call_when_out_of_credits(l
         with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
             r = await _post_prep(jd)
         assert r.status_code == 402
-        assert "Interview questions costs 2 credits" in r.json()["detail"]
+        assert "Interview questions costs 3 credits" in r.json()["detail"]
         gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
