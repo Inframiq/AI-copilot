@@ -32,6 +32,8 @@ async function recordPolicyAcceptance(accessToken: string): Promise<void> {
         terms_version: TERMS_VERSION,
         privacy_version: PRIVACY_VERSION,
       }),
+      // A down or cold-starting API must not hold the sign-in redirect.
+      signal: AbortSignal.timeout(5000),
     });
   } catch {
     // Non-fatal — sign-in must not depend on this succeeding.
