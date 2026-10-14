@@ -270,6 +270,43 @@ async def test_generate_404_when_resume_or_jd_not_owned():
 
 
 @pytest.mark.asyncio
+async def test_generate_404_when_the_tailoring_session_is_not_owned(ledger):
+    """Someone else's session is refused before any charge, not skipped and
+    stored as the letter's link (test RLS-020)."""
+    from app.db.models import Resume, JobDescription
+
+    override, mock_session = make_mock_db()
+    resume = Resume(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), title="R", content={}, template_id="ats_clean",
+    )
+    jd = JobDescription(
+        id=uuid.uuid4(), user_id=uuid.UUID(TEST_USER_ID), title="Backend Engineer", raw_text="...", parsed={},
+    )
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = resume
+    jd_result = MagicMock()
+    jd_result.scalar_one_or_none.return_value = jd
+    no_session = MagicMock()
+    no_session.scalar_one_or_none.return_value = None
+    mock_session.execute = AsyncMock(side_effect=[resume_result, jd_result, no_session])
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/cover-letters",
+                json={"resume_id": str(resume.id), "jd_id": str(jd.id), "tailoring_session_id": str(uuid.uuid4())},
+                headers=make_auth_header(),
+            )
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Tailoring session not found"
+        assert ledger.spent == []
+        mock_session.add.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_get_cover_letter_returns_completed_content():
     from app.db.models import CoverLetter
 

@@ -43,6 +43,15 @@ def _supabase():
     return _sb_client
 
 
+def _in_own_avatar_folder(path: str, uid_str: str) -> bool:
+    """Whether an "avatars" object key sits in the user's own folder. The
+    browser writes career_profiles.photo_path itself, and account deletion
+    removes what it names with the service key, which can delete anyone's
+    photo — so a path into another folder is never trusted (test RLS-020)."""
+    parts = path.split("/")
+    return len(parts) >= 2 and parts[0] == uid_str and all(p not in ("", ".", "..") for p in parts)
+
+
 @router.get("/subscription")
 async def get_my_subscription(
     user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
@@ -139,7 +148,9 @@ async def delete_my_account(
             text("SELECT photo_path FROM career_profiles WHERE user_id = :uid"),
             {"uid": uid_str},
         )
-        avatar_paths = [row[0] for row in photo_result.all() if row[0]]
+        avatar_paths = [
+            row[0] for row in photo_result.all() if row[0] and _in_own_avatar_folder(row[0], uid_str)
+        ]
     except Exception:  # career_profiles is Supabase-managed; never block deletion
         logger.warning("Could not read career_profiles.photo_path for %s", uid_str)
 

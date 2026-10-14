@@ -124,6 +124,34 @@ async def test_delete_account_wipes_data_and_removes_auth_user():
 
 
 @pytest.mark.asyncio
+async def test_delete_account_removes_only_photos_in_the_users_own_folder():
+    """photo_path is written by the browser, so a path into another user's
+    folder must not have the service key delete their photo (test RLS-020)."""
+    other = "80c48c39-4dc4-4555-980e-cccb69e9e981"
+    override, s = _delete_db()
+    empty = MagicMock(); empty.all.return_value = []
+    photos = MagicMock()
+    photos.all.return_value = [(f"{other}/profile.jpeg",), (f"{TEST_USER_ID}/../{other}/profile.jpeg",)]
+
+    async def execute(stmt, *args, **kwargs):
+        return photos if "photo_path" in str(stmt) else empty
+
+    s.execute = AsyncMock(side_effect=execute)
+    app.dependency_overrides[get_db] = override
+    fake_sb = MagicMock()
+    avatars = fake_sb.storage.from_.return_value
+    avatars.list.return_value = [{"name": "profile.png"}]
+    try:
+        with patch("app.routers.me._supabase", return_value=fake_sb):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                r = await c.request("DELETE", "/me", headers=auth())
+        assert r.status_code == 204
+        avatars.remove.assert_called_once_with([f"{TEST_USER_ID}/profile.png"])
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_delete_account_surfaces_auth_failure_without_wiping():
     override, s = _delete_db()
     app.dependency_overrides[get_db] = override

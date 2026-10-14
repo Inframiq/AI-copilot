@@ -127,10 +127,10 @@ async def generate_cover_letter(
     if not resume_row or not jd_row:
         raise HTTPException(status_code=404, detail="Resume or JD not found")
 
-    await spend_credits(db, uid, "cover_letter", email=user.get("email"))
-
     # Reuse the tailored resume content when a session is linked; otherwise
-    # use the resume as saved.
+    # use the resume as saved. A session that isn't this user's is refused,
+    # not skipped: the letter stores the link, and someone else's session
+    # deleting would take this user's letter with it (test RLS-020).
     resume_content = resume_row.content
     if body.tailoring_session_id:
         session_row = (
@@ -141,8 +141,12 @@ async def generate_cover_letter(
                 )
             )
         ).scalar_one_or_none()
-        if session_row and session_row.tailored_content:
+        if not session_row:
+            raise HTTPException(status_code=404, detail="Tailoring session not found")
+        if session_row.tailored_content:
             resume_content = session_row.tailored_content
+
+    await spend_credits(db, uid, "cover_letter", email=user.get("email"))
 
     provider = get_ai_provider()
 
