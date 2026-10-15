@@ -13,7 +13,8 @@ kripax_api is the API's login from now on:
 - SELECT, INSERT, UPDATE, DELETE on every table in public, and the sequences
   behind them. No TRUNCATE, no schema changes, owns nothing, and nothing in
   auth, storage or any other schema.
-- Tables later migrations create get the same grants (postgres creates them).
+- Tables later migrations create get the same grants (the migration login
+  creates them).
 - BYPASSRLS: the API serves every user and checks ownership in its own code,
   as it did as postgres. Row security stays on as the browser's barrier.
 - No role memberships, no CREATEROLE, CREATEDB or REPLICATION.
@@ -40,10 +41,13 @@ BEGIN
     RETURN;
   END IF;
 
+  -- One statement, naming only what differs from a new role's defaults (no
+  -- superuser, no CREATEROLE, CREATEDB or REPLICATION): Supabase's postgres
+  -- is no superuser, and Postgres refuses it any ALTER ROLE that names an
+  -- attribute it doesn't hold itself.
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kripax_api') THEN
-    CREATE ROLE kripax_api NOLOGIN;
+    CREATE ROLE kripax_api NOLOGIN NOINHERIT BYPASSRLS;
   END IF;
-  ALTER ROLE kripax_api NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT BYPASSRLS;
 
   GRANT USAGE ON SCHEMA public TO kripax_api;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kripax_api;
@@ -53,12 +57,11 @@ BEGIN
     REVOKE ALL ON public.alembic_version FROM kripax_api;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kripax_api;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT USAGE, SELECT ON SEQUENCES TO kripax_api;
-  END IF;
+  -- Tables later migrations create: they run as this same login.
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kripax_api;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO kripax_api;
 END $$;
 """
 
@@ -69,12 +72,8 @@ BEGIN
     RETURN;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      REVOKE ALL ON TABLES FROM kripax_api;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      REVOKE ALL ON SEQUENCES FROM kripax_api;
-  END IF;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM kripax_api;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM kripax_api;
   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM kripax_api;
   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM kripax_api;
   REVOKE ALL ON SCHEMA public FROM kripax_api;

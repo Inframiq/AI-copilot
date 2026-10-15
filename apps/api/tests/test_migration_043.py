@@ -24,28 +24,36 @@ def test_migration_043_chains_from_042():
 
 @pytest.fixture
 async def supabase_like(pg_uri):
-    """Supabase's browser role, an app table, a sequence, Alembic's table and a
-    table in another schema standing in for auth.users."""
+    """Supabase's browser role, and an owner like Supabase's postgres: no
+    superuser, but CREATEROLE and BYPASSRLS. It owns an app table with a
+    sequence and Alembic's table; another schema stands in for auth.users.
+    Yields a connection acting as that owner, as the deploy's migration does."""
     import asyncpg
 
     conn = await asyncpg.connect(pg_uri.replace("postgresql+asyncpg://", "postgresql://"))
     await conn.execute("""
         DO $$ BEGIN
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres; END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'm043_owner') THEN CREATE ROLE m043_owner NOLOGIN CREATEROLE BYPASSRLS; END IF;
         END $$;
         DROP TABLE IF EXISTS public.m043_app, public.m043_later, public.alembic_version;
         DROP SCHEMA IF EXISTS m043auth CASCADE;
-        CREATE TABLE public.m043_app (id serial PRIMARY KEY, note text);
-        CREATE TABLE public.alembic_version (version_num varchar(32) PRIMARY KEY);
+        GRANT CREATE ON SCHEMA public TO m043_owner;
         CREATE SCHEMA m043auth;
         CREATE TABLE m043auth.users (id uuid PRIMARY KEY);
+        GRANT USAGE ON SCHEMA m043auth TO m043_owner;  -- as Supabase's postgres sees auth
+        SET ROLE m043_owner;
+        CREATE TABLE public.m043_app (id serial PRIMARY KEY, note text);
+        CREATE TABLE public.alembic_version (version_num varchar(32) PRIMARY KEY);
     """)
     yield conn
     await conn.execute(_migration().DOWNGRADE_SQL)
     await conn.execute("""
         DROP TABLE IF EXISTS public.m043_app, public.m043_later, public.alembic_version;
+        RESET ROLE;
         DROP SCHEMA IF EXISTS m043auth CASCADE;
+        REVOKE CREATE ON SCHEMA public FROM m043_owner;
+        DROP ROLE m043_owner;
     """)
     await conn.close()
 
@@ -80,9 +88,7 @@ async def test_the_api_role_reads_and_writes_app_tables_and_nothing_more(supabas
 async def test_tables_later_migrations_create_are_usable_too(supabase_like):
     conn = supabase_like
     await conn.execute(_migration().UPGRADE_SQL)
-    await conn.execute("GRANT CREATE ON SCHEMA public TO postgres; SET ROLE postgres")
     await conn.execute("CREATE TABLE public.m043_later (id int)")
-    await conn.execute("RESET ROLE")
 
     assert await _can(conn, "public.m043_later", "INSERT")
     assert not await _can(conn, "public.m043_later", "TRUNCATE")
