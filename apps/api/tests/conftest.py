@@ -1,3 +1,22 @@
+import os
+
+# Tests never reach the live database, Supabase or OpenAI. apps/api/.env holds
+# the production values, and a test that missed one of its fakes (the AI usage
+# log opens its own session) wrote rows for a made-up user into production.
+# Set before anything imports app.core.config; environment variables win over
+# .env. The database address points at a port nothing listens on, so a missed
+# fake fails the test instead of writing anywhere. Tests that need a real
+# Postgres use the pg_uri fixture below.
+os.environ.update({
+    "DATABASE_URL": "postgresql+asyncpg://test:test@127.0.0.1:9/no_database_in_tests",
+    "MIGRATION_DATABASE_URL": "",
+    "SUPABASE_URL": "https://test-placeholder.supabase.co",
+    "SUPABASE_ANON_KEY": "test-placeholder",
+    "SUPABASE_SERVICE_ROLE_KEY": "test-placeholder",
+    "SUPABASE_JWT_SECRET": "test-placeholder-secret-at-least-32-chars-long",
+    "OPENAI_API_KEY": "test-placeholder",
+})
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
