@@ -156,11 +156,23 @@ async def get_jd(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSess
     return jd
 
 
+async def _require_own_jd(db: AsyncSession, jd_id: uuid.UUID, uid: uuid.UUID) -> JobDescription:
+    """404 unless the JD is the caller's: a JD someone else owns answers
+    exactly like one that doesn't exist, on every route (test API-001)."""
+    jd = (
+        await db.execute(select(JobDescription).where(JobDescription.id == jd_id, JobDescription.user_id == uid))
+    ).scalar_one_or_none()
+    if jd is None:
+        raise HTTPException(status_code=404, detail="JD not found")
+    return jd
+
+
 @router.get("/{jd_id}/latest-session")
 async def get_latest_session(jd_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Most recent tailoring session for this JD, if any — lets the frontend
     route a "prepare for interview?" prompt to an existing session without
     requiring the user to re-tailor just to get there."""
+    await _require_own_jd(db, jd_id, uuid.UUID(user["sub"]))
     result = await db.execute(
         select(TailoringSession.id)
         .where(
@@ -182,6 +194,7 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
     directly instead of the user having to re-tailor or dig through
     Interview Center to find work already done for this JD."""
     uid = uuid.UUID(user["sub"])
+    jd = await _require_own_jd(db, jd_id, uid)
     result = await db.execute(
         select(TailoringSession)
         .options(selectinload(TailoringSession.resume))
@@ -200,12 +213,8 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
     # resume tailoring was RUN against (the input, not the reviewed/saved
     # output). Preferred over session.resume whenever it exists, since it's
     # what the user actually chose to keep for this JD.
-    jd_result = await db.execute(
-        select(JobDescription).where(JobDescription.id == jd_id, JobDescription.user_id == uid)
-    )
-    jd = jd_result.scalar_one_or_none()
     tailored_resume = None
-    if jd and jd.tailored_resume_id:
+    if jd.tailored_resume_id:
         tr_result = await db.execute(
             select(Resume).where(Resume.id == jd.tailored_resume_id, Resume.user_id == uid)
         )
@@ -342,6 +351,7 @@ async def get_jd_cover_letter(jd_id: uuid.UUID, user=Depends(get_current_user), 
     it, or offer to write one if there's none yet. An unsaved draft is not
     the JD's letter."""
     uid = uuid.UUID(user["sub"])
+    await _require_own_jd(db, jd_id, uid)
     result = await db.execute(
         select(CoverLetter)
         .where(CoverLetter.jd_id == jd_id, CoverLetter.user_id == uid, CoverLetter.saved_at.is_not(None))

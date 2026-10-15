@@ -310,18 +310,17 @@ async def test_get_jd_details_returns_resume_and_question_progress():
     override, mock_session = make_mock_db()
     session_result = MagicMock()
     session_result.scalars.return_value.first.return_value = session_row
-    # JD lookup for the tailored_resume_id link — unset here, so resume
-    # display falls back to session.resume (the resume tailoring ran
-    # against), same as before this field existed.
+    # The caller's JD, looked up first. No tailored_resume_id here, so resume
+    # display falls back to session.resume (the resume tailoring ran against).
     jd_result = MagicMock()
-    jd_result.scalar_one_or_none.return_value = None
+    jd_result.scalar_one_or_none.return_value = JobDescription(id=jd_id, user_id=user_id, title="JD", raw_text="...")
     # The run that holds the questions — here the latest run itself.
     questions_session_result = MagicMock()
     questions_session_result.scalars.return_value.first.return_value = session_row
     questions_result = MagicMock()
     questions_result.one.return_value = (5, 2)
     mock_session.execute = AsyncMock(
-        side_effect=[session_result, jd_result, questions_session_result, questions_result]
+        side_effect=[jd_result, session_result, questions_session_result, questions_result]
     )
 
     app.dependency_overrides[get_db] = override
@@ -384,7 +383,7 @@ async def test_get_jd_details_prefers_the_saved_tailored_resume_over_the_session
     no_questions_session = MagicMock()
     no_questions_session.scalars.return_value.first.return_value = None
     mock_session.execute = AsyncMock(
-        side_effect=[session_result, jd_result, tailored_resume_result, no_questions_session]
+        side_effect=[jd_result, session_result, tailored_resume_result, no_questions_session]
     )
 
     app.dependency_overrides[get_db] = override
@@ -410,8 +409,10 @@ async def test_get_jd_details_no_session_returns_empty_state():
     session_result = MagicMock()
     session_result.scalars.return_value.first.return_value = None
     jd_result = MagicMock()
-    jd_result.scalar_one_or_none.return_value = None
-    mock_session.execute = AsyncMock(side_effect=[session_result, jd_result])
+    jd_result.scalar_one_or_none.return_value = JobDescription(
+        id=jd_id, user_id=uuid.UUID(TEST_USER_ID), title="JD", raw_text="..."
+    )
+    mock_session.execute = AsyncMock(side_effect=[jd_result, session_result])
 
     app.dependency_overrides[get_db] = override
     try:
@@ -1956,3 +1957,24 @@ async def test_project_score_does_not_lazy_load_the_jd():
     r = await _post_project_score(sess, {"session_id": str(sess.id), "accepted_fix_ids": []}, jd=jd)
     assert r.status_code == 200
     assert r.json()["projected_score"] == 100
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["details", "latest-session", "cover-letter"])
+async def test_a_jd_someone_else_owns_answers_like_a_missing_one(suffix):
+    """Test API-001: these three used to answer 200 with an empty result for
+    another user's JD. They showed nothing of it, but every other JD route
+    says 404, and so do these now."""
+    override, mock_session = make_mock_db()
+    not_mine = MagicMock()
+    not_mine.scalar_one_or_none.return_value = None
+    mock_session.execute = AsyncMock(return_value=not_mine)
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{uuid.uuid4()}/{suffix}", headers=make_auth_header())
+        assert r.status_code == 404
+        assert r.json()["detail"] == "JD not found"
+        assert mock_session.execute.await_count == 1, "nothing else is looked up for a JD that isn't yours"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
