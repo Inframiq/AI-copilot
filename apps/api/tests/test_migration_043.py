@@ -30,14 +30,18 @@ async def supabase_like(pg_uri):
     Yields a connection acting as that owner, as the deploy's migration does."""
     import asyncpg
 
-    conn = await asyncpg.connect(pg_uri.replace("postgresql+asyncpg://", "postgresql://"))
+    # A database of its own: GRANT ... ON ALL TABLES as a non-superuser fails
+    # on the shared one's tables, which other tests' superuser created.
+    server = pg_uri.replace("postgresql+asyncpg://", "postgresql://")
+    admin = await asyncpg.connect(server)
+    await admin.execute("DROP DATABASE IF EXISTS m043 WITH (FORCE)")
+    await admin.execute("CREATE DATABASE m043")
+    conn = await asyncpg.connect(server.rsplit("/", 1)[0] + "/m043")
     await conn.execute("""
         DO $$ BEGIN
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'm043_owner') THEN CREATE ROLE m043_owner NOLOGIN CREATEROLE BYPASSRLS; END IF;
         END $$;
-        DROP TABLE IF EXISTS public.m043_app, public.m043_later, public.alembic_version;
-        DROP SCHEMA IF EXISTS m043auth CASCADE;
         GRANT CREATE ON SCHEMA public TO m043_owner;
         CREATE SCHEMA m043auth;
         CREATE TABLE m043auth.users (id uuid PRIMARY KEY);
@@ -48,14 +52,10 @@ async def supabase_like(pg_uri):
     """)
     yield conn
     await conn.execute(_migration().DOWNGRADE_SQL)
-    await conn.execute("""
-        DROP TABLE IF EXISTS public.m043_app, public.m043_later, public.alembic_version;
-        RESET ROLE;
-        DROP SCHEMA IF EXISTS m043auth CASCADE;
-        REVOKE CREATE ON SCHEMA public FROM m043_owner;
-        DROP ROLE m043_owner;
-    """)
     await conn.close()
+    await admin.execute("DROP DATABASE m043 WITH (FORCE)")
+    await admin.execute("DROP ROLE m043_owner")
+    await admin.close()
 
 
 async def _can(conn, table, privilege):

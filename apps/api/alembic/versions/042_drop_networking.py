@@ -26,9 +26,14 @@ down_revision: Union[str, None] = "041"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# One DO block: the deploy runs each op.execute as a single prepared
+# statement, and asyncpg refuses two commands in one.
 UPGRADE_SQL = """
-DROP TABLE IF EXISTS public.connection_requests;
-DROP TABLE IF EXISTS public.profiles;
+DO $$
+BEGIN
+  DROP TABLE IF EXISTS public.connection_requests;
+  DROP TABLE IF EXISTS public.profiles;
+END $$;
 """
 
 DOWNGRADE_SQL = """
