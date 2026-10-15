@@ -38,6 +38,15 @@ def _supabase():
     return _sb_client
 
 
+def _remove_stored_file(path: str) -> None:
+    """Best effort: a file left behind is wasted space, never a broken
+    résumé, so a failure here is logged rather than raised."""
+    try:
+        _supabase().storage.from_("resumes").remove([path])
+    except Exception:
+        logger.warning("could not remove stored file %s", path, exc_info=True)
+
+
 _MAX_RESUMES_PER_USER = 5
 
 
@@ -709,6 +718,11 @@ async def parse_and_create_resume(
     # parse) and refunded if anything after it fails.
     await spend_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
     await db.commit()
+    # What the failure path has to undo (test DB-004): the file stored for
+    # this upload, until the row pointing at it is committed. After that
+    # commit the upload has happened; nothing is undone or refunded.
+    stored_path: str | None = None
+    saved = False
     try:
 
         # Fixed up front (rather than left to the DB default) so the original file
@@ -742,13 +756,18 @@ async def parse_and_create_resume(
         # required (unlike the best-effort background upload used for
         # generated preview PDFs): if this fails, the whole upload fails
         # rather than leaving a Resume row with no master file.
-        original_path = f"resumes/{user['sub']}/{resume_id}/original.pdf"
+        # A name of its own per upload: replacing a résumé used to overwrite
+        # its original.pdf before parsing, so a failed parse left the old
+        # résumé showing the new file. The old file goes once the row points
+        # at the new one.
+        original_path = f"resumes/{user['sub']}/{resume_id}/original-{uuid.uuid4().hex}.pdf"
         try:
             _supabase().storage.from_("resumes").upload(
                 original_path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
             )
         except Exception:
             raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
+        stored_path = original_path
 
         provider = get_ai_provider()
         try:
@@ -765,12 +784,16 @@ async def parse_and_create_resume(
         title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
 
         if existing_resume is not None:
+            previous_path = existing_resume.original_file_path
             existing_resume.title = title[:255]
             existing_resume.template_id = template_id
             existing_resume.content = parsed
             existing_resume.original_file_path = original_path
             existing_resume.original_file_name = file.filename
             await db.commit()
+            saved = True
+            if previous_path and previous_path != original_path:
+                _remove_stored_file(previous_path)
             await db.refresh(existing_resume)
             response.status_code = status.HTTP_200_OK
             return existing_resume
@@ -787,11 +810,17 @@ async def parse_and_create_resume(
         )
         db.add(resume)
         await db.commit()
+        saved = True
         await db.refresh(resume)
         return resume
     except Exception:
-        # Charged above and committed — nothing was delivered, give it back.
+        if saved:
+            raise
+        # Charged above and committed — nothing was delivered: drop the file
+        # stored for it and give the credit back.
         await db.rollback()
+        if stored_path:
+            _remove_stored_file(stored_path)
         await refund_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
         await db.commit()
         raise
