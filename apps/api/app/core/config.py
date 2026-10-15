@@ -5,7 +5,13 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
     supabase_jwt_secret: str
+    # The API's own login: reads and writes the app's tables and nothing else
+    # (the kripax_api role, migration 043).
     database_url: str
+    # The login the deploy's migration step (app.migrate) uses: changing the
+    # schema needs the database owner, postgres. Unset, migrations use
+    # database_url.
+    migration_database_url: str = ""
     openai_api_key: str = ""
     openai_max_output_tokens: int = 16384
     # Used for "fast" and "pro" tiers alike — see openai_provider.py's
@@ -58,5 +64,9 @@ class Settings(BaseSettings):
     # Gemini was removed) must not fail startup on a deploy whose .env still
     # carries it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def migration_url(self) -> str:
+        return self.migration_database_url or self.database_url
 
 settings = Settings()

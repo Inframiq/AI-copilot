@@ -53,7 +53,7 @@ def unknown_revision(script: ScriptDirectory, current: str | None) -> bool:
 def main() -> int:
     cfg = Config(str(_INI))
     script = ScriptDirectory.from_config(cfg)
-    current = asyncio.run(_current_revision(settings.database_url))
+    current = asyncio.run(_current_revision(settings.migration_url))
     if unknown_revision(script, current):
         print(
             f"WARNING: the database is at revision {current!r}, which this code "

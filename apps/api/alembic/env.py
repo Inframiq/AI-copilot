@@ -30,7 +30,7 @@ def _refuse_hand_migrating_a_shared_database() -> None:
         return
     if os.environ.get("ALLOW_REMOTE_MIGRATION") == "1":
         return
-    host = make_url(settings.database_url).host or ""
+    host = make_url(settings.migration_url).host or ""
     if host in _LOCAL_HOSTS:
         return
     raise SystemExit(
@@ -46,7 +46,7 @@ _refuse_hand_migrating_a_shared_database()
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode (no live DB connection needed)."""
     context.configure(
-        url=settings.database_url,
+        url=settings.migration_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -57,7 +57,7 @@ def run_migrations_offline() -> None:
 
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode with an async engine."""
-    connectable = create_async_engine(settings.database_url)
+    connectable = create_async_engine(settings.migration_url)
     async with connectable.connect() as connection:
         await connection.run_sync(
             lambda conn: context.configure(connection=conn, target_metadata=target_metadata)
