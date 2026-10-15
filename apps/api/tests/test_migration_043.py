@@ -22,6 +22,15 @@ def test_migration_043_chains_from_042():
     assert m.down_revision == "042"
 
 
+def _on_database(uri: str, name: str) -> str:
+    """The same server, another database. Swaps only the path: on Linux the
+    server is a socket named in ?host=/tmp/..., so cutting at the last "/"
+    would cut that instead."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    return urlunsplit(urlsplit(uri)._replace(path="/" + name))
+
+
 @pytest.fixture
 async def supabase_like(pg_uri):
     """Supabase's browser role, and an owner like Supabase's postgres: no
@@ -36,7 +45,7 @@ async def supabase_like(pg_uri):
     admin = await asyncpg.connect(server)
     await admin.execute("DROP DATABASE IF EXISTS m043 WITH (FORCE)")
     await admin.execute("CREATE DATABASE m043")
-    conn = await asyncpg.connect(server.rsplit("/", 1)[0] + "/m043")
+    conn = await asyncpg.connect(_on_database(server, "m043"))
     await conn.execute("""
         DO $$ BEGIN
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;

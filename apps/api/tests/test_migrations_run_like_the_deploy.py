@@ -12,6 +12,21 @@ SCRIPTS = pathlib.Path(__file__).parents[1] / "alembic"
 DB = "kripax_migrations_check"
 
 
+def _on_database(uri: str, name: str) -> str:
+    """The same server, another database. Swaps only the path: on Linux the
+    server is a socket named in ?host=/tmp/..., so cutting at the last "/"
+    would cut that instead."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    return urlunsplit(urlsplit(uri)._replace(path="/" + name))
+
+
+def test_another_database_keeps_a_socket_address_intact():
+    linux = "postgresql+asyncpg://postgres:@/postgres?host=/tmp/kripax-pg-x1/run"
+    assert _on_database(linux, DB) == f"postgresql+asyncpg://postgres:@/{DB}?host=/tmp/kripax-pg-x1/run"
+    assert _on_database("postgresql://postgres:@localhost:5433/postgres", DB) == f"postgresql://postgres:@localhost:5433/{DB}"
+
+
 async def _admin(uri: str, sql: str) -> None:
     import asyncpg
 
@@ -36,7 +51,7 @@ def test_alembic_upgrade_head_runs_on_a_fresh_database(pg_uri, monkeypatch):
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
         END $$;
     """))
-    url = pg_uri.rsplit("/", 1)[0] + "/" + DB
+    url = _on_database(pg_uri, DB)
     monkeypatch.setattr(settings, "migration_database_url", url)
     try:
         # No alembic.ini: its logging section would switch off the app's
