@@ -10,6 +10,7 @@ from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
 from app.core.usage import record_ai_usage
+from app.routers.cover_letters import remove_letter_files
 from app.schemas.jd import JDCompanyUpdate, JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.prep_questions import (
     generate_for_session, latest_session_with_questions, run_for_saved_resume,
@@ -372,8 +373,16 @@ async def delete_jd(
     jd = result.scalar_one_or_none()
     if not jd:
         raise HTTPException(status_code=404, detail="JD not found")
+    # Its cover letters go with it (ON DELETE CASCADE); their PDFs in Storage
+    # don't, so they're removed once the rows are gone.
+    letter_files = (
+        await db.execute(
+            select(CoverLetter.pdf_url).where(CoverLetter.jd_id == jd.id, CoverLetter.pdf_url.isnot(None))
+        )
+    ).scalars().all()
     await db.delete(jd)
     await db.commit()
+    remove_letter_files(list(letter_files))
 
 
 @router.patch("/{jd_id}/title", response_model=JDOut)

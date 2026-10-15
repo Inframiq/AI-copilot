@@ -56,6 +56,18 @@ def _supabase():
     return _sb_client
 
 
+def remove_letter_files(paths: list[str]) -> None:
+    """Best effort, after the rows are gone: a file left behind is wasted
+    space and someone's letter kept with nothing pointing at it, never a
+    broken page, so a failure is logged rather than raised."""
+    if not paths:
+        return
+    try:
+        _supabase().storage.from_("resumes").remove(paths)
+    except Exception:
+        logger.warning("could not remove stored letter files %s", paths, exc_info=True)
+
+
 async def _run_cover_letter_background(
     cover_letter_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -279,8 +291,10 @@ async def delete_cover_letter(
     letter = result.scalar_one_or_none()
     if not letter:
         raise HTTPException(status_code=404, detail="Cover letter not found")
+    stored = [letter.pdf_url] if letter.pdf_url else []
     await db.delete(letter)
     await db.commit()
+    remove_letter_files(stored)
 
 
 async def _persist_letter_pdf_to_storage(pdf_bytes: bytes, user_id: str, cover_letter_id: uuid.UUID) -> None:
@@ -292,6 +306,9 @@ async def _persist_letter_pdf_to_storage(pdf_bytes: bytes, user_id: str, cover_l
         if letter:
             letter.pdf_url = path
             await session.commit()
+        else:
+            # Deleted while it rendered: nothing will ever point at this file.
+            remove_letter_files([path])
 
 
 @router.post("/{cover_letter_id}/pdf")

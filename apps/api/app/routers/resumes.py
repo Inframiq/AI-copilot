@@ -414,12 +414,15 @@ async def _persist_pdf_to_storage(pdf_bytes: bytes, user_id: str, resume_id: uui
         # updated_at set to itself: a cached export isn't an edit. Bumping it
         # would make the device's next autosave look stale (see update_resume)
         # and reorder the résumé list on a download.
-        await session.execute(
+        result = await session.execute(
             update(Resume)
             .where(Resume.id == resume_id)
             .values(pdf_url=path, updated_at=Resume.updated_at)
         )
         await session.commit()
+    if result.rowcount == 0:
+        # Deleted while it rendered: nothing will ever point at this file.
+        _remove_stored_file(path)
 
 
 @router.post("/{resume_id}/pdf")
