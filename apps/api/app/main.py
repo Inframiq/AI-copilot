@@ -122,33 +122,26 @@ async def admin_only_restriction_middleware(request: Request, call_next):
 # went out without Access-Control-Allow-Origin and the browser showed
 # "Failed to fetch" instead of the 403 (test API-002).
 # CORS — explicit origins only; wildcard glob strings are not supported by
-# the CORSMiddleware and would silently allow all origins. Production custom
-# domains go in CORS_EXTRA_ORIGINS; preview deployments, if the API should
-# answer them, in CORS_ORIGIN_REGEX scoped to this project. It used to accept
-# every *.vercel.app origin, which is anyone's site.
+# the CORSMiddleware and would silently allow all origins. Other origins go
+# in CORS_EXTRA_ORIGINS — local development's localhost:3000 included, since
+# production must not trust a page on a visitor's own machine (security
+# review L7). Preview deployments, if the API should answer them, go in
+# CORS_ORIGIN_REGEX scoped to this project. It used to accept every
+# *.vercel.app origin, which is anyone's site, and the retired
+# resumebuilder.inframiq.com, which only redirects now (test API-004).
 
 _extra_origins = [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "https://kripax.inframiq.com",
-        # TEMPORARY — the old domain now 308-redirects at the edge
-        # (apps/web/middleware.ts) before its JS ever runs, so this
-        # shouldn't be hit in practice, but it's a cheap safety net for an
-        # already-open old tab or a cached page during the cutover. Remove
-        # once resumebuilder.inframiq.com's domain attachment is torn down.
-        "https://resumebuilder.inframiq.com",
-        *_extra_origins,
-    ],
+    allow_origins=["https://kripax.inframiq.com", *_extra_origins],
     allow_origin_regex=settings.cors_origin_regex or None,
     # The web app authenticates with a bearer token and sends no cookies, so
     # there is nothing a credentialed cross-site request should carry.
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # What lib/api-client.ts sends, nothing more.
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.middleware("http")

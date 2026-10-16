@@ -15,6 +15,9 @@ os.environ.update({
     "SUPABASE_SERVICE_ROLE_KEY": "test-placeholder",
     "SUPABASE_JWT_SECRET": "test-placeholder-secret-at-least-32-chars-long",
     "OPENAI_API_KEY": "test-placeholder",
+    # Production's CORS allow-list, not a developer's localhost additions.
+    "CORS_EXTRA_ORIGINS": "",
+    "CORS_ORIGIN_REGEX": "",
 })
 
 import pytest
