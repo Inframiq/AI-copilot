@@ -8,6 +8,23 @@ const DEFAULT_LINE_SPACING = 1.25;
 const DEFAULT_PARAGRAPH_SPACING = 12;
 const DEFAULT_FONT_CHOICE = "sans";
 
+/**
+ * Skills as the Studio needs them: a flat list of strings.
+ *
+ * The API stores résumé content as it was sent and its templates also draw
+ * skills grouped by category ({"Languages": ["Go"]}), so a résumé saved in
+ * that shape — or with skills missing — used to crash every Studio page that
+ * calls skills.filter. Grouped skills keep their words, in order; anything
+ * that is not a string is dropped.
+ */
+export function withSkillList(content: ResumeContent): ResumeContent {
+  if (!content) return content;
+  const raw: unknown = content.skills;
+  if (Array.isArray(raw) && raw.every((s) => typeof s === "string")) return content;
+  const values = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw).flat() : [];
+  return { ...content, skills: values.filter((s): s is string => typeof s === "string") };
+}
+
 /** What a draft replaces, so discarding it restores all of it. */
 interface DraftBase {
   content: ResumeContent | null;
@@ -182,7 +199,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       updatedAt: updatedAt ?? null,
       conflictUpdatedAt: null,
       resumeId: id,
-      content,
+      content: withSkillList(content),
       templateId,
       lineSpacing: lineSpacing ?? DEFAULT_LINE_SPACING,
       paragraphSpacing: paragraphSpacing ?? DEFAULT_PARAGRAPH_SPACING,
@@ -214,7 +231,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     if (timer !== null) clearTimeout(timer);
     const s = get();
     set({
-      content,
+      content: withSkillList(content),
       draftJdId: jdId,
       // Re-applying over a draft keeps the original as the base, not the draft.
       _draftBase: s.draftJdId
