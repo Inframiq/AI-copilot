@@ -74,3 +74,48 @@ async def test_es256_token_verified_via_jwks(monkeypatch, httpx_mock):
 
     payload = await security._verify_jwt(token)
     assert payload["sub"] == "user-es256"
+
+
+def _unsigned(header: dict) -> str:
+    """A token with the given header and a junk signature."""
+    import base64
+
+    enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+    return enc(header) + "." + enc({"sub": "x"}) + ".c2ln"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "not-a-jwt",
+        _unsigned({"alg": "HS512"}),
+        _unsigned({"alg": "RS256", "kid": "PROBE-KID-123"}),
+        make_token("user-123", secret="wrong-secret-padding-padding-!!!"),
+        make_token("user-123", aud=None),
+    ],
+)
+async def test_rejected_token_says_only_invalid_token(token, monkeypatch):
+    """A 401 names no reason beyond "Invalid token": not the library's
+    wording, not the algorithm, and never the kid the caller sent (API-002)."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+
+    async def no_keys():
+        return {"keys": []}
+
+    monkeypatch.setattr(security, "_get_jwks", no_keys)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/resumes", headers={"Authorization": "Bearer " + token})
+    assert r.status_code == 401
+    assert r.json() == {"detail": "Invalid token"}
+    assert "PROBE" not in r.text
+
+
+async def test_expired_token_still_says_expired():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/resumes", headers={"Authorization": "Bearer " + make_token("u", exp_offset=-120)})
+    assert r.status_code == 401
+    assert r.json() == {"detail": "Token expired"}

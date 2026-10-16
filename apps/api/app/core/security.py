@@ -49,6 +49,11 @@ def _public_key_from_jwk(jwk_dict: dict, alg: str):
     raise ValueError(f"Cannot reconstruct key for algorithm: {alg!r}")
 
 
+class TokenExpired(ValueError):
+    """An otherwise good token past its expiry — the one failure worth naming
+    to the caller, since the web app refreshes the session on it."""
+
+
 async def _verify_jwt(token: str) -> dict:
     """Verify a Supabase JWT and return its payload."""
     try:
@@ -84,7 +89,7 @@ async def _verify_jwt(token: str) -> dict:
             )
         return payload
     except ExpiredSignatureError:
-        raise ValueError("Token expired")
+        raise TokenExpired("Token expired")
     except InvalidTokenError as e:
         raise ValueError(f"Invalid token: {e}")
 
@@ -94,8 +99,13 @@ async def get_current_user(
 ) -> dict:
     try:
         return await _verify_jwt(credentials.credentials)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except TokenExpired:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except ValueError:
+        # Why it failed stays here. The library's wording, and the kid or alg
+        # it quotes back from the caller's own token, tell a prober which
+        # checks ran and in what order (test API-002).
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
