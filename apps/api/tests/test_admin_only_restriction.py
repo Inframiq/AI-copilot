@@ -86,3 +86,16 @@ async def test_no_token_requests_unaffected():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.get("/health")
     assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_admin_only_refusal_is_readable_by_the_web_app():
+    """The 403 carries CORS and the security headers like every other answer.
+    Without them the browser hid it and reported "Failed to fetch" (API-002)."""
+    origin = "https://kripax.inframiq.com"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/resumes", headers={**auth_header(ADMIN_ONLY_EMAIL), "Origin": origin})
+    assert r.status_code == 403
+    assert r.headers.get("access-control-allow-origin") == origin
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("x-content-type-options") == "nosniff"

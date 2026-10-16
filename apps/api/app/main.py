@@ -88,6 +88,39 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
+# Paths an ADMIN_ONLY_EMAILS account may still reach — everything else 403s
+# for them, so a new normal-user route is locked out by default instead of
+# needing to remember to add it to a denylist.
+_ADMIN_ONLY_EXEMPT_EXACT = {"/health", "/docs", "/openapi.json"}
+
+
+@app.middleware("http")
+async def admin_only_restriction_middleware(request: Request, call_next):
+    """settings.ADMIN_ONLY_EMAILS accounts (e.g. tanishqkundrapu@gmail.com)
+    are admin-only — no normal app access, only the admin dashboard. Every
+    other admin email is unaffected and keeps full normal-user access."""
+    if request.method != "OPTIONS":
+        email = await get_optional_user_email(request)
+        if is_admin_only_email(email):
+            path = request.url.path
+            exempt = (
+                path.startswith("/admin")
+                or path.startswith("/redoc")
+                or path in _ADMIN_ONLY_EXEMPT_EXACT
+                or (path == "/feedback" and request.method == "GET")
+            )
+            if not exempt:
+                return JSONResponse(
+                    status_code=403, content={"detail": "This account is admin-only."}
+                )
+    return await call_next(request)
+
+
+# Registered after every middleware that can answer on its own (the
+# admin-only 403 above): the last one added is the outermost, so CORS and
+# the security headers wrap every response. Added before it, a refusal
+# went out without Access-Control-Allow-Origin and the browser showed
+# "Failed to fetch" instead of the 403 (test API-002).
 # CORS — explicit origins only; wildcard glob strings are not supported by
 # the CORSMiddleware and would silently allow all origins. Production custom
 # domains go in CORS_EXTRA_ORIGINS; preview deployments, if the API should
@@ -134,34 +167,6 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
-
-
-# Paths an ADMIN_ONLY_EMAILS account may still reach — everything else 403s
-# for them, so a new normal-user route is locked out by default instead of
-# needing to remember to add it to a denylist.
-_ADMIN_ONLY_EXEMPT_EXACT = {"/health", "/docs", "/openapi.json"}
-
-
-@app.middleware("http")
-async def admin_only_restriction_middleware(request: Request, call_next):
-    """settings.ADMIN_ONLY_EMAILS accounts (e.g. tanishqkundrapu@gmail.com)
-    are admin-only — no normal app access, only the admin dashboard. Every
-    other admin email is unaffected and keeps full normal-user access."""
-    if request.method != "OPTIONS":
-        email = await get_optional_user_email(request)
-        if is_admin_only_email(email):
-            path = request.url.path
-            exempt = (
-                path.startswith("/admin")
-                or path.startswith("/redoc")
-                or path in _ADMIN_ONLY_EXEMPT_EXACT
-                or (path == "/feedback" and request.method == "GET")
-            )
-            if not exempt:
-                return JSONResponse(
-                    status_code=403, content={"detail": "This account is admin-only."}
-                )
-    return await call_next(request)
 
 
 app.include_router(resumes.router)
