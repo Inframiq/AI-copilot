@@ -540,6 +540,44 @@ def test_the_data_only_fetcher_still_refuses_every_other_scheme():
             fetcher.fetch(blocked)
 
 
+def test_a_render_sends_no_request_to_a_url_in_the_document():
+    """Test CODE-003, against a real endpoint: a local server that counts
+    what it receives. The same document rendered with WeasyPrint's own
+    fetcher does reach it (so the server is listening and the test can't
+    pass by accident); rendered the way the app renders, nothing arrives."""
+    import http.server
+    import threading
+
+    hits: list[str] = []
+
+    class Endpoint(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Endpoint)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        document = (
+            f'<link rel="stylesheet" href="{base}/sheet.css">'
+            f'<style>@import url("{base}/import.css"); p {{ background: url("{base}/bg.png") }}</style>'
+            f'<p><img src="{base}/img.png"> x</p>'
+        )
+        weasyprint.HTML(string=document).write_pdf()
+        assert hits, "the endpoint should have been reached without the app's fetcher"
+        hits.clear()
+
+        weasyprint.HTML(string=document, url_fetcher=_blocked_url_fetcher()).write_pdf()
+        assert hits == []
+    finally:
+        server.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # Missing contact fields must be omitted, not rendered as the literal
 # string "None" (Jinja2 stringifies Python None unlike JS's undefined) —
