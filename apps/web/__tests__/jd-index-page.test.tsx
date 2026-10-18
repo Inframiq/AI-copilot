@@ -206,7 +206,12 @@ describe("JDIndexPage — Tailor Resume", () => {
 });
 
 describe("JDIndexPage — uploading a different resume", () => {
-  beforeEach(() => vi.clearAllMocks());
+  // No résumé in the store: the page then offers "or upload a resume".
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    useResumeStore.getState().resetStore();
+    vi.clearAllMocks();
+  });
 
   // Test CODE-002: the server only reads PDFs up to 10 MB, so the picker
   // takes nothing else (it used to offer Word files).
