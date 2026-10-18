@@ -619,6 +619,41 @@ async def test_parse_upload_rejects_unsupported_extension():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("name, data, mime", [
+    pytest.param("notes.txt", b"plain text", "text/plain", id="txt"),
+    pytest.param("page.html", b"<script>alert(1)</script>", "text/html", id="html"),
+    pytest.param("resume.docx", b"PK\x03\x04 not really a docx",
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document", id="docx"),
+    pytest.param("resume.pdf", b"<html><script>alert(1)</script></html>", "application/pdf", id="html-named-pdf"),
+    pytest.param("resume.pdf", b"\x89PNG\r\n\x1a\n not a pdf", "application/pdf", id="png-named-pdf"),
+    pytest.param("photo.png", b"%PDF-1.4 a pdf named as an image", "image/png", id="pdf-named-png"),
+    pytest.param("resume.pdf", b"%PDF-1.4" + b"\0" * (10 * 1024 * 1024), "application/pdf", id="over-10mb"),
+])
+async def test_a_refused_upload_costs_nothing_and_stores_nothing(name, data, mime, ledger):
+    """Test CODE-002: wrong extension, a type that doesn't match the bytes, or
+    a file over 10 MB is refused before any credit is charged or anything is
+    stored."""
+    limiter.reset()
+    override, mock_session = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    storage = MagicMock()
+    try:
+        with patch("app.routers.resumes._supabase", return_value=storage):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/resumes/parse-upload",
+                    files={"file": (name, io.BytesIO(data), mime)},
+                    data={"template_id": "ats_clean"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 400
+        assert ledger.spent == []
+        storage.storage.from_.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_parse_upload_times_out_cleanly_on_slow_parse(monkeypatch, ledger):
     """A file that takes too long to parse is killed (the real sandbox, given
     less time than it takes to start), refused, refunded — and never stored."""

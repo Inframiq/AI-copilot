@@ -204,3 +204,30 @@ describe("JDIndexPage — Tailor Resume", () => {
     expect(finalState.jdId).toBe("jd-2");
   });
 });
+
+describe("JDIndexPage — uploading a different resume", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // Test CODE-002: the server only reads PDFs up to 10 MB, so the picker
+  // takes nothing else (it used to offer Word files).
+  it("takes only a PDF up to 10 MB", async () => {
+    const { container } = renderWithQueryClient(<JDIndexPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "or upload a resume" }));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toBe(".pdf");
+    expect(screen.getByText("PDF · up to 10 MB")).toBeTruthy();
+
+    const pick = (file: File) => userEvent.upload(input, file, { applyAccept: false });
+    await pick(new File(["x"], "resume.docx"));
+    expect(screen.getByText(/Only PDF files are supported/)).toBeTruthy();
+
+    const big = new File(["x"], "resume.pdf", { type: "application/pdf" });
+    Object.defineProperty(big, "size", { value: 10 * 1024 * 1024 + 1 });
+    await pick(big);
+    expect(screen.getByText("File must be smaller than 10 MB.")).toBeTruthy();
+
+    await pick(new File(["%PDF-1.4"], "resume.pdf", { type: "application/pdf" }));
+    expect(screen.getByText("resume.pdf")).toBeTruthy();
+    expect(screen.queryByText(/Only PDF|smaller than 10 MB/)).toBeNull();
+  });
+});

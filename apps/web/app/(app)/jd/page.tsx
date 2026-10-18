@@ -140,6 +140,13 @@ export default function JDIndexPage() {
   const overrideFileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
+  // Same checks as the server's upload: a PDF, at most 10 MB.
+  function pickOverrideFile(f: File) {
+    if (!f.name.toLowerCase().endsWith(".pdf")) { setOverrideError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return; }
+    if (f.size > 10 * 1024 * 1024) { setOverrideError("File must be smaller than 10 MB."); return; }
+    setOverrideError(null); setOverrideFile(f);
+  }
+
   const { data: learningItems = [] } = useQuery<LearningItem[]>({
     queryKey: ["learning"],
     queryFn: () => apiClient.getLearningItems(),
@@ -481,11 +488,8 @@ export default function JDIndexPage() {
 
           {overrideMode === "upload" && (
             <>
-              <input ref={overrideFileRef} type="file" accept=".pdf,.docx,.doc" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) {
-                  if (!f.name.match(/\.(pdf|docx|doc)$/i)) { setOverrideError("PDF or DOCX only"); return; }
-                  setOverrideError(null); setOverrideFile(f);
-                }}} />
+              <input ref={overrideFileRef} type="file" accept=".pdf" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) pickOverrideFile(f); }} />
               {overrideFile ? (
                 <div className="flex items-center gap-md p-md rounded-xl border border-primary/30 bg-primary/5">
                   <UploadSimple size={20} className="text-primary shrink-0" />
@@ -496,14 +500,14 @@ export default function JDIndexPage() {
                 <div
                   onDragOver={e => { e.preventDefault(); setOverrideDragging(true); }}
                   onDragLeave={() => setOverrideDragging(false)}
-                  onDrop={e => { e.preventDefault(); setOverrideDragging(false); const f = e.dataTransfer.files[0]; if (f) { setOverrideError(null); setOverrideFile(f); }}}
+                  onDrop={e => { e.preventDefault(); setOverrideDragging(false); const f = e.dataTransfer.files[0]; if (f) pickOverrideFile(f); }}
                   onClick={() => overrideFileRef.current?.click()}
                   className={`rounded-xl border-2 border-dashed p-lg flex items-center gap-lg cursor-pointer transition-all ${overrideDragging ? "border-primary bg-primary/5" : "border-outline-variant/40 hover:border-primary/40"}`}
                 >
                   <UploadSimple size={24} className="text-on-surface-variant/50" />
                   <div className="flex-1">
                     <p className="text-label-sm text-on-surface font-semibold">Drop resume here</p>
-                    <p className="text-caption text-on-surface-variant">PDF or DOCX · up to 10 MB</p>
+                    <p className="text-caption text-on-surface-variant">PDF · up to 10 MB</p>
                   </div>
                   <span className="text-label-sm text-primary border border-primary/30 rounded-lg px-md py-sm">Browse</span>
                 </div>
