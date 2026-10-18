@@ -99,3 +99,16 @@ async def test_admin_only_refusal_is_readable_by_the_web_app():
     assert r.headers.get("access-control-allow-origin") == origin
     assert r.headers.get("x-frame-options") == "DENY"
     assert r.headers.get("x-content-type-options") == "nosniff"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/health", "/resumes", "/no-such-route"])
+async def test_every_answer_carries_the_security_headers(path):
+    """Test WEB-001: success, refusal and not-found alike."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get(path)
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("referrer-policy") == "no-referrer"
+    assert r.headers.get("content-security-policy") == "default-src 'none'; frame-ancestors 'none'"
+    assert r.headers.get("strict-transport-security") == "max-age=63072000"

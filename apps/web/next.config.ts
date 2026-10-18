@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   },
   images: { domains: [] },
   devIndicators: false,
+  // No "X-Powered-By: Next.js": it tells a visitor nothing they need and an
+  // attacker which framework to look up (test WEB-001).
+  poweredByHeader: false,
   async headers() {
     return [
       {
@@ -26,6 +29,10 @@ const nextConfig: NextConfig = {
           // Nothing here uses the camera, microphone, location or USB, so no
           // page (or anything injected into one) may ask for them.
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), usb=(), browsing-topics=()" },
+          // A page opened from here, or one that opened this, gets no handle
+          // on this window. Sign-in is a full-page redirect and downloads open
+          // with noopener, so nothing relies on that handle.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         ],
       },
     ];
