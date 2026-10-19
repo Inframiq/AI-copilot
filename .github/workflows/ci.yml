@@ -61,8 +61,12 @@ jobs:
         # URLs this repo commits on purpose). The repository is public, so a
         # key committed once is published the moment it is pushed — this is
         # the gate that stops it (test INF-001). A new false positive goes in
-        # the baseline with `detect-secrets scan > .secrets.baseline`, or gets
-        # an inline `pragma: allowlist secret` comment.
+        # the baseline with `detect-secrets scan --slim > .secrets.baseline`,
+        # or gets an inline `pragma: allowlist secret` comment. Regenerate it
+        # with PYTHONUTF8=1 on Windows: without it Python reads files as
+        # cp1252 and silently skips every file holding a character it cannot
+        # decode (an arrow in a docs file hid three findings from a local run
+        # that this job then caught).
         run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
 
   api:
