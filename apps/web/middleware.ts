@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp, createNonce } from "@/lib/csp";
+import { SESSION_COOKIE_OPTIONS } from "@/lib/supabase";
 
 // kripax.inframiq.com is live and confirmed working (Google Sign-In tested
 // end to end on 2026-09-14) — resumebuilder.inframiq.com now 308-redirects
@@ -59,6 +60,7 @@ export async function middleware(request: NextRequest) {
       supabaseUrl,
       supabaseAnonKey,
       {
+        cookieOptions: SESSION_COOKIE_OPTIONS,
         cookies: {
           getAll: () => request.cookies.getAll(),
           setAll: (cookies) => {

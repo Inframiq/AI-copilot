@@ -16,3 +16,7 @@ export function createServerClient() {
 }
 
 export async function signOutHere() {}
+
+// middleware.ts reads this through the aliased spelling; the real value is
+// asserted against the real module in session-cookies.test.ts.
+export const SESSION_COOKIE_OPTIONS = { secure: true };

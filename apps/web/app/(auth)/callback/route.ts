@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { TERMS_VERSION, PRIVACY_VERSION } from "@/lib/legal-versions";
+import { SESSION_COOKIE_OPTIONS } from "@/lib/supabase";
 
 /** Only allow same-origin relative paths, e.g. "/dashboard" — rejects
  * absolute/protocol-relative URLs like "https://evil.com" or "//evil.com"
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: SESSION_COOKIE_OPTIONS,
         cookies: {
           getAll: () => cookieStore.getAll(),
           setAll: (cs) =>

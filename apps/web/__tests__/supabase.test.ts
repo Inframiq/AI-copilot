@@ -18,11 +18,12 @@ describe("lib/supabase", () => {
     createServerClientMock.mockClear();
   });
 
-  it("createBrowserClient forwards the configured URL and anon key", () => {
+  it("createBrowserClient forwards the configured URL, anon key and secure cookies", () => {
     createBrowserClient();
     expect(createBrowserClientMock).toHaveBeenCalledWith(
       expect.any(String),
-      expect.any(String)
+      expect.any(String),
+      { cookieOptions: { secure: true } }
     );
   });
 
@@ -37,6 +38,7 @@ describe("lib/supabase", () => {
     expect(createServerClientMock).toHaveBeenCalledOnce();
 
     const [, , options] = createServerClientMock.mock.calls[0];
+    expect(options.cookieOptions).toEqual({ secure: true });
     expect(options.cookies.getAll()).toEqual([{ name: "sb-token", value: "abc" }]);
 
     options.cookies.setAll([{ name: "new-cookie", value: "xyz", options: {} }]);
