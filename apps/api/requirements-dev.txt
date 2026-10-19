@@ -1,4 +1,12 @@
 -r requirements.txt
+# PYSEC-2026-1845 (pytest through 9.0.2: the predictable /tmp/pytest-of-<user>
+# directory lets another local user on the same UNIX host interfere with a run)
+# is accepted, not fixed: the only fix is pytest 9.0.3, and every pytest-asyncio
+# release to date — 1.2.0 included — requires `pytest<9,>=8.2`, so the upgrade
+# is blocked upstream. It is a test-only dependency (requirements.txt, which is
+# what gets deployed, does not include it), the CI runners are single-tenant
+# throwaway VMs, and development happens on Windows. Revisit when
+# pytest-asyncio supports pytest 9 (test INF-002).
 pytest==8.2.2
 pytest-asyncio==0.23.7
 pytest-httpx==0.30.0
