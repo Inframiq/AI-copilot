@@ -38,6 +38,33 @@ jobs:
       - name: Dependency audit
         run: npm audit --omit=dev
 
+  secrets:
+    name: Secrets (scan)
+    runs-on: ubuntu-26.04
+    steps:
+      # checkout runs `git init`, and a fresh runner's git prints a page of
+      # hints about the default branch name unless one is set.
+      - run: git config --global init.defaultBranch main
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets==1.5.0
+
+      - name: Scan every tracked file
+        # Fails on any credential-shaped string that is not already recorded
+        # in .secrets.baseline (the placeholders, test fixtures and example
+        # URLs this repo commits on purpose). The repository is public, so a
+        # key committed once is published the moment it is pushed — this is
+        # the gate that stops it (test INF-001). A new false positive goes in
+        # the baseline with `detect-secrets scan > .secrets.baseline`, or gets
+        # an inline `pragma: allowlist secret` comment.
+        run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
+
   api:
     name: API (test)
     runs-on: ubuntu-26.04

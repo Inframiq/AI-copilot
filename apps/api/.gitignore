@@ -1,7 +1,10 @@
 __pycache__/
 *.pyc
 *.pyo
+# Any env file, not just .env — see the root .gitignore (test INF-001).
 .env
+.env.*
+!.env.example
 .pytest_cache/
 *.egg-info/
 dist/

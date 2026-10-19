@@ -1,5 +1,10 @@
 .worktrees/
+# Every real env file, anywhere in the repo — .env, .env.local,
+# .env.production and friends. Only the committed examples are allowed
+# through, so a new one can never be added by accident (test INF-001).
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
