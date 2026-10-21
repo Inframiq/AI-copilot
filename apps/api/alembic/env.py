@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from app.core.config import settings
 from app.db.session import Base
+from app.db.tls import connect_args
 from app.db import models  # noqa: F401 — registers all models with Base.metadata
 
 config = context.config
@@ -57,7 +58,9 @@ def run_migrations_offline() -> None:
 
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode with an async engine."""
-    connectable = create_async_engine(settings.migration_url)
+    connectable = create_async_engine(
+        settings.migration_url, connect_args=connect_args(settings.migration_url)
+    )
     async with connectable.connect() as connection:
         await connection.run_sync(
             lambda conn: context.configure(connection=conn, target_metadata=target_metadata)

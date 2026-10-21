@@ -22,6 +22,7 @@ from alembic.util.exc import CommandError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
+from app.db.tls import connect_args
 
 # Lets alembic/env.py tell a deploy apart from someone migrating by hand.
 DEPLOY_FLAG = "KRIPAX_DEPLOY_MIGRATION"
@@ -30,7 +31,7 @@ _INI = pathlib.Path(__file__).resolve().parents[1] / "alembic.ini"
 
 
 async def _current_revision(url: str) -> str | None:
-    engine = create_async_engine(url)
+    engine = create_async_engine(url, connect_args=connect_args(url))
     try:
         async with engine.connect() as conn:
             return await conn.run_sync(
