@@ -93,11 +93,48 @@ def test_the_root_certificate_ships_in_the_image():
     assert "COPY . ." in (API_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
 
-async def test_a_server_that_wont_do_tls_is_refused_not_used_in_plain_text(pg_uri):
-    """The local test Postgres has no TLS, like a downgraded connection."""
+async def _login_sent_in_plain_text(ssl_setting) -> bool:
+    """A server that answers the client's TLS request with "no", as a
+    downgrading middlebox would. Returns whether the client carried on and
+    sent its login (the startup message) in plain text anyway."""
+    import asyncio
+
     import asyncpg
 
-    plain = pg_uri.replace("postgresql+asyncpg://", "postgresql://", 1)
-    with pytest.raises((ConnectionError, OSError, asyncpg.PostgresError)):
-        conn = await asyncpg.connect(plain, ssl=connect_args(POOLER)["ssl"], timeout=10)
-        await conn.close()
+    received = bytearray()
+
+    async def server(reader, writer):
+        request = await reader.readexactly(8)
+        if request[4:] != (80877103).to_bytes(4, "big"):  # not an SSLRequest
+            received.extend(request + await reader.read(1024))
+            writer.close()
+            return
+        writer.write(b"N")
+        await writer.drain()
+        try:
+            received.extend(await asyncio.wait_for(reader.read(1024), 2))
+        except asyncio.TimeoutError:
+            pass
+        writer.close()
+
+    srv = await asyncio.start_server(server, "127.0.0.1", 0)
+    port = srv.sockets[0].getsockname()[1]
+    try:
+        with pytest.raises((ConnectionError, OSError, asyncpg.PostgresError, asyncio.TimeoutError)):
+            await asyncpg.connect(
+                host="127.0.0.1", port=port, user="kripax_api", password="x",
+                database="postgres", ssl=ssl_setting, timeout=5,
+            )
+    finally:
+        srv.close()
+        await srv.wait_closed()
+    return b"kripax_api" in received
+
+
+async def test_asyncpgs_default_would_log_in_without_tls():
+    """The gap this closes: "prefer" settles for plain text."""
+    assert await _login_sent_in_plain_text("prefer") is True
+
+
+async def test_a_server_that_wont_do_tls_is_refused_not_used_in_plain_text():
+    assert await _login_sent_in_plain_text(connect_args(POOLER)["ssl"]) is False
