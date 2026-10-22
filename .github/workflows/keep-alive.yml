@@ -4,6 +4,11 @@ name: Keep API alive
 # first request after that can take 50+ seconds to wake it back up — long
 # enough that the browser gives up and reports a bare "failed to fetch".
 # Pinging /health well inside that window keeps the service warm.
+#
+# It is also the site's alarm (test INF-004): a failed run emails the repo
+# owner, so each check below fails the run when the live site stops doing
+# what it should — the API or the website down, or the API answering
+# requests that should be refused.
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -24,3 +29,29 @@ jobs:
           --retry-delay 30
           --retry-all-errors
           https://ai-copilot-asxm.onrender.com/health
+
+      - name: Website answers
+        run: >
+          curl -sf --show-error -o /dev/null
+          --connect-timeout 15
+          --max-time 60
+          --retry 3
+          --retry-delay 30
+          --retry-all-errors
+          https://kripax.inframiq.com/login
+
+      - name: API still refuses what it should
+        # Not signed in: no data, no admin pages, no API docs.
+        run: |
+          check() {
+            got=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$2")
+            if [ "$got" != "$1" ]; then
+              echo "::error::$2 answered $got, expected $1"
+              return 1
+            fi
+            echo "$2 -> $got"
+          }
+          check 401 https://ai-copilot-asxm.onrender.com/resumes
+          check 401 https://ai-copilot-asxm.onrender.com/admin/users
+          check 404 https://ai-copilot-asxm.onrender.com/docs
+          check 404 https://ai-copilot-asxm.onrender.com/openapi.json
