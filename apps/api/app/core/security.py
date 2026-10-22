@@ -4,9 +4,10 @@ import httpx
 import jwt
 from jwt.algorithms import RSAAlgorithm, ECAlgorithm
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+from app.core.security_log import note_denial
 
 bearer_scheme = HTTPBearer()
 
@@ -95,20 +96,23 @@ async def _verify_jwt(token: str) -> dict:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
     try:
         return await _verify_jwt(credentials.credentials)
     except TokenExpired:
+        note_denial(request, "expired_token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     except ValueError:
         # Why it failed stays here. The library's wording, and the kid or alg
         # it quotes back from the caller's own token, tell a prober which
         # checks ran and in what order (test API-002).
+        note_denial(request, "invalid_token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
-async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
     """Gate for the admin dashboard (feedback list, user/plan management) —
     no roles table, just a comma-separated allowlist in settings.admin_emails
     checked against the JWT's email claim.
@@ -120,9 +124,11 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     signed in through Google at least once."""
     admin_emails = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
     if (user.get("email") or "").lower() not in admin_emails:
+        note_denial(request, "not_admin", user.get("sub"))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     providers = (user.get("app_metadata") or {}).get("providers") or []
     if "google" not in providers:
+        note_denial(request, "admin_without_google", user.get("sub"))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
 

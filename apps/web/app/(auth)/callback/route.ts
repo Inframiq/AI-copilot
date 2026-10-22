@@ -41,6 +41,27 @@ async function recordPolicyAcceptance(accessToken: string): Promise<void> {
   }
 }
 
+/** Keeps a logged value to a short slug: what arrives in the URL is the
+ * caller's to choose, and a newline in it would forge a second log line. */
+function slug(value: string | null | undefined): string {
+  return (value ?? "").replace(/[^A-Za-z0-9_.:-]/g, "?").slice(0, 60) || "-";
+}
+
+/** One line in the host's log for every failed sign-in (test INF-004), in
+ * the API's security_event shape: why it failed and from where. Never the
+ * one-time code, a cookie or a token — whoever reads the log must not be
+ * able to finish someone's sign-in with it. */
+export function logFailedSignIn(
+  request: NextRequest,
+  reason: "provider_error" | "missing_code" | "exchange_failed",
+  detail?: string | null
+): void {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  console.warn(
+    `security_event=sign_in_failed reason=${reason} detail=${slug(detail)} ip=${slug(ip)}`
+  );
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -66,6 +87,9 @@ export async function GET(request: NextRequest) {
     );
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      logFailedSignIn(request, "exchange_failed", error.code ?? String(error.status ?? ""));
+    }
 
     if (!error) {
       const {
@@ -91,6 +115,13 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.redirect(new URL(next, request.url));
     }
+  }
+
+  if (!code) {
+    // Google or Supabase sends ?error=access_denied (and the like) when the
+    // sign-in was cancelled or refused before a code was issued.
+    const providerError = searchParams.get("error");
+    logFailedSignIn(request, providerError ? "provider_error" : "missing_code", providerError);
   }
 
   // Return to login with error if code exchange failed

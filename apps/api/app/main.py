@@ -10,7 +10,9 @@ from app.core.rate_limit import limiter
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.config import settings
 from app.core.security import get_optional_user_email, is_admin_only_email
+from app.core.security_log import configure_logging, log_if_denied, note_denial
 
+configure_logging()
 logger = logging.getLogger("app")
 
 
@@ -110,6 +112,7 @@ async def admin_only_restriction_middleware(request: Request, call_next):
                 or (path == "/feedback" and request.method == "GET")
             )
             if not exempt:
+                note_denial(request, "admin_only_account")
                 return JSONResponse(
                     status_code=403, content={"detail": "This account is admin-only."}
                 )
@@ -162,6 +165,16 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     response.headers["Strict-Transport-Security"] = "max-age=63072000"
+    return response
+
+
+# Added last, so it is the outermost layer and sees every refusal: the auth
+# checks' 401/403s, the admin-only 403 above and the rate limiter's 429s
+# (app.core.security_log, test INF-004).
+@app.middleware("http")
+async def security_event_middleware(request: Request, call_next):
+    response = await call_next(request)
+    log_if_denied(request, response.status_code)
     return response
 
 
