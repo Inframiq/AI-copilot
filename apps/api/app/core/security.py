@@ -95,12 +95,51 @@ async def _verify_jwt(token: str) -> dict:
         raise ValueError(f"Invalid token: {e}")
 
 
+# A signed JWT outlives sign-out: the signature and expiry still check out for
+# up to an hour after the session behind it is deleted. So every request also
+# asks the database whether the token's session still exists (test ATK-007,
+# migration 045). A live answer is reused for a few seconds, so a page that
+# fires several requests at once asks once; an ended session never comes back,
+# so that answer is kept until the cache is trimmed.
+_SESSION_LIVE_TTL = 5.0
+_SESSION_CACHE_MAX = 10_000
+_session_cache: dict[str, tuple[bool, float]] = {}
+
+
+async def _session_is_active(session_id: str) -> bool:
+    from sqlalchemy import text
+    from app.db.session import engine
+
+    async with engine.connect() as conn:
+        return bool(
+            await conn.scalar(
+                text("SELECT private.session_is_active(:sid)"), {"sid": session_id}
+            )
+        )
+
+
+async def _session_still_open(session_id: str | None) -> bool:
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    now = time.monotonic()
+    cached = _session_cache.get(session_id)
+    if cached is not None:
+        active, at = cached
+        if not active or now - at < _SESSION_LIVE_TTL:
+            return active
+    active = await _session_is_active(session_id)
+    if len(_session_cache) >= _SESSION_CACHE_MAX:
+        _session_cache.clear()
+    _session_cache[session_id] = (active, now)
+    return active
+
+
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
     try:
-        return await _verify_jwt(credentials.credentials)
+        payload = await _verify_jwt(credentials.credentials)
     except TokenExpired:
         note_denial(request, "expired_token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
@@ -110,6 +149,12 @@ async def get_current_user(
         # checks ran and in what order (test API-002).
         note_denial(request, "invalid_token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if not await _session_still_open(payload.get("session_id")):
+        # Same answer as a forged token: whether the session ended or never
+        # existed is nothing the caller needs.
+        note_denial(request, "ended_session", payload.get("sub"))
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    return payload
 
 
 async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:

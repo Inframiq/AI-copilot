@@ -133,6 +133,21 @@ def ledger(monkeypatch):
     return book
 
 
+@pytest.fixture(autouse=True)
+def sessions_open(monkeypatch):
+    """Every signed-in request asks the database whether the token's session
+    still exists (app.core.security, test ATK-007); tests' made-up tokens
+    have none. Treated as open here — test_signed_out_tokens.py runs the real
+    check against a throwaway Postgres."""
+    from app.core import security
+
+    async def _open(session_id):
+        return True
+
+    monkeypatch.setattr(security, "_session_still_open", _open)
+    security._session_cache.clear()
+
+
 # ── A real Postgres, for tests that need one ────────────────────────────────
 
 @pytest.fixture(scope="session")
