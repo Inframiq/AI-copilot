@@ -4,13 +4,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const pushMock = vi.fn();
+const leaveMock = vi.fn();
 const signOutMock = vi.fn().mockResolvedValue({ error: null });
 const getUserMock = vi.fn().mockResolvedValue({ data: { user: { email: "u@example.com" } } });
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock, replace: pushMock }),
-}));
 vi.mock("@/lib/api-client", () => ({
   apiClient: { getSubscription: vi.fn(), deleteAccount: vi.fn() },
   ApiError: class ApiError extends Error {},
@@ -18,6 +15,7 @@ vi.mock("@/lib/api-client", () => ({
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({ auth: { signOut: signOutMock, getUser: getUserMock } }),
   signOutHere: () => signOutMock(),
+  leaveSignedOut: () => leaveMock(),
 }));
 vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: vi.fn() }));
 
@@ -57,7 +55,7 @@ describe("Account page", () => {
   beforeEach(() => {
     vi.mocked(apiClient.getSubscription).mockReset();
     vi.mocked(getCareerProfile).mockReset();
-    pushMock.mockClear();
+    leaveMock.mockClear();
     signOutMock.mockClear();
   });
 
@@ -120,14 +118,14 @@ describe("Account page", () => {
     expect(await screen.findByText(/finish setting it up/i)).toHaveAttribute("href", "/onboarding");
   });
 
-  it("signs out and redirects to /login", async () => {
+  it("signs out and leaves for /login with a full page load", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     vi.mocked(getCareerProfile).mockResolvedValue(null);
     renderPage();
 
     await userEvent.click(await screen.findByRole("button", { name: /sign out/i }));
     expect(signOutMock).toHaveBeenCalledOnce();
-    expect(pushMock).toHaveBeenCalledWith("/login");
+    expect(leaveMock).toHaveBeenCalledOnce();
   });
 
   it("links the upgrade card to /plans", async () => {

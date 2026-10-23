@@ -1,10 +1,9 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Scales } from "@phosphor-icons/react";
 import { apiClient, type PolicyAcceptance } from "@/lib/api-client";
-import { signOutHere } from "@/lib/supabase";
+import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
 
 /**
@@ -18,7 +17,6 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
  * lock anyone out of their own work.
  */
 export function PolicyUpdatePrompt() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -53,7 +51,7 @@ export function PolicyUpdatePrompt() {
   async function signOut() {
     await signOutHere();
     queryClient.clear();
-    router.push("/login");
+    leaveSignedOut();
   }
 
   const link = "text-primary font-semibold hover:underline";

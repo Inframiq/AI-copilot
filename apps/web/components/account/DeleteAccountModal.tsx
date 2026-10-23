@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Warning } from "@phosphor-icons/react";
-import { signOutHere } from "@/lib/supabase";
+import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { apiClient, ApiError } from "@/lib/api-client";
 
 // What a deletion actually removes — shown in the dialog so "permanent" is
@@ -19,7 +18,6 @@ const REMOVED = [
 const CONFIRM_WORD = "DELETE";
 
 export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [confirmText, setConfirmText] = useState("");
@@ -52,11 +50,15 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    // Data + auth user are gone — tear down the local session and state.
-    await signOutHere();
-    queryClient.clear();
+    // Data + auth user are gone. Show that for a moment, then tear down the
+    // local session and leave: signing out first would let SessionGuard
+    // leave at once, before the confirmation was seen.
     setPhase("done");
-    setTimeout(() => router.replace("/login"), 1200);
+    setTimeout(async () => {
+      await signOutHere();
+      queryClient.clear();
+      leaveSignedOut();
+    }, 1200);
   }
 
   return (

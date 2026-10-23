@@ -10,7 +10,7 @@ vi.mock("@supabase/ssr", () => ({
 
 // Import the real file by relative path — the vitest.config alias only
 // intercepts "@/lib/supabase" imports elsewhere, not this direct import.
-import { createBrowserClient, createServerClient, signOutHere } from "../lib/supabase";
+import { createBrowserClient, createServerClient, leaveSignedOut, signOutHere } from "../lib/supabase";
 
 describe("lib/supabase", () => {
   beforeEach(() => {
@@ -55,5 +55,18 @@ describe("signOutHere", () => {
     await signOutHere();
     expect(signOut).toHaveBeenNthCalledWith(1);
     expect(signOut).toHaveBeenNthCalledWith(2, { scope: "local" });
+  });
+});
+
+describe("leaveSignedOut", () => {
+  it("leaves with a full page load that takes the page out of the history (ATK-008)", () => {
+    const replace = vi.fn();
+    vi.stubGlobal("window", { location: { replace } });
+    try {
+      leaveSignedOut();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(replace).toHaveBeenCalledWith("/login");
   });
 });

@@ -1,11 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass, Question } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
-import { signOutHere } from "@/lib/supabase";
+import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/components/support/HelpButton";
@@ -46,7 +45,6 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 }
 
 export default function AccountPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
 
@@ -62,7 +60,7 @@ export default function AccountPage() {
   async function handleSignOut() {
     await signOutHere();
     queryClient.clear();
-    router.push("/login");
+    leaveSignedOut();
   }
 
   const pct =

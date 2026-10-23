@@ -7,7 +7,7 @@ import { TERMS_VERSION, PRIVACY_VERSION } from "../../lib/legal-versions";
 const getPolicyAcceptance = vi.fn();
 const acceptPolicies = vi.fn();
 const signOut = vi.fn();
-const push = vi.fn();
+const leave = vi.fn();
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
@@ -15,8 +15,7 @@ vi.mock("@/lib/api-client", () => ({
     acceptPolicies: (t: string, p: string) => acceptPolicies(t, p),
   },
 }));
-vi.mock("@/lib/supabase", () => ({ createBrowserClient: () => ({ auth: { signOut } }), signOutHere: () => signOut() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("@/lib/supabase", () => ({ createBrowserClient: () => ({ auth: { signOut } }), signOutHere: () => signOut(), leaveSignedOut: () => leave() }));
 
 import { PolicyUpdatePrompt } from "../../components/legal/PolicyUpdatePrompt";
 
@@ -34,7 +33,7 @@ describe("PolicyUpdatePrompt", () => {
     getPolicyAcceptance.mockReset();
     acceptPolicies.mockReset();
     signOut.mockReset();
-    push.mockReset();
+    leave.mockReset();
   });
 
   it("stays out of the way when the current versions are on record", async () => {
@@ -69,7 +68,7 @@ describe("PolicyUpdatePrompt", () => {
     getPolicyAcceptance.mockResolvedValue({ terms_version: null, privacy_version: null, accepted_at: null });
     renderPrompt();
     fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
+    await waitFor(() => expect(leave).toHaveBeenCalled());
     expect(signOut).toHaveBeenCalled();
     expect(acceptPolicies).not.toHaveBeenCalled();
   });

@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 
 vi.mock("@/components/analytics/PlanTracker", () => ({ PlanTracker: () => <div /> }));
 vi.mock("@/components/legal/PolicyUpdatePrompt", () => ({ PolicyUpdatePrompt: () => <div /> }));
+vi.mock("@/components/auth/SessionGuard", () => ({ SessionGuard: () => null }));
 
 import BuilderLayout from "../app/(builder)/layout";
 

@@ -1,6 +1,7 @@
 import { PlanTracker } from "@/components/analytics/PlanTracker";
 import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
 import { ViewportLock } from "@/components/layout/ViewportLock";
+import { SessionGuard } from "@/components/auth/SessionGuard";
 
 /**
  * The Builder and Studio own the full viewport — no app sidebar, no top nav.
@@ -18,6 +19,7 @@ export default function BuilderLayout({ children }: { children: React.ReactNode 
       {children}
       <PlanTracker />
       <PolicyUpdatePrompt />
+      <SessionGuard />
     </div>
   );
 }

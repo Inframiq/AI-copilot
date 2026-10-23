@@ -7,6 +7,7 @@ export function createBrowserClient() {
         data: { session: { access_token: "test-token" } },
       }),
       getUser: async () => ({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
     },
   };
 }
@@ -16,6 +17,8 @@ export function createServerClient() {
 }
 
 export async function signOutHere() {}
+
+export function leaveSignedOut() {}
 
 // middleware.ts reads this through the aliased spelling; the real value is
 // asserted against the real module in session-cookies.test.ts.

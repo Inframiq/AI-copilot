@@ -75,3 +75,15 @@ export async function signOutHere() {
     // nothing left to clear
   }
 }
+
+/**
+ * Go to the sign-in page with a full page load, never a router push (test
+ * ATK-008). A push kept the signed-out tab's JavaScript running: the
+ * in-memory stores (résumés, tailoring sessions) and the router's cache of
+ * pages already visited, which Back showed again without asking the server.
+ * A full load drops all of it, and replace() takes the page just left out of
+ * the history.
+ */
+export function leaveSignedOut() {
+  window.location.replace("/login");
+}

@@ -5,6 +5,7 @@ import { GuidedTour } from "@/components/tour/GuidedTour";
 import { PlanTracker } from "@/components/analytics/PlanTracker";
 import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
 import { ViewportLock } from "@/components/layout/ViewportLock";
+import { SessionGuard } from "@/components/auth/SessionGuard";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <GuidedTour />
       <PlanTracker />
       <PolicyUpdatePrompt />
+      <SessionGuard />
     </div>
   );
 }
