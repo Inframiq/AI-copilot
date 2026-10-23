@@ -545,9 +545,12 @@ async def generate_resume(
         rounds += 1
 
     if not result.valid:
+        # Counts only. A violation quotes the résumé (bullet is 41 words:
+        # "Led the …") and names roles and skill groups, and the host's log
+        # is no place for a user's résumé (test ATK-009).
         logger.warning(
-            "generate_resume: %d violation(s) remain after %d compression rounds: %s",
-            len(result.violations), rounds, result.to_dict(),
+            "generate_resume: %d violation(s) remain after %d compression rounds",
+            len(result.violations), rounds,
         )
 
     # One more render of the final content to tell the caller whether it fills

@@ -355,3 +355,25 @@ def test_compress_empty_section_violation_preserves_the_other_role_at_same_compa
     compressed = _compress(content, violations)
     assert len(compressed["experience"]) == 1
     assert len(compressed["experience"][0]["bullets"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_violation_left_after_compression_logs_no_resume_text(monkeypatch, caplog):
+    """The warning says how many rules were still broken, never what the
+    résumé says: violations quote bullets and name roles (test ATK-009)."""
+    from app.services import resume_generator
+    from app.services.resume_validator import ValidationResult, Violation
+
+    leak = Violation("Experience: Staff Engineer @ ATK009COMPANY", 'bullet is 41 words: "ATK009BULLET led the ..."', 30)
+    monkeypatch.setattr(resume_generator, "validate_resume", lambda *a, **k: ValidationResult(valid=False, violations=[leak]))
+    profile = {
+        "contact": {"name": "Alex Fresher", "email": "alex@example.com"},
+        "education": [{"institution": "State University", "degree": "BSc CS", "year": "2024"}],
+        "projects": [_project("Todo App", 2)],
+        "skills": ["Python", "Git"],
+    }
+    with caplog.at_level("WARNING"):
+        await generate_resume(profile, "fresher", make_generator_provider(), target_role="Junior Developer")
+    logged = " | ".join(r.getMessage() for r in caplog.records)
+    assert "1 violation(s) remain" in logged
+    assert "ATK009" not in logged
