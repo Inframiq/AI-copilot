@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Star, LockSimple, ArrowsClockwise } from "@phosphor-icons/react";
+import { Star, LockSimple, ArrowsClockwise, SignOut } from "@phosphor-icons/react";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import type { FeedbackAdmin, AdminUser, DeletionRequestAdmin, DeletionRequestStatus } from "@career-copilot/types";
 
 type Tab = "users" | "feedback" | "deletion";
@@ -18,10 +19,28 @@ const TAB_LABELS: Record<Tab, string> = {
 // state rather than gating navigation to this route client-side.
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("users");
+  const queryClient = useQueryClient();
+
+  // Admin-only accounts are kept off every other page (middleware.ts),
+  // Account included, so this is their only way out.
+  async function handleSignOut() {
+    await signOutHere();
+    queryClient.clear();
+    leaveSignedOut();
+  }
 
   return (
     <div className="p-xl max-w-5xl mx-auto flex flex-col gap-lg">
-      <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
+      <div className="flex items-center justify-between gap-md">
+        <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm font-semibold text-error border border-error/40 bg-error/5 hover:bg-error/10 transition-colors"
+        >
+          <SignOut size={16} weight="bold" />
+          Sign out
+        </button>
+      </div>
 
       <div className="flex items-center gap-sm border-b border-outline-variant/20">
         {(["users", "feedback", "deletion"] as const).map((t) => (
