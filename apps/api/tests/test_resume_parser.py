@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.resume_parser import (
     PARSE_SYSTEM,
     ResumeUnreadable,
-    extract_text_from_docx,
     extract_text_from_pdf,
     parse_resume_text,
 )
@@ -128,63 +127,6 @@ def test_extract_text_from_pdf_omits_hyperlink_section_when_no_links():
     assert "Hyperlinks found" not in text
 
 
-# ---------------------------------------------------------------------------
-# Same bug, same fix, for Word resumes: a hyperlink's visible run text (e.g.
-# "GitHub") never includes the address it points at — see the DOCX branch of
-# extract_text_from_docx / _append_link_hints.
-# ---------------------------------------------------------------------------
-
-
-def _add_hyperlink(paragraph, url: str, text: str) -> None:
-    """python-docx (this version) has no writer-side add_hyperlink helper —
-    build the run manually via its relationship + oxml APIs, purely for
-    constructing a realistic test fixture."""
-    import docx
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-
-    part = paragraph.part
-    r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
-    hyperlink = OxmlElement("w:hyperlink")
-    hyperlink.set(qn("r:id"), r_id)
-    run = OxmlElement("w:r")
-    run.append(OxmlElement("w:rPr"))
-    t = OxmlElement("w:t")
-    t.text = text
-    run.append(t)
-    hyperlink.append(run)
-    paragraph._p.append(hyperlink)
-
-
-def _docx_with_link(anchor_text: str, href: str) -> bytes:
-    import io as _io
-    import docx
-
-    doc = docx.Document()
-    p = doc.add_paragraph("Contact: ")
-    _add_hyperlink(p, href, anchor_text)
-    buf = _io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
-
-
-def test_extract_text_from_docx_surfaces_hyperlink_url_behind_bare_anchor_text():
-    docx_bytes = _docx_with_link("GitHub", "https://github.com/janedoe/my-repo")
-    text = extract_text_from_docx(docx_bytes)
-    assert "GitHub" in text
-    assert "https://github.com/janedoe/my-repo" in text
-
-
-def test_extract_text_from_docx_omits_hyperlink_section_when_no_links():
-    import io as _io
-    import docx
-
-    doc = docx.Document()
-    doc.add_paragraph("Jane Doe, no links here.")
-    buf = _io.BytesIO()
-    doc.save(buf)
-    text = extract_text_from_docx(buf.getvalue())
-    assert "Hyperlinks found" not in text
 
 
 @pytest.mark.asyncio

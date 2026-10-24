@@ -1,8 +1,6 @@
-"""Parse uploaded PDF/DOCX resumes into structured ResumeContent dicts."""
-import io
+"""Parse uploaded PDF resumes into structured ResumeContent dicts."""
 import re
 import json
-import zipfile
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.tailoring import _looks_like_a_skill
@@ -21,29 +19,6 @@ from app.services.pdf_text import (  # noqa: F401
 # A host with a dot (github.com/x, odtect.app), or an explicit scheme.
 _URL_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*://|[a-z0-9-]\.[a-z]{2,}", re.IGNORECASE)
 
-# DOCX files are zip archives — a maliciously crafted archive can advertise a
-# tiny compressed size but expand to gigabytes ("zip bomb"), exhausting memory
-# before python-docx ever gets to text extraction. Bound both the total
-# decompressed size and the per-entry compression ratio before handing the
-# archive to python-docx.
-_MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB of decompressed XML is already generous
-_MAX_DOCX_COMPRESSION_RATIO = 100  # legitimate docx XML rarely exceeds ~20:1
-
-
-def _check_docx_zip_safety(file_bytes: bytes) -> None:
-    """Raise ValueError if the docx zip looks like a decompression bomb or is corrupt."""
-    try:
-        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
-            total_uncompressed = 0
-            for info in zf.infolist():
-                total_uncompressed += info.file_size
-                if total_uncompressed > _MAX_DOCX_UNCOMPRESSED_BYTES:
-                    raise ValueError("DOCX file exceeds the maximum allowed decompressed size.")
-                if info.compress_size > 0 and (info.file_size / info.compress_size) > _MAX_DOCX_COMPRESSION_RATIO:
-                    raise ValueError("DOCX file failed safety validation (suspicious compression ratio).")
-    except zipfile.BadZipFile:
-        raise ValueError("Invalid DOCX file — not a valid archive.")
-
 
 class ParsedResume(BaseModel):
     contact: dict
@@ -54,36 +29,6 @@ class ParsedResume(BaseModel):
     skills: list[str]
     languages: list[dict] | None = None
     certifications: list[str] | None = None
-
-
-def extract_text_from_docx(file_bytes: bytes) -> str:
-    _check_docx_zip_safety(file_bytes)
-    try:
-        import docx  # type: ignore
-        doc = docx.Document(io.BytesIO(file_bytes))
-        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-        text = "\n".join(paragraphs).strip()
-        # Same issue as PDF's _extract_links — a Word hyperlink's visible
-        # run text (e.g. "GitHub") never includes the address it points at.
-        links = [
-            _Link(h.address, h.text.strip(), p.text.strip())
-            for p in doc.paragraphs
-            for h in p.hyperlinks
-            if h.address
-        ]
-        return _append_link_hints(text, links)[:_MAX_TEXT_CHARS]
-    except ImportError:
-        raise RuntimeError("python-docx is not installed. Add 'python-docx' to requirements.txt.")
-
-
-def extract_text(file_bytes: bytes, content_type: str) -> str:
-    ct = content_type.lower()
-    if "pdf" in ct:
-        return extract_text_from_pdf(file_bytes)
-    if "word" in ct or "docx" in ct or "openxml" in ct:
-        return extract_text_from_docx(file_bytes)
-    # Fallback: assume plain text
-    return file_bytes.decode("utf-8", errors="replace")[:_MAX_TEXT_CHARS]
 
 
 def _strip_json_fence(raw: str) -> str:
