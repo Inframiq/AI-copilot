@@ -158,6 +158,9 @@ async def security_headers_middleware(request: Request, call_next):
         and run nothing, whatever text it carries (test WEB-001).
       - HSTS: HTTPS only, so a token is never sent over plain HTTP. Not
         includeSubDomains: the host is a subdomain of Render's, not ours.
+      - Permissions-Policy / COOP: a response opened in a tab gets no device
+        access and no handle on the window that opened it. Little to protect
+        on JSON, but the same baseline the website sends.
     """
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -165,6 +168,8 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     response.headers["Strict-Transport-Security"] = "max-age=63072000"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), usb=(), browsing-topics=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     return response
 
 

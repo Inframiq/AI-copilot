@@ -112,3 +112,5 @@ async def test_every_answer_carries_the_security_headers(path):
     assert r.headers.get("referrer-policy") == "no-referrer"
     assert r.headers.get("content-security-policy") == "default-src 'none'; frame-ancestors 'none'"
     assert r.headers.get("strict-transport-security") == "max-age=63072000"
+    assert r.headers.get("permissions-policy") == "camera=(), microphone=(), geolocation=(), usb=(), browsing-topics=()"
+    assert r.headers.get("cross-origin-opener-policy") == "same-origin"
