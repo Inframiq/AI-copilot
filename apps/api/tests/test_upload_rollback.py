@@ -136,3 +136,25 @@ async def test_a_failure_after_the_save_undoes_nothing(ledger):
     assert _removed(storage) == []
     assert ledger.refunded == []
 
+
+
+@pytest.mark.asyncio
+async def test_replacing_someone_elses_resume_is_404_before_anything_is_charged(ledger):
+    """The Replace flow names the résumé to overwrite by id (test ATK-010).
+    Another user's id must look exactly like one that doesn't exist: looked up
+    under the caller's own id only, refused before a credit is spent, the
+    file read, or anything stored."""
+    import uuid
+
+    someone_elses = uuid.uuid4()
+    session = _replacing(None)  # the owner-scoped lookup finds nothing
+    storage, parse = MagicMock(), AsyncMock(return_value=PARSED)
+    r = await _upload(session, parse, storage, data={"resume_id": str(someone_elses)})
+
+    assert r.status_code == 404 and r.json() == {"detail": "Resume not found"}
+    lookup = session.execute.call_args_list[0].args[0].compile().params.values()
+    assert someone_elses in lookup and uuid.UUID(TEST_USER_ID) in lookup
+    assert ledger.spent == []
+    parse.assert_not_called()
+    storage.storage.from_.return_value.upload.assert_not_called()
+    session.add.assert_not_called()
