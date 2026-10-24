@@ -353,3 +353,81 @@ async def test_downgrade_puts_the_policies_back(supabase_like):
     await conn.execute(_migration().DOWNGRADE_SQL)
     assert await conn.fetch("SELECT policyname, qual, with_check FROM pg_policies ORDER BY policyname") == before
     assert await conn.fetchval("SELECT to_regnamespace('private')") is None
+
+
+# ── Migration 048: a browser asks only about its own sign-in ────────────────
+
+MIG_048 = pathlib.Path(__file__).parents[1] / "alembic/versions/048_session_check_only_your_own.py"
+SESSION_B = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+
+def _migration_048():
+    spec = importlib.util.spec_from_file_location("m048", MIG_048)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_migration_048_chains_from_047():
+    m = _migration_048()
+    assert m.revision == "048"
+    assert m.down_revision == "047"
+    assert "__CALLER_CHECK__" not in m.UPGRADE_SQL + m.DOWNGRADE_SQL
+    assert m.CALLER_CHECK in m.UPGRADE_SQL and m.CALLER_CHECK not in m.DOWNGRADE_SQL
+
+
+async def _with_b_signed_in(conn):
+    await conn.execute(_migration().UPGRADE_SQL)
+    await _seed(conn)
+    async with conn.transaction():
+        await conn.execute("RESET ROLE")
+        await conn.execute("INSERT INTO auth.sessions VALUES ($1, $2, NULL)", SESSION_B, uuid.uuid4())
+        await conn.execute("SET ROLE m045_owner")
+
+
+async def _asks(conn, session_id):
+    rows = await _as_browser(conn, "SELECT private.session_is_active($1) AS live", str(session_id))
+    return rows[0]["live"]
+
+
+async def test_before_048_a_signed_in_user_could_ask_about_another_session(supabase_like):
+    conn = supabase_like
+    await _with_b_signed_in(conn)
+    assert await _asks(conn, SESSION_B) is True
+
+
+async def test_after_048_a_signed_in_user_learns_only_about_their_own(supabase_like):
+    conn = supabase_like
+    await _with_b_signed_in(conn)
+    await conn.execute(_migration_048().UPGRADE_SQL)
+
+    assert await _asks(conn, SESSION_A) is True
+    assert await _asks(conn, SESSION_B) is False
+    assert await _asks(conn, str(SESSION_A).upper()) is True
+    # The rules, which pass the caller's own session, still let A in.
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+    assert len(await _as_browser(conn, "SELECT * FROM storage.objects")) == 1
+
+
+async def test_after_048_the_api_login_still_asks_about_any_session(supabase_like):
+    conn = supabase_like
+    await _with_b_signed_in(conn)
+    await conn.execute(_migration_048().UPGRADE_SQL)
+    async with conn.transaction():
+        await conn.execute("SET LOCAL ROLE kripax_api")
+        assert await conn.fetchval("SELECT private.session_is_active($1)", str(SESSION_B)) is True
+        assert await conn.fetchval("SELECT private.session_is_active($1)", str(SESSION_A)) is True
+
+
+async def test_048_keeps_the_grants_and_the_downgrade_restores_045(supabase_like):
+    conn = supabase_like
+    await _with_b_signed_in(conn)
+    m = _migration_048()
+    await conn.execute(m.UPGRADE_SQL)
+    fn = "private.session_is_active(text)"
+    assert await conn.fetchval("SELECT has_function_privilege('authenticated', $1, 'EXECUTE')", fn)
+    assert not await conn.fetchval("SELECT has_function_privilege('anon', $1, 'EXECUTE')", fn)
+    config = await conn.fetchval("SELECT proconfig FROM pg_proc WHERE oid = $1::regprocedure", fn)
+    assert config == ['search_path=""']
+    await conn.execute(m.DOWNGRADE_SQL)
+    assert await _asks(conn, SESSION_B) is True
