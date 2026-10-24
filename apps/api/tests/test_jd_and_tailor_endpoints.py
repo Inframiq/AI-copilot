@@ -48,6 +48,15 @@ def make_mock_db():
     return _override, mock_session
 
 
+def usage_log_offline():
+    """Keeps record_ai_usage's own session off the database. A bare
+    patch(...AsyncSessionLocal) makes add_all an AsyncMock, so the call left an
+    un-awaited coroutine behind; AsyncSession.add_all is synchronous."""
+    factory = MagicMock()
+    factory.return_value.__aenter__.return_value.add_all = MagicMock()
+    return patch("app.db.session.AsyncSessionLocal", new=factory)
+
+
 # ── POST /jd ──────────────────────────────────────────────────────────────────
 
 
@@ -728,7 +737,7 @@ async def test_analyze_charges_a_credit_only_when_a_model_ran(ledger):
         mock_session.execute = AsyncMock(side_effect=[rr, jr])
         app.dependency_overrides[get_db] = override
         try:
-            with patch("app.routers.ai.analyze_jd_match", new=analyze),                  patch("app.db.session.AsyncSessionLocal"):  # the usage log's own session
+            with patch("app.routers.ai.analyze_jd_match", new=analyze),                  usage_log_offline():
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     r = await client.post("/ai/analyze",
                         json={"resume_id": str(resume.id), "jd_id": str(jd.id)},

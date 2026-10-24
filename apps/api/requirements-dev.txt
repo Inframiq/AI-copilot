@@ -10,3 +10,4 @@ pytest-asyncio==1.4.0
 pytest-httpx==0.36.2
 pdfminer.six==20260107
 pgserver==0.1.4  # a throwaway real Postgres for tests/test_credits*.py (credit races)
+pip-audit==2.10.1  # CI's dependency audit of requirements.txt

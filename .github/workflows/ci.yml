@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Every pip run otherwise ends with a "new release of pip is available" notice.
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
   web:
     name: Web (typecheck + test)
@@ -110,6 +114,5 @@ jobs:
         # (weasyprint PYSEC-2026-3412 / PYSEC-2026-3940 are both fixed in 70.0,
         #  which requirements.txt now pins — no ignore needed.)
         # Any other new finding fails the build.
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt
+        # pip-audit itself is pinned in requirements-dev.txt.
+        run: pip-audit -r requirements.txt

@@ -11,7 +11,7 @@ from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, Subscription
-from tests.test_jd_and_tailor_endpoints import no_previous_run
+from tests.test_jd_and_tailor_endpoints import no_previous_run, usage_log_offline
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -366,7 +366,7 @@ def _regen_db(db, *, have, credits, ledger):
 
 async def _post_prep(jd, body=None, *, raise_app_exceptions=True):
     # record_ai_usage writes its rows through its own session — kept off the DB.
-    with patch("app.db.session.AsyncSessionLocal"):
+    with usage_log_offline():
         transport = ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             return await c.post(f"/jd/{jd.id}/prep-questions", json=body, headers=make_auth_header())
