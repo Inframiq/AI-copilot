@@ -1,7 +1,10 @@
+import { BetaBadge } from "@/components/ui/BetaBadge";
+
 export default function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center p-gutter bg-background">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl text-center max-w-[28rem] w-full">
+        <BetaBadge className="mb-md" />
         <p className="text-headline-xl text-primary font-black mb-sm">404</p>
         <p className="text-headline-md text-on-surface font-bold mb-sm">Page not found</p>
         <p className="text-body-md text-on-surface-variant mb-lg">

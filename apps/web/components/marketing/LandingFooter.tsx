@@ -1,12 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 export function LandingFooter() {
   return (
     <footer className="border-t border-outline-variant/40 bg-white/50 px-gutter py-xl backdrop-blur">
       <div className="mx-auto flex max-w-[1200px] flex-col gap-lg sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-xs">
-          <Image src="/brand/logo-wordmark.png" alt="KripaX" width={110} height={24} />
+          <div className="flex items-center gap-xs">
+            <Image src="/brand/logo-wordmark.png" alt="KripaX" width={110} height={24} />
+            <BetaBadge />
+          </div>
           <p className="text-caption text-on-surface-variant">
             © {new Date().getFullYear()} Inframiq Solutions Private Limited. Résumé tailoring you can stand behind.
           </p>

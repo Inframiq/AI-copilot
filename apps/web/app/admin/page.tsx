@@ -5,6 +5,7 @@ import { Star, LockSimple, ArrowsClockwise, SignOut } from "@phosphor-icons/reac
 import { apiClient, ApiError } from "@/lib/api-client";
 import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import type { FeedbackAdmin, AdminUser, DeletionRequestAdmin, DeletionRequestStatus } from "@career-copilot/types";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 type Tab = "users" | "feedback" | "deletion";
 
@@ -32,7 +33,10 @@ export default function AdminPage() {
   return (
     <div className="p-xl max-w-5xl mx-auto flex flex-col gap-lg">
       <div className="flex items-center justify-between gap-md">
-        <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
+        <div className="flex items-center gap-sm">
+          <h1 className="text-title-lg text-on-surface font-semibold">Admin</h1>
+          <BetaBadge />
+        </div>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-xs px-md py-sm rounded-lg text-label-sm font-semibold text-error border border-error/40 bg-error/5 hover:bg-error/10 transition-colors"

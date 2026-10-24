@@ -2,6 +2,7 @@
 import { ArrowLeft, CheckCircle, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { FOCUS_RING } from "@/lib/focus";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 /**
  * Back, title and autosave status. The status reads straight off
@@ -59,6 +60,7 @@ export function BuilderHeader({
       </button>
       <span aria-hidden className="h-4 w-px shrink-0 bg-outline-variant/40" />
       <h1 className="truncate text-headline-md font-semibold text-on-surface">{title}</h1>
+      <BetaBadge />
       <span
         data-testid="save-status"
         className={`ml-auto flex shrink-0 items-center gap-xs text-caption ${status.tone}`}

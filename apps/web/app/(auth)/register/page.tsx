@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { AuthBackLink } from "@/components/auth/AuthBackLink";
 import { createBrowserClient } from "@/lib/supabase";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 export default function RegisterPage() {
   const [error, setError] = useState("");
@@ -35,8 +36,9 @@ export default function RegisterPage() {
         </div>
 
         {/* Logo */}
-        <div className="mb-xl">
+        <div className="mb-xl flex items-center gap-xs">
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={172} height={38} priority />
+          <BetaBadge />
         </div>
 
         <h1 className="text-headline-lg text-on-surface mb-md">Create account</h1>

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { LegalBackLink } from "@/components/legal/LegalBackLink";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 const LAST_UPDATED = "September 19, 2026";
 const ENTITY_NAME = "Inframiq Solutions Private Limited";
@@ -16,8 +17,9 @@ export default function CookiePolicyPage() {
   return (
     <div className="relative z-[1] min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-gutter py-lg max-w-[1440px] mx-auto w-full">
-        <Link href="/" aria-label="KripaX home" className="flex shrink-0 items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+        <Link href="/" aria-label="KripaX home" className="flex shrink-0 items-center gap-xs rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={128} height={28} loading="eager" />
+          <BetaBadge />
         </Link>
         <LegalBackLink />
       </nav>

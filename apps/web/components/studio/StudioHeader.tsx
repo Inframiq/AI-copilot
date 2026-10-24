@@ -2,6 +2,7 @@
 import { ArrowClockwise, ArrowLeft, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
 import { FOCUS_RING } from "@/lib/focus";
 import { StudioControls } from "./StudioControls";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 export type StudioMode = "edit" | "preview";
 
@@ -71,6 +72,7 @@ export function StudioHeader({
       </button>
 
       <h1 className="hidden sm:block truncate text-label-md font-semibold text-on-surface">{title}</h1>
+      <BetaBadge />
 
       <div
         role="tablist"

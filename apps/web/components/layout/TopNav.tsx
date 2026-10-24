@@ -9,6 +9,7 @@ import { GlobalSearch, MobileSearch } from "./GlobalSearch";
 import { FeedbackWidget } from "../feedback/FeedbackWidget";
 import { HelpButton } from "@/components/support/HelpButton";
 import { APP_NAV, PHONE_TABS, isActive } from "@/lib/nav";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 const TABS = PHONE_TABS.map((href) => APP_NAV.find((n) => n.href === href)!);
 const MORE = APP_NAV.filter((n) => !PHONE_TABS.includes(n.href));
@@ -31,8 +32,9 @@ export function TopNav() {
     <>
       {/* Mobile Top Header */}
       <header className="md:hidden flex justify-between items-center w-full px-md h-12 bg-surface/85 backdrop-blur-md sticky top-0 z-40 border-b border-outline-variant/30 shadow-sm">
-        <Link href="/dashboard" className="flex items-center">
+        <Link href="/dashboard" className="flex items-center gap-xs">
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={100} height={22} priority />
+          <BetaBadge />
         </Link>
         <div className="flex items-center gap-xs">
           <MobileSearch />
@@ -46,6 +48,7 @@ export function TopNav() {
       <header className="hidden md:flex justify-between items-center w-full px-lg h-14 bg-surface/80 backdrop-blur-md sticky top-0 z-30 border-b border-outline-variant/20 shrink-0">
         <GlobalSearch />
         <div className="flex items-center gap-md">
+          <BetaBadge />
           <HelpButton />
           <FeedbackWidget />
           <CreditMeter variant="compact" />

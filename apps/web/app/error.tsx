@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { BetaBadge } from "@/components/ui/BetaBadge";
 
 export default function ErrorBoundary({
   error,
@@ -16,6 +17,7 @@ export default function ErrorBoundary({
   return (
     <div className="min-h-screen flex items-center justify-center p-gutter bg-background">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-lg p-xl text-center max-w-[28rem] w-full">
+        <BetaBadge className="mb-md" />
         <p className="text-headline-md text-on-surface font-bold mb-sm">Something went wrong</p>
         <p className="text-body-md text-on-surface-variant mb-lg">
           An unexpected error occurred. You can try again, or head back to your dashboard.
