@@ -102,7 +102,7 @@ async def test_admin_only_refusal_is_readable_by_the_web_app():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/health", "/resumes", "/no-such-route"])
+@pytest.mark.parametrize("path", ["/health", "/plans", "/resumes", "/no-such-route"])
 async def test_every_answer_carries_the_security_headers(path):
     """Test WEB-001: success, refusal and not-found alike."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -114,3 +114,5 @@ async def test_every_answer_carries_the_security_headers(path):
     assert r.headers.get("strict-transport-security") == "max-age=63072000"
     assert r.headers.get("permissions-policy") == "camera=(), microphone=(), geolocation=(), usb=(), browsing-topics=()"
     assert r.headers.get("cross-origin-opener-policy") == "same-origin"
+    # Test ATK-049: no browser or proxy keeps a copy of any answer.
+    assert r.headers.get("cache-control") == "no-store"

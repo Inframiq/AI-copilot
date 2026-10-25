@@ -165,8 +165,13 @@ async def security_headers_middleware(request: Request, call_next):
       - Permissions-Policy / COOP: a response opened in a tab gets no device
         access and no handle on the window that opened it. Little to protect
         on JSON, but the same baseline the website sends.
+      - Cache-Control no-store: answers are one account's private data, and
+        a browser or proxy keeping a copy would leave it on disk after sign
+        out, for the next person at the same computer (test ATK-049). A
+        route that is safe to cache can set its own.
     """
     response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-store")
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
