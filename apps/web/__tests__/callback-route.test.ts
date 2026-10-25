@@ -86,6 +86,28 @@ describe("failed sign-in callbacks are logged (INF-004)", () => {
     expect(logged(warn)).toContain("reason=missing_code detail=-");
   });
 
+  // A failed or forged callback must leave no trace of a sign-in (test
+  // ATK-032): no session cookie, no consent recorded against anyone, no
+  // profile lookup — just the way back to the login page.
+  it.each([
+    ["a refused code", `?code=${CODE}`],
+    ["a sign-in cancelled at Google", "?error=access_denied"],
+    ["no code at all", ""],
+    ["a refused code with a next page", `?code=${CODE}&next=/dashboard`],
+  ])("%s signs nobody in", async (_, query) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Set, so recording consent would really call out rather than skip.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.test");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    exchange.mockResolvedValue({ error: { code: "bad_code_verifier", status: 400 } });
+    const res = await call(query);
+    vi.unstubAllEnvs();
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://kripax.inframiq.com/login?error=auth");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("cannot be made to write a second log line", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await call("?error=x%0Asecurity_event%3Dforged");
