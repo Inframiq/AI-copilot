@@ -5,15 +5,18 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // A signed-out tab must not keep showing signed-in pages (test ATK-008).
-let authListener: ((event: string) => void) | null = null;
+type Listener = (event: string, session?: { user: { id: string } } | null) => void;
+let authListener: Listener | null = null;
 const unsubscribe = vi.fn();
 const getSession = vi.fn();
 const leave = vi.fn();
+const replace = vi.fn();
+Object.defineProperty(window, "location", { value: { ...window.location, replace }, writable: true });
 
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({
     auth: {
-      onAuthStateChange: (cb: (event: string) => void) => {
+      onAuthStateChange: (cb: Listener) => {
         authListener = cb;
         return { data: { subscription: { unsubscribe } } };
       },
@@ -43,7 +46,9 @@ describe("SessionGuard", () => {
     authListener = null;
     unsubscribe.mockReset();
     getSession.mockReset();
+    getSession.mockResolvedValue({ data: { session: null } });
     leave.mockReset();
+    replace.mockReset();
   });
 
   it("leaves when the session ends, here or in another tab", () => {
@@ -62,26 +67,50 @@ describe("SessionGuard", () => {
   });
 
   it("stays when the restored page is still signed in", async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: "t" } } });
+    getSession.mockResolvedValue({ data: { session: { access_token: "t", user: { id: "A" } } } });
     render(<SessionGuard />);
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
     pageshow(true);
-    await waitFor(() => expect(getSession).toHaveBeenCalled());
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+    expect(leave).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("ignores an ordinary page load", async () => {
+    render(<SessionGuard />);
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1)); // whose page, once
+    pageshow(false);
+    expect(getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops listening when it unmounts", async () => {
+    const { unmount } = render(<SessionGuard />);
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    pageshow(true);
+    expect(getSession).toHaveBeenCalledTimes(1);
+  });
+
+  // Test ATK-049: A's page must never stay on screen for B.
+  it("leaves when Back restores A's page while B is signed in", async () => {
+    getSession.mockResolvedValueOnce({ data: { session: { access_token: "a", user: { id: "A" } } } });
+    render(<SessionGuard />);
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
+    getSession.mockResolvedValue({ data: { session: { access_token: "b", user: { id: "B" } } } });
+    pageshow(true);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
     expect(leave).not.toHaveBeenCalled();
   });
 
-  it("ignores an ordinary page load", () => {
+  it("leaves when B signs in from another tab while A's page is open", async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: "a", user: { id: "A" } } } });
     render(<SessionGuard />);
-    pageshow(false);
-    expect(getSession).not.toHaveBeenCalled();
-  });
-
-  it("stops listening when it unmounts", () => {
-    const { unmount } = render(<SessionGuard />);
-    unmount();
-    expect(unsubscribe).toHaveBeenCalledOnce();
-    getSession.mockResolvedValue({ data: { session: null } });
-    pageshow(true);
-    expect(getSession).not.toHaveBeenCalled();
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
+    authListener!("TOKEN_REFRESHED", { user: { id: "A" } });
+    expect(replace).not.toHaveBeenCalled();
+    authListener!("SIGNED_IN", { user: { id: "B" } });
+    expect(replace).toHaveBeenCalledWith("/dashboard");
   });
 
   it("is on every layout the middleware protects", () => {
