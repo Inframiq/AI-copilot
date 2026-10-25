@@ -4,6 +4,8 @@ Per-user limits stop one account; the site-wide AI cap stops many — a swarm
 of accounts can't saturate the OpenAI quota and stall the site for everyone.
 """
 import ast
+import asyncio
+import re
 import time
 import uuid
 from pathlib import Path
@@ -135,3 +137,27 @@ def test_counters_live_where_the_settings_say():
     # one instance — see Settings.rate_limit_storage_uri.
     assert settings.rate_limit_storage_uri == "memory://"
     assert type(limiter._storage).__name__ == "MemoryStorage"
+
+
+async def test_a_burst_sent_at_once_stops_at_the_limit(nothing_found):
+    # Test ATK-039: requests arriving together, not one after another, must
+    # not slip past the count. Tailoring allows 10 a minute.
+    body = {"resume_id": str(uuid.uuid4()), "jd_id": str(uuid.uuid4())}
+    headers = _token(str(uuid.uuid4()))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        replies = await asyncio.gather(*(c.post("/ai/tailor", json=body, headers=headers) for _ in range(15)))
+    codes = sorted(r.status_code for r in replies)
+    assert codes == [404] * 10 + [429] * 5
+
+
+def test_one_server_process_while_counters_are_in_memory():
+    # memory:// counters are per process. A second worker (or gunicorn) would
+    # give every limit a second allowance, so a burst split between them
+    # could pass twice the limit. Move the counters to a shared store first.
+    cmd = next(
+        line for line in (ROUTERS.parents[1] / "Dockerfile").read_text(encoding="utf-8").splitlines()
+        if line.startswith("CMD")
+    )
+    assert "uvicorn" in cmd and "gunicorn" not in cmd
+    workers = re.search(r"--workers[ =](\d+)", cmd)
+    assert workers is None or workers.group(1) == "1", cmd
