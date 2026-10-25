@@ -1,7 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { TERMS_VERSION, PRIVACY_VERSION } from "@/lib/legal-versions";
+import {
+  TERMS_VERSION,
+  PRIVACY_VERSION,
+  POLICY_CONSENT_COOKIE,
+  POLICY_CONSENT_VALUE,
+} from "@/lib/legal-versions";
 import { SESSION_COOKIE_OPTIONS } from "@/lib/supabase";
 
 /** Only allow same-origin relative paths, e.g. "/dashboard" — rejects
@@ -15,9 +20,9 @@ export function safeNextPath(next: string | null): string {
 }
 
 /** Records which Terms/Privacy version this user last agreed to, and when.
- * The login/register checkbox itself doesn't survive the Google OAuth
- * redirect, so this is the durable, server-side evidence of consent — every
- * successful sign-in re-records it against whatever version is current.
+ * The login/register checkbox reaches here as POLICY_CONSENT_COOKIE, and
+ * only a sign-in that carries it is recorded: one started without the
+ * checkbox gets no record, and PolicyUpdatePrompt asks in the app instead.
  * Best-effort: a failure here must never block sign-in itself. */
 async function recordPolicyAcceptance(accessToken: string): Promise<void> {
   const base = process.env.NEXT_PUBLIC_API_URL;
@@ -86,6 +91,11 @@ export async function GET(request: NextRequest) {
       }
     );
 
+    // Read once and cleared whatever happens: it is good for this sign-in only.
+    const marker = cookieStore.get(POLICY_CONSENT_COOKIE);
+    const consented = marker?.value === POLICY_CONSENT_VALUE;
+    if (marker) cookieStore.set(POLICY_CONSENT_COOKIE, "", { path: "/callback", maxAge: 0 });
+
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       logFailedSignIn(request, "exchange_failed", error.code ?? String(error.status ?? ""));
@@ -96,7 +106,7 @@ export async function GET(request: NextRequest) {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (session?.access_token) {
+      if (consented && session?.access_token) {
         await recordPolicyAcceptance(session.access_token);
       }
 

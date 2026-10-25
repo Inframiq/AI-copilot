@@ -5,6 +5,7 @@ import Image from "next/image";
 import { AuthBackLink } from "@/components/auth/AuthBackLink";
 import { createBrowserClient } from "@/lib/supabase";
 import { BetaBadge } from "@/components/ui/BetaBadge";
+import { markPolicyConsent } from "@/lib/legal-versions";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -16,6 +17,7 @@ export default function LoginPage() {
     if (!agreed) return;
     setError("");
     setLoading(true);
+    markPolicyConsent();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
