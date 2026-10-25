@@ -225,7 +225,8 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
     from app.services import prep_questions
 
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
+    # The set check, the run's lock, the set check again under the lock.
+    db.execute = AsyncMock(side_effect=[_scalars([]), MagicMock(), _scalars([])])
     db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
     sess = _session()
@@ -236,8 +237,9 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
          patch.object(prep_questions, "_agent1_parse_jd", new=AsyncMock()) as parse, \
          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()), \
          patch.object(prep_questions, "record_ai_usage"):
-        rows = await prep_questions.generate_for_session(db, sess, jd, saved)
+        rows, made = await prep_questions.generate_for_session(db, sess, jd, saved)
 
+    assert made is True
     assert [r.question for r in rows] == ["Tell me about the pipeline."]
     assert all(r.session_id == sess.id for r in rows)
     parse.assert_not_awaited()
@@ -261,7 +263,7 @@ async def test_generation_parses_the_jd_when_no_analysis_is_cached():
     from app.services.tailoring import JDAnalysis
 
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_scalars([]), _scalars([])])
+    db.execute = AsyncMock(side_effect=[_scalars([]), MagicMock(), _scalars([])])
     db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {}
 
@@ -271,7 +273,7 @@ async def test_generation_parses_the_jd_when_no_analysis_is_cached():
                       new=AsyncMock(return_value=JDAnalysis(**_AGENT1))) as parse, \
          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()), \
          patch.object(prep_questions, "record_ai_usage"):
-        rows = await prep_questions.generate_for_session(db, _session(), jd, {"experience": []})
+        rows, _ = await prep_questions.generate_for_session(db, _session(), jd, {"experience": []})
 
     parse.assert_awaited_once()
     assert len(rows) == 1
@@ -289,9 +291,9 @@ async def test_generation_keeps_a_set_that_already_exists():
     db = MagicMock(); db.execute = AsyncMock(return_value=_scalars(have)); db.add_all = MagicMock()
 
     with patch.object(prep_questions, "get_or_generate_prep_questions", new=AsyncMock()) as gen:
-        rows = await prep_questions.generate_for_session(db, sess, make_jd(), {})
+        rows, made = await prep_questions.generate_for_session(db, sess, make_jd(), {})
 
-    assert [r.question for r in rows] == ["Old"]
+    assert [r.question for r in rows] == ["Old"] and made is False
     gen.assert_not_awaited()
     db.add_all.assert_not_called()
 
@@ -311,8 +313,9 @@ async def test_regeneration_swaps_in_a_new_set_in_one_commit():
 
     with patch.object(prep_questions, "get_or_generate_prep_questions",
                       new=AsyncMock(return_value=_gen_out())) as gen,          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()),          patch.object(prep_questions, "record_ai_usage"):
-        rows = await prep_questions.generate_for_session(db, sess, jd, {}, replace=True)
+        rows, made = await prep_questions.generate_for_session(db, sess, jd, {}, replace=True)
 
+    assert made is True
     gen.assert_awaited_once()  # an existing set doesn't short-circuit it
     assert [r.question for r in rows] == ["Tell me about the pipeline."]
     deletes = [c.args[0] for c in db.execute.call_args_list if "DELETE" in str(c.args[0]).upper()]
@@ -331,23 +334,24 @@ async def test_regeneration_that_makes_nothing_keeps_the_old_set():
     jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
 
     with patch.object(prep_questions, "get_or_generate_prep_questions", new=AsyncMock(return_value=[])),          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()),          patch.object(prep_questions, "record_ai_usage"):
-        rows = await prep_questions.generate_for_session(db, _session(), jd, {}, replace=True)
+        rows, made = await prep_questions.generate_for_session(db, _session(), jd, {}, replace=True)
 
-    assert rows == []
+    assert rows == [] and made is False
     assert not any("DELETE" in str(c.args[0]).upper() for c in db.execute.call_args_list)
     db.add_all.assert_not_called()
     db.commit.assert_not_awaited()
 
 
-def _made(rows):
+def _made(rows, *, kept=None):
     """Stands in for generate_for_session: records the model call it makes
-    (as the real one does), then returns `rows`."""
+    (as the real one does), then returns `rows` and whether it made them
+    (kept=False: a set another request made meanwhile came back instead)."""
     from app.core.usage import record_call
 
     async def run(*args, **kwargs):
         record_call(call_name="prep_questions_interview", model="m", model_tier="premium",
                     input_tokens=1, output_tokens=1, reasoning_tokens=0, total_tokens=2)
-        return rows
+        return rows, bool(rows) if kept is None else kept
     return AsyncMock(side_effect=run)
 
 
@@ -516,7 +520,7 @@ async def test_generate_endpoint_returns_an_existing_set_free_even_with_no_credi
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session",
-                   new=AsyncMock(return_value=[MagicMock()] * 10)):
+                   new=AsyncMock(return_value=([MagicMock()] * 10, False))):
             r = await _post_prep(jd)
         assert r.status_code == 200
         assert r.json()["questions_total"] == 10
@@ -528,14 +532,14 @@ async def test_generate_endpoint_returns_an_existing_set_free_even_with_no_credi
 @pytest.mark.asyncio
 async def test_a_set_made_by_a_simultaneous_request_is_not_charged_twice(ledger):
     """Save to JD and the JD page's button at once: both see no set, both
-    reserve; the second gets back the set the first made — no model ran
-    for it, so its credits come back."""
+    reserve, both run the model; the second gets back the set the first
+    made, so its credits come back (test ATK-038)."""
     override, db = make_mock_db()
     jd, _ = _saved_jd_db(db)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session",
-                   new=AsyncMock(return_value=[MagicMock()] * 10)):  # no model call recorded
+                   new=_made([MagicMock()] * 10, kept=False)):
             r = await _post_prep(jd)
         assert r.status_code == 200
         assert ledger.spent == ["prep_questions"] and ledger.refunded == ["prep_questions"]

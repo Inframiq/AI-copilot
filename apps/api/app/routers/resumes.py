@@ -129,6 +129,21 @@ async def _ensure_room_for_a_new_resume(db: AsyncSession, user_id: uuid.UUID) ->
     )
 
 
+async def _claim_room_for_a_new_resume(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """_ensure_room_for_a_new_resume, made safe for requests sent together:
+    called in the transaction that inserts the résumé, it holds this user's
+    résumé count still until that commits. Unlocked, several creates sent at
+    once with four résumés all counted four and all went in (test ATK-038);
+    now each waits its turn and the one past the limit is refused. Callers
+    that run a model first still check up front, so a refusal is usually
+    free, and refund if this later check refuses."""
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"kripax:resumes:{user_id}"},
+    )
+    await _ensure_room_for_a_new_resume(db, user_id)
+
+
 async def _is_master_resume(db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID) -> bool:
     """Whether career_profiles.master_resume_id points at this résumé."""
     result = await db.execute(
@@ -234,7 +249,7 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
                 await db.refresh(existing)
                 return existing
 
-    await _ensure_room_for_a_new_resume(db, uid)
+    await _claim_room_for_a_new_resume(db, uid)
     resume = Resume(user_id=uid, **payload)
     db.add(resume)
     # One commit for the résumé and the JD's link to it: committing the
@@ -637,6 +652,7 @@ async def generate_resume_endpoint(
             # Only dedupe the auto-generated fallback title — an explicit
             # body.title is the caller's deliberate choice (e.g. "Save As"),
             # same as create_jd honoring an explicit title on a content match.
+            await _claim_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
             final_title = title if body.title else await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
             resume = Resume(
                 user_id=uuid.UUID(user["sub"]),
@@ -806,6 +822,7 @@ async def parse_and_create_resume(
             response.status_code = status.HTTP_200_OK
             return existing_resume
 
+        await _claim_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
         title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
         resume = Resume(
             id=resume_id,

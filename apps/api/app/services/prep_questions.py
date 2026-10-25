@@ -67,13 +67,17 @@ async def run_for_saved_resume(
 async def generate_for_session(
     db: AsyncSession, session: TailoringSession, jd: JobDescription, resume_content: dict,
     *, replace: bool = False,
-) -> list[PrepQuestion]:
+) -> tuple[list[PrepQuestion], bool]:
     """Writes this run's questions, from the saved résumé. A run that already
     has a set keeps it — saving the same JD again must not replace questions
     the user may already be practicing — unless the user asked for a new set
     (replace). Then the new set is made first and swapped in in one commit,
     so a failed or empty generation leaves the old set as it was (and
-    returns [])."""
+    returns []).
+
+    Returns the run's questions and whether this call made them: False when
+    it found a set (one another request made meanwhile included) or made
+    nothing, which is what the caller refunds on."""
     async def existing() -> list[PrepQuestion]:
         return list(
             (
@@ -86,7 +90,7 @@ async def generate_for_session(
         )
 
     if not replace and (have := await existing()):
-        return have
+        return have, False
 
     provider = get_ai_provider()
     # The JD's cached parse when it has one. A run made with a target company
@@ -127,22 +131,29 @@ async def generate_for_session(
         for row, q in zip(rows, questions)
         if q.follow_up
     ]
+    if replace and not rows:
+        return [], False  # nothing to swap in; the old set stays
+    # Two requests can both get this far for one run: Save to JD pressed
+    # twice, a second tab, or the JD page's "Generate questions" at the same
+    # time. Checking for a set and then adding one used to let both add one
+    # (test ATK-038). The run's row is now locked until this commits, so the
+    # second waits here, then finds the first's set and keeps it.
+    await db.execute(
+        select(TailoringSession.id).where(TailoringSession.id == session.id).with_for_update()
+    )
     if replace:
-        if not rows:
-            return []  # nothing to swap in; the old set stays
         await db.execute(delete(PrepQuestion).where(PrepQuestion.session_id == session.id))
-    # The save's background task and the JD page's "Generate questions" can
-    # overlap; whichever finishes second keeps the first one's set.
     elif have := await existing():
-        return have
+        await db.commit()  # lets the next one in
+        return have, False
     if rows:
         db.add_all(rows)
         await db.flush()  # the questions exist before their follow-ups point at them
         db.add_all(followups)
-        await db.commit()
-        for r in rows:
-            await db.refresh(r)
-    return rows
+    await db.commit()
+    for r in rows:
+        await db.refresh(r)
+    return rows, bool(rows)
 
 
 async def latest_session_with_questions(

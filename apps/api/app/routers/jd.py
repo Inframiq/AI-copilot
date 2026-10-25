@@ -327,13 +327,13 @@ async def generate_jd_prep_questions(
         await db.commit()
     try:
         async with record_ai_usage(uid, "prep_questions") as calls:
-            rows = await generate_for_session(db, session, jd, saved.content, replace=regenerate)
+            rows, made = await generate_for_session(db, session, jd, saved.content, replace=regenerate)
     except Exception:
         if makes_new:
             await refund_credits(db, uid, "prep_questions", email=email)
             await db.commit()
         raise
-    if makes_new and (not rows or not calls):
+    if makes_new and (not made or not calls):
         await refund_credits(db, uid, "prep_questions", email=email)
         await db.commit()
     if regenerate and not rows:
