@@ -90,9 +90,9 @@ async def record_policy_acceptance(
     db: AsyncSession = Depends(get_db),
 ):
     """Upserts the signed-in user's latest accepted Terms/Privacy version and
-    timestamp. Called once per sign-in, right after the OAuth callback
-    establishes a session — the login/register checkbox itself doesn't
-    survive the Google redirect, so this is the durable record of consent."""
+    timestamp. Called by the OAuth callback only when the login/register
+    checkbox was ticked for this sign-in, and by the in-app prompt when the
+    user agrees there — this is the durable record of consent."""
     uid = uuid.UUID(user["sub"])
     stmt = pg_insert(PolicyAcceptance).values(
         user_id=uid,

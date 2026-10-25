@@ -302,11 +302,10 @@ class Subscription(Base):
 
 class PolicyAcceptance(Base):
     """One row per user — the Terms of Service / Privacy Policy version they
-    most recently agreed to and when. Written by POST /me/policy-acceptance,
-    called right after a successful sign-in (see (auth)/callback/route.ts),
-    since the checkbox on the login/register page is the only place consent
-    is actually captured but is lost across the Google OAuth redirect. This
-    is deliberately evidence of acceptance, not just a UI checkbox state."""
+    most recently agreed to and when. Written by PUT /me/policy-acceptance:
+    by (auth)/callback/route.ts after a sign-in that carried the login/register
+    checkbox's marker cookie, or by the in-app PolicyUpdatePrompt. This is
+    deliberately evidence of acceptance, not just a UI checkbox state."""
 
     __tablename__ = "policy_acceptances"
 
