@@ -154,6 +154,8 @@ async def get_current_user(
         # existed is nothing the caller needs.
         note_denial(request, "ended_session", payload.get("sub"))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    # Who, should the route then refuse (a 404 for someone else's record).
+    request.state.user_id = payload.get("sub")
     return payload
 
 

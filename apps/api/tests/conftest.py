@@ -148,6 +148,18 @@ def sessions_open(monkeypatch):
     security._session_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def refusal_counts_start_empty():
+    """The repeated-refusal alert counts across requests (test ATK-047);
+    each test starts from nothing so one test's refusals can't alert in
+    another's log."""
+    from app.core.security_log import reset_alerts
+
+    reset_alerts()
+    yield
+    reset_alerts()
+
+
 # ── A real Postgres, for tests that need one ────────────────────────────────
 
 @pytest.fixture(scope="session")

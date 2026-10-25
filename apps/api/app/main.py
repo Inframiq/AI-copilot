@@ -178,8 +178,9 @@ async def security_headers_middleware(request: Request, call_next):
 
 
 # Added last, so it is the outermost layer and sees every refusal: the auth
-# checks' 401/403s, the admin-only 403 above and the rate limiter's 429s
-# (app.core.security_log, test INF-004).
+# checks' 401/403s, the admin-only 403 above, the rate limiter's 429s, and
+# not-found / malformed requests (app.core.security_log, tests INF-004 and
+# ATK-047).
 @app.middleware("http")
 async def security_event_middleware(request: Request, call_next):
     response = await call_next(request)
