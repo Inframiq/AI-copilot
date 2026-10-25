@@ -8,6 +8,7 @@ from app.routers import resumes, jd, ai, learning, cover_letters, me, plans, fee
 from app.services.ai_engine.base import AIInputTooLargeError, AIPausedError
 from app.core.rate_limit import limiter
 from app.core.body_limit import BodySizeLimitMiddleware
+from app.core.nul_chars import StripNulCharactersMiddleware
 from app.core.config import settings
 from app.core.security import get_optional_user_email, is_admin_only_email
 from app.core.security_log import configure_logging, log_if_denied, note_denial
@@ -37,6 +38,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.enable_api_docs else None,
     openapi_url="/openapi.json" if settings.enable_api_docs else None,
 )
+# Inside the size limit (the last added is the outermost), so the body it
+# buffers is already capped.
+app.add_middleware(StripNulCharactersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 
 # Rate limiter

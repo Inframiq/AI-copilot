@@ -1,11 +1,17 @@
 import json
 import uuid
 from datetime import datetime
+from typing import Annotated
 from pydantic import BaseModel, Field, field_validator
 from app.schemas.resume import _validate_content_size
 
 _MAX_PRIORITY_SKILLS = 20
 _MAX_PROFILE_JSON_BYTES = 200_000
+
+# Ids the review screen sends back: "exp0_b2", or fix_slug's "skill:<60 chars>".
+_ReviewId = Annotated[str, Field(max_length=100)]
+# The candidate's own bullet, as long as the Rewrite box takes one.
+_BulletText = Annotated[str, Field(max_length=3000)]
 
 
 class TailorRequest(BaseModel):
@@ -202,7 +208,7 @@ class GenerateResumeOut(BaseModel):
 
 class ProjectScoreRequest(BaseModel):
     session_id: uuid.UUID
-    accepted_fix_ids: list[str] = Field(default_factory=list, max_length=500)
+    accepted_fix_ids: list[_ReviewId] = Field(default_factory=list, max_length=500)
     # The résumé exactly as the review screen currently shows it — accepted /
     # rejected bullet rewrites, chosen skills, per-fix role overrides and
     # inline edits already merged in by the client. When present this IS the
@@ -213,13 +219,13 @@ class ProjectScoreRequest(BaseModel):
     content: dict | None = None
     # Bullet ids ("exp0_b2") whose rewrite the user is keeping. Given, each
     # earns its after-tailoring verdicts; omitted, the old scoring applies.
-    accepted_bullet_ids: list[str] | None = Field(default=None, max_length=500)
+    accepted_bullet_ids: list[_ReviewId] | None = Field(default=None, max_length=500)
     # The candidate's own text for each rewritten bullet, by the same id. The
     # session stores only the tailored side, so without this the endpoint
     # cannot score "this rewrite turned off" and the rewrite badges stay
     # frozen at their pipeline values. Omitted by older clients, in which case
     # no rewrite deltas come back.
-    original_bullets: dict[str, str] | None = Field(default=None, max_length=500)
+    original_bullets: dict[_ReviewId, _BulletText] | None = Field(default=None, max_length=500)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

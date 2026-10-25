@@ -695,8 +695,13 @@ async def parse_and_create_resume(
         if existing_resume is None:
             raise HTTPException(status_code=404, detail="Resume not found")
 
+    # Kept as the résumé's file name (and its title when the parse finds no
+    # name): no NUL, which the database can't store, and no longer than the
+    # column. Either one used to fail the save after the parse (test ATK-029).
+    file_name = (file.filename or "").replace("\x00", "")[:255] or None
+
     content_type = file.content_type or ""
-    if content_type not in _ALLOWED_MIME and not (file.filename or "").lower().endswith(".pdf"):
+    if content_type not in _ALLOWED_MIME and not (file_name or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
 
     # Read one byte past the limit rather than the whole upload: a
@@ -784,7 +789,7 @@ async def parse_and_create_resume(
 
         # Derive a sensible title from the candidate's name
         name = parsed.get("contact", {}).get("name", "").strip()
-        title = f"{name}'s Resume" if name else (file.filename or "Uploaded Resume")
+        title = f"{name}'s Resume" if name else (file_name or "Uploaded Resume")
 
         if existing_resume is not None:
             previous_path = existing_resume.original_file_path
@@ -792,7 +797,7 @@ async def parse_and_create_resume(
             existing_resume.template_id = template_id
             existing_resume.content = parsed
             existing_resume.original_file_path = original_path
-            existing_resume.original_file_name = file.filename
+            existing_resume.original_file_name = file_name
             await db.commit()
             saved = True
             if previous_path and previous_path != original_path:
@@ -809,7 +814,7 @@ async def parse_and_create_resume(
             template_id=template_id,
             content=parsed,
             original_file_path=original_path,
-            original_file_name=file.filename,
+            original_file_name=file_name,
         )
         db.add(resume)
         await db.commit()
