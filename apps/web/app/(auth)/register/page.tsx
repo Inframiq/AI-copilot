@@ -22,6 +22,8 @@ export default function RegisterPage() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/callback`,
+        // Always show Google's account picker, so a signed-out person can switch accounts.
+        queryParams: { prompt: "select_account" },
       },
     });
     if (error) {
