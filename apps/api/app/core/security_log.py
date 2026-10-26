@@ -22,6 +22,11 @@ ALERT_AFTER times within ALERT_WINDOW seconds also gets one
 "security_alert=repeated_refusals" line at ERROR level, so a run of guesses
 or probes stands out from the odd stale link or mistyped request. Counted
 per server process, which is the whole API (see test_rate_limits).
+
+Handing out a download link for a stored file (an uploaded original or a
+saved PDF export) leaves a "file_link" line with who asked: the link works
+for anyone holding it until it expires, so the log is what says whose it
+was and when (test ATK-052). Never the link itself.
 """
 import logging
 import re
@@ -36,6 +41,8 @@ from app.core.rate_limit import client_ip
 logger = logging.getLogger("app.security")
 
 DENIED_STATUSES = frozenset({401, 403, 429})
+# GET routes whose answer is a signed link to a stored file.
+_FILE_LINK_PATH = re.compile(r"^/resumes/[^/]+/(original|pdf)$")
 REFUSED_STATUSES = frozenset({404, 422})
 
 _FALLBACK_REASON = {
@@ -132,3 +139,15 @@ def log_if_denied(request: Request, status_code: int) -> None:
         _clean(reason),
     )
     _count_and_maybe_alert(f"user:{user}" if user != "-" else f"ip:{ip}")
+
+
+def log_file_link(request: Request, status_code: int) -> None:
+    if not (200 <= status_code < 300 and request.method == "GET" and _FILE_LINK_PATH.match(request.url.path)):
+        return
+    logger.info(
+        "security_event=file_link status=%d method=GET path=%s ip=%s user=%s",
+        status_code,
+        _clean(request.url.path),
+        _clean(client_ip(request)),
+        _clean(getattr(request.state, "user_id", None) or "-"),
+    )

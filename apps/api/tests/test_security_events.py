@@ -240,3 +240,70 @@ async def test_refusals_older_than_the_window_are_forgotten(caplog, monkeypatch)
     clock[0] += security_log.ALERT_WINDOW + 1
     await _get("/resumes", from_ip="198.51.100.3")
     assert _alerts(caplog) == []
+
+
+# ── Download links for stored files (test ATK-052) ──────────────────────────
+
+def _resume_with_files(**overrides):
+    import uuid
+    from datetime import datetime, timezone
+    from app.db.models import Resume
+
+    return Resume(
+        id=uuid.uuid4(), user_id=uuid.UUID(USER_ID), title="Mine", content={}, template_id="ats_clean",
+        pdf_url=f"resumes/{USER_ID}/r.pdf", original_file_path=f"resumes/{USER_ID}/r/original-x.pdf",
+        original_file_name="cv.pdf", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+        **overrides,
+    )
+
+
+@pytest.fixture
+def stored_files(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+    from app.db.session import get_db
+    from app.routers import resumes
+
+    found = {"resume": _resume_with_files()}
+    session = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.side_effect = lambda: found["resume"]
+    session.execute = AsyncMock(return_value=result)
+
+    async def _db():
+        yield session
+
+    app.dependency_overrides[get_db] = _db
+    monkeypatch.setattr(resumes, "_supabase", lambda: None)
+    monkeypatch.setattr(resumes, "get_signed_url", lambda path, client: f"https://storage.test/{path}?token=SIGNEDLINKSECRET")
+    yield found
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["pdf", "original"])
+async def test_a_download_link_handed_out_is_recorded_with_who_asked(caplog, stored_files, kind):
+    r = await _get(f"/resumes/{stored_files['resume'].id}/{kind}", headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 200
+    assert "SIGNEDLINKSECRET" in r.json()["signed_url"]
+    assert _events(caplog) == [
+        f"security_event=file_link status=200 method=GET path=/resumes/{stored_files['resume'].id}/{kind} "
+        f"ip=203.0.113.9 user={USER_ID}"
+    ]
+    # The link is a working download for whoever holds it: never in the log.
+    assert "SIGNEDLINKSECRET" not in caplog.text and "storage.test" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_no_link_no_file_link_line(caplog, stored_files):
+    stored_files["resume"] = None  # someone else's record, or none: 404
+    r = await _get(f"/resumes/{_resume_with_files().id}/pdf", headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 404
+    events = _events(caplog)
+    assert len(events) == 1 and events[0].startswith("security_event=refused status=404")
+
+
+@pytest.mark.asyncio
+async def test_a_link_asked_for_without_signing_in_is_only_a_denial(caplog, stored_files):
+    r = await _get(f"/resumes/{stored_files['resume'].id}/pdf")
+    assert r.status_code == 401
+    assert [e.split(" ")[0] for e in _events(caplog)] == ["security_event=denied"]

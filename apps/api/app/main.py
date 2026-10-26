@@ -11,7 +11,7 @@ from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.nul_chars import StripNulCharactersMiddleware
 from app.core.config import settings
 from app.core.security import get_optional_user_email, is_admin_only_email
-from app.core.security_log import configure_logging, log_if_denied, note_denial
+from app.core.security_log import configure_logging, log_file_link, log_if_denied, note_denial
 
 configure_logging()
 logger = logging.getLogger("app")
@@ -185,11 +185,12 @@ async def security_headers_middleware(request: Request, call_next):
 # Added last, so it is the outermost layer and sees every refusal: the auth
 # checks' 401/403s, the admin-only 403 above, the rate limiter's 429s, and
 # not-found / malformed requests (app.core.security_log, tests INF-004 and
-# ATK-047).
+# ATK-047), and every download link handed out for a stored file (ATK-052).
 @app.middleware("http")
 async def security_event_middleware(request: Request, call_next):
     response = await call_next(request)
     log_if_denied(request, response.status_code)
+    log_file_link(request, response.status_code)
     return response
 
 
