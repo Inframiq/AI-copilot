@@ -11,7 +11,10 @@ const ROOT = join(__dirname, "..");
 const DIRS = ["app", "components", "lib"];
 
 const REVIEWED: Record<string, { count: number; why: string }> = {
-  "app/layout.tsx": { count: 1, why: "sidebar-state script, a constant string" },
+  "app/layout.tsx": {
+    count: 2,
+    why: "sidebar-state script, a constant string; the URL-token guard, built from the public Supabase URL and key quoted by JSON.stringify (url-token-guard.test.ts)",
+  },
   "app/(marketing)/page.tsx": { count: 1, why: "JSON-LD, JSON.stringify of a constant" },
   "components/studio/ResumeCanvas.tsx": {
     count: 1,

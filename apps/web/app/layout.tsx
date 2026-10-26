@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { urlTokenGuardScript } from "@/lib/url-token-guard";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -99,6 +100,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             __html:
               'try{var v=localStorage.getItem("career-copilot-sidebar");' +
               'if(v==="collapsed"||v==="expanded")document.documentElement.dataset.sidebar=v;}catch(e){}',
+          }}
+        />
+        {/* Takes a sign-in token out of the address and ends its session
+            before anything else runs (lib/url-token-guard.ts). */}
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: urlTokenGuardScript(
+              process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+            ),
           }}
         />
       </head>
