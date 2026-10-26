@@ -107,15 +107,26 @@ async def test_sign_out_is_honoured_within_seconds(sessions, monkeypatch):
         await security.get_current_user(_request(), _token("s-1"))
 
 
-async def test_an_ended_session_is_never_asked_about_again(sessions, monkeypatch):
+async def test_an_ended_session_is_asked_about_once_a_minute(sessions, monkeypatch):
     _, asked = sessions
     clock = [1000.0]
     monkeypatch.setattr(security.time, "monotonic", lambda: clock[0])
     for _ in range(3):
-        clock[0] += 60
+        clock[0] += 10
         with pytest.raises(HTTPException):
             await security.get_current_user(_request(), _token("s-gone"))
-    assert asked == ["s-gone"]
+    assert asked == ["s-gone"], "a replayed dead token doesn't reach the database each time"
+
+
+async def test_a_lifted_ban_lets_the_same_session_back_in_within_a_minute(sessions, monkeypatch):
+    live, _ = sessions
+    clock = [1000.0]
+    monkeypatch.setattr(security.time, "monotonic", lambda: clock[0])
+    with pytest.raises(HTTPException):
+        await security.get_current_user(_request(), _token("s-1"))  # banned
+    live.add("s-1")  # the ban is lifted; the session was never deleted
+    clock[0] += security._SESSION_ENDED_TTL + 0.1
+    assert (await security.get_current_user(_request(), _token("s-1")))["sub"] == "user-a"
 
 
 # ── The database side (migration 045) ───────────────────────────────────────
@@ -137,12 +148,13 @@ SUPABASE_LIKE = """
     CREATE SCHEMA auth AUTHORIZATION m045_auth_admin;
     SET ROLE m045_auth_admin;
     CREATE TABLE auth.sessions (id uuid PRIMARY KEY, user_id uuid NOT NULL, not_after timestamptz);
+    CREATE TABLE auth.users (id uuid PRIMARY KEY, banned_until timestamptz, deleted_at timestamptz);
     CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE
       AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE
       AS $$ SELECT nullif(auth.jwt() ->> 'sub', '')::uuid $$;
     GRANT USAGE ON SCHEMA auth TO m045_owner, m045_storage_admin, authenticated;
-    GRANT SELECT ON auth.sessions TO m045_owner;  -- as Supabase's postgres reads it
+    GRANT SELECT ON auth.sessions, auth.users TO m045_owner;  -- as Supabase's postgres reads them
     RESET ROLE;
 
     CREATE SCHEMA storage AUTHORIZATION __STORAGE_OWNER__;
@@ -235,6 +247,7 @@ async def _as_browser(conn, sql, *args, session_id=SESSION_A, user=USER_A):
 async def _seed(conn):
     async with conn.transaction():
         await conn.execute("RESET ROLE")
+        await conn.execute("INSERT INTO auth.users (id) VALUES ($1)", USER_A)
         await conn.execute("INSERT INTO auth.sessions VALUES ($1, $2, NULL)", SESSION_A, USER_A)
         await conn.execute("INSERT INTO public.career_profiles VALUES ($1, 'mine')", USER_A)
         await conn.execute("INSERT INTO storage.objects (bucket_id, name) VALUES ('avatars', $1)", f"{USER_A}/profile.png")
@@ -381,7 +394,9 @@ async def _with_b_signed_in(conn):
     await _seed(conn)
     async with conn.transaction():
         await conn.execute("RESET ROLE")
-        await conn.execute("INSERT INTO auth.sessions VALUES ($1, $2, NULL)", SESSION_B, uuid.uuid4())
+        user_b = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id) VALUES ($1)", user_b)
+        await conn.execute("INSERT INTO auth.sessions VALUES ($1, $2, NULL)", SESSION_B, user_b)
         await conn.execute("SET ROLE m045_owner")
 
 
@@ -431,3 +446,115 @@ async def test_048_keeps_the_grants_and_the_downgrade_restores_045(supabase_like
     assert config == ['search_path=""']
     await conn.execute(m.DOWNGRADE_SQL)
     assert await _asks(conn, SESSION_B) is True
+
+
+# ── Migration 049: a banned or deleted account's token stops working ────────
+
+MIG_049 = pathlib.Path(__file__).parents[1] / "alembic/versions/049_banned_accounts_stop_working.py"
+
+
+def _migration_049():
+    spec = importlib.util.spec_from_file_location("m049", MIG_049)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_migration_049_chains_from_048_and_keeps_its_caller_check():
+    m = _migration_049()
+    assert m.revision == "049"
+    assert m.down_revision == "048"
+    assert "__" not in m.UPGRADE_SQL + m.DOWNGRADE_SQL
+    assert _migration_048().CALLER_CHECK in m.UPGRADE_SQL
+    # Downgrading puts back exactly 048's function.
+    assert m.DOWNGRADE_SQL.split() == _migration_048().UPGRADE_SQL.split()
+
+
+async def _up_to_049(conn):
+    await conn.execute(_migration().UPGRADE_SQL)
+    await conn.execute(_migration_048().UPGRADE_SQL)
+    await _seed(conn)
+
+
+async def _set_user(conn, sql):
+    async with conn.transaction():
+        await conn.execute("RESET ROLE")
+        await conn.execute(sql, USER_A)
+        await conn.execute("SET ROLE m045_owner")
+
+
+BAN = "UPDATE auth.users SET banned_until = now() + interval '100 years' WHERE id = $1"
+
+
+async def test_before_049_a_banned_account_keeps_reading_its_profile(supabase_like):
+    conn = supabase_like
+    await _up_to_049(conn)
+    await _set_user(conn, BAN)
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+
+
+@pytest.mark.parametrize("change", [
+    BAN,
+    "UPDATE auth.users SET deleted_at = now() WHERE id = $1",
+    "DELETE FROM auth.users WHERE id = $1",
+])
+async def test_after_049_a_banned_or_deleted_account_reads_and_writes_nothing(supabase_like, change):
+    conn = supabase_like
+    await _up_to_049(conn)
+    await conn.execute(_migration_049().UPGRADE_SQL)
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+
+    await _set_user(conn, change)
+    assert await _as_browser(conn, "SELECT * FROM public.career_profiles") == []
+    assert await _as_browser(conn, "SELECT * FROM storage.objects") == []
+    assert await _as_browser(conn, "UPDATE public.career_profiles SET headline = 'x' RETURNING 1") == []
+    async with conn.transaction():
+        await conn.execute("SET LOCAL ROLE kripax_api")
+        assert await conn.fetchval("SELECT private.session_is_active($1)", str(SESSION_A)) is False
+
+
+async def test_after_049_a_ban_that_ran_out_or_was_lifted_lets_the_session_back(supabase_like):
+    conn = supabase_like
+    await _up_to_049(conn)
+    await conn.execute(_migration_049().UPGRADE_SQL)
+    await _set_user(conn, "UPDATE auth.users SET banned_until = now() - interval '1 minute' WHERE id = $1")
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+    await _set_user(conn, "UPDATE auth.users SET banned_until = NULL WHERE id = $1")
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+
+
+async def test_after_049_the_browser_still_asks_only_about_its_own_session(supabase_like):
+    conn = supabase_like
+    await _with_b_signed_in(conn)
+    await conn.execute(_migration_048().UPGRADE_SQL)
+    await conn.execute(_migration_049().UPGRADE_SQL)
+    assert await _asks(conn, SESSION_A) is True
+    assert await _asks(conn, SESSION_B) is False
+    fn = "private.session_is_active(text)"
+    assert await conn.fetchval("SELECT has_function_privilege('authenticated', $1, 'EXECUTE')", fn)
+    assert not await conn.fetchval("SELECT has_function_privilege('anon', $1, 'EXECUTE')", fn)
+
+
+async def test_a_login_that_cannot_read_users_stops_the_049_deploy(supabase_like):
+    conn = supabase_like
+    await _up_to_049(conn)
+    async with conn.transaction():
+        await conn.execute("RESET ROLE")
+        await conn.execute("REVOKE SELECT ON auth.users FROM m045_owner")
+        await conn.execute("SET ROLE m045_owner")
+    with pytest.raises(asyncpg.RaiseError, match="cannot read auth.users"):
+        await conn.execute(_migration_049().UPGRADE_SQL)
+    # The running check is left as it was.
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1
+
+
+async def test_049_downgrade_lets_a_banned_account_back_in(supabase_like):
+    conn = supabase_like
+    await _up_to_049(conn)
+    m = _migration_049()
+    await conn.execute(m.UPGRADE_SQL)
+    await conn.execute(m.UPGRADE_SQL)  # a re-run changes nothing
+    await _set_user(conn, BAN)
+    assert await _as_browser(conn, "SELECT * FROM public.career_profiles") == []
+    await conn.execute(m.DOWNGRADE_SQL)
+    assert len(await _as_browser(conn, "SELECT * FROM public.career_profiles")) == 1

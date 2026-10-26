@@ -98,10 +98,12 @@ async def _verify_jwt(token: str) -> dict:
 # A signed JWT outlives sign-out: the signature and expiry still check out for
 # up to an hour after the session behind it is deleted. So every request also
 # asks the database whether the token's session still exists (test ATK-007,
-# migration 045). A live answer is reused for a few seconds, so a page that
-# fires several requests at once asks once; an ended session never comes back,
-# so that answer is kept until the cache is trimmed.
+# migration 045). The same check also fails while the account is banned or
+# deleted (test ATK-050, migration 049). A live answer is reused for a few
+# seconds, so a page that fires several requests at once asks once; an ended
+# answer is kept for a minute, since a lifted ban lets the same session back in.
 _SESSION_LIVE_TTL = 5.0
+_SESSION_ENDED_TTL = 60.0
 _SESSION_CACHE_MAX = 10_000
 _session_cache: dict[str, tuple[bool, float]] = {}
 
@@ -125,7 +127,7 @@ async def _session_still_open(session_id: str | None) -> bool:
     cached = _session_cache.get(session_id)
     if cached is not None:
         active, at = cached
-        if not active or now - at < _SESSION_LIVE_TTL:
+        if now - at < (_SESSION_LIVE_TTL if active else _SESSION_ENDED_TTL):
             return active
     active = await _session_is_active(session_id)
     if len(_session_cache) >= _SESSION_CACHE_MAX:
