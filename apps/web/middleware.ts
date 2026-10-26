@@ -78,7 +78,9 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/jd", "/interview", "/analytics", "/profile", "/onboarding", "/account", "/plans", "/admin"];
+  // Every page needs a sign-in unless it is listed here (test ATK-001). A
+  // list of protected pages instead had already missed /cover-letters; a
+  // page added later is protected without anyone remembering to add it.
   const PUBLIC_PATHS = [
     "/",
     "/login",
@@ -91,14 +93,17 @@ export async function middleware(request: NextRequest) {
     "/data-deletion",
   ];
 
+  // Files, not pages: the public/ folder (logos, template previews,
+  // security.txt), robots.txt, sitemap.xml and the app icon. No page path
+  // has a dot in its last segment.
+  const isFile = /\.[a-z0-9]+$/i.test(pathname) || pathname.startsWith("/.well-known/");
+
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon.ico");
+    isFile;
 
-  const isProtected = PROTECTED_PREFIXES.some((prefix) =>
-    pathname === prefix || pathname.startsWith(prefix + "/")
-  );
+  const isProtected = !isPublic;
 
   // Signed in, the home page and the sign-in screens are the wrong place to
   // land: the KripaX logo on the legal pages (linked from Account) points at

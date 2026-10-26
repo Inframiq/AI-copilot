@@ -48,3 +48,63 @@ describe("middleware: where a signed-in person lands", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 });
+
+// Every page is for signed-in people unless it is one of these (test
+// ATK-001). Pages are found on disk, so a page added later is checked too.
+const PUBLIC_PAGES = ["/", "/login", "/register", "/privacy", "/terms", "/refunds", "/cookies", "/data-deletion"];
+
+function allPages(): string[] {
+  const fs = require("node:fs") as typeof import("node:fs");
+  const path = require("node:path") as typeof import("node:path");
+  const root = path.join(__dirname, "..", "app");
+  const pages: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === "page.tsx") {
+        const route = path.relative(root, dir).split(path.sep)
+          .filter((seg) => seg && !/^\(.*\)$/.test(seg))
+          .map((seg) => (/^\[.*\]$/.test(seg) ? "00000000-0000-4000-8000-000000000001" : seg));
+        pages.push("/" + route.join("/"));
+      }
+    }
+  };
+  walk(root);
+  return pages.map((p) => (p === "/" ? p : p.replace(/\/$/, ""))).sort();
+}
+
+describe("middleware: a visitor who isn't signed in", () => {
+  beforeEach(() => {
+    currentUser = null;
+  });
+
+  it("finds the app's pages", () => {
+    expect(allPages()).toEqual(expect.arrayContaining(["/dashboard", "/cover-letters", "/studio/00000000-0000-4000-8000-000000000001/preview", "/admin"]));
+    expect(allPages().length).toBeGreaterThanOrEqual(25);
+  });
+
+  it.each(allPages().filter((p) => !PUBLIC_PAGES.includes(p)))("is sent to sign-in from %s", async (path) => {
+    const res = await visit(path);
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+  });
+
+  it("is sent to sign-in from an address that isn't a page yet", async () => {
+    const res = await visit("/settings/billing");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+  });
+
+  it.each([...PUBLIC_PAGES, "/callback"])("can open %s", async (path) => {
+    const res = await visit(path);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it.each(["/brand/logo-full.png", "/resume-templates/ats_clean.png", "/.well-known/security.txt", "/robots.txt", "/sitemap.xml", "/icon.png"])(
+    "can load the public file %s",
+    async (path) => {
+      const res = await visit(path);
+      expect(res.headers.get("location")).toBeNull();
+    }
+  );
+});
