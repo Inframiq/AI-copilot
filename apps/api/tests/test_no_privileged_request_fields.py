@@ -3,7 +3,7 @@
 Plan, credits, role and ownership are decided by the server: plan and
 credits live in subscriptions, which only app.core.credits and the admin
 routes write; admin is the token's email plus its Google provider; the
-owner is the token's subject. So no non-admin request schema may even
+owner is the token's subject; a record's timestamps are the database's. So no non-admin request schema may even
 declare a field like that, and none may pass unknown fields through
 (extra="allow"), or a client could set them by adding them to the body."""
 import types
@@ -19,6 +19,8 @@ PRIVILEGED = {
     "role", "roles", "is_admin", "admin", "is_superuser", "permissions", "scopes",
     "plan", "tier", "subscription", "credits", "credits_remaining", "credits_allotment",
     "user_id", "owner_id", "owner", "app_metadata",
+    # Audit fields: when and by whom a record was made or changed (test ATK-051).
+    "created_at", "updated_at", "deleted_at", "created_by", "updated_by", "deleted_by",
 }
 ADMIN = {(path, _method(route)) for path, route, _ in ADMIN_ROUTES}
 
