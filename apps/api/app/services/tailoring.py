@@ -61,6 +61,8 @@ _MAX_TOKENS_SEMANTIC_VERIFY = 4000
 # Up to 15 questions, each with a likely answer and a follow-up.
 _MAX_TOKENS_PREP_INTERVIEW_QUESTIONS = 12000
 _MAX_TOKENS_FOLLOWUP_ANSWER = 3000
+# Up to 15 answers of ~120 words and their follow-ups.
+_MAX_TOKENS_PREP_ANSWERS = 10000
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -219,12 +221,23 @@ class InterviewQuestionData(BaseModel):
     basis: str
     topic: str
     question: str
-    likely_answer: str
-    follow_up: str
 
 
 class InterviewQuestionsWrapper(BaseModel):
     questions: list[InterviewQuestionData]
+
+
+class PrepAnswerData(BaseModel):
+    """One question's likely answer and the interviewer's follow-up, from the
+    separate answer call (_agent4_write_answers). id is the question's index
+    in the request."""
+    id: int
+    likely_answer: str
+    follow_up: str
+
+
+class PrepAnswersWrapper(BaseModel):
+    answers: list[PrepAnswerData]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1614,7 +1627,10 @@ clear. Junior roles: fundamentals in depth, debugging, reasoning out loud. \
 Mid: design choices, trade-offs, ownership of a component end to end. \
 Senior/lead and above: system- or program-level design, ambiguity, failure \
 and recovery, influencing people they don't manage, cost/risk trade-offs. \
-State the level and what is being tested in interviewer_intent.
+interviewer_intent is shown to the candidate as "What they're testing": \
+one sentence, at most 20 words, naming the level and what the interviewer \
+is checking — e.g. "Senior bar: whether you can trade consistency against \
+latency and defend the choice."
 2. MIX OF QUESTION TYPES (over the whole set):
    - DEEP DIVE (about a third): take one SPECIFIC thing from \
 resume_content — a named project, system, metric or decision — and drill \
@@ -1630,7 +1646,8 @@ PM/analyst a prioritization or metric-drop case. Ask how they would \
 approach it AND which trade-off they would make. These ARE allowed to be \
 hypothetical — that is how real technical and case rounds work.
    - BEHAVIORAL AT THE ROLE'S BAR (the rest): past examples only ("Tell me \
-about a time…", "Walk me through…"), but about what is hard at this level \
+about a time…"), never "How do you approach…" or any other hypothetical — \
+but about what is hard at this level \
 — a decision that turned out wrong, pushing back on a senior stakeholder, \
 a trade-off with real cost, delivering through ambiguity. Never "a time \
 you did <JD duty>".
@@ -1646,20 +1663,20 @@ it.
    - Could be asked of any candidate for any similar role unchanged.
    Every question must contain at least one concrete detail: a named \
 system, tool, metric, standard, constraint or number from the JD or \
-résumé. A question is at most two sentences and asks about ONE hard \
-thing. Never ask how the candidate would learn or research a skill.
+résumé. A question is at most two sentences and 40 words, has ONE question \
+mark, and asks about ONE hard thing — never "how did you…, why…, and what \
+would break…" in one question; the other parts are for the follow-ups. Never ask \
+how the candidate would learn, research or ramp up on a skill.
    The SHAPE of a strong question (fill the <...> from THIS JD and résumé \
 — the shapes are not content, never write <...> or invent around them):
    - Scenario: "<a concrete deadline or scale> — you discover <a specific \
 failure in a system or process this role owns>. What do you tell <a named \
 stakeholder>, and what do you fix first?"
    - Deep dive: "On <named project from the résumé>, <the specific result \
-it claims> — how did you <the hard part>, why <their choice> over <the \
-obvious alternative>, and what would break at <10x the scale or a \
-tighter constraint>?"
+it claims> — why <their choice> over <the obvious alternative>?"
    - Gap: "<a realistic incident or task that needs the missing skill>. \
-You have <the adjacent skill they do have> but not <the missing one> — \
-walk me through your first <hour / week>."
+How would you approach it?" — never say the candidate lacks the skill, and \
+never ask about their first hour or week of learning.
    - Behavioral: "Tell me about a time <a senior person> rejected <a \
 specific call you made in this domain>. What did you give up, and what \
 did you refuse to give up?"
@@ -1675,9 +1692,11 @@ basis = "<skill> — <the résumé detail referenced>".
    - "gap": grounded in missing_skills. Never trivia on the missing skill. \
 Put the candidate in a realistic situation that needs it, and let them \
 show how adjacent experience they DO have (from matched_skills or \
-resume_content) gets them there — and what they would need to learn. basis \
-= the missing skill. Any question about a missing skill is "gap", never \
-"requirement".
+resume_content) carries over. basis = the missing skill, as written in \
+missing_skills. Any question whose subject is in missing_skills is "gap", \
+never "requirement" — including a JD duty that is in missing_skills.
+   HR & Culture questions are "requirement" (basis = the role or company), \
+never "gap".
    Skip a category only when its input is empty.
 5. CAP: AT MOST 15 questions in total. Fewer, harder questions beat broad \
 coverage.
@@ -1689,29 +1708,12 @@ Deep dives and scenario/design questions on tools, systems or domain \
 practice are "Technical". A past example about people, conflict, \
 failure, ambiguity or influence is "Behavioral". "HR & Culture" is ONLY \
 motivation for this role/company and working-style fit — at most one \
-or two, still specific.
-8. LIKELY ANSWER — the answer THIS candidate could give, written as a \
-coach talking to them ("you"), 80-140 words, as 3-4 short lines separated \
-by newlines. Each line starts with a 1-3 word label and a colon, then one \
-or two sentences. Labels by question type:
-   - Behavioral: "Situation:", "What you did:", "Result:", "Takeaway:".
-   - Deep dive: "Context:", "Your choice:", "Why:", "What you'd change:".
-   - Scenario / design: "First move:", "Approach:", "Trade-off:", \
-"How you'd close:".
-   - HR & Culture: "Why this role:", "Evidence:", "Close:".
-   Build it from resume_content: name the real project, tool, metric or \
-employer it draws on. Where the résumé does not say (a detail, a number, \
-how a disagreement went), never state it as fact — frame it for the \
-candidate to fill in or imagine: "for example…", "imagine you…", "name \
-the metric you tracked". A gap answer bridges from the adjacent skill \
-they DO have and says plainly what they would still need to learn; never \
-claim a missing skill. The points to make, in the order to make them — \
-not a script to memorize.
-9. FOLLOW-UP — the one probing question the interviewer asks next after \
-hearing that answer: one sentence, aimed at its most testable point (a \
-number, a trade-off, a decision, what could fail). Never a restatement \
-of the question.
-10. Output ONLY valid JSON matching the schema. No markdown, no preamble.
+or two, still specific. When target_role_context names a company, one of \
+them is why this company.
+8. QUESTIONS ONLY. The likely answer and the interviewer's follow-up are \
+written separately, from your question, interviewer_intent and basis — so \
+make those three say exactly what is being asked and why.
+9. Output ONLY valid JSON matching the schema. No markdown, no preamble.
 </rules>"""
 
 
@@ -1843,6 +1845,119 @@ async def _agent4_generate_interview_questions(
     return wrapper.questions
 
 
+# The labels a likely answer's lines start with, by kind of question.
+_ANSWER_LABELS = {
+    "behavioral": ["Situation", "What you did", "Result", "Takeaway"],
+    "hr": ["Why this role", "Evidence", "Close"],
+    "gap": ["First move", "What carries over", "Approach", "Still to learn"],
+    "deep_dive": ["Context", "Your choice", "Why", "What you'd change"],
+    "scenario": ["First move", "Approach", "Trade-off", "How you'd close"],
+}
+
+
+def _answer_labels(q: InterviewQuestionData) -> list[str]:
+    if q.source == "gap":
+        return _ANSWER_LABELS["gap"]
+    if q.topic == "HR & Culture":
+        return _ANSWER_LABELS["hr"]
+    if q.topic == "Behavioral":
+        return _ANSWER_LABELS["behavioral"]
+    if q.source == "overlap":
+        return _ANSWER_LABELS["deep_dive"]
+    return _ANSWER_LABELS["scenario"]
+
+
+_PREP_ANSWERS_SYSTEM = """\
+<system_role>
+You are an interview coach. For each interview question, write the likely \
+answer THIS candidate could give, from their résumé, and the follow-up the \
+interviewer asks after hearing it.
+</system_role>
+
+<rules>
+1. FACT LOCK. resume_content is everything known about the candidate. Name \
+the real project, employer, tool and number it states. Any other detail — \
+a technique, tool, cause, person, event, outcome — is unknown, so it is \
+never written as something they did. Never write "you used X" or "you \
+implemented X" unless resume_content says so.
+2. CONCRETE, NOT VAGUE. An answer of "name the change you made" alone is \
+useless. Where the résumé is silent, give one plausible, clearly marked \
+example the candidate can keep or swap: "for example, an index on the \
+orders table — if that's what you did", "such as dual writes, if that was \
+your approach". Each answer has at least one such concrete anchor: a fact \
+from the résumé or a marked example.
+3. Behavioral answers name the résumé item to draw on and leave the story \
+to the candidate ("pick the quarter where…"); never invent what happened, \
+who was involved, or how it ended.
+4. A skill in missing_skills is never claimed. Bridge from what the \
+candidate does have; the "Still to learn" line is one honest sentence, \
+never a tutorial or course.
+5. FORM: a coach talking to the candidate — always "you", never "I", "my", \
+"we". 70-120 words, one line per label given for that question, in that \
+order, each "Label: one or two sentences", lines separated by newlines. No \
+advice about the answer itself ("only if you can substantiate", "do not \
+invent") — just the points to make. Answer at the level of \
+jd_target_job_titles and jd_seniority_indicators, and serve what \
+the question's testing field says is being tested.
+6. FOLLOW-UP: the one question the interviewer asks after hearing THIS \
+answer — one sentence, at its most testable point (a number, a trade-off, \
+a decision, what could fail). It must make sense whichever example the \
+candidate keeps, so never build it on a marked example as if it were fact. \
+Never a restatement of the question.
+7. One entry per question, with the question's id. Output ONLY valid JSON \
+matching the schema.
+</rules>"""
+
+
+async def _agent4_write_answers(
+    questions: list[InterviewQuestionData],
+    jd_analysis: "JDAnalysis",
+    matched_skills: list[str],
+    missing_skills: list[str],
+    resume_content: dict,
+    provider: AIProvider,
+) -> dict[int, PrepAnswerData]:
+    """Likely answers and first follow-ups for a question set, by question
+    index. A separate call from the questions: written with them, the
+    answers stated details the résumé never said as things the candidate
+    did ("you used dual writes"), however the prompt forbade it, and the
+    follow-up then probed that invented detail. The follow-up answers were
+    already honest on this tier with a short focused prompt; this does the
+    same for the first answer, and writes the follow-up from the answer
+    that is actually shown."""
+    payload = {
+        "jd_target_job_titles": jd_analysis.target_job_titles,
+        "jd_seniority_indicators": jd_analysis.seniority_indicators,
+        "jd_core_responsibilities": jd_analysis.core_responsibilities,
+        "matched_skills": matched_skills[:15],
+        "missing_skills": missing_skills[:10],
+        "resume_content": resume_content,
+        "questions": [
+            {
+                "id": i,
+                "question": q.question,
+                "testing": q.interviewer_intent,
+                "basis": q.basis,
+                "labels": _answer_labels(q),
+            }
+            for i, q in enumerate(questions)
+        ],
+    }
+    wrapper = await provider.complete_structured(
+        _PREP_ANSWERS_SYSTEM,
+        json.dumps(payload),
+        PrepAnswersWrapper,
+        model_tier="standard",
+        max_output_tokens=_MAX_TOKENS_PREP_ANSWERS,
+        call_name="prep_questions_answers",
+    )
+    out: dict[int, PrepAnswerData] = {}
+    for a in wrapper.answers:
+        if 0 <= a.id < len(questions) and a.id not in out:
+            out[a.id] = a
+    return out
+
+
 async def get_or_generate_prep_questions(
     missing_skills: list[str],
     resume_content: dict,
@@ -1870,20 +1985,30 @@ async def get_or_generate_prep_questions(
         jd_analysis, safe_matched, safe_missing, resume_content, company_name, provider
     )
     questions = _cap_balanced(questions, _MAX_PREP_QUESTIONS)
+    if not questions:
+        return []
+    answers = await _agent4_write_answers(
+        questions, jd_analysis, safe_matched, safe_missing, resume_content, provider
+    )
 
     result: list[PrepQuestionData] = []
     for i, q in enumerate(questions):
+        answer = answers.get(i)
+        # A question the answer call skipped would show with no answer and
+        # no follow-up; better left out of the set.
+        if answer is None or not answer.likely_answer.strip():
+            continue
         source = q.source if q.source in _PREP_SOURCE_VALUES else "requirement"
         result.append(PrepQuestionData(
             topic=q.topic if q.topic in _TOPIC_VALUES else "Technical",
             question=q.question,
-            likely_answer=q.likely_answer.strip(),
-            follow_up=q.follow_up.strip(),
+            likely_answer=answer.likely_answer.strip(),
+            follow_up=answer.follow_up.strip(),
             interviewer_intent=q.interviewer_intent.strip(),
             is_gap_based=(source == "gap"),
             source=source,
             basis=q.basis,
-            order_index=i + 1,
+            order_index=len(result) + 1,
         ))
     return result
 

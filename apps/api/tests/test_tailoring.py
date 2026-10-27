@@ -4,7 +4,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.tailoring import (
     get_or_generate_prep_questions, PrepQuestionData,
-    InterviewQuestionData, InterviewQuestionsWrapper,
+    InterviewQuestionData, InterviewQuestionsWrapper, PrepAnswerData, PrepAnswersWrapper,
+    _answer_labels, _PREP_ANSWERS_SYSTEM, _build_interview_prep_system,
     run_tailoring_pipeline, TailoringResult,
     analyze_jd_match, JDMatchAnalysis,
     JDAnalysis, _JDAnalysisWire, MappingPlan, BulletMapping,
@@ -154,6 +155,13 @@ def make_mock_db_with_rows(rows):
     return session
 
 
+def _answers_for(n: int, skip: frozenset = frozenset()) -> PrepAnswersWrapper:
+    return PrepAnswersWrapper(answers=[
+        PrepAnswerData(id=i, likely_answer=f"Context: answer {i}.", follow_up=f"Follow-up {i}?")
+        for i in range(n) if i not in skip
+    ])
+
+
 @pytest.mark.asyncio
 async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_analysis_given():
     """The real, personalized flow: questions come from Agent 4, grounded in
@@ -170,23 +178,25 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
                 basis="Own the payments reconciliation pipeline",
                 topic="Technical",
                 question="Tell me about a time you owned a reconciliation pipeline.",
-                likely_answer="Situation: the reconciliation pipeline.",
-                follow_up="How did you catch mismatches?",
             ),
             InterviewQuestionData(
                 source="overlap",
                 basis="AWS — built the payments ingestion service on AWS Lambda",
                 topic="Technical",
                 question="Walk me through how you built that AWS Lambda ingestion service.",
-                likely_answer="A", follow_up="F",
             ),
             InterviewQuestionData(
                 source="gap",
                 basis="Kubernetes",
                 topic="Technical",
                 question="Tell me about a time your Docker experience would carry over to Kubernetes.",
-                likely_answer="A", follow_up="F",
             ),
+        ]),
+        PrepAnswersWrapper: PrepAnswersWrapper(answers=[
+            PrepAnswerData(id=0, likely_answer="Situation: the reconciliation pipeline.",
+                           follow_up="How did you catch mismatches?"),
+            PrepAnswerData(id=1, likely_answer="A", follow_up="F"),
+            PrepAnswerData(id=2, likely_answer="A", follow_up="F"),
         ]),
     })
     db = make_mock_db_with_rows([])
@@ -208,10 +218,124 @@ async def test_get_or_generate_prep_questions_returns_real_questions_when_jd_ana
     assert req_q.follow_up == "How did you catch mismatches?"
 
 
+@pytest.mark.asyncio
+async def test_answers_and_follow_ups_come_from_their_own_call():
+    """Written with the questions, answers stated details the résumé never
+    said as things the candidate did, and the follow-up probed them. The
+    question call now asks for no answers; a second call on the standard
+    tier writes the answer and the follow-up for each question, by id,
+    from the question, what it tests and its basis."""
+    questions = [
+        InterviewQuestionData(interviewer_intent="Senior bar: migration risk.", source="overlap",
+                              basis="PostgreSQL — the 4M-record migration", topic="Technical",
+                              question="Why zero downtime over a maintenance window?"),
+        InterviewQuestionData(interviewer_intent="Senior bar: influence.", source="requirement",
+                              basis="partner with product", topic="Behavioral",
+                              question="Tell me about a time product disagreed with you."),
+    ]
+    provider = make_provider_dispatching_by_schema({
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=questions),
+        # Out of order on purpose: matched by id, not position.
+        PrepAnswersWrapper: PrepAnswersWrapper(answers=[
+            PrepAnswerData(id=1, likely_answer="Situation: quarterly planning.", follow_up="What changed their mind?"),
+            PrepAnswerData(id=0, likely_answer="Context: the migration.", follow_up="How did you verify parity?"),
+        ]),
+    })
+
+    result = await get_or_generate_prep_questions(
+        [], {"experience": [{"bullets": ["Migrated 4M records"]}]}, provider, make_mock_db_with_rows([]),
+        jd_analysis=make_jd_analysis(seniority_indicators=["Senior"]),
+    )
+
+    assert [(q.question, q.likely_answer, q.follow_up) for q in result] == [
+        ("Why zero downtime over a maintenance window?", "Context: the migration.", "How did you verify parity?"),
+        ("Tell me about a time product disagreed with you.", "Situation: quarterly planning.", "What changed their mind?"),
+    ]
+    calls = {c.args[2]: c for c in provider.complete_structured.call_args_list}
+    answer_call = calls[PrepAnswersWrapper]
+    assert answer_call.kwargs["model_tier"] == "standard"
+    sent = json.loads(answer_call.args[1])
+    assert sent["resume_content"] == {"experience": [{"bullets": ["Migrated 4M records"]}]}
+    assert sent["questions"][0] == {
+        "id": 0, "question": "Why zero downtime over a maintenance window?",
+        "testing": "Senior bar: migration risk.", "basis": "PostgreSQL — the 4M-record migration",
+        "labels": ["Context", "Your choice", "Why", "What you'd change"],
+    }
+    assert sent["questions"][1]["labels"] == ["Situation", "What you did", "Result", "Takeaway"]
+    # The question call is not asked to write answers any more.
+    assert "likely_answer" not in InterviewQuestionData.model_fields
+    assert "follow_up" not in InterviewQuestionData.model_fields
+
+
+@pytest.mark.asyncio
+async def test_a_question_the_answer_call_skipped_is_left_out():
+    provider = make_provider_dispatching_by_schema({
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(
+            questions=[_make_interview_question("requirement", i) for i in range(3)]
+        ),
+        PrepAnswersWrapper: PrepAnswersWrapper(answers=[
+            PrepAnswerData(id=0, likely_answer="Context: zero.", follow_up="F0?"),
+            PrepAnswerData(id=2, likely_answer="Context: two.", follow_up="F2?"),
+            PrepAnswerData(id=7, likely_answer="Context: no such question.", follow_up="?"),
+        ]),
+    })
+
+    result = await get_or_generate_prep_questions(
+        [], {"experience": []}, provider, make_mock_db_with_rows([]), jd_analysis=make_jd_analysis(),
+    )
+
+    assert [(q.question, q.order_index) for q in result] == [
+        ("requirement question 0", 1), ("requirement question 2", 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_no_answer_call_when_there_are_no_questions():
+    provider = make_provider_dispatching_by_schema({
+        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
+    })
+
+    result = await get_or_generate_prep_questions(
+        [], {"experience": []}, provider, make_mock_db_with_rows([]), jd_analysis=make_jd_analysis(),
+    )
+
+    assert result == []
+    assert provider.complete_structured.await_count == 1
+
+
+def test_answer_labels_follow_the_kind_of_question():
+    def q(source, topic):
+        return InterviewQuestionData(source=source, basis="b", topic=topic, question="q")
+
+    assert _answer_labels(q("gap", "Technical"))[-1] == "Still to learn"
+    assert _answer_labels(q("requirement", "HR & Culture")) == ["Why this role", "Evidence", "Close"]
+    assert _answer_labels(q("overlap", "Behavioral"))[0] == "Situation"
+    assert _answer_labels(q("overlap", "Technical"))[0] == "Context"
+    assert _answer_labels(q("requirement", "Technical")) == ["First move", "Approach", "Trade-off", "How you'd close"]
+
+
+def test_answer_prompt_keeps_the_candidate_honest():
+    """The rules that stop an answer from stating unknown details as things
+    the candidate did, and a follow-up from probing them."""
+    p = _PREP_ANSWERS_SYSTEM
+    assert "FACT LOCK" in p and 'Never write "you used X"' in p
+    assert "clearly marked" in p and "if that's what you did" in p
+    assert "never build it on a marked example as if it were fact" in p
+    assert 'never "I", "my"' in p
+
+
+def test_question_prompt_asks_one_thing_and_leaves_answers_out():
+    p = _build_interview_prep_system(["Senior"])
+    assert "has ONE question" in p and "40 words" in p
+    assert "QUESTIONS ONLY" in p
+    assert "LIKELY ANSWER" not in p
+    assert "why this company" in p
+
+
 def _make_interview_question(source: str, i: int) -> InterviewQuestionData:
     return InterviewQuestionData(
         source=source, basis=f"{source}-{i}", topic="Technical",
-        question=f"{source} question {i}", likely_answer="A", follow_up="F",
+        question=f"{source} question {i}",
     )
 
 
@@ -246,6 +370,7 @@ async def test_get_or_generate_prep_questions_caps_at_fifteen():
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(
             questions=[_make_interview_question("requirement", i) for i in range(20)]
         ),
+        PrepAnswersWrapper: _answers_for(15),
     })
     db = make_mock_db_with_rows([])
 

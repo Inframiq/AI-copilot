@@ -319,7 +319,8 @@ forces or fabricates a weak metric to fit the `[Action Verb] + [Method] +
 | 2 | Semantic Mapper (`_agent2_semantic_map`) | Every "Tailor Resume" only | **`"premium"`** | premium model | 3,288 chars (~822 tokens) | 16384 (`agent2_semantic_map`) — scales with bullet count |
 | 3 | Precision Writer (`_agent3_write`) | Every "Tailor Resume" only | **`"premium"`** (was `"pro"` — see 2026-09-03 note) | premium model | 2,302 chars (~575 tokens, varies slightly with humanize tone) | 16384 (`agent3_write`) — scales with bullet count |
 | — | Cover letter (`write_cover_letter`) | "Generate Cover Letter" action | `"pro"` | fast model | ~1,000 chars (~250 tokens) | 3000 (`cover_letter`) |
-| — | Prep Questions (`_agent4_generate_interview_questions` via `get_or_generate_prep_questions`) | Save to JD (`POST /jd/{id}/prep-questions`), NOT the tailoring pipeline | **`"premium"`** (was `"pro"` — see 2026-10-11 note above) | premium model | ~6,400 chars (~1,600 tokens) | 6000 (`prep_questions_interview`) |
+| — | Prep Questions (`_agent4_generate_interview_questions` via `get_or_generate_prep_questions`) | Save to JD (`POST /jd/{id}/prep-questions`), NOT the tailoring pipeline | **`"premium"`** (was `"pro"` — see 2026-10-11 note above) | premium model | ~6,400 chars (~1,600 tokens) | 12000 (`prep_questions_interview`) — questions only since 2026-10-27 |
+| — | Prep answers (`_agent4_write_answers`) | Same Save to JD, right after the questions | `"standard"` | standard model | ~3,000 chars (~750 tokens) | 10000 (`prep_questions_answers`) — each question's likely answer + first follow-up |
 | — | Semantic presence verify (`_verify_semantic_presence`) | Twice per "Tailor Resume" (pre + post re-score); once per "Analyze" | `"fast"` | fast model | ~1,250 chars (~314 tokens) | 4000 (`verify_semantic_presence`) |
 | — | Gap filler (`_agent_gap_filler`) | Every "Tailor Resume" only | `"fast"` | fast model | ~1,200 chars (~308 tokens) | 4000 (`agent_gap_filler`) |
 | — | Rewrite/Humanize bullet (`/ai/rewrite-bullet`, `apps/api/app/routers/ai.py`) | Per-click "Rewrite"/"Humanize" button in the tailoring review panel | `"fast"` | fast model | 250–350 chars (~70–90 tokens) | 1200 (`rewrite_bullet`) |
@@ -333,8 +334,18 @@ doc were placeholders and are not real OpenAI ids — set real ones per env.
 semantic verify → Agent 2 → Agent 3 → semantic verify (on the tailored
 résumé) → gap filler, plus optional Agent 0 if a company name was entered.
 That's **two premium-model calls (Agent 2 + Agent 3)** plus ~3-4 fast-model
-calls. Prep questions are no longer part of this — they generate lazily on
-first Interview-Center view.
+calls. Prep questions are no longer part of this — they are made by Save to
+JD.
+
+**Per question set (2026-10-27):** two calls. Written in one premium call,
+the likely answers stated details the résumé never said as things the
+candidate did ("you used dual writes", "Jenkins pipelines") and the
+follow-up then probed them, whatever the prompt said. The answers and first
+follow-ups now come from a second, focused call on the standard tier (the
+one follow-up answers already used, honestly). The budget model was tried
+for it and invented details again. Measured on `experienced_backend_ic`:
+$0.0033 per set before, $0.0276 after. Checked by
+`python -m evals.prep_runner run` (see `apps/api/evals/prep_runner.py`).
 
 **Cost guardrail:** `POST /ai/tailor` calls `spend_credits(db, uid, "tailor")`
 (`app/core/credits.py`) — deducts 10 credits from the user's `subscriptions`

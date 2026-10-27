@@ -1,0 +1,569 @@
+{
+  "generated_at": "2026-10-27T11:51:23.632026+00:00",
+  "aggregate": {
+    "fixtures_ok": 5,
+    "fixtures_failed": 0,
+    "answers_with_unmarked_details": 0.0,
+    "avg_question_words": 27.38,
+    "first_person_answers": 0.0,
+    "multi_ask_questions": 0.0,
+    "questions_total": 7.6,
+    "tokens_input": 3746.0,
+    "tokens_output": 2082.2,
+    "tokens_reasoning": 193.2,
+    "tokens_total": 5828.2
+  },
+  "fixtures": [
+    {
+      "name": "career_changer_thin_overlap",
+      "questions_total": 5,
+      "multi_ask_questions": 0,
+      "avg_question_words": 29.0,
+      "first_person_answers": 0,
+      "answers_with_unmarked_details": 0,
+      "unmarked_details": [],
+      "tokens_input": 3397,
+      "tokens_output": 1569,
+      "tokens_reasoning": 254,
+      "tokens_total": 4966,
+      "token_calls": {
+        "prep_questions_interview": 2413,
+        "prep_questions_answers": 2553
+      },
+      "questions": [
+        {
+          "topic": "Technical",
+          "question": "You must deliver a revenue report in 4 hours using SQL on a 100 million row sales table but queries are slow; what exact steps and trade-offs do you make to optimize and deliver accurate results?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would clarify the revenue definition, reporting cutoff, and required breakdowns before querying; your closest reporting experience is monthly campaign performance across six channels at Brightline Media.\nApproach: You would validate the business logic on a small, time-bounded sample first, then request support from the data owner for the production SQL; for example, aggregate by reporting period before joining detail tables, if that matches the data model.\nTrade-off: You would prioritize a clearly defined, reproducible total and disclose any necessary scope reduction rather than sacrifice accuracy for every possible cut.\nHow you'd close: You would deliver the reconciled report with metric definitions, time coverage, and validation checks, then document performance work needed for recurring reporting.",
+          "follow_up": "What specific validation would you use to establish that the delivered revenue total is accurate before sending it?",
+          "interviewer_intent": "Senior bar: how you handle performance trade-offs and accuracy in SQL revenue queries under tight deadlines.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "run SQL analyses to answer business questions",
+          "order_index": 1
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time a finance leader questioned your revenue forecast; how did you handle their pushback and what did you insist was correct versus what you adjusted?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Draw on Brightline Media's spreadsheet models forecasting quarterly campaign spend, rather than presenting this as a revenue-forecast or finance-leadership example; pick a quarter in which an assumption or forecast total was questioned.\nWhat you did: You would walk through the model inputs, calculation logic, and timing assumptions, separating figures supported by available campaign data from assumptions that needed stakeholder agreement; for example, a planned-spend assumption, if that was the point of disagreement.\nResult: State the actual resolution from that quarter, including what remained supported by the data and what assumption changed, if any.\nTakeaway: You would emphasize that forecast discussions need transparent definitions, visible assumptions, and a documented version of the agreed model.",
+          "follow_up": "Which assumption in the forecast was most material to the projected total, and how did you determine whether to retain or revise it?",
+          "interviewer_intent": "Senior bar: whether you can explain and influence finance stakeholders on revenue forecasting discrepancies.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "partner with finance on revenue forecasting",
+          "order_index": 2
+        },
+        {
+          "topic": "Technical",
+          "question": "You have 5 revenue KPIs and looker config limits stakeholders’ dashboard to 3 widgets; how do you design and justify which metrics to include to maximize insight?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would identify the stakeholder's decision and define each of the five revenue KPIs consistently before selecting widgets; your reporting foundation is monthly campaign-performance reporting across six channels.\nApproach: You would reserve three widgets for the metrics that answer the core question most directly—for example, total revenue, revenue versus forecast, and trend over time, if those are the relevant business measures—and provide definitions and a supporting report for the remaining KPIs.\nTrade-off: You would favor a focused dashboard over showing every available measure, while preserving drill-down or a separate detail view where the platform permits.\nHow you'd close: You would confirm the chosen metrics with revenue stakeholders, explain what is intentionally excluded, and revisit the design after feedback.",
+          "follow_up": "What stakeholder decision would determine which three KPIs are essential, rather than merely interesting?",
+          "interviewer_intent": "Senior bar: can you design a user-friendly revenue dashboard balancing key metrics and limits of platforms like Tableau or Looker?",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "build dashboards and reports for revenue stakeholders",
+          "order_index": 3
+        },
+        {
+          "topic": "Technical",
+          "question": "Imagine you lack Tableau or Looker experience but must build a revenue dashboard next week; how would you approach learning quickly, and which dashboard trade-offs would you prioritize?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would state that Tableau and Looker are still to learn, then begin with the dashboard question, metric definitions, data source, and stakeholder audience rather than treating the tool as the starting point.\nWhat carries over: Your Excel models forecasting quarterly campaign spend and monthly reporting across six channels provide experience organizing metrics, checking calculations, and presenting quarterly results to leadership.\nApproach: You would build a small first version around a few agreed revenue measures—for example, total revenue, forecast variance, and a time trend, if those serve the audience—then validate the figures against the source report and iterate on usability.\nStill to learn: You still need hands-on Tableau or Looker experience, including the platform's data connections, calculations, and configuration limits.",
+          "follow_up": "Before publishing the first dashboard, how would you verify that its displayed revenue measures reconcile to the source reporting?",
+          "interviewer_intent": "Senior bar: whether you can reason through end-to-end dashboard project trade-offs with unfamiliar BI tools under sudden product changes.",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "Tableau, Looker",
+          "order_index": 4
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Describe a time your monthly marketing reports conflicted with a team’s expectations; how did you resolve the disagreement and what compromise did you reach?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Use your monthly campaign-performance reporting at Brightline Media and choose a reporting cycle where a team's expectation differed from what the report showed; the résumé does not specify the disagreement or outcome.\nWhat you did: You would bring the relevant channel-level results, explain the report's metric definitions and reporting period, and ask the team to identify the expectation or source behind the discrepancy; for example, an expectation based on a different date range, if that was the issue.\nResult: Describe the actual resolution and any revised report view, definition, or communication agreed in that cycle.\nTakeaway: You would emphasize that resolving reporting ambiguity means aligning on definitions and time periods before debating performance conclusions.",
+          "follow_up": "What exact metric definition or reporting-period difference proved decisive in resolving the disagreement?",
+          "interviewer_intent": "Senior bar: can you manage ambiguity and competing priorities in reporting from your marketing coordination experience?",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Excel and reporting — monthly campaign performance reports",
+          "order_index": 5
+        }
+      ]
+    },
+    {
+      "name": "experienced_backend_ic",
+      "questions_total": 9,
+      "multi_ask_questions": 0,
+      "avg_question_words": 26.4,
+      "first_person_answers": 0,
+      "answers_with_unmarked_details": 0,
+      "unmarked_details": [],
+      "tokens_input": 4148,
+      "tokens_output": 2371,
+      "tokens_reasoning": 169,
+      "tokens_total": 6519,
+      "token_calls": {
+        "prep_questions_interview": 2900,
+        "prep_questions_answers": 3619
+      },
+      "questions": [
+        {
+          "topic": "Technical",
+          "question": "During the zero-downtime migration of 4M records from MySQL to PostgreSQL at Northwind Retail, what was the hardest technical trade-off you had to make to maintain availability?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Northwind Retail, you migrated the checkout database from MySQL to PostgreSQL with zero downtime across 4M records.\nYour choice: Describe the real availability-versus-migration-speed decision; for example, a phased copy with ongoing change synchronization, if that was your approach, rather than a short write outage.\nWhy: You protected checkout availability while accepting a longer migration and more operational complexity. Tie the decision to validating correctness before switching production traffic.\nWhat you'd change: Name the stage that created the most uncertainty and the guardrail you would strengthen, such as clearer rollback criteria, if that was relevant.",
+          "follow_up": "What specific signal or threshold told you it was safe to move checkout traffic to PostgreSQL?",
+          "interviewer_intent": "Senior bar: whether you can identify trade-offs in a large DB migration with no downtime",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Database migration — Migrated MySQL to PostgreSQL with zero downtime across 4M records",
+          "order_index": 1
+        },
+        {
+          "topic": "Technical",
+          "question": "On your order fulfilment API that reduced processing time to 240ms, how did you ensure system resilience and data consistency under traffic spikes or partial backend failure?",
+          "answer_framework": "",
+          "likely_answer": "Context: You built Northwind Retail's Python order fulfilment API and reduced average processing time from 800ms to 240ms for a high-traffic consumer product.\nYour choice: Explain the resilience and consistency mechanisms you actually used; for example, idempotency keys for repeated order requests, if that was part of the service.\nWhy: Connect each mechanism to the failure it contained: duplicate fulfilment, slow downstream dependencies, or inconsistent order state during a partial failure.\nWhat you'd change: Identify the remaining weak point after the improvement, such as recovery visibility or a dependency timeout policy, if applicable.",
+          "follow_up": "Which failure mode was most likely to create an incorrect order state, and how did your design prevent or recover from it?",
+          "interviewer_intent": "Senior bar: how you manage cascading failure in high-volume transactional API",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Performance optimization — cutting order processing time from 800ms to 240ms on order fulfilment API",
+          "order_index": 2
+        },
+        {
+          "topic": "Technical",
+          "question": "Design a payment processing service handling 10,000 transactions per second with PostgreSQL backend and event-driven architecture; how do you guarantee exactly-once processing with Kafka latency under 50ms?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would begin by clarifying whether exactly-once means no duplicate customer charge, no duplicate internal event, or both, because those guarantees differ across a distributed system.\nApproach: Your relevant foundation is six years building transactional services, including a Python order fulfilment API and a zero-downtime PostgreSQL migration across 4M records. You would use durable transaction records and idempotent processing; for example, a unique payment-operation key in PostgreSQL, while validating Kafka and event-processing design with experienced teammates.\nTrade-off: You would prioritize correctness of charges over strict end-to-end latency when the two conflict.\nHow you'd close: Define measurable duplicate, failure-recovery, and latency targets before rollout.",
+          "follow_up": "How would you reconcile a successful PostgreSQL payment write with a delayed or failed publication of its corresponding event?",
+          "interviewer_intent": "Senior bar: design skill on distributed event-driven systems under scale and consistency constraints",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "design and scale distributed systems handling high transaction volume",
+          "order_index": 3
+        },
+        {
+          "topic": "Technical",
+          "question": "Faced with roadmap conflicts between launching a new feature and stabilizing your payment service, how would you decide what to prioritize given aggressive investor deadlines?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would make the conflict explicit with product: define the feature deadline, the payment-service risk, affected customers, and the consequence of delaying each option.\nWhat carries over: At Northwind Retail, you worked with the product team to plan quarterly engineering priorities, so you can ground the conversation in shared outcomes rather than an engineering-only preference.\nApproach: Present options with a clear recommendation, such as stabilizing the highest-risk payment path while scoping the launch, if that matches the evidence. Set decision checkpoints and communicate the residual risk of proceeding.\nStill to learn: You have quarterly planning experience, and you would deepen formal roadmap-prioritisation practice for investor-driven trade-offs.",
+          "follow_up": "What evidence would make you recommend delaying the launch despite an aggressive investor deadline?",
+          "interviewer_intent": "Senior bar: whether you can prioritize product roadmap trade-offs and make clear decisions",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "roadmap prioritisation",
+          "order_index": 4
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time a junior engineer resisted your design feedback; what was your approach to help them improve code quality without causing friction?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Draw on your Northwind Retail work helping newer engineers through code reviews and design feedback; select the actual review where there was disagreement.\nWhat you did: Describe how you first understood their reasoning, then tied your feedback to a concrete code-quality or system-design concern. For example, you might compare failure handling or maintainability between two designs, if that was the issue.\nResult: State what changed in the code, design, or working relationship from that specific example, without overstating agreement.\nTakeaway: You learned to make feedback specific, explain the trade-off, and leave room for the engineer's ownership of the solution.",
+          "follow_up": "What was the specific technical criterion that resolved the disagreement?",
+          "interviewer_intent": "Senior bar: how do you approach mentoring engineers on system design and improving quality?",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Mentoring engineers — helping with code reviews and design feedback at Northwind Retail",
+          "order_index": 5
+        },
+        {
+          "topic": "Behavioral",
+          "question": "A payment processing node fails at peak hour causing delays; what do you tell the head of product and what’s your first fix in the next 30 minutes?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Frame this as a peak-hour payment-node incident, separating confirmed customer impact from hypotheses about the cause.\nWhat you did: Tell the head of product the current impact, what is being done, the next update time, and any customer-facing limitation. In the first 30 minutes, prioritize containing the delay and preserving transaction correctness; for example, route traffic away from the unhealthy node if the system supports it.\nResult: The immediate goal is restored or reduced-impact service with a clear record of transactions needing reconciliation.\nTakeaway: Your transactional-service experience makes correctness and transparent status communication the first priorities during an incident.",
+          "follow_up": "How would you determine whether delayed transactions were safe to retry without creating duplicate charges?",
+          "interviewer_intent": "Senior bar: how do you communicate system failure impact and fixes to senior stakeholders fast",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "own end-to-end delivery of payment processing services",
+          "order_index": 6
+        },
+        {
+          "topic": "Technical",
+          "question": "You need to implement a new data processing pipeline using Kafka and event-driven architecture; how would you leverage your prior high-volume Python service experience to approach this?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would clarify the pipeline's inputs, ordering and delivery requirements, failure consequences, throughput target, and which consumers own each business outcome.\nWhat carries over: You bring Python transactional-service experience, PostgreSQL migration experience across 4M records, and work on a high-traffic order fulfilment API improved from 800ms to 240ms. Those experiences transfer to defining data contracts, performance targets, safe database changes, and operational failure cases.\nApproach: You would pair with engineers experienced in Kafka and event-driven systems, build a narrow end-to-end slice, and test replay and duplicate-handling behavior; for example, use idempotent consumers if that fits the requirements.\nStill to learn: You have not yet listed Kafka or event-driven architecture experience, so you would build depth in their delivery and operating trade-offs.",
+          "follow_up": "Which pipeline failure scenario would you test first to validate that processing remains correct?",
+          "interviewer_intent": "Senior bar: ability to integrate missing skills from adjacent experience in context",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "event-driven architecture",
+          "order_index": 7
+        },
+        {
+          "topic": "Technical",
+          "question": "After automating deployments to cut release times by over 80%, what were the main risks you identified and how did you mitigate rollout failures early?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Northwind Retail, you set up automated deployment pipelines that reduced release time from two hours to 15 minutes.\nYour choice: Explain the rollout controls you actually introduced; for example, automated checks before promotion and a quick rollback path, if those were part of the pipeline.\nWhy: Faster deployment increases the frequency and speed at which defects can reach production, so the pipeline needed safeguards that caught failures early and limited blast radius.\nWhat you'd change: Identify the risk that remained after automation, such as production-only behavior or insufficient rollback confidence, and the control you would improve.",
+          "follow_up": "What was the earliest point in the pipeline where a faulty release could be stopped, and what evidence triggered that stop?",
+          "interviewer_intent": "Senior bar: insight into deployment pipeline automation trade-offs and risk management",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Automated deployment pipelines reducing release time from 2 hours to 15 minutes",
+          "order_index": 8
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time when a product manager disagreed with your engineering priority suggestion; how did you persuade them and what concessions were necessary?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Use a real quarterly-planning discussion from Northwind Retail, where you worked with the product team to plan engineering priorities; choose the instance with an actual disagreement.\nWhat you did: Describe the product outcome you both wanted, the engineering evidence you brought, and the options you offered. For example, you may have proposed sequencing reliability work before a feature or reducing feature scope, if that reflects the event.\nResult: State the agreed priority and concession from the real discussion, including if the decision differed from your original recommendation.\nTakeaway: You learned that influence comes from making customer impact, delivery cost, and risk visible together.",
+          "follow_up": "What concession did you make to product, and how did you ensure the engineering risk remained visible?",
+          "interviewer_intent": "Senior bar: influence without direct authority in cross-team product planning",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "Work with product team to plan quarterly engineering priorities",
+          "order_index": 9
+        }
+      ]
+    },
+    {
+      "name": "fresher_projects_only",
+      "questions_total": 10,
+      "multi_ask_questions": 0,
+      "avg_question_words": 25.6,
+      "first_person_answers": 0,
+      "answers_with_unmarked_details": 0,
+      "unmarked_details": [],
+      "tokens_input": 3972,
+      "tokens_output": 2616,
+      "tokens_reasoning": 98,
+      "tokens_total": 6588,
+      "token_calls": {
+        "prep_questions_interview": 2792,
+        "prep_questions_answers": 3796
+      },
+      "questions": [
+        {
+          "topic": "Technical",
+          "question": "On your Campus Course Analytics project, you added checks that flagged malformed records; why did you choose that checking method over schema validation tools?",
+          "answer_framework": "",
+          "likely_answer": "Context: You built Campus Course Analytics with Python, SQL, and Airflow, pulling enrolment data from three campus systems into a single warehouse on a nightly schedule.\nYour choice: You added checks that flagged malformed records; describe the specific rule you used, such as required-field or invalid-format checks, if that was your implementation.\nWhy: You can explain that the project needed a practical safeguard around incoming records while keeping nightly refreshes visible in Airflow. The résumé does not establish use of a schema-validation tool.\nWhat you'd change: You would make the checks more explicit and reusable, for example by defining expected fields and acceptable values centrally, then tracking how many records each rule flags.",
+          "follow_up": "What exact condition caused a record to be flagged, and what happened to the pipeline when that condition was met?",
+          "interviewer_intent": "Junior bar: testing detailed understanding of Airflow pipelines and data quality check implementation.",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "ETL — Campus Course Analytics Airflow pipeline and data quality checks",
+          "order_index": 1
+        },
+        {
+          "topic": "Technical",
+          "question": "Your Campus Course Analytics pipeline runs nightly; one morning the data pull stops updating before completion—what priority steps do you take to identify and fix the failure?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would establish where the nightly Campus Course Analytics run stopped by checking the Airflow task status and logs, then identify whether the failure occurred during extraction, loading, or the malformed-record checks.\nApproach: You would compare the last successful run with the failed run, inspect the affected source pull, and validate whether any data reached the single warehouse. For example, you could rerun one failed task after isolating the cause.\nTrade-off: You would avoid presenting incomplete data as a completed refresh; restoring a trustworthy prior dataset can be preferable to rushing a partial load.\nHow you'd close: You would confirm a successful end-to-end run and verify that the data checks complete before marking the refresh resolved.",
+          "follow_up": "How would you decide whether to rerun only the failed task or rerun the full pipeline?",
+          "interviewer_intent": "Junior bar: assessing ability to troubleshoot pipeline issues under operational constraints.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "build and maintain ETL pipelines",
+          "order_index": 2
+        },
+        {
+          "topic": "Technical",
+          "question": "In your Transit Delay Tracker, how did you verify that your SQL model for the 10 delay-prone routes accurately reflected real-world delays instead of data quirks?",
+          "answer_framework": "",
+          "likely_answer": "Context: You collected live bus-arrival data for Transit Delay Tracker over six months in PostgreSQL and wrote SQL models that surfaced the 10 most delay-prone city routes.\nYour choice: You would describe the validation you actually performed; a concrete comparison could be checking a sample of route records across different dates against the stored arrival data, if that was your approach.\nWhy: The goal is to show that the ranking came from consistent delay definitions and enough underlying records, rather than one unusual feed or time period.\nWhat you'd change: You would add repeatable checks around missing arrivals, duplicate observations, and route coverage, then examine whether the top 10 remains similar across separate time windows.",
+          "follow_up": "What definition of delay did your SQL model use, and how would a change to that definition affect the top-10 ranking?",
+          "interviewer_intent": "Junior bar: evaluating experience in SQL modeling and interpretation of project data outputs.",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "SQL modeling — Transit Delay Tracker SQL models for delay-prone routes",
+          "order_index": 3
+        },
+        {
+          "topic": "Technical",
+          "question": "If you had to automate checks for data consistency and completeness on a new dataset without existing tools, how would you design these checks in Python?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would first profile the new dataset: its expected columns, data types, identifier fields, refresh frequency, and what a complete load means for its source.\nApproach: You would write Python checks that return clear pass or fail results for schema presence, nulls in required fields, duplicate IDs, valid ranges, and record-count changes. For example, a check could flag a daily load when its row count is far below the previous successful load.\nTrade-off: You would begin with a small set of high-value rules rather than blocking delivery with every possible validation, while treating critical failures differently from warnings.\nHow you'd close: You would run the checks with each load, log the outcomes, retain failed records or failure details for investigation, and refine thresholds from observed data.",
+          "follow_up": "Which of your checks would block a load, and which would only generate an alert?",
+          "interviewer_intent": "Junior bar: checking approach to automating data quality appropriate for junior data engineers.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "automate data quality checks",
+          "order_index": 4
+        },
+        {
+          "topic": "Technical",
+          "question": "You have two days before your first report is due but no experience with cloud data warehouses; how would you prepare data extraction and loading to meet the deadline?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would clarify the report’s required fields, source, deadline, and expected output, then break the two days into a minimal extraction, load, validation, and handoff plan.\nWhat carries over: You have built Campus Course Analytics in Python, SQL, and Airflow, pulling data from three systems into a single warehouse, so the core extract-load-check workflow carries over. You can use Python and SQL to prepare and validate the data.\nApproach: You would work from the warehouse’s approved loading guidance and a small sample, build the smallest reliable load for the first report, and validate row counts and required fields before delivery.\nStill to learn: You still need hands-on experience with cloud data warehouse setup, security, and platform-specific loading operations.",
+          "follow_up": "What would you validate before relying on the first loaded dataset for the report?",
+          "interviewer_intent": "Junior bar: testing realistic handling of incomplete domain expertise with cloud warehouses under deadline.",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "cloud data warehouses",
+          "order_index": 5
+        },
+        {
+          "topic": "Technical",
+          "question": "Given a request to model data for reporting without prior experience, which teammates or resources would you engage to complete the task accurately?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would meet with the analytics teammate or report owner to define the questions the report must answer, its audience, metric definitions, refresh cadence, and level of detail.\nWhat carries over: Your Transit Delay Tracker used SQL models to surface the 10 most delay-prone routes, and Campus Course Analytics produced a dashboard used by 200 students to compare course workloads. Those projects connect SQL outputs to a reporting need.\nApproach: You would ask the analytics team to review an initial model and validate example report outputs against the agreed definitions. For example, you could propose a clear reporting table organized around the report’s primary entity, if that fits the request.\nStill to learn: You still need direct experience designing data models for reporting in a professional analytics workflow.",
+          "follow_up": "What specific question would you ask the analytics team first to prevent the model from producing the wrong metric?",
+          "interviewer_intent": "Junior bar: exploring adaptability when lacking direct experience with a key reporting task.",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "model data for reporting",
+          "order_index": 6
+        },
+        {
+          "topic": "Technical",
+          "question": "You need to implement modular transformations but have not used dbt; how do you structure and test these transformations with Python and SQL instead?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would divide the transformation into small SQL steps with one clear purpose each, identify inputs and outputs, and write down the expected grain for every result.\nWhat carries over: You used SQL models in Transit Delay Tracker and worked with Python and SQL in Campus Course Analytics, so you can structure transformations around readable queries and validate the resulting data.\nApproach: You would keep SQL transformation files modular, use Python to orchestrate or run checks where appropriate, and test each step with representative inputs. For example, you could compare row counts and duplicate keys between an intermediate result and its source.\nStill to learn: You still need experience with dbt’s project conventions, dependency management, and built-in testing workflow.",
+          "follow_up": "How would you detect that one intermediate transformation changed the grain and created duplicate records downstream?",
+          "interviewer_intent": "Junior bar: assessing problem-solving without dbt experience on data transformation workflows.",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "dbt",
+          "order_index": 7
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time a more senior team member rejected your approach to automate data quality checks; what aspects did you defend and what did you change?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Your résumé does not describe a senior teammate rejecting an approach, so draw from Campus Course Analytics and choose a real project moment where feedback challenged the malformed-record checks; for example, a review of what should be flagged, if that occurred.\nWhat you did: You can explain the project’s concrete context: nightly Airflow refreshes from three campus systems into one warehouse, with checks for malformed records. State the rationale you presented and the feedback you incorporated.\nResult: Give the actual outcome from that discussion, such as the final agreed check behavior, without claiming a result not reflected in your experience.\nTakeaway: You learned to ground a technical preference in data reliability, pipeline impact, and a clear definition of what the check protects.",
+          "follow_up": "What was the most important technical trade-off in the feedback, and how did it change the final check behavior?",
+          "interviewer_intent": "Junior bar: learning from ambiguity and pushing back on technical decisions.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "ownership and collaboration on ETL pipelines",
+          "order_index": 8
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Describe a time when a data pipeline you built broke in production close to a reporting deadline; how did you communicate with stakeholders and prioritize fixes?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Your résumé does not state that a pipeline broke in production near a reporting deadline, so use Campus Course Analytics only if you have a real incident from its nightly Airflow pipeline; otherwise, say that this scenario did not occur in the documented project work.\nWhat you did: You would describe a concrete response using the project’s architecture: inspect Airflow status and logs, locate the failed extract, load, or validation step, and assess whether the warehouse holds a trustworthy prior refresh.\nResult: State the actual incident outcome if you have one; in a hypothetical scenario, the priority would be a reliable report rather than an unverified partial refresh.\nTakeaway: You would communicate status, scope, and the next decision point clearly while preserving data quality.",
+          "follow_up": "What information would you give stakeholders before you knew the root cause, and when would you update them next?",
+          "interviewer_intent": "Junior bar: evaluating decision trade-offs and communication under production pressure.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "build and maintain ETL pipelines",
+          "order_index": 9
+        },
+        {
+          "topic": "HR & Culture",
+          "question": "What attracted you specifically to this data engineering role focusing on ETL pipeline building and automation, given your academic and project background?",
+          "answer_framework": "",
+          "likely_answer": "Why this role: You are drawn to a junior data engineering role because it centers on building reliable ETL pipelines and automating quality checks, which match the work you chose in your projects.\nEvidence: In Campus Course Analytics, you used Python, SQL, and Airflow to pull enrolment data from three campus systems into a single warehouse, schedule nightly refreshes, and flag malformed records. You also used PostgreSQL and SQL in Transit Delay Tracker after collecting live bus-arrival data over six months, and your course dashboard was used by 200 students.\nClose: You want to grow from these project-scale workflows into maintaining dependable data for an analytics team, while developing experience with reporting models and cloud warehouse platforms.",
+          "follow_up": "Which part of the Campus Course Analytics pipeline would you most want to deepen in a production data engineering environment, and why?",
+          "interviewer_intent": "Junior bar: understanding motivations specific to joining a data engineering role.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "interest in data engineering",
+          "order_index": 10
+        }
+      ]
+    },
+    {
+      "name": "management_seniority_signals",
+      "questions_total": 7,
+      "multi_ask_questions": 0,
+      "avg_question_words": 26.6,
+      "first_person_answers": 0,
+      "answers_with_unmarked_details": 0,
+      "unmarked_details": [],
+      "tokens_input": 3659,
+      "tokens_output": 2072,
+      "tokens_reasoning": 372,
+      "tokens_total": 5731,
+      "token_calls": {
+        "prep_questions_interview": 2583,
+        "prep_questions_answers": 3148
+      },
+      "questions": [
+        {
+          "topic": "Technical",
+          "question": "Approaching a quarterly platform roadmap decision where two critical features must launch but your squads only have capacity for one, how do you decide which to prioritize and communicate this to senior leadership?",
+          "answer_framework": "",
+          "likely_answer": "First move: Ground the decision in the quarterly planning process you ran at Vantage Systems, which reduced missed commitments from 40% to 10%, and make capacity, dependencies, and the cost of delay visible.\nApproach: Compare the two features against product-team impact because the internal platform serves every product team; for example, prioritize the feature that unblocks more teams, if that is what the evidence shows.\nTrade-off: State explicitly that the deferred feature needs a revised commitment, rather than promising both with one squad’s capacity.\nHow you'd close: Present senior leadership with the recommendation, the alternative, delivery risk, and a dated next decision point.",
+          "follow_up": "What metric would you use to prove that the feature you deferred had a lower cost of delay than the one you prioritized?",
+          "interviewer_intent": "Senior bar: whether you can lead roadmap delivery trade-offs under conflicting priorities",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "own the platform roadmap and delivery commitments",
+          "order_index": 1
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time an engineer you coached struggled with promotion readiness; how did you adjust your approach while maintaining their motivation?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Draw on your coaching of the two Vantage Systems engineers who reached promotion within 18 months, choosing the period when one needed more time or clarity before being ready.\nWhat you did: Describe the specific readiness signal you assessed, then reset expectations into observable growth goals; for example, broader ownership of a platform deliverable, if that was the gap you identified.\nResult: Give the actual outcome for that engineer while noting the résumé’s confirmed result that two engineers were promoted within 18 months.\nTakeaway: Emphasize that coaching combines candid calibration with a path that keeps progress visible and motivating.",
+          "follow_up": "Which observable promotion criterion was hardest for the engineer to demonstrate, and how did you determine they had met it?",
+          "interviewer_intent": "Senior bar: can you manage platform team growth and navigate promotion coaching challenges",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "team leadership — coached two engineers to promotion within 18 months",
+          "order_index": 2
+        },
+        {
+          "topic": "Technical",
+          "question": "On rebuilding the service scaffolding that cut new service setup time from 3 weeks to 2 days, why did you choose that approach over incremental improvements, and what scalability trade-offs did you consider?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Vantage Systems, you rebuilt service scaffolding for the internal platform, reducing new-service setup from three weeks to two days.\nYour choice: Explain why a rebuild was the right scope based on the bottleneck you observed; for example, a consistent scaffold that removed repeated setup work, if that reflects the implementation.\nWhy: Connect the decision to enabling product teams to start services faster, since every product team uses the platform.\nWhat you'd change: Name the scalability concern you actually encountered or would revisit, such as how centrally maintained scaffolding can constrain exceptional service needs, if that was a relevant trade-off.",
+          "follow_up": "What evidence showed that the three-week setup time came from a structural problem rather than a series of smaller fixes?",
+          "interviewer_intent": "Senior bar: understand your trade-offs and technical vision in platform infrastructure improvements",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "platform development — rebuilt service scaffolding to reduce new service setup from 3 weeks to 2 days",
+          "order_index": 3
+        },
+        {
+          "topic": "Technical",
+          "question": "Your change to quarterly planning cut missed delivery commitments from 40% to 10%; which process fix was most impactful, and how did you measure its effectiveness?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Vantage Systems, you ran quarterly planning and reduced missed delivery commitments from 40% to 10%.\nYour choice: Identify the planning-process change that most directly improved commitment quality; for example, explicitly validating capacity and dependencies before commitments were made, if that was the change you introduced.\nWhy: Explain how that change addressed the actual source of missed commitments rather than merely making plans more detailed.\nWhat you'd change: Keep the same measure—missed delivery commitments—and describe the next refinement you would test, such as reviewing commitment risk during the quarter, if that fits your experience.",
+          "follow_up": "How did you define a missed commitment consistently enough for the 40% to 10% comparison to be credible?",
+          "interviewer_intent": "Senior bar: evaluate your ability to reduce missed delivery commitments with planning changes",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "delivery ownership — ran quarterly planning cutting missed commitments from 40% to 10%",
+          "order_index": 4
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about managing technical disagreements between two squads under your leadership; how did you prioritize resolution without compromising roadmap delivery?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Use a real disagreement from your time leading a six-engineer squad at Vantage Systems while delivering the internal platform used by every product team.\nWhat you did: Describe how you separated the decision needed for delivery from the issues requiring deeper technical evaluation; for example, set a time-boxed decision review if that was your method.\nResult: State the actual decision and delivery effect, without overstating the scope beyond the squad you led.\nTakeaway: Connect the experience to managing two squads by showing how shared decision criteria, clear ownership, and escalation timing protect a roadmap when technical views differ.",
+          "follow_up": "What decision criterion broke the deadlock, and what would have happened to the delivery commitment if the disagreement had remained unresolved?",
+          "interviewer_intent": "Senior bar: whether you can handle ambiguity managing a growing squad across multiple teams",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "lead a team of 8-12 engineers across two squads",
+          "order_index": 5
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Describe a time you had to convince senior leadership to adopt a platform change they initially opposed; what arguments did you refuse to compromise on?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Draw on the Vantage Systems service-scaffolding rebuild, or another actual platform decision involving senior leadership, and describe the specific initial concern rather than assuming opposition.\nWhat you did: Frame the case around the measured setup-time problem—three weeks to stand up a new service before the rebuild and two days afterward—and the impact on product teams.\nResult: Give the actual leadership decision and outcome; the résumé confirms the scaffolding result, not the stakeholder path.\nTakeaway: Make clear which principle you protected, such as preserving a repeatable platform experience for product teams, if that was the non-negotiable in the decision.",
+          "follow_up": "Which concern from senior leadership was hardest to answer, and what evidence ultimately addressed it?",
+          "interviewer_intent": "Senior bar: confirm your ownership of platform strategy influencing senior stakeholders without explicit authority",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "partner with senior leadership on technical strategy",
+          "order_index": 6
+        },
+        {
+          "topic": "Technical",
+          "question": "If tasked with owning the entire platform roadmap for the first time, how would you approach aligning stakeholder priorities while facing a tight delivery schedule?",
+          "answer_framework": "",
+          "likely_answer": "First move: Build on the quarterly planning process you ran at Vantage Systems by making stakeholder requests, team capacity, dependencies, and delivery dates explicit in one roadmap view.\nWhat carries over: Your experience leading six engineers, serving every product team through the internal platform, and reducing missed commitments from 40% to 10% provides a delivery-focused foundation.\nApproach: Establish decision criteria and recommend sequencing; for example, prioritize work that removes the largest product-team bottleneck, if stakeholder evidence supports it, then communicate what will not fit.\nStill to learn: You have not yet held formal ownership of the entire platform roadmap, so you would need to learn the organization’s strategic planning and leadership-alignment mechanisms.",
+          "follow_up": "When stakeholder priorities remain tied after applying your criteria, who makes the final call and what information would you put in front of them?",
+          "interviewer_intent": "Senior bar: assessing how you would handle gap owning platform roadmap despite limited direct experience",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "own the platform roadmap",
+          "order_index": 7
+        }
+      ]
+    },
+    {
+      "name": "sparse_unquantified",
+      "questions_total": 7,
+      "multi_ask_questions": 0,
+      "avg_question_words": 29.3,
+      "first_person_answers": 0,
+      "answers_with_unmarked_details": 0,
+      "unmarked_details": [],
+      "tokens_input": 3554,
+      "tokens_output": 1783,
+      "tokens_reasoning": 73,
+      "tokens_total": 5337,
+      "token_calls": {
+        "prep_questions_interview": 2535,
+        "prep_questions_answers": 2802
+      },
+      "questions": [
+        {
+          "topic": "Technical",
+          "question": "On the shared component library you maintained, which specific accessibility fixes required balancing design consistency with usability, and how did you prioritize those trade-offs?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Harbour Studio, you maintained the shared component library used across client projects and fixed accessibility issues flagged in client audits.\nYour choice: Focus on the audited issue with the largest effect on using a component, such as ensuring a control has an accessible name while retaining the library’s established visual treatment—if that was the issue you handled.\nWhy: A shared-library fix can benefit multiple client projects, while the component should remain recognizable and consistent for designers.\nWhat you'd change: You would bring the accessibility requirement into the component’s documented expectations earlier, alongside the visual mockup.",
+          "follow_up": "How would you determine whether that library-level change could break or alter the experience on existing client pages?",
+          "interviewer_intent": "Senior bar: ability to analyze design trade-offs in a shared component library for frontend engineering.",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "React and component library maintenance — Harbour Studio",
+          "order_index": 1
+        },
+        {
+          "topic": "Technical",
+          "question": "Given a deadline of two weeks, you discover critical layout thrashing in a marketing page using React and CSS that causes slow rendering; what is the first optimization you apply and how do you explain this choice to the designer?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would first identify which rendering work is repeatedly triggering layout changes, rather than making broad React or CSS changes under the two-week deadline.\nApproach: Use the page’s React and CSS implementation to isolate the costly interaction; for example, replace repeated layout-affecting style changes with a transform-based visual change, if that matches the page’s animation.\nTrade-off: You would preserve the campaign’s intended visual hierarchy, but reduce or simplify movement that delays rendering.\nHow you'd close: Confirm the page renders more smoothly, share the before-and-after behavior with the designer, and retain the agreed design outcome where possible.",
+          "follow_up": "What evidence would you use to show that the first change improved rendering rather than merely changing the page’s appearance?",
+          "interviewer_intent": "Senior bar: testing expertise in improving page performance with React and CSS under tight deadlines.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "improving page performance",
+          "order_index": 2
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time a senior designer rejected an accessibility improvement you proposed; what trade-offs did you accept, and what did you insist on preserving?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Draw on a Harbour Studio client-audit accessibility issue or a mockup-to-page handoff where a designer’s preference conflicted with an accessibility improvement; pick the specific project where this occurred.\nWhat you did: Describe the requirement you raised, the design constraint, and the concrete option you proposed, such as keeping the visual style while adding a visible focus state—if that was your approach.\nResult: State what the team ultimately agreed and what changed in the page or shared component, using the actual outcome.\nTakeaway: You learned to frame accessibility as a product requirement alongside design consistency, with the audit finding or user impact as the anchor.",
+          "follow_up": "Which accessibility requirement did you treat as non-negotiable, and what made that requirement more important than the rejected design preference?",
+          "interviewer_intent": "Senior bar: whether candidate can handle conflict with a senior stakeholder while advocating accessibility improvements.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "web accessibility and collaboration with designers",
+          "order_index": 3
+        },
+        {
+          "topic": "Technical",
+          "question": "Imagine adding TypeScript to the shared component library you maintained without prior experience; which runtime errors are you most concerned about before conversion, and how would you mitigate them during rollout?",
+          "answer_framework": "",
+          "likely_answer": "First move: You would start by identifying the JavaScript boundaries in the shared component library where invalid props or unexpected data could reach React components.\nWhat carries over: Your React, JavaScript, HTML, CSS, and component-library maintenance experience carries over to understanding component inputs and the places client projects consume shared components.\nApproach: Introduce TypeScript incrementally, beginning with a small component and its props; for example, define required versus optional button properties, if that is a component you maintain, while keeping runtime checks where external data can still be invalid.\nStill to learn: You still need hands-on TypeScript experience, particularly its configuration and the limits of compile-time checks against runtime data.",
+          "follow_up": "What runtime failure would remain possible after a component’s props are typed, and where would you keep a runtime safeguard?",
+          "interviewer_intent": "Senior bar: understanding impact and limitations of typesafety in React frontend development.",
+          "is_gap_based": true,
+          "source": "gap",
+          "basis": "TypeScript",
+          "order_index": 4
+        },
+        {
+          "topic": "Technical",
+          "question": "When turning designer mockups into responsive pages, what is the hardest accessibility requirement you encountered, and how did you implement it given the design's limitations?",
+          "answer_framework": "",
+          "likely_answer": "Context: At Harbour Studio, you turned designer mockups into working pages and fixed accessibility issues flagged in client audits.\nYour choice: Use the actual audited issue you found hardest; for example, make an interactive element usable by keyboard while preserving the mockup’s layout, if that was the limitation you encountered.\nWhy: A responsive page needs to work across screen sizes without excluding people who navigate differently, so the implementation must address both behavior and layout.\nWhat you'd change: You would raise the accessibility requirement while the mockup is being reviewed, so the component’s responsive and interaction states are considered before page build begins.",
+          "follow_up": "How did you verify that the accessible behavior still worked when the layout changed across screen sizes?",
+          "interviewer_intent": "Senior bar: whether candidate can deliver accessible, responsive interfaces from design with minimal specs under real-world constraints.",
+          "is_gap_based": false,
+          "source": "overlap",
+          "basis": "working with designers to turn mockups into pages — Harbour Studio",
+          "order_index": 5
+        },
+        {
+          "topic": "Behavioral",
+          "question": "Tell me about a time you convinced designers to modify a component’s behavior or style to improve accessibility or performance despite initial resistance; what was your approach?",
+          "answer_framework": "",
+          "likely_answer": "Situation: Choose a Harbour Studio component-library or client-page example involving an accessibility issue from a client audit or a mockup handoff where designers initially preferred a different treatment.\nWhat you did: Explain the specific component behavior or style at issue and connect the proposed change to the audit finding; for example, propose a clear focus treatment that fits the existing component styling, if that was your case.\nResult: Give the actual decision, whether the design changed, the requirement was handled another way, or the issue remained open.\nTakeaway: You learned that shared components create a useful place to discuss consistency and accessibility together because a change can affect client projects beyond one page.",
+          "follow_up": "What concrete evidence or constraint moved the discussion from a design preference to a decision the team could make?",
+          "interviewer_intent": "Senior bar: ability to influence cross-functional team on frontend best practices under ambiguity and conflicting priorities.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "collaboration with designers on component library",
+          "order_index": 6
+        },
+        {
+          "topic": "Technical",
+          "question": "On a React page with heavy CSS animations causing performance issues, which metric do you prioritize to measure impact, and what trade-off would you choose between animation smoothness and load time?",
+          "answer_framework": "",
+          "likely_answer": "First move: Prioritize a measure of whether the animation is harming the page’s rendering experience, then compare the page before and after the smallest targeted CSS change.\nApproach: Identify the heavy animation and test a less layout-intensive alternative; for example, use a transform-based effect instead of changing layout-related properties, if that fits the intended design.\nTrade-off: Choose dependable page rendering and a clear marketing message over maximum animation smoothness when the two conflict, while retaining a simpler version of the visual effect where possible.\nHow you'd close: Review the revised behavior with the designer, confirm the campaign page still communicates its purpose, and record the decision for similar components or pages.",
+          "follow_up": "Which measurement would tell you that the animation is impairing rendering, and what result would justify keeping a reduced-motion version?",
+          "interviewer_intent": "Senior bar: evaluation of trade-offs under performance constraints in CSS animations affecting page speed.",
+          "is_gap_based": false,
+          "source": "requirement",
+          "basis": "improve page performance",
+          "order_index": 7
+        }
+      ]
+    }
+  ]
+}

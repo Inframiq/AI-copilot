@@ -196,3 +196,109 @@ def compare_reports(before: dict, after: dict) -> dict:
             entry["delta"] = round(a - b, 4)
         out[key] = entry
     return out
+
+
+# ── Interview prep sets ──────────────────────────────────────────────────────
+#
+# A likely answer may name only what the résumé says; anything else has to be
+# offered as an example the candidate can keep or swap. Written with the
+# questions, answers broke that constantly ("you used dual writes", "you
+# introduced caching layers") — and a candidate repeating one gets caught by
+# the next follow-up. These measure it, plus the question rules (one ask, at
+# most 40 words) and the coaching voice.
+
+# Techniques and tools an answer tends to invent. Lowercase phrases, matched
+# on word boundaries; anything capitalised mid-sentence (Jenkins, Redis) is
+# caught separately.
+_TECHNIQUES = (
+    "caching", "cache", "indexing", "index", "indexes", "sharding", "partitioning",
+    "replication", "dual writes", "dual-write", "change data capture", "cdc",
+    "blue-green", "canary", "feature flag", "feature flags", "load balancer",
+    "circuit breaker", "circuit breakers", "rate limiting", "profiling", "profiled",
+    "batching", "connection pooling", "read replica", "read replicas", "materialized view",
+    "message queue", "retries", "backfill", "backfilling", "pair programming", "post-mortem",
+)
+_TECHNIQUE_RE = re.compile(r"\b(" + "|".join(re.escape(t) for t in _TECHNIQUES) + r")\b", re.I)
+# A line that offers its detail as an example, or hands it to the candidate.
+_MARKED_RE = re.compile(
+    r"for example|for instance|such as|e\.g\.|if that|if those|if it was|if this|if you|"
+    r"keep or swap|placeholder|name the|say which|say how|describe the actual|might have",
+    re.I,
+)
+_HYPOTHETICAL_RE = re.compile(r"\b(would|could|might|you'd|you’d)\b", re.I)
+_FIRST_PERSON_RE = re.compile(r"\b(I|I'd|I'm|I've|my|we|our)\b")
+# A named tool mid-sentence: Jenkins, Redis, Terraform. Title case only —
+# short acronyms (TPS, ROI, CSV) are measures and formats far more often.
+_CAPITALISED_RE = re.compile(r"^[A-Z][a-z][a-zA-Z0-9+#.]+$")
+_SENTENCE_RE = re.compile(r"(?<=[.!?;])\s+")
+# Capitalised words that are not a tool or a technique.
+_ORDINARY_CAPS = {
+    "You", "Your", "The", "This", "That", "When", "What", "Why", "How", "Then", "Use",
+    "Start", "State", "Name", "Explain", "Describe", "Give", "Show", "Emphasize", "Draw",
+    "Senior", "Junior", "Mid", "Product", "Engineering", "Finance", "Leadership",
+}
+
+
+def _words_in(text: str) -> set[str]:
+    return {w.lower().strip(".,;:()'\"") for w in _WORD_RE.findall(text or "")}
+
+
+def _flatten(value) -> str:
+    if isinstance(value, dict):
+        return " ".join(_flatten(v) for v in value.values())
+    if isinstance(value, list):
+        return " ".join(_flatten(v) for v in value)
+    return str(value) if value is not None else ""
+
+
+def unmarked_details(answer: str, known_text: str) -> list[str]:
+    """The techniques and tools an answer names that appear nowhere in
+    known_text (the résumé, the question, the JD), in a sentence that states
+    them as something the candidate did: not offered as an example, and not
+    a hypothetical ("you would…", which is how a design answer is meant to
+    read)."""
+    known = (known_text or "").lower()
+    known_words = _words_in(known_text)
+    found: list[str] = []
+    for line in (answer or "").splitlines():
+        body = line.split(":", 1)[1] if ":" in line[:32] else line
+        for sentence in _SENTENCE_RE.split(body.strip()):
+            if _MARKED_RE.search(sentence) or _HYPOTHETICAL_RE.search(sentence):
+                continue
+            for m in _TECHNIQUE_RE.finditer(sentence):
+                term = m.group(1).lower()
+                if term not in known:
+                    found.append(term)
+            # The first word of a sentence is capitalised anyway.
+            for raw in sentence.split()[1:]:
+                word = raw.strip(".,;:()'\"’")
+                if not _CAPITALISED_RE.match(word) or word in _ORDINARY_CAPS:
+                    continue
+                if word.lower() not in known_words:
+                    found.append(word)
+    return found
+
+
+def prep_set_report(questions: list[dict], resume_content: dict, jd_text: str = "") -> dict:
+    """One interview prep set's comparable record. questions are dicts with
+    question / likely_answer (and optionally follow_up)."""
+    resume_text = _flatten(resume_content)
+    total = len(questions)
+    flagged: list[str] = []
+    answers_with_unmarked = 0
+    for q in questions:
+        details = unmarked_details(q.get("likely_answer", ""), f"{resume_text} {q.get('question', '')} {jd_text}")
+        if details:
+            answers_with_unmarked += 1
+            flagged.extend(details)
+    words = [len(_WORD_RE.findall(q.get("question", ""))) for q in questions]
+    return {
+        "questions_total": total,
+        "multi_ask_questions": sum(
+            q.get("question", "").count("?") > 1 or n > 40 for q, n in zip(questions, words)
+        ),
+        "avg_question_words": round(sum(words) / total, 1) if total else 0.0,
+        "first_person_answers": sum(bool(_FIRST_PERSON_RE.search(q.get("likely_answer", ""))) for q in questions),
+        "answers_with_unmarked_details": answers_with_unmarked,
+        "unmarked_details": sorted(set(flagged)),
+    }
