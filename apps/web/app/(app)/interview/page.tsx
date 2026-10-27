@@ -20,7 +20,8 @@ import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
+import { usePrepQuestionsStore, startPrepQuestions, offerPrepQuestions } from "@/stores/prep-questions-store";
+import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
 import { sourceLabel, practiceSaveError } from "@/components/interview/QuestionCard";
 import type { PrepQuestionWithJdOut, JobDescription, Subscription } from "@career-copilot/types";
 
@@ -148,6 +149,16 @@ export default function InterviewIndexPage() {
   // card when it's selected, or in the banner when it isn't.
   const hasSet = new Set(jdOptions.map((o) => o.jd_id));
   const preparing = Object.entries(pending).filter(([id]) => !hasSet.has(id)).map(([, title]) => title);
+  // Jobs with a tailored résumé saved but no set yet: their questions are
+  // made here on request too (a "Not now" after the save isn't final).
+  // Newest first, like the switcher. A job has at most one set, so a job
+  // with one never shows here — and the server holds to that as well.
+  const readyJds = jds
+    .filter((j) => !!j.tailored_resume_id && !hasSet.has(j.id) && !(j.id in pending))
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  const askToGenerate = (j: JobDescription) =>
+    offerPrepQuestions({ jdId: j.id, sessionId: null, title: j.title });
+
   // A first set that failed (out of credits, say) has no card to show its
   // error on, so it used to vanish with the "preparing" banner.
   const jdTitle = new Map(jds.map((j) => [j.id, j.title]));
@@ -334,6 +345,15 @@ export default function InterviewIndexPage() {
           </div>
         )}
 
+        {readyJds.length > 0 && (
+          <ReadyForQuestions
+            jds={readyJds}
+            cost={subscription?.costs?.prep_questions ?? 5}
+            onGenerate={askToGenerate}
+          />
+        )}
+        <PrepQuestionsOffer />
+
         {/* Which JD's questions are on screen — each JD is its own page. */}
         {selectedJd && (
           <JdSwitcher
@@ -495,7 +515,7 @@ export default function InterviewIndexPage() {
               </div>
             )}
           </div>
-        ) : (
+        ) : readyJds.length > 0 ? null : (
           /* No tailoring-generated questions yet. Interview questions are
              only ever produced by tailoring a resume against a JD — there
              is no resume-only or cross-user question list here, so a plain
@@ -669,6 +689,54 @@ function NextMockCard({
         {sessionId ? (compact ? "Start" : "Start Practice") : compact ? "Go" : "Analyze a JD First"}
       </button>
     </div>
+  );
+}
+
+/** Jobs whose saved résumé has no question set yet, each one click from the
+ * same "Make interview questions?" the Studio asks after a save. */
+function ReadyForQuestions({
+  jds,
+  cost,
+  onGenerate,
+}: {
+  jds: JobDescription[];
+  cost: number;
+  onGenerate: (jd: JobDescription) => void;
+}) {
+  return (
+    <section
+      aria-labelledby="ready-for-questions"
+      className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-sm"
+    >
+      <div>
+        <h3 id="ready-for-questions" className="text-label-md text-on-surface font-semibold">
+          Ready for interview questions
+        </h3>
+        <p className="text-caption text-on-surface-variant">
+          A tailored résumé is saved to these jobs. Questions are built from it.
+        </p>
+      </div>
+      <ul className="flex flex-col divide-y divide-outline-variant/20">
+        {jds.map((j) => (
+          <li key={j.id} className="flex items-center gap-sm py-xs first:pt-0 last:pb-0">
+            <Link
+              href={`/jd/${j.id}`}
+              className="min-w-0 flex-1 truncate text-body-sm text-on-surface hover:text-primary hover:underline"
+            >
+              {j.title}
+            </Link>
+            <button
+              type="button"
+              onClick={() => onGenerate(j)}
+              aria-label={`Generate interview questions for ${j.title}`}
+              className="shrink-0 inline-flex items-center gap-xs px-sm py-xs rounded-lg border border-primary/30 text-label-sm text-primary hover:bg-primary/5 transition-colors"
+            >
+              Generate · {cost} credits
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

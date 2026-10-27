@@ -22,6 +22,10 @@ vi.mock("@/lib/api-client", () => ({
     getLatestSession: vi.fn().mockResolvedValue({ session_id: null }),
     getSubscription: vi.fn().mockResolvedValue({ costs: { prep_questions: 2 } }),
     generateJdPrepQuestions: vi.fn().mockResolvedValue({ session_id: "s", questions_total: 10 }),
+    getJdDetails: vi.fn().mockResolvedValue({
+      session_id: "run-1", questions_total: 0, questions_practiced: 0, questions_session_id: null,
+      questions_match_resume: null, resume_saved: true,
+    }),
   },
 }));
 
@@ -320,6 +324,68 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     finish();
     await waitFor(() => expect(screen.getByRole("button", { name: "Regenerate" })).toBeEnabled());
     expect(apiClient.getMyQuestions).toHaveBeenCalledTimes(2); // refetched the new set
+  });
+});
+
+describe("InterviewIndexPage — making questions from here", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    vi.clearAllMocks();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
+    vi.mocked(apiClient.getLatestSession).mockResolvedValue({ session_id: null });
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(
+      { credits_remaining: 40, costs: { prep_questions: 5 } } as never,
+    );
+  });
+
+  const has = {
+    id: "q-1", session_id: "run-0", jd_id: "jd-has", jd_title: "Has a set", topic: "Technical",
+    question: "A question", answer_framework: "", is_gap_based: false, source: "requirement",
+    basis: "", order_index: 1, practiced_at: null,
+  };
+
+  it("lists only saved jobs with no set, and makes one only through the question", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([has]);
+    vi.mocked(apiClient.getJds).mockResolvedValue([
+      { id: "jd-has", title: "Has a set", tailored_resume_id: "r0", created_at: "2026-10-01" },
+      { id: "jd-ready", title: "Saved, no set", tailored_resume_id: "r1", created_at: "2026-10-02" },
+      { id: "jd-analyzed", title: "Only analyzed", tailored_resume_id: null, created_at: "2026-10-03" },
+    ] as never);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    const ready = await screen.findByRole("region", { name: "Ready for interview questions" });
+    expect(ready).toHaveTextContent("Saved, no set");
+    expect(ready).not.toHaveTextContent("Has a set");
+    expect(ready).not.toHaveTextContent("Only analyzed");
+
+    await userEvent.click(screen.getByRole("button", { name: "Generate interview questions for Saved, no set" }));
+    expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole("button", { name: "Make questions · 5 credits" }));
+    await waitFor(() => expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-ready", undefined));
+  });
+
+  it("drops a job from the list while its set is being made", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
+    vi.mocked(apiClient.getJds).mockResolvedValue([
+      { id: "jd-ready", title: "Saved, no set", tailored_resume_id: "r1", created_at: "2026-10-02" },
+    ] as never);
+    usePrepQuestionsStore.setState({ pending: { "jd-ready": "Saved, no set" }, errors: {}, offer: null });
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByText(/Preparing interview questions for Saved, no set/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Ready for interview questions" })).toBeNull();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
+  });
+
+  it("shows the list instead of the empty page when no job has a set yet", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([]);
+    vi.mocked(apiClient.getJds).mockResolvedValue([
+      { id: "jd-ready", title: "Saved, no set", tailored_resume_id: "r1", created_at: "2026-10-02" },
+    ] as never);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(await screen.findByRole("region", { name: "Ready for interview questions" })).toBeInTheDocument();
+    expect(screen.queryByText(/No interview questions yet/)).toBeNull();
   });
 });
 

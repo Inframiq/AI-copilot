@@ -34,8 +34,15 @@ export function PrepQuestionsOffer() {
     enabled: !!offer,
   });
 
+  // A job has one set. The server returns the existing one free when it was
+  // written from this saved résumé, or hangs off this very run; otherwise a
+  // new set replaces it.
   const run = offer?.sessionId ?? details?.session_id ?? null;
-  const hasSet = !!details && details.questions_total > 0 && details.questions_session_id === run;
+  const existing = details?.questions_total ?? 0;
+  const hasSet =
+    !!details && existing > 0 && (details.questions_match_resume === true || details.questions_session_id === run);
+  const replaces = !!details && existing > 0 && !hasSet;
+  const practiced = details?.questions_practiced ?? 0;
 
   useEffect(() => {
     if (offer && hasSet) clearPrepQuestionsOffer();
@@ -87,6 +94,14 @@ export function PrepQuestionsOffer() {
                 Up to 15 questions{offer.title ? ` for ${offer.title}` : ""}, each with a likely answer built from
                 this résumé. Costs {cost} credits. They can also be made later from the job&apos;s page.
               </p>
+              {replaces && (
+                <p className="text-caption text-on-surface mt-xs">
+                  Replaces this job&apos;s current {existing} question{existing !== 1 ? "s" : ""}, made from an
+                  earlier résumé
+                  {practiced > 0 ? ` (${practiced} practiced)` : ""}; their
+                  practice progress and written follow-up answers are lost.
+                </p>
+              )}
               {balance !== null && (
                 <p className={`text-caption mt-xs ${short ? "text-error" : "text-on-surface-variant"}`}>
                   {short

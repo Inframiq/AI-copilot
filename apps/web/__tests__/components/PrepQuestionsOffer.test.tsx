@@ -101,6 +101,32 @@ describe("PrepQuestionsOffer", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("doesn't ask when the job's set was made from this very résumé, on another run", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue(
+      details({ session_id: "run-2", questions_total: 9, questions_session_id: "run-1", questions_match_resume: true }) as never,
+    );
+    offerPrepQuestions({ jdId: "jd-1", sessionId: null, title: "" });
+    renderOffer();
+
+    await waitFor(() => expect(usePrepQuestionsStore.getState().offer).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("says a new set replaces the job's current one, made from an earlier résumé", async () => {
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue(
+      details({
+        session_id: "run-2", questions_total: 9, questions_practiced: 4, questions_session_id: "run-1",
+        questions_match_resume: false,
+      }) as never,
+    );
+    offerPrepQuestions({ jdId: "jd-1", sessionId: "run-2", title: "" });
+    renderOffer();
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      /Replaces this job's current 9 questions, made from an earlier résumé \(4 practiced\)/,
+    );
+  });
+
   it("asks when only an older run has a set", async () => {
     vi.mocked(apiClient.getJdDetails).mockResolvedValue(
       details({ session_id: "run-2", questions_total: 9, questions_session_id: "run-1" }) as never,

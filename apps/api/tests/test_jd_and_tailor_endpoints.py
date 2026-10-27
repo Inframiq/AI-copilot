@@ -352,6 +352,55 @@ async def test_get_jd_details_returns_resume_and_question_progress():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("written_from, saved_now, expected", [
+    ({"summary": "as saved"}, {"summary": "as saved"}, True),
+    ({"summary": "as saved"}, {"summary": "edited since"}, False),
+    (None, {"summary": "anything"}, None),  # a set from before migration 052
+])
+async def test_get_jd_details_says_whether_the_set_matches_the_saved_resume(written_from, saved_now, expected):
+    """The Studio's "Make interview questions?" asks nothing for a set made
+    from this résumé (it comes back free) and says a new one replaces any
+    other — so it needs to know which this is."""
+    from app.db.models import TailoringSession
+    from app.services.prep_questions import resume_fingerprint
+
+    jd_id, user_id = uuid.uuid4(), uuid.UUID(TEST_USER_ID)
+    saved = Resume(id=uuid.uuid4(), user_id=user_id, title="Saved", template_id="ats_clean", content=saved_now)
+    run = TailoringSession(id=uuid.uuid4(), user_id=user_id, jd_id=jd_id, status="completed",
+                           created_at=datetime.now(timezone.utc))
+    run.resume = None
+    override, mock_session = make_mock_db()
+
+    def result(**attrs):
+        r = MagicMock()
+        for path, value in attrs.items():
+            target = r
+            *parts, last = path.split(".")
+            for part in parts:
+                target = getattr(target, part).return_value
+            setattr(target, last, MagicMock(return_value=value))
+        return r
+
+    mock_session.execute = AsyncMock(side_effect=[
+        result(scalar_one_or_none=JobDescription(id=jd_id, user_id=user_id, title="JD", raw_text="x",
+                                                  tailored_resume_id=saved.id)),
+        result(**{"scalars.first": run}),
+        result(scalar_one_or_none=saved),
+        result(**{"scalars.first": run}),
+        result(one=(9, 0)),
+        result(scalar_one_or_none=resume_fingerprint(written_from) if written_from is not None else None),
+    ])
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/jd/{jd_id}/details", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()["questions_match_resume"] is expected
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_get_jd_details_prefers_the_saved_tailored_resume_over_the_session_input_resume():
     """Studio's "Save tailored resume" links JobDescription.tailored_resume_id
     to the resume the user actually chose to keep — that's what JD Details

@@ -139,7 +139,10 @@ export interface JDDetails {
   /** The run holding this JD's questions — not necessarily session_id, the
    * latest run: a later re-tailor that was never saved has none. */
   questions_session_id?: string | null;
-  /** A tailored résumé is saved to this JD; saving is what makes questions. */
+  /** The set was written from the saved résumé as it is now (asking again
+   * returns it free); false: a new set would replace it; null: unknown. */
+  questions_match_resume?: boolean | null;
+  /** A tailored résumé is saved to this JD; questions are made from it. */
   resume_saved?: boolean;
 }
 

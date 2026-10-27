@@ -13,7 +13,8 @@ from app.core.usage import record_ai_usage
 from app.routers.cover_letters import remove_letter_files
 from app.schemas.jd import JDCompanyUpdate, JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
 from app.services.prep_questions import (
-    generate_for_session, latest_session_with_questions, run_for_saved_resume,
+    generate_for_session, latest_session_with_questions, resume_fingerprint, run_for_saved_resume,
+    set_for_saved_resume,
 )
 
 router = APIRouter(prefix="/jd", tags=["jd"])
@@ -231,6 +232,7 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
             "questions_total": 0,
             "questions_practiced": 0,
             "questions_session_id": None,
+            "questions_match_resume": None,
             "resume_saved": False,
         }
 
@@ -247,6 +249,21 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
         )
         questions_total, questions_practiced = q_result.one()
 
+    # Whether the set was written from the saved résumé as it is now: a set
+    # for this résumé comes back free; any other is replaced by a new one.
+    # None when unknown (no set, no saved résumé, a set from before 052).
+    questions_match_resume = None
+    if questions_session and tailored_resume is not None:
+        written_from = (
+            await db.execute(
+                select(PrepQuestion.resume_fingerprint)
+                .where(PrepQuestion.session_id == questions_session.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if written_from is not None:
+            questions_match_resume = written_from == resume_fingerprint(tailored_resume.content)
+
     resume_for_display = tailored_resume or (session.resume if session else None)
 
     return {
@@ -259,7 +276,8 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
         "questions_total": questions_total,
         "questions_practiced": questions_practiced,
         "questions_session_id": str(questions_session.id) if questions_session else None,
-        # Questions are made by saving the tailored résumé to this JD.
+        "questions_match_resume": questions_match_resume,
+        # Questions are made from the tailored résumé saved to this JD.
         "resume_saved": tailored_resume is not None,
     }
 
@@ -311,15 +329,15 @@ async def generate_jd_prep_questions(
             status_code=409,
             detail="Tailor your résumé to this job and save it to the JD first — that is what interview questions are made from.",
         )
-    # An existing set is returned as it is, free. Making one — first time or
-    # regenerated — is a model call, so it is charged: the cost is reserved
-    # up front (atomically, so simultaneous requests can't share credits),
-    # committed before the model runs, and refunded if nothing was made or
-    # the set that comes back is one another request made meanwhile.
+    # An existing set for this saved résumé is returned as it is, free —
+    # whichever run it hangs off, so the Studio and the Interview Center
+    # find the same one. Making one — first time or regenerated — is a model
+    # call, so it is charged: the cost is reserved up front (atomically, so
+    # simultaneous requests can't share credits), committed before the model
+    # runs, and refunded if nothing was made or the set that comes back is
+    # one another request made meanwhile.
     regenerate = bool(body and body.regenerate)
-    have = (
-        await db.execute(select(func.count(PrepQuestion.id)).where(PrepQuestion.session_id == session.id))
-    ).scalar_one()
+    have = await set_for_saved_resume(db, session, jd, saved.content)
     makes_new = regenerate or not have
     email = user.get("email")
     if makes_new:
@@ -341,7 +359,8 @@ async def generate_jd_prep_questions(
             status_code=502,
             detail="Couldn't make a new set of questions — your current questions are unchanged. Try again.",
         )
-    return {"session_id": str(session.id), "questions_total": len(rows)}
+    # The run the set hangs off: an existing set may be another run's.
+    return {"session_id": str(rows[0].session_id if rows else session.id), "questions_total": len(rows)}
 
 
 @router.get("/{jd_id}/cover-letter")

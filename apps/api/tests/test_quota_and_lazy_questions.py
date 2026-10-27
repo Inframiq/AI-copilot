@@ -226,8 +226,11 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
     from app.services import prep_questions
 
     db = MagicMock()
-    # The set check, the run's lock, the set check again under the lock.
-    db.execute = AsyncMock(side_effect=[_scalars([]), MagicMock(), _scalars([])])
+    # The set check (the run's own, then the same résumé's on another run),
+    # the JD's lock, the set check again under the lock, other runs' sets out.
+    db.execute = AsyncMock(side_effect=[
+        _scalars([]), _scalars([]), MagicMock(), _scalars([]), _scalars([]), MagicMock(),
+    ])
     db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {"agent1": _AGENT1}; jd.company_name = "Acme"
     sess = _session()
@@ -271,7 +274,9 @@ async def test_generation_parses_the_jd_when_no_analysis_is_cached():
     from app.services.tailoring import JDAnalysis
 
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_scalars([]), MagicMock(), _scalars([])])
+    db.execute = AsyncMock(side_effect=[
+        _scalars([]), _scalars([]), MagicMock(), _scalars([]), _scalars([]), MagicMock(),
+    ])
     db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
     jd = make_jd(); jd.parsed = {}
 
@@ -326,8 +331,10 @@ async def test_regeneration_swaps_in_a_new_set_in_one_commit():
     assert made is True
     gen.assert_awaited_once()  # an existing set doesn't short-circuit it
     assert [r.question for r in rows] == ["Tell me about the pipeline."]
-    deletes = [c.args[0] for c in db.execute.call_args_list if "DELETE" in str(c.args[0]).upper()]
-    assert len(deletes) == 1 and "prep_questions" in str(deletes[0])
+    deletes = [str(c.args[0]) for c in db.execute.call_args_list if "DELETE" in str(c.args[0]).upper()]
+    # This run's old set, then any other run's: one set per JD.
+    assert len(deletes) == 2 and all("prep_questions" in d for d in deletes)
+    assert "tailoring_sessions" in deletes[1]
     assert db.add_all.call_args_list[0].args[0] == rows
     db.commit.assert_awaited_once()
 
@@ -370,15 +377,17 @@ def _regen_db(db, *, have, credits, ledger):
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
     rr = MagicMock(); rr.scalar_one_or_none.return_value = saved
     run = MagicMock(); run.scalars.return_value.first.return_value = sess
-    count = MagicMock(); count.scalar_one.return_value = have
     ledger.set(TEST_USER_ID, credits)
-    db.execute = AsyncMock(side_effect=[jr, rr, run, count])
+    db.execute = AsyncMock(side_effect=[jr, rr, run])
+    jd._test_have = have
     return jd, sess
 
 
 async def _post_prep(jd, body=None, *, raise_app_exceptions=True):
     # record_ai_usage writes its rows through its own session — kept off the DB.
-    with usage_log_offline():
+    # The JD's existing set for the saved résumé: as many as the helper set up.
+    have = [MagicMock()] * getattr(jd, "_test_have", 0)
+    with usage_log_offline(),          patch("app.routers.jd.set_for_saved_resume", new=AsyncMock(return_value=have)):
         transport = ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             return await c.post(f"/jd/{jd.id}/prep-questions", json=body, headers=make_auth_header())
@@ -396,8 +405,8 @@ def _saved_jd_db(db, *, have=0, named=None):
         run.scalar_one_or_none.return_value = named
     else:
         run.scalars.return_value.first.return_value = sess
-    count = MagicMock(); count.scalar_one.return_value = have
-    db.execute = AsyncMock(side_effect=[jr, rr, run, count])
+    db.execute = AsyncMock(side_effect=[jr, rr, run])
+    jd._test_have = have
     return jd, sess
 
 
@@ -405,7 +414,7 @@ def _saved_jd_db(db, *, have=0, named=None):
 async def test_regenerate_replaces_an_existing_set_and_charges_for_it(ledger):
     override, db = make_mock_db()
     jd, sess = _regen_db(db, have=10, credits=50, ledger=ledger)
-    gen = _made([MagicMock()] * 9)
+    gen = _made([MagicMock(session_id=sess.id)] * 9)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session", new=gen):
@@ -487,7 +496,7 @@ async def test_generate_endpoint_refuses_a_jd_that_was_only_analyzed():
 async def test_generate_endpoint_makes_questions_for_a_saved_jd(ledger):
     override, db = make_mock_db()
     jd, sess = _saved_jd_db(db)
-    gen = _made([MagicMock(), MagicMock()])
+    gen = _made([MagicMock(session_id=sess.id)] * 2)
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.jd.generate_for_session", new=gen):
@@ -511,7 +520,7 @@ async def test_generate_endpoint_uses_the_run_the_saved_resume_came_from(ledger)
     jd, _ = _saved_jd_db(db, named=named)
     app.dependency_overrides[get_db] = override
     try:
-        with patch("app.routers.jd.generate_for_session", new=_made([MagicMock()])) as gen:
+        with patch("app.routers.jd.generate_for_session", new=_made([MagicMock(session_id=named.id)])) as gen:
             r = await _post_prep(jd, {"tailoring_session_id": str(named.id)})
         assert r.status_code == 200
         assert r.json()["session_id"] == str(named.id)

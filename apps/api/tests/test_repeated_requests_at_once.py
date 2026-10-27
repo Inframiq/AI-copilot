@@ -238,6 +238,83 @@ async def test_asking_again_later_returns_the_set_free(Session):
     assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]
 
 
+async def _another_run(Session, jd_id):
+    """A later completed run of the same JD (a re-tailor)."""
+    async with Session() as s:
+        run = TailoringSession(user_id=USER, jd_id=jd_id, status="completed",
+                               matched_skills=["Python"], missing_skills=["AWS"])
+        s.add(run)
+        await s.commit()
+        return run.id
+
+
+async def _jd_questions(Session, jd_id):
+    """Every question the JD has, on any run, by run."""
+    async with Session() as s:
+        rows = (await s.execute(
+            select(PrepQuestion.session_id, func.count(PrepQuestion.id))
+            .join(TailoringSession, PrepQuestion.session_id == TailoringSession.id)
+            .where(TailoringSession.jd_id == jd_id)
+            .group_by(PrepQuestion.session_id)
+        )).all()
+        return {run: n for run, n in rows}
+
+
+async def test_the_studio_and_the_interview_center_at_once_make_one_set(Session):
+    """The Studio names the run its résumé came from; the Interview Center
+    can't, so it asks for the JD's latest run — here a different one. Same
+    saved résumé, so one set, charged once."""
+    jd_id, run_id = await _saved_jd(Session)
+    later = await _another_run(Session, jd_id)
+    with question_model(2):
+        async with _client() as c:
+            a, b = await asyncio.gather(
+                c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={"tailoring_session_id": str(run_id)}),
+                c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={}),
+            )
+    assert a.status_code == b.status_code == 200, (a.text, b.text)
+    sets = await _jd_questions(Session, jd_id)
+    assert list(sets.values()) == [10], sets  # one set, on one run
+    assert a.json()["session_id"] == b.json()["session_id"] in {str(run_id), str(later)}
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]
+
+
+async def test_asking_from_another_run_for_the_same_resume_returns_the_set_free(Session):
+    jd_id, run_id = await _saved_jd(Session)
+    await _another_run(Session, jd_id)
+    with question_model(1):
+        async with _client() as c:
+            first = await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={"tailoring_session_id": str(run_id)})
+            again = await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={})
+    assert first.status_code == again.status_code == 200
+    assert again.json()["session_id"] == str(run_id)
+    assert await _jd_questions(Session, jd_id) == {run_id: 10}
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]
+
+
+async def test_a_set_for_a_newly_saved_resume_replaces_the_old_one(Session):
+    """Re-tailored and saved again: the new set replaces the old, never sits
+    beside it."""
+    jd_id, run_id = await _saved_jd(Session)
+    with question_model(1):
+        async with _client() as c:
+            assert (await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={})).status_code == 200
+    async with Session() as s:
+        jd = await s.get(JobDescription, jd_id)
+        await s.execute(
+            Resume.__table__.update().where(Resume.id == jd.tailored_resume_id)
+            .values(content={"experience": [], "summary": "re-tailored"})
+        )
+        await s.commit()
+    later = await _another_run(Session, jd_id)
+    with question_model(1):
+        async with _client() as c:
+            r = await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={"tailoring_session_id": str(later)})
+    assert r.status_code == 200 and r.json()["session_id"] == str(later)
+    assert await _jd_questions(Session, jd_id) == {later: 10}
+    assert await _credits(Session) == 50 - 2 * credits.CREDIT_COSTS["prep_questions"]
+
+
 # ── The 5-résumé limit ──────────────────────────────────────────────────────
 
 async def test_saves_sent_together_at_four_resumes_stop_at_five(Session):

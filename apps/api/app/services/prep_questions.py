@@ -75,32 +75,57 @@ async def run_for_saved_resume(
     ).scalars().first()
 
 
+async def set_for_saved_resume(
+    db: AsyncSession, session: TailoringSession, jd: JobDescription, resume_content: dict,
+) -> list[PrepQuestion]:
+    """The JD's set already made for this saved résumé: the run's own, or one
+    another run of the same JD wrote from the very same content. Asking from
+    the Studio (which names its run) and from the Interview Center (which
+    can't) must find the same set, not make a second one."""
+    own = list(
+        (
+            await db.execute(
+                select(PrepQuestion)
+                .where(PrepQuestion.session_id == session.id)
+                .order_by(PrepQuestion.order_index)
+            )
+        ).scalars().all()
+    )
+    if own:
+        return own
+    return list(
+        (
+            await db.execute(
+                select(PrepQuestion)
+                .join(TailoringSession, PrepQuestion.session_id == TailoringSession.id)
+                .where(
+                    TailoringSession.jd_id == jd.id,
+                    TailoringSession.user_id == session.user_id,
+                    PrepQuestion.resume_fingerprint == resume_fingerprint(resume_content),
+                )
+                .order_by(PrepQuestion.order_index)
+            )
+        ).scalars().all()
+    )
+
+
 async def generate_for_session(
     db: AsyncSession, session: TailoringSession, jd: JobDescription, resume_content: dict,
     *, replace: bool = False,
 ) -> tuple[list[PrepQuestion], bool]:
-    """Writes this run's questions, from the saved résumé. A run that already
-    has a set keeps it — saving the same JD again must not replace questions
-    the user may already be practicing — unless the user asked for a new set
-    (replace). Then the new set is made first and swapped in in one commit,
-    so a failed or empty generation leaves the old set as it was (and
-    returns []).
+    """Writes the JD's questions, from the saved résumé, on this run. A JD has
+    one set: a set already made for this résumé is kept — saving the same JD
+    again must not replace questions the user may already be practicing —
+    unless the user asked for a new set (replace). A new set replaces the
+    JD's other runs' sets in the same commit, and is made before anything is
+    removed, so a failed or empty generation leaves the old set as it was
+    (and returns []).
 
-    Returns the run's questions and whether this call made them: False when
-    it found a set (one another request made meanwhile included) or made
-    nothing, which is what the caller refunds on."""
-    async def existing() -> list[PrepQuestion]:
-        return list(
-            (
-                await db.execute(
-                    select(PrepQuestion)
-                    .where(PrepQuestion.session_id == session.id)
-                    .order_by(PrepQuestion.order_index)
-                )
-            ).scalars().all()
-        )
-
-    if not replace and (have := await existing()):
+    Returns the set and whether this call made it: False when it found one
+    (one another request made meanwhile included) or made nothing, which is
+    what the caller refunds on."""
+    written_from = resume_content or session.tailored_content or {}
+    if not replace and (have := await set_for_saved_resume(db, session, jd, written_from)):
         return have, False
 
     provider = get_ai_provider()
@@ -117,7 +142,6 @@ async def generate_for_session(
         except Exception:
             jd_analysis = None
 
-    written_from = resume_content or session.tailored_content or {}
     async with record_ai_usage(session.user_id, "prep_questions"):
         if jd_analysis is None:
             jd_analysis = await _agent1_parse_jd(jd.raw_text, provider)
@@ -150,20 +174,31 @@ async def generate_for_session(
     ]
     if replace and not rows:
         return [], False  # nothing to swap in; the old set stays
-    # Two requests can both get this far for one run: Save to JD pressed
-    # twice, a second tab, or the JD page's "Generate questions" at the same
-    # time. Checking for a set and then adding one used to let both add one
-    # (test ATK-038). The run's row is now locked until this commits, so the
-    # second waits here, then finds the first's set and keeps it.
-    await db.execute(
-        select(TailoringSession.id).where(TailoringSession.id == session.id).with_for_update()
-    )
+    # Two requests can both get this far for one JD: Save to JD pressed
+    # twice, a second tab, the JD page's or the Interview Center's "Generate"
+    # at the same time — even for two different runs. Checking for a set and
+    # then adding one used to let both add one (test ATK-038). The JD's row
+    # is locked until this commits, so the second waits here, then finds the
+    # first's set and keeps it.
+    await db.execute(select(JobDescription.id).where(JobDescription.id == jd.id).with_for_update())
     if replace:
         await db.execute(delete(PrepQuestion).where(PrepQuestion.session_id == session.id))
-    elif have := await existing():
+    elif have := await set_for_saved_resume(db, session, jd, written_from):
         await db.commit()  # lets the next one in
         return have, False
     if rows:
+        # One set per JD: this one replaces any other run's.
+        await db.execute(
+            delete(PrepQuestion).where(
+                PrepQuestion.session_id.in_(
+                    select(TailoringSession.id).where(
+                        TailoringSession.jd_id == jd.id,
+                        TailoringSession.user_id == session.user_id,
+                        TailoringSession.id != session.id,
+                    )
+                )
+            )
+        )
         db.add_all(rows)
         await db.flush()  # the questions exist before their follow-ups point at them
         db.add_all(followups)
