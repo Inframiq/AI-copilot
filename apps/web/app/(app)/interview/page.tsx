@@ -344,7 +344,7 @@ export default function InterviewIndexPage() {
             onRegenerate={regenerate}
             regenerating={selectedJd.jd_id in pending}
             error={prepErrors[selectedJd.jd_id] ?? null}
-            cost={subscription?.costs?.prep_questions ?? 3}
+            cost={subscription?.costs?.prep_questions ?? 5}
             resumeChanged={resumeChanged}
             answeredFollowups={answeredFollowups}
           />

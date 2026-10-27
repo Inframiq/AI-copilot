@@ -344,7 +344,8 @@ follow-up then probed them, whatever the prompt said. The answers and first
 follow-ups now come from a second, focused call on the standard tier (the
 one follow-up answers already used, honestly). The budget model was tried
 for it and invented details again. Measured on `experienced_backend_ic`:
-$0.0033 per set before, $0.0276 after. Checked by
+$0.0033 per set before, $0.0276 after, so a set now costs 5 credits (was 3;
+≈ $0.042 on the $5 / 600 plan). Checked by
 `python -m evals.prep_runner run` (see `apps/api/evals/prep_runner.py`).
 
 **Cost guardrail:** `POST /ai/tailor` calls `spend_credits(db, uid, "tailor")`

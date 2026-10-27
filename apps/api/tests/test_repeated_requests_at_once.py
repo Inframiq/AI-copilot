@@ -213,7 +213,7 @@ async def test_questions_asked_for_twice_at_once_are_made_and_charged_once(Sessi
     assert a.status_code == b.status_code == 200, (a.text, b.text)
     assert await _questions(Session, run_id) == 10  # one set, not two
     assert a.json()["questions_total"] == b.json()["questions_total"] == 10
-    assert await _credits(Session) == 50 - 3  # charged once: the second got its 3 back
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]  # charged once: the second got its credits back
 
 
 async def test_five_requests_at_once_still_make_one_set(Session):
@@ -225,7 +225,7 @@ async def test_five_requests_at_once_still_make_one_set(Session):
             ])
     assert [r.status_code for r in replies] == [200] * 5
     assert await _questions(Session, run_id) == 10
-    assert await _credits(Session) == 47
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]
 
 
 async def test_asking_again_later_returns_the_set_free(Session):
@@ -235,7 +235,7 @@ async def test_asking_again_later_returns_the_set_free(Session):
             assert (await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={})).status_code == 200
             assert (await c.post(f"/jd/{jd_id}/prep-questions", headers=auth(), json={})).status_code == 200
     assert await _questions(Session, run_id) == 10
-    assert await _credits(Session) == 47
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["prep_questions"]
 
 
 # ── The 5-résumé limit ──────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ async def test_generated_resumes_sent_together_stop_at_five_and_refund_the_refus
             ])
     assert sorted(r.status_code for r in replies) == [201, 409], [r.text for r in replies]
     assert await _resume_count(Session) == 5
-    assert await _credits(Session) == 50 - 3  # the refused one was given its credits back
+    assert await _credits(Session) == 50 - credits.CREDIT_COSTS["generate_resume"]  # the refused one was given its credits back
 
 
 async def test_uploads_sent_together_stop_at_five_and_clean_up_the_refused(Session):

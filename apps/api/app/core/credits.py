@@ -45,9 +45,11 @@ CREDIT_COSTS: dict[str, int] = {
     # Three model calls: relevance filter, writer, compressor.
     "generate_resume": 3,
     "cover_letter": 3,
-    # One premium-tier call writing up to 15 questions, each with a likely
-    # answer and its first follow-up.
-    "prep_questions": 3,
+    # Two calls: the premium tier writes up to 15 questions, then the
+    # standard tier each one's likely answer and first follow-up. ~$0.028 a
+    # set (2026-10-27); 5 credits ≈ $0.042 on the $5 / 600 plan, so even a
+    # user who spends every credit on sets and Regenerate stays above cost.
+    "prep_questions": 5,
     # The likely answer to one follow-up, on request (standard tier), with
     # the next follow-up.
     "followup_answer": 3,

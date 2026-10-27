@@ -7,6 +7,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
 
+from app.core.credits import CREDIT_COSTS
 from app.main import app
 from app.core.config import settings
 from app.db.session import get_db
@@ -412,7 +413,7 @@ async def test_regenerate_replaces_an_existing_set_and_charges_for_it(ledger):
         assert r.status_code == 200
         assert r.json() == {"session_id": str(sess.id), "questions_total": 9}
         assert gen.call_args.kwargs["replace"] is True
-        assert ledger.balance(TEST_USER_ID) == 47 and ledger.refunded == []
+        assert ledger.balance(TEST_USER_ID) == 50 - CREDIT_COSTS["prep_questions"] and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -496,7 +497,7 @@ async def test_generate_endpoint_makes_questions_for_a_saved_jd(ledger):
         gen.assert_awaited_once()
         assert gen.call_args.args[3] == {"experience": ["saved"]}
         # Making the set is a model call, so it is charged.
-        assert ledger.balance(TEST_USER_ID) == 47 and ledger.refunded == []
+        assert ledger.balance(TEST_USER_ID) == 50 - CREDIT_COSTS["prep_questions"] and ledger.refunded == []
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -565,7 +566,7 @@ async def test_generate_endpoint_402_before_any_model_call_when_out_of_credits(l
         with patch("app.routers.jd.generate_for_session", new=AsyncMock()) as gen:
             r = await _post_prep(jd)
         assert r.status_code == 402
-        assert "Interview questions costs 3 credits" in r.json()["detail"]
+        assert f"Interview questions costs {CREDIT_COSTS['prep_questions']} credits" in r.json()["detail"]
         gen.assert_not_awaited()
     finally:
         app.dependency_overrides.pop(get_db, None)
