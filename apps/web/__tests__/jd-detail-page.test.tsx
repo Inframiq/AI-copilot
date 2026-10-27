@@ -24,6 +24,8 @@ vi.mock("@/lib/api-client", () => ({
     generateCoverLetter: vi.fn(),
     generateJdPrepQuestions: vi.fn(),
     updateJdCompany: vi.fn(),
+    getSubscription: vi.fn().mockResolvedValue({ plan: "free", credits_remaining: 40, costs: { prep_questions: 5 } }),
+    getPlans: vi.fn().mockResolvedValue({ plans: [] }),
   },
 }));
 
@@ -219,7 +221,7 @@ describe("JDPage — Interview Practice row", () => {
     expect(screen.queryByRole("button", { name: "Practice" })).toBeNull();
   });
 
-  it("generates questions for a saved JD that has none", async () => {
+  it("asks first, then makes questions for a saved JD that has none", async () => {
     vi.mocked(apiClient.getJdDetails)
       .mockResolvedValueOnce(details({ resume_saved: true }) as any)
       .mockResolvedValue(details({ resume_saved: true, questions_total: 10, questions_session_id: "run-saved" }) as any);
@@ -227,6 +229,11 @@ describe("JDPage — Interview Practice row", () => {
 
     await renderWithQueryClient(<JDPage params={Promise.resolve({ jdId: "jd-1" })} />);
     await userEvent.click(await screen.findByRole("button", { name: /Generate questions/ }));
+
+    // The same sheet as everywhere else: price and balance, nothing charged yet.
+    expect(await screen.findByRole("dialog", { name: "Make interview questions?" })).toBeInTheDocument();
+    expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Make questions · 5 credits" }));
 
     expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-1", undefined);
     expect(await screen.findByText("0 of 10 questions practiced")).toBeInTheDocument();

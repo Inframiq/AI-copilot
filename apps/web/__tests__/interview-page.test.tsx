@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const nav = vi.hoisted(() => ({
@@ -304,6 +304,19 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(screen.getByText("1 of 2 practiced")).toBeInTheDocument();
   });
 
+  it("opens on a topic that has questions, and won't open an empty one", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", { id: "q-b", topic: "Behavioral", question: "A time you disagreed." }),
+    ]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    // Technical is the default tab, but this job has none: Behavioral shows.
+    expect(await screen.findByText("A time you disagreed.")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Behavioral \(1\)/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Technical \(0\)/ })).toBeDisabled();
+    expect(screen.queryByText(/No Technical questions/)).toBeNull();
+  });
+
   it("says Start practice before any, and Practice again once all are done", async () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
     const { unmount } = renderWithQueryClient(<InterviewIndexPage />);
@@ -399,6 +412,47 @@ describe("InterviewIndexPage — making questions from here", () => {
 
     expect(await screen.findByRole("region", { name: "Ready for interview questions" })).toBeInTheDocument();
     expect(screen.queryByText(/No interview questions yet/)).toBeNull();
+  });
+});
+
+describe("InterviewIndexPage — linked to a job with no questions yet", () => {
+  beforeEach(() => {
+    useTailoringStore.getState().resetStore();
+    vi.clearAllMocks();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
+    vi.mocked(apiClient.getLatestSession).mockResolvedValue({ session_id: null });
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(
+      { credits_remaining: 40, costs: { prep_questions: 5 } } as never,
+    );
+  });
+
+  it("says so first, and makes them through the same question", async () => {
+    nav.params = new URLSearchParams("jd=jd-ready");
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      {
+        id: "q-1", session_id: "run-0", jd_id: "jd-has", jd_title: "Has a set", topic: "Technical",
+        question: "A question", answer_framework: "", is_gap_based: false, source: "requirement",
+        basis: "", order_index: 1, practiced_at: null,
+      },
+    ]);
+    vi.mocked(apiClient.getJds).mockResolvedValue([
+      { id: "jd-has", title: "Has a set", tailored_resume_id: "r0", created_at: "2026-10-01" },
+      { id: "jd-ready", title: "Platform Engineer", tailored_resume_id: "r1", created_at: "2026-10-02" },
+    ] as never);
+    try {
+      renderWithQueryClient(<InterviewIndexPage />);
+      const notice = await screen.findByRole("region", { name: "No questions for this job yet" });
+      expect(notice).toHaveTextContent(/No interview questions for Platform Engineer yet/);
+
+      await userEvent.click(within(notice).getByRole("button", { name: /Make questions/ }));
+      expect(await screen.findByRole("dialog", { name: "Make interview questions?" })).toBeInTheDocument();
+      // The notice steps aside while its own question is open.
+      expect(screen.queryByRole("region", { name: "No questions for this job yet" })).toBeNull();
+      expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+    } finally {
+      nav.params = new URLSearchParams();
+      usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
+    }
   });
 });
 

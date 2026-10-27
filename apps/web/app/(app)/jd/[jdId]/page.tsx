@@ -7,7 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
+import { usePrepQuestionsStore, offerPrepQuestions } from "@/stores/prep-questions-store";
+import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter, Subscription } from "@career-copilot/types";
 import {
@@ -175,8 +176,10 @@ export default function JDPage({
   });
   const questionsCost = subscription?.costs?.prep_questions ?? 5;
   const prepError = usePrepQuestionsStore((s) => s.errors[jdId] ?? null);
+  // Asks first, with the price and balance — the same sheet as after a
+  // save and in the Interview Center (it used to charge on the click).
   function handleGenerateQuestions() {
-    void startPrepQuestions(queryClient, jdId, { title: jd?.title });
+    offerPrepQuestions({ jdId, sessionId: null, title: jd?.title ?? "" });
   }
 
   async function handleOpen() {
@@ -510,6 +513,7 @@ export default function JDPage({
         </Card>
       </div>
 
+      <PrepQuestionsOffer />
     </div>
   );
 }

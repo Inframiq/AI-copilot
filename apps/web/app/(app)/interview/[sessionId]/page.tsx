@@ -134,17 +134,17 @@ export default function InterviewPage({
           </div>
           <div className="text-center max-w-[24rem]">
             <h2 className="text-headline-md text-on-surface mb-sm">
-              No questions yet
+              No questions here
             </h2>
             <p className="text-body-md text-on-surface-variant mb-lg">
-              Tailor your résumé to a job in the JD Analyzer and Save to JD —
-              your personalized interview questions are made from that save.
+              This set was replaced by a newer one, or removed. The job&apos;s current questions are in the
+              Interview Center.
             </p>
             <button
-              onClick={() => router.push("/jd")}
-              className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
+              onClick={() => router.push(centerHref)}
+              className="px-xl py-md rounded-lg text-label-md text-on-primary bg-primary hover:bg-primary-container transition-colors"
             >
-              Go to JD Analyzer
+              Open the Interview Center
             </button>
           </div>
         </div>

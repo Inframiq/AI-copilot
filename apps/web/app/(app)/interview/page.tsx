@@ -152,8 +152,16 @@ export default function InterviewIndexPage() {
   const readyJds = jds
     .filter((j) => !!j.tailored_resume_id && !hasSet.has(j.id) && !(j.id in pending))
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
-  const askToGenerate = (j: JobDescription) =>
+  const askToGenerate = (j: JobDescription) => {
+    // Selected now, so its questions are on screen the moment they exist.
+    selectJd(j.id);
     offerPrepQuestions({ jdId: j.id, sessionId: null, title: j.title });
+  };
+  // Linked here for a job with no set yet (e.g. "Open interview prep" from
+  // the JD page): say so first, rather than show another job's questions.
+  // Not while its own "Make interview questions?" is open.
+  const offerOpenFor = usePrepQuestionsStore((s) => s.offer?.jdId ?? null);
+  const linkedReady = readyJds.find((j) => j.id === pickedJdId && j.id !== offerOpenFor) ?? null;
 
   // A first set that failed (out of credits, say) has no panel to show its
   // error on, so it used to vanish with the "preparing" banner.
@@ -221,7 +229,11 @@ export default function InterviewIndexPage() {
   const strengths = (overlapSkills.length > 0 ? overlapSkills : runIsForThisJd ? matchedSkills : []).slice(0, 4);
   const focus = (gapSkills.length > 0 ? gapSkills : runIsForThisJd ? missingSkills : []).slice(0, 4);
 
-  const tabQuestions = scopedQuestions.filter((q) => classifyTopic(q.topic) === activeTab);
+  // The tab picked, unless this job has nothing under it: then its first
+  // topic that has questions (a job with no Technical questions used to
+  // open on "No Technical questions").
+  const shownTab: Tab = tabCounts[activeTab] > 0 ? activeTab : TABS.find((t) => tabCounts[t] > 0) ?? activeTab;
+  const tabQuestions = scopedQuestions.filter((q) => classifyTopic(q.topic) === shownTab);
 
   async function handleMarkAnswered(qId: string) {
     // Optimistic — flip it locally immediately, reconcile with the server's
@@ -293,6 +305,25 @@ export default function InterviewIndexPage() {
       )}
       <PrepQuestionsOffer />
 
+      {linkedReady && (
+        <section
+          aria-label="No questions for this job yet"
+          className="flex flex-col sm:flex-row sm:items-center gap-sm rounded-xl border border-primary/25 bg-primary-fixed/40 px-md py-sm"
+        >
+          <p className="min-w-0 flex-1 text-body-sm text-on-surface">
+            No interview questions for <span className="font-medium">{linkedReady.title}</span> yet. They&apos;re built
+            from the résumé saved for it.
+          </p>
+          <button
+            type="button"
+            onClick={() => askToGenerate(linkedReady)}
+            className={`shrink-0 inline-flex items-center justify-center gap-xs rounded-lg bg-primary px-md py-xs text-label-md text-on-primary hover:bg-primary-container ${FOCUS_RING}`}
+          >
+            Make questions · {cost} credits
+          </button>
+        </section>
+      )}
+
       {nothingYet && <EmptyState onStart={() => router.push("/jd")} />}
 
       {!selectedJd && readyJds.length > 0 && (
@@ -337,18 +368,20 @@ export default function InterviewIndexPage() {
 
             <div role="tablist" aria-label="Question topics" className="flex gap-xs p-xs rounded-xl bg-surface-container w-full sm:w-fit">
               {TABS.map((tab) => {
-                const active = activeTab === tab;
+                const active = shownTab === tab;
+                const empty = tabCounts[tab] === 0;
                 return (
                   <button
                     key={tab}
                     role="tab"
                     aria-selected={active}
                     aria-label={`${tab} (${tabCounts[tab]})`}
+                    disabled={empty}
                     onClick={() => setActiveTab(tab)}
                     className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-xs px-sm sm:px-md py-xs rounded-lg text-label-md whitespace-nowrap transition-colors ${FOCUS_RING} ${
                       active
                         ? "bg-surface-container-lowest text-on-surface shadow-sm"
-                        : "text-on-surface-variant hover:text-on-surface"
+                        : "text-on-surface-variant hover:text-on-surface disabled:opacity-40 disabled:hover:text-on-surface-variant"
                     }`}
                   >
                     {tab}
@@ -410,7 +443,7 @@ export default function InterviewIndexPage() {
               </ol>
             ) : (
               <div className="rounded-2xl border border-dashed border-outline-variant/60 px-md py-xl text-center">
-                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions for this job</p>
+                <p className="text-body-md text-on-surface font-medium">No {shownTab} questions for this job</p>
                 <p className="mt-xs text-body-sm text-on-surface-variant">This set focuses on the other topics.</p>
               </div>
             )}
