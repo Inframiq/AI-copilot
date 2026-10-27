@@ -5,9 +5,10 @@ import { apiClient } from "@/lib/api-client";
 /**
  * Interview prep questions being made right now, by JD.
  *
- * Saving a tailored résumé to its JD is what makes them: the Studio starts
- * the request the moment the save succeeds and nobody awaits it, so the user
- * can carry on. Held here, outside any page, so it survives navigation —
+ * A tailored résumé saved to its JD is what they are made from. After Save
+ * to JD or Export the Studio asks whether to make them (they cost credits);
+ * a yes starts the request and nobody awaits it, so the user can carry on.
+ * Held here, outside any page, so it survives navigation —
  * the JD page and the Interview Center read it to say "preparing", and every
  * list of questions is refreshed the moment the request comes back. Before,
  * a server background task did this out of sight, and the lists stayed empty
@@ -18,12 +19,34 @@ interface PrepQuestionsState {
   pending: Record<string, string>;
   /** jdId → why the last attempt failed. */
   errors: Record<string, string>;
+  /** A JD whose saved résumé could get a question set: the Studio asks
+   * (components/interview/PrepQuestionsOffer.tsx). A set costs credits, so
+   * saving or exporting no longer makes one unasked. */
+  offer: PrepQuestionsOfferTarget | null;
+}
+
+export interface PrepQuestionsOfferTarget {
+  jdId: string;
+  /** The tailoring run the saved résumé came from, when known. */
+  sessionId: string | null;
+  title: string;
 }
 
 export const usePrepQuestionsStore = create<PrepQuestionsState>(() => ({
   pending: {},
   errors: {},
+  offer: null,
 }));
+
+/** Ask whether to make this JD's interview questions. */
+export function offerPrepQuestions(target: PrepQuestionsOfferTarget): void {
+  usePrepQuestionsStore.setState({ offer: target });
+}
+
+/** The question was answered, or no longer applies. */
+export function clearPrepQuestionsOffer(): void {
+  usePrepQuestionsStore.setState({ offer: null });
+}
 
 /** Make (or fetch the existing) interview questions for a saved JD — or,
  * with `regenerate`, a new set in place of the existing one. Resolves once

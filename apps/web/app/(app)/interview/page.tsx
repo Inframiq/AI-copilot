@@ -503,9 +503,9 @@ export default function InterviewIndexPage() {
           <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
             <p className="text-body-md text-on-surface font-medium">No interview questions yet</p>
             <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
-              Interview questions are made when you save a tailored résumé to
-              a job: analyze a JD, tailor your résumé to it, then Save to JD.
-              The questions are built from that résumé and that role.
+              Interview questions are made for a job on request: analyze a
+              JD, tailor your résumé to it, Save to JD, then choose Make
+              questions. They are built from that résumé and that role.
             </p>
             <button
               onClick={() => router.push("/jd")}

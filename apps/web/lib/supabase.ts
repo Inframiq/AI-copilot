@@ -1,6 +1,7 @@
 import { createBrowserClient as _createBrowserClient } from "@supabase/ssr";
 import { createServerClient as _createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
+import { standDownLeaveWarnings } from "@/lib/leave-warnings";
 
 // Use empty-string fallbacks so the app boots in local preview mode
 // (where Supabase is not configured). Auth calls will simply fail gracefully.
@@ -85,5 +86,7 @@ export async function signOutHere() {
  * the history.
  */
 export function leaveSignedOut() {
+  // Unsaved work must not be able to hold a signed-out page on screen.
+  standDownLeaveWarnings();
   window.location.replace("/login");
 }

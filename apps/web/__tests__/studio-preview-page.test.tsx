@@ -21,6 +21,11 @@ vi.mock("@/lib/api-client", async (importOriginal) => ({
     getJd: vi.fn(async () => ({ id: "jd1", title: "Platform Engineer", tailored_resume_id: null })),
     getJdCoverLetter: vi.fn(async () => ({ cover_letter_id: null, status: null, created_at: null })),
     generateCoverLetter: vi.fn(async () => ({ cover_letter_id: "cl-1" })),
+    getJdDetails: vi.fn(async () => ({
+      session_id: "sess-9", questions_total: 0, questions_practiced: 0, questions_session_id: null,
+      resume_saved: true,
+    })),
+    getSubscription: vi.fn(async () => ({ credits_remaining: 40, costs: { prep_questions: 5 } })),
     getResume: vi.fn(async () => ({
       id: "r1", content: { contact: {}, summary: "Fetched.", experience: [], education: [], skills: [] },
       template_id: "ats_clean", line_spacing: 1.25, paragraph_spacing: 12,
@@ -40,6 +45,7 @@ vi.mock("@/lib/career-profile-client", () => ({
 import StudioPreviewPage from "../app/(builder)/studio/[resumeId]/preview/page";
 import { useResumeStore } from "../stores/resume-store";
 import { useTailoringStore } from "../stores/tailoring-store";
+import { usePrepQuestionsStore } from "../stores/prep-questions-store";
 import { apiClient } from "../lib/api-client";
 
 // The page reads route params with use(), which suspends. Flushing inside
@@ -64,6 +70,7 @@ describe("Studio preview page", () => {
     vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: null } as never);
     useResumeStore.getState().resetStore();
     useTailoringStore.getState().resetStore();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
     useResumeStore.setState({
       resumeId: "r1",
       content: {
@@ -139,8 +146,8 @@ describe("Studio preview page", () => {
 
   it("saves an unsaved tailored draft to its JD before exporting it", async () => {
     // Exporting a draft means it is the version going out: it is saved to the
-    // JD first (which makes the JD's interview questions) and the PDF comes
-    // from the saved copy, then the Studio switches to that copy.
+    // JD first and the PDF comes from the saved copy, then the Studio
+    // switches to that copy and asks about interview questions.
     const order: string[] = [];
     const saveDraftToJd = vi.fn(async () => { order.push("save"); return "saved-1"; });
     useResumeStore.setState({ draftJdId: "jd1", saveDraftToJd } as never);
@@ -156,8 +163,12 @@ describe("Studio preview page", () => {
       fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
       await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/saved-1/preview?done=exported"));
       expect(order).toEqual(["save", "pdf"]);
-      // The save starts the JD's interview questions, for the run reviewed.
-      expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd1", "sess-9");
+      // Questions cost credits: asked about once the PDF is down, never made
+      // unasked. A yes makes them for the run reviewed.
+      expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+      const offer = await screen.findByRole("dialog", { name: /make interview questions for this job/i });
+      fireEvent.click(within(offer).getByRole("button", { name: /make questions · 5 credits/i }));
+      await waitFor(() => expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd1", "sess-9"));
       expect(vi.mocked(apiClient.generatePdf).mock.calls[0][0]).toBe("saved-1");
       expect(click).toHaveBeenCalled();
     } finally {
@@ -177,6 +188,38 @@ describe("Studio preview page", () => {
     fireEvent.click(within(next).getByRole("button", { name: /write cover letter/i }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/cover-letters/cl-1"));
     expect(apiClient.generateCoverLetter).toHaveBeenCalledWith("r1", "jd1", 50);
+  });
+
+  it("asks about interview questions from Next steps when the job has none — a 'Not now' isn't final", async () => {
+    searchParams = new URLSearchParams("done=saved");
+    useTailoringStore.setState({ jdId: "jd1", sessionId: "sess-9" } as never);
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: "r1" } as never);
+    await renderPage();
+    const next = await screen.findByRole("region", { name: /next steps/i });
+    await waitFor(() => expect(apiClient.getJdDetails).toHaveBeenCalledWith("jd1"));
+
+    fireEvent.click(within(next).getByRole("button", { name: /interview questions/i }));
+
+    expect(await screen.findByRole("dialog", { name: /make interview questions/i })).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
+    expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+  });
+
+  it("opens the job's questions from Next steps when it has a set", async () => {
+    searchParams = new URLSearchParams("done=saved");
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    vi.mocked(apiClient.getJd).mockResolvedValue({ id: "jd1", title: "Platform Engineer", tailored_resume_id: "r1" } as never);
+    vi.mocked(apiClient.getJdDetails).mockResolvedValue({
+      session_id: "sess-9", questions_total: 9, questions_practiced: 0, questions_session_id: "sess-9", resume_saved: true,
+    } as never);
+    await renderPage();
+    const next = await screen.findByRole("region", { name: /next steps/i });
+    await waitFor(() => expect(apiClient.getJdDetails).toHaveBeenCalled());
+    await act(async () => {});
+
+    fireEvent.click(within(next).getByRole("button", { name: /interview questions/i }));
+
+    expect(push).toHaveBeenCalledWith("/interview?jd=jd1");
   });
 
   it("opens the job's cover letter rather than writing a second one", async () => {
@@ -589,6 +632,7 @@ describe("switching template in the Studio preview", () => {
     vi.clearAllMocks();
     useResumeStore.getState().resetStore();
     useTailoringStore.getState().resetStore();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
     useResumeStore.setState({
       resumeId: "r1",
       templateId: "ats_clean",
@@ -658,6 +702,7 @@ describe("a photo the server could not load", () => {
     vi.clearAllMocks();
     useResumeStore.getState().resetStore();
     useTailoringStore.getState().resetStore();
+    usePrepQuestionsStore.setState({ pending: {}, errors: {}, offer: null });
     useResumeStore.setState({
       resumeId: "r1",
       templateId: "ats_sidebar",

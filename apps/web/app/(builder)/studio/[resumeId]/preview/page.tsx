@@ -20,7 +20,9 @@ import { PhotoPrompt } from "@/components/resume/PhotoPrompt";
 import { CanvasNotice } from "@/components/studio/CanvasNotice";
 import { SaveToJd } from "@/components/studio/SaveToJd";
 import { NextSteps } from "@/components/studio/NextSteps";
-import { startPrepQuestions } from "@/stores/prep-questions-store";
+import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
+import { offerPrepQuestions } from "@/stores/prep-questions-store";
+import { releaseLeaveWarning, useLeaveWarning } from "@/lib/use-leave-warning";
 
 /**
  * The Resume Studio: the document is the interface.
@@ -90,18 +92,18 @@ export default function StudioPreviewPage({
   });
   const savedToJd = !draftJdId && !!jd && jd.tailored_resume_id === resumeId;
 
-  // A draft lives only in memory: warn before a refresh or close drops it.
-  useEffect(() => {
-    if (!draftJdId) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [draftJdId]);
+  // A draft lives only in memory: ask before anything drops it — a refresh,
+  // closing the tab, a link (the sidebar included) or the browser's Back.
+  // Only refresh and close used to ask.
+  useLeaveWarning(
+    !!draftJdId,
+    "This tailored résumé isn't saved. Leave without saving? Save to JD keeps it with the job.",
+  );
 
-  /** Saves the tailored draft as the JD's résumé, then starts making the
-   * JD's interview prep questions from it — not awaited: every view of the
-   * questions shows them as preparing and refreshes when they land. Returns
-   * the saved résumé's id. Throws if the save fails. */
+  /** Saves the tailored draft as the JD's résumé, then offers to make the
+   * JD's interview questions from it (they cost credits, so they are no
+   * longer made unasked). Returns the saved résumé's id. Throws if the save
+   * fails. */
   async function saveDraftToJd(): Promise<string> {
     const jdForDraft = useResumeStore.getState().draftJdId;
     const name = useResumeStore.getState().content?.contact?.name?.trim();
@@ -114,19 +116,29 @@ export default function StudioPreviewPage({
     queryClient.invalidateQueries({ queryKey: ["jd", linkedJdId] });
     queryClient.invalidateQueries({ queryKey: ["jdDetails", linkedJdId] });
     queryClient.invalidateQueries({ queryKey: ["resumes"] });
-    if (jdForDraft) {
-      void startPrepQuestions(queryClient, jdForDraft, {
-        sessionId: useTailoringStore.getState().sessionId,
-        title: jd?.title,
-      });
-    }
+    // The draft is saved: take the leave warning's extra Back entry off the
+    // history before moving to the saved copy.
+    await releaseLeaveWarning();
     return savedId;
+  }
+
+  /** Asks whether to make the job's interview questions — once the save or
+   * export it follows has finished, not over it. */
+  function offerQuestions(jdForDraft: string | null) {
+    if (!jdForDraft) return;
+    offerPrepQuestions({
+      jdId: jdForDraft,
+      sessionId: useTailoringStore.getState().sessionId,
+      title: jd?.title ?? "",
+    });
   }
 
   async function handleSaveToJd() {
     setSaveError(null);
+    const jdForDraft = useResumeStore.getState().draftJdId;
     try {
       const savedId = await saveDraftToJd();
+      offerQuestions(jdForDraft);
       // The Studio now edits the JD's own copy, and autosaves into it.
       router.replace(`/studio/${savedId}/preview?done=saved`);
     } catch (err) {
@@ -204,8 +216,8 @@ export default function StudioPreviewPage({
     try {
       const s = useResumeStore.getState();
       // Exporting an unsaved tailored draft means it is the version going
-      // out — save it to its JD first (which also makes the JD's interview
-      // questions), then export the saved copy. It used to render the draft
+      // out — save it to its JD first (then, once the PDF is down, offer the
+      // JD's interview questions), then export the saved copy. It used to render the draft
       // and save nothing, so the résumé that was sent existed nowhere.
       let savedFromDraft: string | null = null;
       if (s.draftJdId && s.content) {
@@ -230,8 +242,10 @@ export default function StudioPreviewPage({
       // workbench was removed, so the button spun and then did nothing.
       await downloadFile(signed_url, resumeFileName(content?.contact?.name));
       // The Studio now edits the JD's own copy, as after Save to JD.
-      if (savedFromDraft) router.replace(`/studio/${savedFromDraft}/preview?done=exported`);
-      else setDone("exported");
+      if (savedFromDraft) {
+        offerQuestions(s.draftJdId);
+        router.replace(`/studio/${savedFromDraft}/preview?done=exported`);
+      } else setDone("exported");
     } catch (err) {
       if (isResumeLimitCancelled(err)) return;
       // Previously a bare finally: a failed export reset the button and said
@@ -354,6 +368,7 @@ export default function StudioPreviewPage({
           ) : undefined
         }
       />
+      <PrepQuestionsOffer />
       {done && savedToJd && linkedJdId && (
         <NextSteps
           jdId={linkedJdId}

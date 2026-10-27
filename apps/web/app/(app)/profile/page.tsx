@@ -65,6 +65,7 @@ import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
+import { leaveWarningsStoodDown } from "@/lib/leave-warnings";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -245,6 +246,8 @@ export default function ProfilePage() {
     if (!isDirty) return;
 
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Never on a security exit (signed out, another account).
+      if (leaveWarningsStoodDown()) return;
       e.preventDefault();
       e.returnValue = "";
     };

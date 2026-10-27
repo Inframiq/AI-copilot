@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
 import { CoverLetterWriting } from "@/components/cover-letter/CoverLetterWriting";
 import { DeleteLetter } from "@/components/cover-letter/DeleteLetter";
+import { leaveWarningsStoodDown } from "@/lib/leave-warnings";
 import type { CoverLetter } from "@career-copilot/types";
 
 export default function CoverLetterEditorPage({
@@ -81,7 +82,10 @@ export default function CoverLetterEditorPage({
   const unsaved = letter?.status === "completed" && (!isSaved || isDirty);
   useEffect(() => {
     if (!unsaved) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    // Never on a security exit (signed out, another account).
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!leaveWarningsStoodDown()) event.preventDefault();
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [unsaved]);

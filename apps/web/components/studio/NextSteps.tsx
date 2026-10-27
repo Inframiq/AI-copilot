@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle, EnvelopeSimple, Microphone, X } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { FOCUS_RING } from "@/lib/focus";
-import type { JDCoverLetter } from "@career-copilot/types";
+import type { JDCoverLetter, JDDetails } from "@career-copilot/types";
+import { offerPrepQuestions, usePrepQuestionsStore } from "@/stores/prep-questions-store";
+import { useTailoringStore } from "@/stores/tailoring-store";
 
 /**
  * What comes after Save to JD or Export: the cover letter and the interview
@@ -13,7 +15,9 @@ import type { JDCoverLetter } from "@career-copilot/types";
  * find them broke the flow at the moment the résumé was done.
  *
  * The letter is written from the résumé just saved for the job. One that
- * already exists is opened rather than written again.
+ * already exists is opened rather than written again. Interview questions
+ * are made only on request: with none for the job yet, the button asks
+ * (the same question the Studio asked after the save).
  */
 export function NextSteps({
   jdId,
@@ -39,6 +43,20 @@ export function NextSteps({
     queryFn: () => apiClient.getJdCoverLetter(jdId),
   });
   const existing = letter?.cover_letter_id ?? null;
+  const { data: details } = useQuery<JDDetails>({
+    queryKey: ["jdDetails", jdId],
+    queryFn: () => apiClient.getJdDetails(jdId),
+  });
+  const preparing = usePrepQuestionsStore((s) => jdId in s.pending);
+  const haveQuestions = (details?.questions_total ?? 0) > 0 || preparing;
+
+  function handleQuestions() {
+    if (haveQuestions) {
+      router.push(`/interview?jd=${jdId}`);
+      return;
+    }
+    offerPrepQuestions({ jdId, sessionId: useTailoringStore.getState().sessionId, title: jdTitle ?? "" });
+  }
 
   async function handleLetter() {
     if (existing) {
@@ -96,7 +114,7 @@ export function NextSteps({
         </button>
         <button
           type="button"
-          onClick={() => router.push(`/interview?jd=${jdId}`)}
+          onClick={handleQuestions}
           className={`flex items-center gap-xs rounded-xl border border-primary/40 px-sm py-xs text-label-sm text-primary transition-colors hover:bg-primary/10 sm:px-md ${FOCUS_RING}`}
         >
           <Microphone size={16} />

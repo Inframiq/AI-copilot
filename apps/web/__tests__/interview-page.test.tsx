@@ -48,7 +48,7 @@ describe("InterviewIndexPage — no active session", () => {
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
     expect(
-      screen.getByText(/made when you save a tailored résumé to\s+a job/i)
+      screen.getByText(/made for a job on request/i)
     ).toBeInTheDocument();
   });
 

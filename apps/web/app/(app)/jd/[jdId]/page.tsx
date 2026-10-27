@@ -9,7 +9,7 @@ import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
-import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter } from "@career-copilot/types";
+import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter, Subscription } from "@career-copilot/types";
 import {
   CheckCircle,
   WarningCircle,
@@ -163,10 +163,17 @@ export default function JDPage({
     router.push(`/studio/${masterResume.id}/review`);
   }
 
-  // Saving the tailored résumé to this JD starts its questions (from the
-  // Studio); "Generate questions" covers a JD saved before that was so, or a
-  // generation that failed. Either way the same in-flight state shows here.
+  // Questions are made from the résumé saved to this JD, on request: the
+  // Studio asks after Save to JD or Export, and "Generate questions" here
+  // covers a "Not now", a JD saved before that was so, or a generation that
+  // failed. Either way the same in-flight state shows here.
   const isGeneratingQuestions = usePrepQuestionsStore((s) => jdId in s.pending);
+  // Only for the price shown — the server charges what it charges.
+  const { data: subscription } = useQuery<Subscription>({
+    queryKey: ["subscription"],
+    queryFn: () => apiClient.getSubscription(),
+  });
+  const questionsCost = subscription?.costs?.prep_questions ?? 5;
   const prepError = usePrepQuestionsStore((s) => s.errors[jdId] ?? null);
   function handleGenerateQuestions() {
     void startPrepQuestions(queryClient, jdId, { title: jd?.title });
@@ -443,7 +450,7 @@ export default function JDPage({
                     disabled={isGeneratingQuestions}
                     className="shrink-0 flex items-center justify-center gap-xs px-sm py-xs rounded-lg text-label-sm text-primary border border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
                   >
-                    {isGeneratingQuestions ? "Generating…" : "Generate questions"}
+                    {isGeneratingQuestions ? "Generating…" : `Generate questions · ${questionsCost} credits`}
                   </button>
                 ) : null}
               </div>

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserClient, leaveSignedOut } from "@/lib/supabase";
+import { standDownLeaveWarnings } from "@/lib/leave-warnings";
 
 /**
  * Keeps a signed-out tab off the signed-in pages (test ATK-008).
@@ -58,5 +59,7 @@ export function SessionGuard() {
 /** A full page load, so nothing of the previous account's page survives in
  * memory; the dashboard is the one page every account has. */
 function leaveForAnotherAccount() {
+  // Unsaved work must not be able to hold the other account's page on screen.
+  standDownLeaveWarnings();
   window.location.replace("/dashboard");
 }
