@@ -144,6 +144,15 @@ export function QuestionCard({ question, practiced }: { question: PrepQuestionOu
         </p>
       )}
 
+      {/* Shown before the answer: knowing what is being tested is part of
+          answering well. Older sets have none. */}
+      {question.interviewer_intent?.trim() && (
+        <p className="text-caption flex items-start gap-xs">
+          <span className="shrink-0 font-semibold text-on-surface">What they&apos;re testing:</span>
+          <span className="text-on-surface-variant">{question.interviewer_intent.trim()}</span>
+        </p>
+      )}
+
       {hasGuide && (
         <div className="border-t border-outline-variant/30 pt-sm">
           <button

@@ -193,6 +193,7 @@ class PrepQuestionData(BaseModel):
     answer_framework: str = ""
     likely_answer: str = ""
     follow_up: str = ""
+    interviewer_intent: str = ""
     is_gap_based: bool = True
     source: str = "requirement"
     basis: str = ""
@@ -211,7 +212,8 @@ class InterviewQuestionData(BaseModel):
 
     interviewer_intent is declared first — same schema-order technique as
     BulletMapping.reasoning — so the model commits to what the question
-    tests, and at what level, before writing it. Never stored or shown."""
+    tests, and at what level, before writing it. Stored and shown as
+    "What they're testing"."""
     interviewer_intent: str = ""
     source: str  # "requirement" | "overlap" | "gap"
     basis: str
@@ -1877,6 +1879,7 @@ async def get_or_generate_prep_questions(
             question=q.question,
             likely_answer=q.likely_answer.strip(),
             follow_up=q.follow_up.strip(),
+            interviewer_intent=q.interviewer_intent.strip(),
             is_gap_based=(source == "gap"),
             source=source,
             basis=q.basis,

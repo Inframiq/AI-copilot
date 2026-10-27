@@ -64,6 +64,23 @@ describe("InterviewIndexPage — no active session", () => {
     }
   });
 
+  it("shows why a first set of questions failed, which has no card to show it on", async () => {
+    vi.mocked(apiClient.getJds).mockResolvedValue([{ id: "jd-1", title: "Backend Engineer" }] as never);
+    usePrepQuestionsStore.setState({ pending: {}, errors: { "jd-1": "Not enough credits." } });
+    try {
+      renderWithQueryClient(<InterviewIndexPage />);
+      // The title arrives with the JD list.
+      await waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          /Couldn't make interview questions for Backend Engineer: Not enough credits\./,
+        ),
+      );
+      expect(screen.getByRole("link", { name: /Open the JD/ })).toHaveAttribute("href", "/jd/jd-1");
+    } finally {
+      usePrepQuestionsStore.setState({ pending: {}, errors: {} });
+    }
+  });
+
   it("still shows only the CTA after switching tabs", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
@@ -207,7 +224,7 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(screen.getByText("0 of 1 practiced")).toBeInTheDocument();
   });
 
-  it("asks before regenerating — the cost, and that practice progress starts over", async () => {
+  it("asks before regenerating — the cost, and that practice progress is lost", async () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
       question("acme", { practiced_at: "2026-10-01T00:00:00Z" }),
       question("acme", { id: "q-acme-2", question: "Second Acme question" }),
@@ -216,11 +233,70 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
     expect(screen.getByText(/Replace these 2 questions with a new set\?/)).toBeInTheDocument();
-    expect(screen.getByText(/Costs 2 credits; your practice progress on this JD \(1 done\) starts over/)).toBeInTheDocument();
+    expect(screen.getByText(/Costs 2 credits\. This JD's practice progress \(1 done\) will be lost\./)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText(/Replace these 2 questions/)).not.toBeInTheDocument();
     expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
+  });
+
+  it("says written follow-up answers are lost too, since they were paid for", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", {
+        followups: [
+          { id: "f1", position: 1, question: "Why?", answer: "Direct answer: because." },
+          { id: "f2", position: 2, question: "And then?", answer: null },
+        ],
+      }),
+    ]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    expect(screen.getByText(/This JD's 1 written follow-up answer will be lost\./)).toBeInTheDocument();
+  });
+
+  it("files HR & Culture questions under their own tab, not Behavioral", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", { id: "q-hr", topic: "HR & Culture", question: "Why this team?" }),
+      question("acme", { id: "q-beh", topic: "Behavioral", question: "A time you disagreed." }),
+    ]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /HR & Culture \(1\)/ }));
+    expect(screen.getByText("Why this team?")).toBeInTheDocument();
+    expect(screen.queryByText("A time you disagreed.")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Behavioral \(1\)/ }));
+    expect(screen.getByText("A time you disagreed.")).toBeInTheDocument();
+    expect(screen.queryByText("Why this team?")).not.toBeInTheDocument();
+  });
+
+  it("says when the job's résumé was edited after its questions were made", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme", { resume_changed: true })]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    expect(
+      await screen.findByText(/résumé for this job was edited after these questions were made/),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about edits when the résumé is unchanged", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme", { resume_changed: false })]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await screen.findByText("Acme technical question");
+    expect(screen.queryByText(/was edited after these questions were made/)).not.toBeInTheDocument();
+  });
+
+  it("names the steps the readiness score counts", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
+    renderWithQueryClient(<InterviewIndexPage />);
+
+    await screen.findByText("Acme technical question");
+    for (const step of ["JD analyzed", "Résumé tailored", "Questions ready", "Questions practiced"]) {
+      expect(screen.getByText(step)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Session started")).not.toBeInTheDocument();
   });
 
   it("regenerates the selected JD's set once confirmed", async () => {

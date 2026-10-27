@@ -25,7 +25,7 @@ from app.services.tailoring import (
 )
 from app.services.bullet_guard import guard_rewrite
 from app.services.prep_questions import (
-    answer_followup_for_user, followups_by_question, latest_with_questions_per_jd,
+    answer_followup_for_user, followups_by_question, latest_with_questions_per_jd, resume_fingerprint,
 )
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
 from app.services.ats import (
@@ -756,6 +756,7 @@ def _question_out(q: PrepQuestion, followups: list[PrepFollowup]) -> PrepQuestio
         question=q.question,
         answer_framework=q.answer_framework,
         likely_answer=q.likely_answer,
+        interviewer_intent=q.interviewer_intent,
         followups=[PrepFollowupOut.model_validate(f) for f in followups],
         is_gap_based=q.is_gap_based,
         source=q.source,
@@ -778,7 +779,10 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
 
     latest_per_jd = latest_with_questions_per_jd(uid)
     sessions_result = await db.execute(
-        select(TailoringSession.id, TailoringSession.jd_id, JobDescription.title)
+        select(
+            TailoringSession.id, TailoringSession.jd_id, JobDescription.title,
+            JobDescription.tailored_resume_id,
+        )
         .join(
             latest_per_jd,
             (TailoringSession.jd_id == latest_per_jd.c.jd_id)
@@ -787,9 +791,29 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
         .join(JobDescription, TailoringSession.jd_id == JobDescription.id)
         .where(TailoringSession.user_id == uid, TailoringSession.status == "completed")
     )
-    session_jd = {row.id: (row.jd_id, row.title) for row in sessions_result.all()}
+    session_rows = sessions_result.all()
+    session_jd = {row.id: (row.jd_id, row.title) for row in session_rows}
     if not session_jd:
         return []
+
+    # Each JD's saved résumé as it is now, to tell whether it was edited
+    # after its questions were written from it.
+    saved_ids = {row.tailored_resume_id for row in session_rows if row.tailored_resume_id}
+    saved_content = {}
+    if saved_ids:
+        saved_content = {
+            r.id: r.content
+            for r in (
+                await db.execute(
+                    select(Resume.id, Resume.content).where(Resume.id.in_(saved_ids), Resume.user_id == uid)
+                )
+            ).all()
+        }
+    current_fingerprint = {
+        row.id: resume_fingerprint(saved_content[row.tailored_resume_id])
+        for row in session_rows
+        if row.tailored_resume_id in saved_content
+    }
 
     questions = (
         await db.execute(
@@ -804,6 +828,11 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
             **_question_out(q, chains.get(q.id, [])).model_dump(),
             jd_id=session_jd[q.session_id][0],
             jd_title=session_jd[q.session_id][1],
+            resume_changed=(
+                q.resume_fingerprint is not None
+                and q.session_id in current_fingerprint
+                and q.resume_fingerprint != current_fingerprint[q.session_id]
+            ),
         )
         for q in questions
     ]

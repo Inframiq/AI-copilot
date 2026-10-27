@@ -22,12 +22,21 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions } from "@/stores/prep-questions-store";
 import { sourceLabel, practiceSaveError } from "@/components/interview/QuestionCard";
-import type { PrepQuestionWithJdOut, Resume, JobDescription, Subscription } from "@career-copilot/types";
+import type { PrepQuestionWithJdOut, JobDescription, Subscription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
+
+const READINESS_HELP =
+  "20% each for analyzing a JD, tailoring a résumé to it, and having interview questions ready, plus up to 40% for the share of your questions marked practiced.";
 type Tab = (typeof TABS)[number];
 
 function classifyTopic(topic: string): Tab {
+  // New sets name one of the tabs exactly. Matching words came first, and
+  // "culture" is a Behavioral word, so every HR & Culture question was filed
+  // under Behavioral and that tab was always empty.
+  const exact = TABS.find((t) => t === topic);
+  if (exact) return exact;
+  // Older sets: a free-form topic name.
   const l = topic.toLowerCase();
   if (
     /algorithm|system design|coding|technical|data structure|database|api|architecture|programming|react|typescript|javascript|python|frontend|backend|cloud|devops|fullstack|node|sql|css|html|git|docker|kubernetes|aws|java|c\+\+|golang|linux|rest|graphql|ci\/cd|framework|testing|security|infrastructure/.test(l)
@@ -85,11 +94,6 @@ export default function InterviewIndexPage() {
   const isLoading = myQuestionsQuery.isLoading;
   const hasAnyQuestions = myQuestions.length > 0;
 
-  const resumesQuery = useQuery<Resume[]>({
-    queryKey: ["resumes"],
-    queryFn:  () => apiClient.getResumes(),
-  });
-  const resumes = resumesQuery.data ?? [];
   const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn:  () => apiClient.getJds(),
@@ -101,13 +105,10 @@ export default function InterviewIndexPage() {
     queryFn: () => apiClient.getSubscription(),
   });
 
-  const connectionError =
-    myQuestionsQuery.isError || resumesQuery.isError || jdsQuery.isError;
-  const isRetrying =
-    myQuestionsQuery.isFetching || resumesQuery.isFetching || jdsQuery.isFetching;
+  const connectionError = myQuestionsQuery.isError || jdsQuery.isError;
+  const isRetrying = myQuestionsQuery.isFetching || jdsQuery.isFetching;
   const retryAll = () => {
     myQuestionsQuery.refetch();
-    resumesQuery.refetch();
     jdsQuery.refetch();
   };
 
@@ -147,6 +148,12 @@ export default function InterviewIndexPage() {
   // card when it's selected, or in the banner when it isn't.
   const hasSet = new Set(jdOptions.map((o) => o.jd_id));
   const preparing = Object.entries(pending).filter(([id]) => !hasSet.has(id)).map(([, title]) => title);
+  // A first set that failed (out of credits, say) has no card to show its
+  // error on, so it used to vanish with the "preparing" banner.
+  const jdTitle = new Map(jds.map((j) => [j.id, j.title]));
+  const firstSetErrors = Object.entries(prepErrors)
+    .filter(([id]) => !hasSet.has(id) && !(id in pending))
+    .map(([id, message]) => ({ id, title: jdTitle.get(id) ?? null, message }));
   const regeneratingElsewhere = Object.entries(pending)
     .filter(([id]) => hasSet.has(id) && id !== selectedJdId)
     .map(([, title]) => title);
@@ -159,6 +166,13 @@ export default function InterviewIndexPage() {
   // The selected JD's questions — everything below the switcher derives
   // from this, not myQuestions directly.
   const scopedQuestions = myQuestions.filter((q) => q.jd_id === selectedJdId);
+  // The saved résumé was edited after this set was written from it.
+  const resumeChanged = scopedQuestions.some((q) => q.resume_changed);
+  // Written follow-up answers are paid for, and a new set replaces them.
+  const answeredFollowups = scopedQuestions.reduce(
+    (n, q) => n + (q.followups ?? []).filter((f) => f.answer).length,
+    0,
+  );
 
   // The run "Next mock" opens: the selected JD's (one run per JD in this
   // list). Only runs with questions appear here, so it never opens an
@@ -176,8 +190,9 @@ export default function InterviewIndexPage() {
 
   // Overall readiness (progressive — each milestone = +20 pts, practice fills last 40).
   // Interview readiness only starts once actual prep work exists — a JD
-  // analyzed, questions generated (via JD tailoring or this tab), a practice
-  // session started. Merely uploading a resume in My Profile does not count.
+  // analyzed, a résumé tailored to one, questions made. Merely uploading a
+  // resume in My Profile does not count. sessionId is a completed tailoring
+  // run; it used to be shown as "Session started", which read as practice.
   const practiceScore  = myQuestions.length > 0 ? (answeredCount / myQuestions.length) * 40 : 0;
   const readinessScore = Math.round(
     (jds.length        > 0 ? 20 : 0) +
@@ -245,10 +260,11 @@ export default function InterviewIndexPage() {
   }
 
   // Shared by the laptop's right rail and the phone's strip.
+  // The same steps the score counts, so the list and the number agree.
   const milestones = [
-    { label: "Resume created", done: resumes.length > 0 },
     { label: "JD analyzed", done: jds.length > 0 },
-    { label: "Session started", done: !!sessionId },
+    { label: "Résumé tailored", done: !!sessionId },
+    { label: "Questions ready", done: hasAnyQuestions },
     { label: "Questions practiced", done: answeredCount > 0 },
   ];
   const strengths = (overlapSkills.length > 0 ? overlapSkills : runIsForThisJd ? matchedSkills : []).slice(0, 3);
@@ -292,6 +308,20 @@ export default function InterviewIndexPage() {
             </span>
           </div>
         )}
+        {firstSetErrors.map((e) => (
+          <div
+            key={e.id}
+            role="alert"
+            className="flex flex-col sm:flex-row sm:items-center gap-xs sm:gap-sm rounded-2xl border border-error/25 bg-error-container/30 px-md py-sm text-body-sm text-on-surface"
+          >
+            <span className="min-w-0 flex-1">
+              Couldn&apos;t make interview questions{e.title ? ` for ${e.title}` : ""}: {e.message}
+            </span>
+            <Link href={`/jd/${e.id}`} className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline">
+              Open the JD <ArrowRight size={12} />
+            </Link>
+          </div>
+        ))}
         {regeneratingElsewhere.length > 0 && (
           <div
             role="status"
@@ -315,6 +345,8 @@ export default function InterviewIndexPage() {
             regenerating={selectedJd.jd_id in pending}
             error={prepErrors[selectedJd.jd_id] ?? null}
             cost={subscription?.costs?.prep_questions ?? 3}
+            resumeChanged={resumeChanged}
+            answeredFollowups={answeredFollowups}
           />
         )}
 
@@ -326,7 +358,7 @@ export default function InterviewIndexPage() {
             <div className="min-w-0">
               <p className="text-label-md text-on-surface font-semibold flex items-center gap-xs">
                 Readiness
-                <InfoTooltip text="20% each for analyzing a JD, generating questions, and starting a practice session, plus up to 40% based on how many of your questions you've marked practiced." />
+                <InfoTooltip text={READINESS_HELP} />
               </p>
               <p className="text-caption text-on-surface-variant">
                 {milestones.filter((m) => m.done).length} of {milestones.length} steps
@@ -492,7 +524,7 @@ export default function InterviewIndexPage() {
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
           <h3 className="text-headline-md text-on-surface mb-lg font-semibold flex items-center gap-sm">
             Overall Readiness
-            <InfoTooltip text="20% each for analyzing a JD, generating questions, and starting a practice session, plus up to 40% based on how many of your questions you've marked practiced." />
+            <InfoTooltip text={READINESS_HELP} />
           </h3>
 
           {/* Circular gauge */}
@@ -640,6 +672,17 @@ function NextMockCard({
   );
 }
 
+/** What a new set throws away, for Regenerate's confirmation. */
+function regenerateLosses(practiced: number, answeredFollowups: number): string {
+  const lost = [
+    practiced > 0 ? `practice progress (${practiced} done)` : null,
+    answeredFollowups > 0
+      ? `${answeredFollowups} written follow-up answer${answeredFollowups !== 1 ? "s" : ""}`
+      : null,
+  ].filter(Boolean);
+  return lost.length > 0 ? ` This JD's ${lost.join(" and ")} will be lost.` : "";
+}
+
 type JdOption = { jd_id: string; jd_title: string; total: number; practiced: number };
 
 function JdSwitcher({
@@ -650,6 +693,8 @@ function JdSwitcher({
   regenerating,
   error,
   cost,
+  resumeChanged,
+  answeredFollowups,
 }: {
   options: JdOption[];
   selected: JdOption;
@@ -658,6 +703,8 @@ function JdSwitcher({
   regenerating: boolean;
   error: string | null;
   cost: number;
+  resumeChanged: boolean;
+  answeredFollowups: number;
 }) {
   // Regenerate replaces the set (and its practice progress) and costs
   // credits, so it asks first — inline, right where the button was.
@@ -747,8 +794,8 @@ function JdSwitcher({
           <p className="flex-1 min-w-0 text-body-sm text-on-surface">
             Replace these {selected.total} questions with a new set?{" "}
             <span className="text-on-surface-variant">
-              Costs {cost} credit{cost !== 1 ? "s" : ""}
-              {selected.practiced > 0 ? `; your practice progress on this JD (${selected.practiced} done) starts over` : ""}.
+              Costs {cost} credit{cost !== 1 ? "s" : ""}.
+              {regenerateLosses(selected.practiced, answeredFollowups)}
             </span>
           </p>
           <div className="flex gap-sm shrink-0">
@@ -790,6 +837,11 @@ function JdSwitcher({
             View JD <ArrowRight size={12} />
           </Link>
         </div>
+      )}
+      {resumeChanged && !confirming && !regenerating && (
+        <p className="text-caption text-on-surface-variant">
+          The résumé for this job was edited after these questions were made. Regenerate to match it.
+        </p>
       )}
       {error && !regenerating && <p className="text-caption text-error">{error}</p>}
     </section>

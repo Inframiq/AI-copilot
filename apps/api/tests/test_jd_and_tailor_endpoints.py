@@ -1242,7 +1242,8 @@ async def test_get_my_questions_annotates_each_question_with_its_jd():
     override, mock_session = make_mock_db()
     sessions_result = MagicMock()
     sessions_result.all.return_value = [
-        SimpleNamespace(id=session_id, jd_id=jd_id, title="Senior Backend Engineer — Acme")
+        SimpleNamespace(id=session_id, jd_id=jd_id, title="Senior Backend Engineer — Acme",
+                        tailored_resume_id=None)
     ]
     questions_result = MagicMock()
     questions_result.scalars.return_value.all.return_value = [question]
@@ -1266,6 +1267,55 @@ async def test_get_my_questions_annotates_each_question_with_its_jd():
         assert [(f["position"], f["question"], f["answer"]) for f in body[0]["followups"]] == [
             (1, "How did you handle partitions?", None)
         ]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("saved_now, written_from, expected", [
+    ({"summary": "edited after"}, {"summary": "as saved"}, True),
+    # Same content, keys in another order: not an edit.
+    ({"b": 1, "a": 2}, {"a": 2, "b": 1}, False),
+    # An older set (no fingerprint) is never reported as changed.
+    ({"summary": "anything"}, None, False),
+])
+async def test_get_my_questions_says_when_the_saved_resume_was_edited_since(saved_now, written_from, expected):
+    from app.db.models import PrepQuestion
+    from app.services.prep_questions import resume_fingerprint
+    from types import SimpleNamespace
+
+    session_id, jd_id, resume_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    question = PrepQuestion(
+        id=uuid.uuid4(), session_id=session_id, topic="Technical", question="Q",
+        answer_framework="", is_gap_based=False, source="requirement", basis="", order_index=1,
+        interviewer_intent="Mid level: ownership of a component end to end.",
+        resume_fingerprint=resume_fingerprint(written_from) if written_from is not None else None,
+    )
+    override, mock_session = make_mock_db()
+    sessions_result = MagicMock()
+    sessions_result.all.return_value = [
+        SimpleNamespace(id=session_id, jd_id=jd_id, title="JD", tailored_resume_id=resume_id)
+    ]
+    resumes_result = MagicMock()
+    resumes_result.all.return_value = [SimpleNamespace(id=resume_id, content=saved_now)]
+    questions_result = MagicMock()
+    questions_result.scalars.return_value.all.return_value = [question]
+    followups_result = MagicMock()
+    followups_result.scalars.return_value.all.return_value = []
+    mock_session.execute = AsyncMock(
+        side_effect=[sessions_result, resumes_result, questions_result, followups_result]
+    )
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/ai/questions/mine", headers=make_auth_header())
+        assert r.status_code == 200
+        assert r.json()[0]["resume_changed"] is expected
+        assert r.json()[0]["interviewer_intent"] == "Mid level: ownership of a component end to end."
+        # The saved résumé is looked up as this user's only.
+        resume_query = str(mock_session.execute.call_args_list[1].args[0])
+        assert "resumes.user_id" in resume_query
     finally:
         app.dependency_overrides.pop(get_db, None)
 

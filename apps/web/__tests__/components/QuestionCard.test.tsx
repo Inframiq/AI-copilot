@@ -73,6 +73,19 @@ describe("QuestionCard", () => {
     expect(within(chain).getByRole("button", { name: /Write a likely answer · 3 credits/ })).toBeTruthy();
   });
 
+  it("shows what the question tests before any answer is opened", () => {
+    renderCard(question({ interviewer_intent: "Mid level: owning a pipeline end to end." }));
+
+    expect(screen.getByText("What they're testing:")).toBeTruthy();
+    expect(screen.getByText("Mid level: owning a pipeline end to end.")).toBeTruthy();
+  });
+
+  it("older sets with nothing on what is tested show no empty label", () => {
+    renderCard(question({ interviewer_intent: null }));
+
+    expect(screen.queryByText("What they're testing:")).toBeNull();
+  });
+
   it("asks before the first paid answer, then writes it and shows the next follow-up", async () => {
     vi.mocked(apiClient.answerFollowup).mockResolvedValue([
       { id: "f1", position: 1, question: "How did you catch mismatches?", answer: "Direct answer: nightly diffs." },

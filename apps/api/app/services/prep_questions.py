@@ -13,6 +13,8 @@ happened to fetch it again.
 They hang off the tailoring run (PrepQuestion.session_id) that produced the
 saved résumé, but are written from the résumé as saved, edits included.
 """
+import hashlib
+import json
 import logging
 import uuid
 from datetime import timedelta
@@ -31,6 +33,15 @@ from app.services.tailoring import (
 )
 
 logger = logging.getLogger("app")
+
+
+def resume_fingerprint(content: dict | None) -> str:
+    """sha256 of a résumé's content, key order ignored. Stored with a set so
+    the Interview Center can tell when the saved résumé has been edited since
+    (the Studio keeps autosaving into it). Content only: a template or
+    spacing change is not an edit the questions care about."""
+    canonical = json.dumps(content or {}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def sessions_with_questions():
@@ -106,21 +117,27 @@ async def generate_for_session(
         except Exception:
             jd_analysis = None
 
+    written_from = resume_content or session.tailored_content or {}
     async with record_ai_usage(session.user_id, "prep_questions"):
         if jd_analysis is None:
             jd_analysis = await _agent1_parse_jd(jd.raw_text, provider)
         questions = await get_or_generate_prep_questions(
             session.missing_skills or [],
-            resume_content or session.tailored_content or {},
+            written_from,
             provider,
             db,
             jd_analysis=jd_analysis,
+            # The target company saved beside Tailor: without it a "why this
+            # company" question could only ever say "this role".
+            company_name=jd.company_name,
             matched_skills=session.matched_skills or [],
         )
+    fingerprint = resume_fingerprint(written_from)
     rows = [
         PrepQuestion(
             id=uuid.uuid4(), session_id=session.id, topic=q.topic, question=q.question,
             answer_framework=q.answer_framework, likely_answer=q.likely_answer or None,
+            interviewer_intent=q.interviewer_intent or None, resume_fingerprint=fingerprint,
             is_gap_based=q.is_gap_based, source=q.source, basis=q.basis, order_index=q.order_index,
         )
         for q in questions

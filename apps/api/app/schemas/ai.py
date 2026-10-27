@@ -75,6 +75,8 @@ class PrepQuestionOut(BaseModel):
     answer_framework: str
     # "Label: text" lines in a coaching voice; null on older sets.
     likely_answer: str | None = None
+    # What the question tests, at what level; null on older sets.
+    interviewer_intent: str | None = None
     # The follow-up chain, in order. Only the last one can be unanswered.
     followups: list[PrepFollowupOut] = []
     is_gap_based: bool
@@ -91,6 +93,9 @@ class PrepQuestionOut(BaseModel):
 class PrepQuestionWithJdOut(PrepQuestionOut):
     jd_id: uuid.UUID
     jd_title: str
+    # The JD's saved résumé has been edited since this set was written from
+    # it. False when unknown (older sets, or the saved résumé is gone).
+    resume_changed: bool = False
 
 
 class LearningItemIn(BaseModel):

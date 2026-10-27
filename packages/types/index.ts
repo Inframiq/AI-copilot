@@ -215,6 +215,8 @@ export interface PrepQuestionOut {
   answer_framework: string;
   // "Label: text" lines in a coaching voice; null on older sets.
   likely_answer?: string | null;
+  // What the question tests and at what level; null on older sets.
+  interviewer_intent?: string | null;
   // The follow-up chain, in order. Only the last one can be unanswered.
   followups?: PrepFollowupOut[];
   is_gap_based: boolean;
@@ -234,6 +236,8 @@ export interface PrepQuestionOut {
 export interface PrepQuestionWithJdOut extends PrepQuestionOut {
   jd_id: string;
   jd_title: string;
+  // The JD's saved résumé was edited after this set was written from it.
+  resume_changed?: boolean;
 }
 
 export interface LearningItem {

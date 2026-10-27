@@ -228,12 +228,14 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
     # The set check, the run's lock, the set check again under the lock.
     db.execute = AsyncMock(side_effect=[_scalars([]), MagicMock(), _scalars([])])
     db.commit = AsyncMock(); db.refresh = AsyncMock(); db.flush = AsyncMock(); db.add_all = MagicMock()
-    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}
+    jd = make_jd(); jd.parsed = {"agent1": _AGENT1}; jd.company_name = "Acme"
     sess = _session()
     saved = {"experience": ["as saved"]}
+    out = _gen_out()
+    out[0].interviewer_intent = "Mid level: owning a pipeline end to end."
 
     with patch.object(prep_questions, "get_or_generate_prep_questions",
-                      new=AsyncMock(return_value=_gen_out())) as gen, \
+                      new=AsyncMock(return_value=out)) as gen, \
          patch.object(prep_questions, "_agent1_parse_jd", new=AsyncMock()) as parse, \
          patch.object(prep_questions, "get_ai_provider", return_value=MagicMock()), \
          patch.object(prep_questions, "record_ai_usage"):
@@ -246,6 +248,11 @@ async def test_generation_writes_questions_from_the_saved_resume_and_cached_anal
     args, kwargs = gen.call_args
     assert args[0] == ["AWS"] and args[1] == saved  # the résumé as saved, not the raw run
     assert kwargs["jd_analysis"].core_responsibilities == ["Own the pipeline"]
+    # The target company saved for the JD reaches the generator.
+    assert kwargs["company_name"] == "Acme"
+    # What the question tests is kept, and so is which résumé it came from.
+    assert rows[0].interviewer_intent == "Mid level: owning a pipeline end to end."
+    assert rows[0].resume_fingerprint == prep_questions.resume_fingerprint(saved)
     (questions,), (followups,) = [c.args for c in db.add_all.call_args_list]
     assert questions == rows
     # Each question's first follow-up is stored with it, unanswered.

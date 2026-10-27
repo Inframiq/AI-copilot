@@ -221,6 +221,12 @@ class PrepQuestion(Base):
     # "Label: text" lines, built from the résumé, hedged ("for example…")
     # where the résumé is silent. Written with the question set.
     likely_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What the question tests and at what level, shown as "What they're
+    # testing". Null on sets made before it was kept (migration 052).
+    interviewer_intent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # sha256 of the saved résumé's content the set was written from — see
+    # services/prep_questions.resume_fingerprint. Null on older sets.
+    resume_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_gap_based: Mapped[bool] = mapped_column(Boolean, default=True)
     # "requirement" (seeded from a JD core_responsibilities entry) |
     # "overlap" (seeded from a matched_skill + real resume evidence) |
