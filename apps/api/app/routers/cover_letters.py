@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from supabase import create_client
 from app.core.config import settings
 from app.db.session import get_db, AsyncSessionLocal
@@ -235,6 +235,29 @@ async def list_cover_letters(user=Depends(get_current_user), db: AsyncSession = 
     return result.scalars().all()
 
 
+async def _numbered_title(db: AsyncSession, letter: CoverLetter, title: str) -> str:
+    """The lowest free "<title> (n)" among the job's saved letters. One
+    numbering at a time per job (a lock held until the save commits): two
+    letters saved at once both found "(2)" free and both took it."""
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"kripax:letters:{letter.user_id}:{letter.jd_id}"},
+    )
+    taken = set(
+        (
+            await db.execute(
+                select(CoverLetter.title).where(
+                    CoverLetter.user_id == letter.user_id,
+                    CoverLetter.jd_id == letter.jd_id,
+                    CoverLetter.saved_at.is_not(None),
+                    CoverLetter.id != letter.id,
+                )
+            )
+        ).scalars().all()
+    )
+    return first_free_title(title, taken)
+
+
 @router.patch("/{cover_letter_id}", response_model=CoverLetterOut)
 async def update_cover_letter(
     cover_letter_id: uuid.UUID,
@@ -242,14 +265,31 @@ async def update_cover_letter(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Locked, so two saves of this letter (two tabs) can't both pass the
+    # version check below: the second waits, then sees the first's saved_at.
     result = await db.execute(
         select(CoverLetter).where(
             CoverLetter.id == cover_letter_id, CoverLetter.user_id == uuid.UUID(user["sub"])
-        )
+        ).with_for_update()
     )
     letter = result.scalar_one_or_none()
     if not letter:
         raise HTTPException(status_code=404, detail="Cover letter not found")
+    expected = body.expected_saved_at
+    if expected is not None and letter.saved_at is not None:
+        if expected.tzinfo is None:
+            expected = expected.replace(tzinfo=timezone.utc)
+        if letter.saved_at != expected:
+            # Saved elsewhere since this editor loaded it. Its saved_at goes
+            # back so "keep mine" can save over exactly that version.
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "letter_changed",
+                    "message": "This letter was saved in another tab or device.",
+                    "saved_at": letter.saved_at.isoformat(),
+                },
+            )
     # The editor's Save: the only thing that keeps a letter.
     letter.content = body.content
     title = body.title.strip() if body.title and body.title.strip() else letter.title
@@ -259,19 +299,7 @@ async def update_cover_letter(
     # is reused rather than doubled up. Done at save, so drafts nobody kept
     # use no numbers, and a name the user chose is left as they wrote it.
     if letter.saved_at is None and title and title == letter.title:
-        taken = set(
-            (
-                await db.execute(
-                    select(CoverLetter.title).where(
-                        CoverLetter.user_id == letter.user_id,
-                        CoverLetter.jd_id == letter.jd_id,
-                        CoverLetter.saved_at.is_not(None),
-                        CoverLetter.id != letter.id,
-                    )
-                )
-            ).scalars().all()
-        )
-        title = first_free_title(title, taken)
+        title = await _numbered_title(db, letter, title)
     letter.title = title
     letter.saved_at = datetime.now(timezone.utc)
     await db.commit()

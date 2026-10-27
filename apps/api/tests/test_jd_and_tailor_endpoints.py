@@ -701,6 +701,14 @@ async def test_analyze_uses_content_override_when_provided():
         app.dependency_overrides.pop(get_db, None)
 
 
+def _locked(jd):
+    """The JD read again under its row lock before analyze writes its cache
+    (a second tab's analysis may have stored one meanwhile)."""
+    r = MagicMock()
+    r.scalar_one.return_value = jd
+    return r
+
+
 @pytest.mark.asyncio
 async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
     """Second analyze of the same resume+JD must not re-run the semantic
@@ -715,7 +723,7 @@ async def test_analyze_reuses_cached_semantic_verdicts_when_resume_unchanged():
     def _rows():
         rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
         jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-        return [rr, jr]
+        return [rr, jr, _locked(jd)]
 
     mock_session.execute = AsyncMock(side_effect=_rows() + _rows())
 
@@ -783,7 +791,7 @@ async def test_analyze_charges_a_credit_only_when_a_model_ran(ledger):
         jd.parsed = {}
         rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
         jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-        mock_session.execute = AsyncMock(side_effect=[rr, jr])
+        mock_session.execute = AsyncMock(side_effect=[rr, jr, _locked(jd)])
         app.dependency_overrides[get_db] = override
         try:
             with patch("app.routers.ai.analyze_jd_match", new=analyze),                  usage_log_offline():
@@ -818,7 +826,7 @@ async def test_a_fully_cached_analysis_is_free_even_at_zero_credits(ledger):
     override, mock_session = make_mock_db()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    mock_session.execute = AsyncMock(side_effect=[rr, jr, _locked(jd)])
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(return_value=fake)) as run:
@@ -840,7 +848,7 @@ async def test_analyze_refunds_when_the_model_call_fails(ledger):
     jd.parsed = {}
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    mock_session.execute = AsyncMock(side_effect=[rr, jr, _locked(jd)])
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.ai.analyze_jd_match", new=AsyncMock(side_effect=RuntimeError("boom"))):
@@ -864,7 +872,7 @@ async def test_analyze_returns_importance_map():
     jd = make_jd()
     rr = MagicMock(); rr.scalar_one_or_none.return_value = resume
     jr = MagicMock(); jr.scalar_one_or_none.return_value = jd
-    mock_session.execute = AsyncMock(side_effect=[rr, jr])
+    mock_session.execute = AsyncMock(side_effect=[rr, jr, _locked(jd)])
 
     fake = JDMatchAnalysis(
         jd_analysis=JDAnalysis(

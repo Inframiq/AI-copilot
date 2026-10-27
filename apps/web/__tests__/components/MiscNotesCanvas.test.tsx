@@ -30,7 +30,10 @@ function renderCanvas() {
 async function typeAndSave(text: string) {
   renderCanvas();
   const user = userEvent.setup();
-  await user.type(await screen.findByRole("textbox", { name: "Your note" }), text);
+  // Pasted, not typed key by key: each keystroke re-renders the canvas, and
+  // typing whole notes pushed tests past the 5 s limit under a full run.
+  await user.click(await screen.findByRole("textbox", { name: "Your note" }));
+  await user.paste(text);
   await waitFor(() => expect(screen.getByRole("button", { name: /^save/i })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: /^save/i }));
   return user;
@@ -103,7 +106,10 @@ describe("MiscNotesCanvas", () => {
     expect(screen.getAllByText(/words ·/)).toHaveLength(1);
 
     const first = screen.getByRole("textbox", { name: "Point 1" });
-    await user.type(first, ", growing it from 12 to 40 members through weekly build nights and a regional competition entry");
+    // Pasted at the end of the point (see typeAndSave on why not typed).
+    await user.click(first);
+    await user.keyboard("{End}");
+    await user.paste(", growing it from 12 to 40 members through weekly build nights and a regional competition entry");
     expect(screen.getByText(/2[0-9] words · a good length/)).toBeTruthy();
   });
 

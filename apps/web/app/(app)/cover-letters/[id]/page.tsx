@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, DownloadSimple, Copy, FloppyDisk, Sparkle, Check, WarningCircle } from "@phosphor-icons/react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, isLetterChanged } from "@/lib/api-client";
 import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
@@ -64,12 +64,19 @@ export default function CoverLetterEditorPage({
   // The letter's name: after its JD, renamed in place in the heading.
   const [title, setTitle] = useState("");
   const [savedTitle, setSavedTitle] = useState("");
+  // The saved_at of the version on screen: a save from it is refused when the
+  // letter has been saved since in another tab or device (two tabs used to
+  // overwrite each other silently, the last save winning).
+  const [version, setVersion] = useState<string | null>(null);
+  // That refusal: the newer save's saved_at, for "keep mine".
+  const [conflict, setConflict] = useState<{ saved_at: string } | null>(null);
   useEffect(() => {
     if (letter?.status === "completed" && letter.content !== null && seededFor !== id) {
       setDraft(letter.content);
       setSavedContent(letter.content);
       setTitle(letter.title ?? "");
       setSavedTitle(letter.title ?? "");
+      setVersion(letter.saved_at ?? null);
       setSeededFor(id);
     }
   }, [letter, id, seededFor]);
@@ -91,10 +98,12 @@ export default function CoverLetterEditorPage({
   }, [unsaved]);
 
   /** Writes the draft to the server; false (with the error shown) on failure. */
-  async function persistDraft(): Promise<boolean> {
+  async function persistDraft(over?: string): Promise<boolean> {
     const content = draft;
     try {
-      const saved = await apiClient.updateCoverLetter(id, content, title.trim() || undefined);
+      const saved = await apiClient.updateCoverLetter(id, content, title.trim() || undefined, over ?? version);
+      setConflict(null);
+      setVersion(saved?.saved_at ?? null);
       setSavedContent(content);
       // The server may number it ("… (2)") beside the job's other letters.
       const name = saved?.title ?? title.trim();
@@ -106,16 +115,25 @@ export default function CoverLetterEditorPage({
       queryClient.invalidateQueries({ queryKey: ["coverLetter", id] });
       return true;
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
+      const changed = isLetterChanged(e);
+      if (changed) setConflict(changed);
+      else setError(e instanceof Error ? e.message : "Failed to save");
       return false;
     }
   }
 
-  async function handleSave() {
+  async function handleSave(over?: string) {
     setIsSaving(true);
     setError(null);
-    await persistDraft();
+    await persistDraft(over);
     setIsSaving(false);
+  }
+
+  /** Drops this editor's changes for the version saved elsewhere. */
+  async function loadSavedVersion() {
+    setConflict(null);
+    await queryClient.refetchQueries({ queryKey: ["coverLetter", id] });
+    setSeededFor(null);
   }
 
   async function handleRegenerate(nextHumanizeLevel: number) {
@@ -255,9 +273,33 @@ export default function CoverLetterEditorPage({
           disabled={isRegenerating || !letter.resume_id}
         />
         {error && <p className="text-caption text-error">{error}</p>}
+        {conflict && (
+          <div role="alert" className="flex flex-col sm:flex-row sm:items-center gap-sm rounded-xl border border-error/25 bg-error-container/30 px-md py-sm text-body-sm text-on-surface">
+            <span className="min-w-0 flex-1">
+              This letter was saved in another tab or device. Saving here would replace that version.
+            </span>
+            <div className="flex gap-sm shrink-0">
+              <button
+                type="button"
+                onClick={() => void loadSavedVersion()}
+                className="px-md py-xs rounded-lg border border-outline-variant/40 text-label-sm text-on-surface hover:bg-surface-container"
+              >
+                Load the saved version
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSave(conflict.saved_at)}
+                disabled={isSaving}
+                className="px-md py-xs rounded-lg bg-primary text-on-primary text-label-sm disabled:opacity-50"
+              >
+                Keep this version
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-sm">
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={isSaving || (isSaved && !isDirty)}
             className="flex items-center gap-xs px-md py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all disabled:opacity-50"
           >

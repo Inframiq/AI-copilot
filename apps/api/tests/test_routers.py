@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 import time
 import uuid
 import jwt as pyjwt
@@ -852,7 +853,8 @@ async def test_mark_question_practiced_sets_practiced_at():
         source="gap",
         basis="",
         order_index=0,
-        practiced_at=None,
+        # As the UPDATE ... RETURNING gives it back.
+        practiced_at=datetime.now(timezone.utc),
     )
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = question
@@ -867,7 +869,11 @@ async def test_mark_question_practiced_sets_practiced_at():
             )
         assert r.status_code == 200
         assert r.json()["practiced_at"] is not None
-        assert question.practiced_at is not None
+        # One statement: marked only if it is this user's question — read
+        # then written, a set replaced in between failed the write.
+        marked = str(mock_session.execute.call_args_list[0].args[0])
+        assert marked.startswith("UPDATE prep_questions SET practiced_at")
+        assert "tailoring_sessions.user_id" in marked
     finally:
         app.dependency_overrides.pop(get_db, None)
 

@@ -41,6 +41,10 @@ class CoverLetterUpdate(BaseModel):
     content: str = Field(max_length=20000)
     # A new name; omitted or blank keeps the current one.
     title: str | None = Field(default=None, max_length=255)
+    # The saved_at this editor loaded or last saved. When the letter has been
+    # saved since (another tab or device), the save is refused with 409
+    # letter_changed instead of overwriting it. Omitted: saved regardless.
+    expected_saved_at: datetime | None = None
 
 
 class CoverLetterPdfRequest(BaseModel):

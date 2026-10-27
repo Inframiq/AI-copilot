@@ -67,6 +67,16 @@ export function isResumeChanged(err: unknown): { updated_at: string } | null {
   return { updated_at: d.updated_at };
 }
 
+/** The refusal of a save made from an out-of-date copy of a cover letter —
+ * another tab or device saved it since. Carries that save's saved_at, which
+ * "keep mine" sends to save over exactly it. */
+export function isLetterChanged(err: unknown): { saved_at: string } | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const d = err.detail as { code?: unknown; saved_at?: unknown } | null;
+  if (!d || typeof d !== "object" || d.code !== "letter_changed" || typeof d.saved_at !== "string") return null;
+  return { saved_at: d.saved_at };
+}
+
 /** A server `detail` as words: itself when it's a string, its `message`
  * when it's a structured one. */
 function detailMessage(detail: unknown, fallback: string): string {
@@ -344,8 +354,17 @@ export const apiClient = {
     request<JDCoverLetter>("GET", `/jd/${jdId}/cover-letter`),
 
   // Save: keeps the letter (and its name, when given).
-  updateCoverLetter: (id: string, content: string, title?: string): Promise<CoverLetter> =>
-    request<CoverLetter>("PATCH", `/cover-letters/${id}`, title !== undefined ? { content, title } : { content }),
+  /** expectedSavedAt: the saved_at this editor holds. When the letter was
+   * saved since (another tab or device) the server refuses with 409
+   * `letter_changed` instead of overwriting — see isLetterChanged. */
+  updateCoverLetter: (
+    id: string, content: string, title?: string, expectedSavedAt?: string | null,
+  ): Promise<CoverLetter> =>
+    request<CoverLetter>("PATCH", `/cover-letters/${id}`, {
+      content,
+      ...(title !== undefined ? { title } : {}),
+      ...(expectedSavedAt ? { expected_saved_at: expectedSavedAt } : {}),
+    }),
 
   // With `content`, renders that text as is and keeps nothing on the server —
   // how an unsaved draft downloads without being saved.

@@ -593,7 +593,8 @@ async def _first_save(letter, taken: list, title: str | None = None):
     found.scalar_one_or_none.return_value = letter
     titles = MagicMock()
     titles.scalars.return_value.all.return_value = taken
-    mock_session.execute = AsyncMock(side_effect=[found, titles])
+    # The letter (locked), the job's numbering lock, the names taken.
+    mock_session.execute = AsyncMock(side_effect=[found, MagicMock(), titles])
     app.dependency_overrides[get_db] = override
     try:
         body = {"content": "x"} if title is None else {"content": "x", "title": title}

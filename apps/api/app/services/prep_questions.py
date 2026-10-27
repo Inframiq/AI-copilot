@@ -387,6 +387,28 @@ async def answer_followup_for_user(
             detail="Couldn't write this answer. No credits were used — try again.",
         )
 
+    # The set can be replaced while the answer was being written — Regenerate,
+    # or a new résumé's set, in another tab — and its follow-ups go with it.
+    # Writing on regardless failed after the credits were taken (the next
+    # follow-up pointed at a question that was gone). Lock the question
+    # (FOR KEY SHARE: a delete of it waits for this) and then the follow-up,
+    # in the order a delete takes them, so the two can't deadlock; if either
+    # is gone, nothing is written and the credits come back.
+    still_there = (
+        await db.execute(
+            select(PrepQuestion.id).where(PrepQuestion.id == qid).with_for_update(read=True, key_share=True)
+        )
+    ).scalar_one_or_none() and (
+        await db.execute(select(PrepFollowup.id).where(PrepFollowup.id == fid).with_for_update())
+    ).scalar_one_or_none()
+    if not still_there:
+        await db.rollback()
+        await refund_credits(db, user_id, "followup_answer", email=email)
+        await db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail="This question was replaced by a new set while the answer was being written. No credits were used.",
+        )
     await db.execute(
         update(PrepFollowup).where(PrepFollowup.id == fid)
         .values(answer=answer, claimed_at=None)

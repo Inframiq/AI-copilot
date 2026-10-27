@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.db.session import get_db
+from app.db.session import get_db, read_from_one_snapshot
 from app.db.models import JobDescription, TailoringSession, PrepQuestion, CoverLetter, Resume
 from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
@@ -194,6 +194,7 @@ async def get_jd_details(jd_id: uuid.UUID, user=Depends(get_current_user), db: A
     and its interview prep progress — so the JD detail page can show them
     directly instead of the user having to re-tailor or dig through
     Interview Center to find work already done for this JD."""
+    await read_from_one_snapshot(db)
     uid = uuid.UUID(user["sub"])
     jd = await _require_own_jd(db, jd_id, uid)
     result = await db.execute(

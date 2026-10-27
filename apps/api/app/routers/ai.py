@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import attributes
-from app.db.session import get_db, AsyncSessionLocal
+from app.db.session import get_db, AsyncSessionLocal, read_from_one_snapshot
 from app.db.models import Resume, JobDescription, TailoringSession, PrepQuestion, PrepFollowup
 from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
@@ -138,9 +138,21 @@ async def analyze_jd(
     # Persist Agent 1 + semantic verdicts so future no-company analyses are
     # deterministic (same JD text → same skill list, same resume → same score).
     if not body.company_name:
+        # Merged into the cache as it is now, under the JD's row lock — not
+        # written back from the copy read before the model ran. Two analyses
+        # (two tabs) or an analysis and a tailor finishing together each
+        # wrote their stale copy whole, so the later one replaced the cached
+        # Agent 1 parse the first had stored: the parse the displayed score
+        # was computed from, which is never to be overwritten.
+        jd_row = (
+            await db.execute(
+                select(JobDescription).where(JobDescription.id == jd_row.id).with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
         existing = dict(jd_row.parsed) if jd_row.parsed else {}
         changed = False
-        if not raw_cached:
+        if not existing.get("agent1"):
             existing["agent1"] = analysis.jd_analysis.model_dump()
             changed = True
         if resume_fp and cached_semantic_verdicts is None:
@@ -152,7 +164,7 @@ async def analyze_jd(
         if changed:
             jd_row.parsed = existing
             attributes.flag_modified(jd_row, "parsed")
-            await db.commit()
+        await db.commit()  # writes it, or just lets the lock go
 
     return AnalyzeOut(
         ats_score=analysis.ats_score,
@@ -247,9 +259,11 @@ async def _run_tailoring_background(
         # existing cache: it is what the user's displayed score was computed
         # from, and replacing it would make the number jump for no reason.
         if result.jd_analysis is not None and not company_name:
+            # Locked: an analysis finishing at the same moment checks and
+            # writes the same cache (see analyze_jd above).
             jd_row = (
                 await session_db.execute(
-                    select(JobDescription).where(JobDescription.id == row.jd_id)
+                    select(JobDescription).where(JobDescription.id == row.jd_id).with_for_update()
                 )
             ).scalar_one_or_none()
             if jd_row is not None and not (jd_row.parsed or {}).get("agent1"):
@@ -726,6 +740,7 @@ async def get_questions(session_id: uuid.UUID, user=Depends(get_current_user), d
     never by viewing them: this used to generate on first view, which only
     the per-session page ever triggered, so the Interview Center (which
     lists, never generates) showed nothing for new runs."""
+    await read_from_one_snapshot(db)
     uid = uuid.UUID(user["sub"])
     session = (
         await db.execute(
@@ -775,6 +790,7 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
     the set that exists. Powers Interview Center's "categorize by JD"
     grouping and its JD filter; both are computed client-side off this one
     list rather than a separate endpoint per JD."""
+    await read_from_one_snapshot(db)
     uid = uuid.UUID(user["sub"])
 
     latest_per_jd = latest_with_questions_per_jd(uid)
@@ -842,21 +858,26 @@ async def get_my_questions(user=Depends(get_current_user), db: AsyncSession = De
 async def mark_question_practiced(
     question_id: uuid.UUID, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(PrepQuestion)
-        .join(TailoringSession)
-        .where(
-            PrepQuestion.id == question_id,
-            TailoringSession.user_id == uuid.UUID(user["sub"]),
+    # One statement: the user's own question, marked, or nothing. Read then
+    # written, a set replaced in another tab in between (Regenerate) made the
+    # write fail on a row that was gone — an error instead of a 404.
+    question = (
+        await db.execute(
+            update(PrepQuestion)
+            .where(
+                PrepQuestion.id == question_id,
+                PrepQuestion.session_id.in_(
+                    select(TailoringSession.id).where(TailoringSession.user_id == uuid.UUID(user["sub"]))
+                ),
+            )
+            .values(practiced_at=datetime.now(timezone.utc))
+            .returning(PrepQuestion)
+            .execution_options(synchronize_session=False)
         )
-    )
-    question = result.scalar_one_or_none()
+    ).scalar_one_or_none()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-
-    question.practiced_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(question)
     chains = await followups_by_question(db, [question.id])
     return _question_out(question, chains.get(question.id, []))
 
