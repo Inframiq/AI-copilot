@@ -1,14 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CaretDown, Check, CircleNotch, Coins, X } from "@phosphor-icons/react";
+import { CaretDown, Check, CircleNotch } from "@phosphor-icons/react";
 import type { PrepFollowupOut, PrepQuestionOut, PrepQuestionWithJdOut, Subscription } from "@career-copilot/types";
 import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
+import { Sheet } from "@/components/ui/Sheet";
+import { FOCUS_RING } from "@/lib/focus";
 
-/** Where a question came from, as the label before its basis. */
-export function sourceLabel(source: string): string {
-  return source === "overlap" ? "From your resume:" : source === "gap" ? "Bridging a gap:" : "From the JD:";
+/** Where a question came from: the small label above or beside it, in the
+ * Interview Center, on this card and in "Make interview questions?". */
+export function questionSource(source: string): { label: string; tone: string } {
+  if (source === "overlap") return { label: "From your résumé", tone: "text-primary" };
+  if (source === "gap") return { label: "Bridging a gap", tone: "text-tertiary" };
+  return { label: "From the job", tone: "text-secondary" };
 }
 
 /** What to say when "Mark as practiced" didn't save (the tick is undone). */
@@ -125,29 +130,30 @@ export function QuestionCard({ question, practiced }: { question: PrepQuestionOu
   return (
     <Card className="flex flex-col gap-md">
       <div className="flex items-center justify-between gap-sm">
-        <span className="px-sm py-xs pill rounded-full bg-secondary-container text-on-secondary-container text-label-sm">
+        <span className="px-sm py-0.5 rounded-md bg-surface-container text-on-surface-variant text-label-sm">
           {question.topic}
         </span>
         {practiced && (
-          <span className="inline-flex items-center gap-xs px-sm py-xs rounded-full bg-success-accent/10 text-success-accent text-label-sm">
+          <span className="inline-flex items-center gap-xs px-sm py-0.5 rounded-full bg-success-container text-on-success-container text-label-sm">
             <Check size={12} weight="bold" /> Practiced
           </span>
         )}
       </div>
 
-      <p className="text-body-lg sm:text-headline-md text-on-surface font-medium">{question.question}</p>
-
-      {question.basis && (
-        <p className="text-caption text-primary/80 flex items-start gap-xs">
-          <span className="shrink-0 font-semibold">{sourceLabel(question.source)}</span>
-          <span className="text-on-surface-variant">{question.basis}</span>
+      <div className="flex flex-col gap-xs">
+        <p className="flex flex-wrap items-baseline gap-x-xs">
+          <span className={`font-label-caps text-label-caps uppercase ${questionSource(question.source).tone}`}>
+            {questionSource(question.source).label}
+          </span>
+          {question.basis && <span className="text-caption text-on-surface-variant">· {question.basis}</span>}
         </p>
-      )}
+        <p className="text-body-lg sm:text-[20px] sm:leading-snug text-on-surface font-medium">{question.question}</p>
+      </div>
 
       {/* Shown before the answer: knowing what is being tested is part of
           answering well. Older sets have none. */}
       {question.interviewer_intent?.trim() && (
-        <p className="text-caption flex items-start gap-xs">
+        <p className="text-body-sm flex items-start gap-xs rounded-lg bg-surface-container-low px-sm py-xs">
           <span className="shrink-0 font-semibold text-on-surface">What they&apos;re testing:</span>
           <span className="text-on-surface-variant">{question.interviewer_intent.trim()}</span>
         </p>
@@ -236,64 +242,41 @@ export function QuestionCard({ question, practiced }: { question: PrepQuestionOu
 function FollowupCostDialog({
   cost, onCancel, onConfirm,
 }: { cost: number; onCancel: () => void; onConfirm: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   return (
-    <>
-      <div className="fixed inset-0 z-[70] bg-on-surface/30 backdrop-blur-sm" onClick={onCancel} />
-      <div className="fixed inset-0 z-[71] flex items-end sm:items-center justify-center p-sm sm:p-lg pointer-events-none">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="followup-cost-title"
-          aria-describedby="followup-cost-help"
-          className="pointer-events-auto w-full max-w-[28rem] bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl"
-        >
-          <div className="p-md sm:p-lg pb-sm flex items-start gap-md">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Coins size={20} className="text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 id="followup-cost-title" className="text-headline-md text-on-surface font-semibold">
-                Follow-up answers use credits
-              </h2>
-              <p id="followup-cost-help" className="text-body-sm text-on-surface-variant mt-xs">
-                Each follow-up answer costs {cost} credits. It is written from your résumé for this job and
-                adds the next follow-up an interviewer is likely to ask.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="Close"
-              className="shrink-0 p-xs -m-xs rounded-full text-on-surface-variant hover:bg-surface-container-high/50"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          <div className="p-md sm:p-lg pt-sm flex gap-sm">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 py-sm rounded-xl border border-outline-variant/40 text-label-md text-on-surface hover:bg-surface-container"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              autoFocus
-              onClick={onConfirm}
-              className="flex-1 py-sm rounded-xl bg-primary text-on-primary text-label-md font-semibold hover:opacity-90"
-            >
-              Write answer · {cost} credits
-            </button>
-          </div>
+    <Sheet labelledBy="followup-cost-title" describedBy="followup-cost-help" onClose={onCancel}>
+      <div className="px-md sm:px-lg pt-md sm:pt-lg pb-md sm:pb-lg flex flex-col gap-md">
+        <div className="pr-xl">
+          <p className="font-label-caps text-label-caps uppercase text-primary">Follow-up answer</p>
+          <h2 id="followup-cost-title" className="mt-sm text-headline-md text-on-surface">
+            Follow-up answers use credits
+          </h2>
+          <p id="followup-cost-help" className="mt-xs text-body-sm text-on-surface-variant">
+            Written from your résumé for this job, with the next follow-up an interviewer is likely to ask.
+            Asked only this once.
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-md border-y border-outline-variant/40 py-sm">
+          <span className="text-body-sm text-on-surface">Each answer</span>
+          <span className="text-label-md text-on-surface tabular-nums">{cost} credits</span>
+        </div>
+        <div className="flex gap-sm">
+          <button
+            type="button"
+            onClick={onCancel}
+            className={`flex-1 py-sm rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-autofocus
+            onClick={onConfirm}
+            className={`flex-[1.4] py-sm rounded-lg bg-primary text-on-primary text-label-md font-semibold hover:bg-primary-container ${FOCUS_RING}`}
+          >
+            Write answer · {cost} credits
+          </button>
         </div>
       </div>
-    </>
+    </Sheet>
   );
 }

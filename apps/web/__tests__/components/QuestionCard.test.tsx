@@ -96,7 +96,9 @@ describe("QuestionCard", () => {
     await userEvent.click(screen.getByRole("button", { name: /Write a likely answer/ }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/costs 3 credits/)).toBeTruthy();
+    // The price, as its own line: each answer, 3 credits.
+    expect(within(dialog).getByText("Each answer")).toBeTruthy();
+    expect(within(dialog).getByText("3 credits")).toBeTruthy();
     expect(apiClient.answerFollowup).not.toHaveBeenCalled();
     await userEvent.click(within(dialog).getByRole("button", { name: "Write answer · 3 credits" }));
 

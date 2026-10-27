@@ -20,7 +20,7 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions, offerPrepQuestions } from "@/stores/prep-questions-store";
 import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
-import { practiceSaveError } from "@/components/interview/QuestionCard";
+import { practiceSaveError, questionSource } from "@/components/interview/QuestionCard";
 import type { PrepQuestionWithJdOut, JobDescription, Subscription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
@@ -42,14 +42,6 @@ function classifyTopic(topic: string): Tab {
   return "HR & Culture";
 }
 
-/** Where a question came from — the small label above it. Same three kinds
- * the Studio's "Make interview questions?" names. */
-const SOURCE: Record<string, { label: string; tone: string }> = {
-  overlap: { label: "From your résumé", tone: "text-primary" },
-  requirement: { label: "From the job", tone: "text-secondary" },
-  gap: { label: "Bridging a gap", tone: "text-tertiary" },
-};
-const sourceOf = (s: string) => SOURCE[s] ?? SOURCE.requirement;
 
 export default function InterviewIndexPage() {
   const router    = useRouter();
@@ -374,7 +366,7 @@ export default function InterviewIndexPage() {
               <ol className="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 divide-y divide-outline-variant/25">
                 {tabQuestions.map((q) => {
                   const isPracticed = answeredSet.has(q.id);
-                  const src = sourceOf(q.source);
+                  const src = questionSource(q.source);
                   return (
                     <li key={q.id} className="p-md sm:p-lg flex flex-col gap-sm">
                       <div className="flex items-start justify-between gap-sm">

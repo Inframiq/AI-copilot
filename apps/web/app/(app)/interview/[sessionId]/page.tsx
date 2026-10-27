@@ -110,7 +110,7 @@ export default function InterviewPage({
         >
           <ArrowLeft size={14} /> Interview Center
         </Link>
-        <h1 className="text-headline-xl text-on-surface mb-xs">{jdTitle ?? "Interview Prep"}</h1>
+        <h1 className="text-headline-md sm:text-headline-lg text-on-surface mb-xs">{jdTitle ?? "Interview Prep"}</h1>
         <p className="text-body-lg text-on-surface-variant">
           {isLoading
             ? "Loading questions…"
