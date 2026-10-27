@@ -8,6 +8,9 @@ vi.mock("@/lib/api-client", () => ({
     getJdDetails: vi.fn(),
     getSubscription: vi.fn(),
     generateJdPrepQuestions: vi.fn(async () => ({ session_id: "run-1", questions_total: 9 })),
+    getPlans: vi.fn(async () => ({
+      plans: [{ id: "premium", name: "Premium", price_usd: 5, period: "month", credits: 600, refills: true, features: [] }],
+    })),
   },
 }));
 
@@ -52,10 +55,14 @@ describe("PrepQuestionsOffer", () => {
     offerPrepQuestions({ jdId: "jd-1", sessionId: "run-1", title: "Platform Engineer" });
     renderOffer();
 
-    const dialog = await screen.findByRole("dialog", { name: "Make interview questions for this job?" });
-    expect(dialog).toHaveTextContent(/for Platform Engineer/);
-    expect(dialog).toHaveTextContent(/Costs 5 credits/);
-    expect(await screen.findByText("Balance: 40 credits.")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "Make interview questions?" });
+    expect(dialog).toHaveTextContent(/For Platform Engineer, built from the résumé you saved/);
+    // What the set covers — the three kinds the Interview Center labels.
+    expect(screen.getByRole("list", { name: "What the set covers" })).toHaveTextContent(
+      /From your résumé.*From the job.*Bridging a gap/,
+    );
+    expect(dialog).toHaveTextContent(/Costs\s*5 credits/);
+    expect(await screen.findByText("40 → 35 left after")).toBeInTheDocument();
     expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Make questions · 5 credits" }));
@@ -79,15 +86,31 @@ describe("PrepQuestionsOffer", () => {
     expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
   });
 
-  it("can't be accepted without enough credits, and says so", async () => {
+  it("short of credits, offers Premium instead of a set it can't make", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(
-      { credits_remaining: 3, costs: { prep_questions: 5 } } as never,
+      { plan: "free", credits_remaining: 3, costs: { prep_questions: 5 } } as never,
     );
     offerPrepQuestions({ jdId: "jd-1", sessionId: "run-1", title: "" });
     renderOffer();
 
-    expect(await screen.findByText("Not enough credits: 5 needed, 3 left.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Make questions · 5 credits" })).toBeDisabled();
+    expect(await screen.findByText("You have 3 · 2 short")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Make questions/ })).toBeNull();
+    // Price and allowance from the server's plan catalog.
+    expect(await screen.findByText("Premium · $5 a month")).toBeInTheDocument();
+    expect(screen.getByText(/600 credits every 30 days/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /See Premium/ })).toHaveAttribute("href", "/plans");
+  });
+
+  it("short of credits on a paid plan, says when they come back instead", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValue({
+      plan: "premium", credits_remaining: 3, credits_allotment: 600, renews: true,
+      current_period_end: "2026-11-12T00:00:00Z", costs: { prep_questions: 5 },
+    } as never);
+    offerPrepQuestions({ jdId: "jd-1", sessionId: "run-1", title: "" });
+    renderOffer();
+
+    expect(await screen.findByText(/Your 600 credits refill on/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /See Premium/ })).toBeNull();
   });
 
   it("doesn't ask when the run this résumé came from already has a set", async () => {

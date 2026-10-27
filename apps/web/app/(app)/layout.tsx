@@ -6,6 +6,7 @@ import { PlanTracker } from "@/components/analytics/PlanTracker";
 import { PolicyUpdatePrompt } from "@/components/legal/PolicyUpdatePrompt";
 import { ViewportLock } from "@/components/layout/ViewportLock";
 import { SessionGuard } from "@/components/auth/SessionGuard";
+import { OutOfCreditsDialog } from "@/components/plans/OutOfCreditsDialog";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <PlanTracker />
       <PolicyUpdatePrompt />
       <SessionGuard />
+      <OutOfCreditsDialog />
     </div>
   );
 }

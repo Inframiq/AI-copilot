@@ -166,7 +166,7 @@ describe("Studio preview page", () => {
       // Questions cost credits: asked about once the PDF is down, never made
       // unasked. A yes makes them for the run reviewed.
       expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
-      const offer = await screen.findByRole("dialog", { name: /make interview questions for this job/i });
+      const offer = await screen.findByRole("dialog", { name: /make interview questions/i });
       fireEvent.click(within(offer).getByRole("button", { name: /make questions · 5 credits/i }));
       await waitFor(() => expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd1", "sess-9"));
       expect(vi.mocked(apiClient.generatePdf).mock.calls[0][0]).toBe("saved-1");

@@ -51,9 +51,11 @@ describe("InterviewIndexPage — no active session", () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/made for a job on request/i)
-    ).toBeInTheDocument();
+    // The way there, in order.
+    for (const step of ["Analyze a job", "Tailor and save", "Make questions"]) {
+      expect(screen.getByText(step)).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: /Go to JD Analyzer/ })).toBeInTheDocument();
   });
 
   it("says questions are being prepared while a Save to JD is making them", async () => {
@@ -85,13 +87,11 @@ describe("InterviewIndexPage — no active session", () => {
     }
   });
 
-  it("still shows only the CTA after switching tabs", async () => {
+  it("shows no topic tabs while there is nothing to sort", async () => {
     renderWithQueryClient(<InterviewIndexPage />);
 
-    await screen.findByText("Behavioral");
-    await userEvent.click(screen.getByText("Behavioral"));
-
     expect(await screen.findByText(/No interview questions yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 });
 
@@ -221,10 +221,10 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
     renderWithQueryClient(<InterviewIndexPage />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /Mark as Practiced/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Mark as practiced/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Couldn't mark this as practiced — it wasn't saved/);
-    expect(screen.getByRole("button", { name: /Mark as Practiced/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mark as practiced/ })).toBeInTheDocument();
     expect(screen.getByText("0 of 1 practiced")).toBeInTheDocument();
   });
 
@@ -266,11 +266,11 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     ]);
     renderWithQueryClient(<InterviewIndexPage />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /HR & Culture \(1\)/ }));
+    await userEvent.click(await screen.findByRole("tab", { name: /HR & Culture \(1\)/ }));
     expect(screen.getByText("Why this team?")).toBeInTheDocument();
     expect(screen.queryByText("A time you disagreed.")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /Behavioral \(1\)/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /Behavioral \(1\)/ }));
     expect(screen.getByText("A time you disagreed.")).toBeInTheDocument();
     expect(screen.queryByText("Why this team?")).not.toBeInTheDocument();
   });
@@ -292,15 +292,27 @@ describe("InterviewIndexPage — real questions exist across JDs", () => {
     expect(screen.queryByText(/was edited after these questions were made/)).not.toBeInTheDocument();
   });
 
-  it("names the steps the readiness score counts", async () => {
-    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
+  it("continues practice at the first question not yet practised", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([
+      question("acme", { practiced_at: "2026-10-01T00:00:00Z" }),
+      question("acme", { id: "q-acme-2", question: "Second Acme question", order_index: 1 }),
+    ]);
     renderWithQueryClient(<InterviewIndexPage />);
 
-    await screen.findByText("Acme technical question");
-    for (const step of ["JD analyzed", "Résumé tailored", "Questions ready", "Questions practiced"]) {
-      expect(screen.getByText(step)).toBeInTheDocument();
-    }
-    expect(screen.queryByText("Session started")).not.toBeInTheDocument();
+    const go = await screen.findByRole("link", { name: /Continue practice/ });
+    expect(go).toHaveAttribute("href", "/interview/session-acme?q=q-acme-2&jd=jd-acme");
+    expect(screen.getByText("1 of 2 practiced")).toBeInTheDocument();
+  });
+
+  it("says Start practice before any, and Practice again once all are done", async () => {
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme")]);
+    const { unmount } = renderWithQueryClient(<InterviewIndexPage />);
+    expect(await screen.findByRole("link", { name: /Start practice/ })).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(apiClient.getMyQuestions).mockResolvedValue([question("acme", { practiced_at: "2026-10-01T00:00:00Z" })]);
+    renderWithQueryClient(<InterviewIndexPage />);
+    expect(await screen.findByRole("link", { name: /Practice again/ })).toBeInTheDocument();
   });
 
   it("regenerates the selected JD's set once confirmed", async () => {
@@ -353,12 +365,13 @@ describe("InterviewIndexPage — making questions from here", () => {
     ] as never);
     renderWithQueryClient(<InterviewIndexPage />);
 
-    const ready = await screen.findByRole("region", { name: "Ready for interview questions" });
+    // Drawn twice (phone strip, laptop column; CSS shows one) once a job has a set.
+    const [ready] = await screen.findAllByRole("region", { name: "Ready for interview questions" });
     expect(ready).toHaveTextContent("Saved, no set");
     expect(ready).not.toHaveTextContent("Has a set");
     expect(ready).not.toHaveTextContent("Only analyzed");
 
-    await userEvent.click(screen.getByRole("button", { name: "Generate interview questions for Saved, no set" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Generate interview questions for Saved, no set" })[0]);
     expect(apiClient.generateJdPrepQuestions).not.toHaveBeenCalled();
     await userEvent.click(await screen.findByRole("button", { name: "Make questions · 5 credits" }));
     await waitFor(() => expect(apiClient.generateJdPrepQuestions).toHaveBeenCalledWith("jd-ready", undefined));
@@ -397,6 +410,7 @@ describe("InterviewIndexPage — no real questions for any JD", () => {
   });
 
   it("shows the empty-state CTA even with an active session but no generated questions", async () => {
+    vi.mocked(apiClient.getJds).mockResolvedValue([]);
     useTailoringStore.setState({ sessionId: "session-1" });
 
     renderWithQueryClient(<InterviewIndexPage />);

@@ -1,6 +1,7 @@
 import { createBrowserClient } from "@/lib/supabase";
 import { withResumeRoom } from "@/stores/resume-limit-store";
 import { confirmHeadline } from "@/stores/headline-confirm-store";
+import { reportCreditRefusal } from "@/stores/credits-store";
 import type {
   Resume,
   JobDescription,
@@ -103,6 +104,8 @@ async function request<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    // Out of credits: the app-wide dialog says what to do about it.
+    if (res.status === 402) reportCreditRefusal(err.detail);
     throw new ApiError(res.status, detailMessage(err.detail, "Request failed"), err.detail);
   }
   if (res.status === 204) return undefined as T;
@@ -287,6 +290,7 @@ export const apiClient = {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
+        if (res.status === 402) reportCreditRefusal(err.detail);
         throw new ApiError(res.status, detailMessage(err.detail, "Upload failed"), err.detail);
       }
       return res.json() as Promise<Resume>;

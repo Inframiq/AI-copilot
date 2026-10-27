@@ -286,13 +286,18 @@ html:has([data-app-shell]) body {
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
 
+/* Fill "backwards", not "both", and no lasting will-change. Keeping the end
+   state kept an (identity) transform on every section for good, and any
+   transform — like will-change: transform — makes a section the containing
+   block of position:fixed: a pop-up inside one sized to that section and sat
+   under the phone's tab bar (probe: ~/.kripax-dev/fixed-trap.mjs).
+   Backwards still holds the first frame through each stagger delay. */
 .page-enter > div > * {
-  animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
-  will-change: opacity, transform;
+  animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .page-enter > div > *:nth-child(1)  { animation-delay: 0.00s; }
@@ -323,6 +328,23 @@ html:has([data-app-shell]) body {
 
 @media (prefers-reduced-motion: reduce) {
   .section-enter {
+    animation: none;
+  }
+}
+
+/* ── Sheets (components/ui/Sheet.tsx): the backdrop fades, the sheet
+   settles in with the cards' easing — a decision arriving, not a pop. ──── */
+.sheet-backdrop-enter {
+  animation: page-fade 0.18s ease both;
+}
+
+.sheet-enter {
+  animation: card-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop-enter,
+  .sheet-enter {
     animation: none;
   }
 }

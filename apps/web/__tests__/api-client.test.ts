@@ -29,6 +29,21 @@ describe("apiClient", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
+  it("hands an out-of-credits refusal to the app-wide dialog, and still throws it", async () => {
+    const { useCreditsStore, clearCreditRefusal } = await import("../stores/credits-store");
+    clearCreditRefusal();
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        { detail: "Out of credits: A cover letter costs 3 credits and you have 1." },
+        { ok: false, status: 402, statusText: "Payment Required" },
+      ),
+    );
+
+    await expect(apiClient.generateCoverLetter("r1", "jd1", 50)).rejects.toBeInstanceOf(ApiError);
+    expect(useCreditsStore.getState().refusal).toEqual({ action: "A cover letter", cost: 3, have: 1 });
+    clearCreditRefusal();
+  });
+
   it("attaches the auth header and content type on every request", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
     await apiClient.getResumes();

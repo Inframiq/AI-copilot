@@ -4,31 +4,26 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ThumbsUp,
-  TrendDown,
-  Play,
-  MicrophoneStage,
-  Check,
-  CircleNotch,
+  ArrowRight,
+  ArrowsClockwise,
   CaretDown,
   CaretLeft,
   CaretRight,
-  ArrowRight,
-  ArrowsClockwise,
+  Check,
+  CircleNotch,
+  Play,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
+import { FOCUS_RING } from "@/lib/focus";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions, offerPrepQuestions } from "@/stores/prep-questions-store";
 import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
-import { sourceLabel, practiceSaveError } from "@/components/interview/QuestionCard";
+import { practiceSaveError } from "@/components/interview/QuestionCard";
 import type { PrepQuestionWithJdOut, JobDescription, Subscription } from "@career-copilot/types";
 
 const TABS = ["Technical", "Behavioral", "HR & Culture"] as const;
-
-const READINESS_HELP =
-  "20% each for analyzing a JD, tailoring a résumé to it, and having interview questions ready, plus up to 40% for the share of your questions marked practiced.";
 type Tab = (typeof TABS)[number];
 
 function classifyTopic(topic: string): Tab {
@@ -47,6 +42,15 @@ function classifyTopic(topic: string): Tab {
   return "HR & Culture";
 }
 
+/** Where a question came from — the small label above it. Same three kinds
+ * the Studio's "Make interview questions?" names. */
+const SOURCE: Record<string, { label: string; tone: string }> = {
+  overlap: { label: "From your résumé", tone: "text-primary" },
+  requirement: { label: "From the job", tone: "text-secondary" },
+  gap: { label: "Bridging a gap", tone: "text-tertiary" },
+};
+const sourceOf = (s: string) => SOURCE[s] ?? SOURCE.requirement;
+
 export default function InterviewIndexPage() {
   const router    = useRouter();
   const searchParams = useSearchParams();
@@ -60,7 +64,7 @@ export default function InterviewIndexPage() {
   const prepErrors = usePrepQuestionsStore((s) => s.errors);
 
   const [activeTab, setActiveTab]     = useState<Tab>("Technical");
-  // A "Mark as Practiced" that didn't save — shown under that question.
+  // A "Mark as practiced" that didn't save — shown under that question.
   const [markError, setMarkError]     = useState<{ id: string; message: string } | null>(null);
   // Each JD's questions are their own page — one JD in view at a time, picked
   // from the switcher. Seeded from ?jd= so a link (or the practice page's
@@ -70,8 +74,8 @@ export default function InterviewIndexPage() {
   // The in-memory tailoring store only knows about a session if tailoring
   // just ran in this browser tab — a reload, direct nav, or switching JDs
   // wipes it. Fall back to the user's actual most recent completed session
-  // (real, JD-specific) for the "Next Mock Interview" card and the
-  // Strengths/Needs Focus skill fallback below.
+  // (real, JD-specific) for picking the job shown first and the focus-skill
+  // fallback below.
   const { data: latestSession } = useQuery({
     queryKey: ["latestSession"],
     queryFn: () => apiClient.getLatestSession(),
@@ -93,18 +97,18 @@ export default function InterviewIndexPage() {
   });
   const myQuestions = myQuestionsQuery.data ?? [];
   const isLoading = myQuestionsQuery.isLoading;
-  const hasAnyQuestions = myQuestions.length > 0;
 
   const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn:  () => apiClient.getJds(),
   });
   const jds = jdsQuery.data ?? [];
-  // Only for the price shown on Regenerate — the server charges what it charges.
+  // Only for the prices shown — the server charges what it charges.
   const { data: subscription } = useQuery<Subscription>({
     queryKey: ["subscription"],
     queryFn: () => apiClient.getSubscription(),
   });
+  const cost = subscription?.costs?.prep_questions ?? 5;
 
   const connectionError = myQuestionsQuery.isError || jdsQuery.isError;
   const isRetrying = myQuestionsQuery.isFetching || jdsQuery.isFetching;
@@ -125,7 +129,7 @@ export default function InterviewIndexPage() {
         o.total += 1;
         if (q.practiced_at) o.practiced += 1;
         return acc.set(q.jd_id, o);
-      }, new Map<string, { jd_id: string; jd_title: string; total: number; practiced: number }>())
+      }, new Map<string, JdOption>())
       .values(),
   ].sort((a, b) => (jdCreatedAt.get(b.jd_id) ?? "").localeCompare(jdCreatedAt.get(a.jd_id) ?? ""));
 
@@ -146,7 +150,7 @@ export default function InterviewIndexPage() {
 
   // In flight: a first set for a JD that has none yet goes in the banner
   // ("they'll appear here"); a new set for a JD that has one shows on its
-  // card when it's selected, or in the banner when it isn't.
+  // panel when it's selected, or in the banner when it isn't.
   const hasSet = new Set(jdOptions.map((o) => o.jd_id));
   const preparing = Object.entries(pending).filter(([id]) => !hasSet.has(id)).map(([, title]) => title);
   // Jobs with a tailored résumé saved but no set yet: their questions are
@@ -159,7 +163,7 @@ export default function InterviewIndexPage() {
   const askToGenerate = (j: JobDescription) =>
     offerPrepQuestions({ jdId: j.id, sessionId: null, title: j.title });
 
-  // A first set that failed (out of credits, say) has no card to show its
+  // A first set that failed (out of credits, say) has no panel to show its
   // error on, so it used to vanish with the "preparing" banner.
   const jdTitle = new Map(jds.map((j) => [j.id, j.title]));
   const firstSetErrors = Object.entries(prepErrors)
@@ -175,8 +179,14 @@ export default function InterviewIndexPage() {
   }
 
   // The selected JD's questions — everything below the switcher derives
-  // from this, not myQuestions directly.
-  const scopedQuestions = myQuestions.filter((q) => q.jd_id === selectedJdId);
+  // from this, not myQuestions directly. In the order they are practised:
+  // by tab, then as written.
+  const scopedQuestions = myQuestions
+    .filter((q) => q.jd_id === selectedJdId)
+    .sort(
+      (a, b) =>
+        TABS.indexOf(classifyTopic(a.topic)) - TABS.indexOf(classifyTopic(b.topic)) || a.order_index - b.order_index,
+    );
   // The saved résumé was edited after this set was written from it.
   const resumeChanged = scopedQuestions.some((q) => q.resume_changed);
   // Written follow-up answers are paid for, and a new set replaces them.
@@ -185,54 +195,26 @@ export default function InterviewIndexPage() {
     0,
   );
 
-  // The run "Next mock" opens: the selected JD's (one run per JD in this
-  // list). Only runs with questions appear here, so it never opens an
-  // empty page.
   const practiceSessionId = scopedQuestions[0]?.session_id ?? null;
   const firstUnpracticed = scopedQuestions.find((q) => !q.practiced_at);
   const practiceHref = (sid: string, qId?: string) =>
     `/interview/${sid}?${qId ? `q=${qId}&` : ""}jd=${encodeURIComponent(selectedJdId ?? "")}`;
 
   // Practice progress — real, persisted server-side (PrepQuestion.practiced_at).
-  // Built from the full (unfiltered) list so the readiness gauge and
-  // "N practiced" count reflect all JDs regardless of the filter above.
   const answeredSet   = new Set(myQuestions.filter((q) => q.practiced_at).map((q) => q.id));
   const answeredCount = answeredSet.size;
 
-  // Overall readiness (progressive — each milestone = +20 pts, practice fills last 40).
-  // Interview readiness only starts once actual prep work exists — a JD
-  // analyzed, a résumé tailored to one, questions made. Merely uploading a
-  // resume in My Profile does not count. sessionId is a completed tailoring
-  // run; it used to be shown as "Session started", which read as practice.
-  const practiceScore  = myQuestions.length > 0 ? (answeredCount / myQuestions.length) * 40 : 0;
-  const readinessScore = Math.round(
-    (jds.length        > 0 ? 20 : 0) +
-    (hasAnyQuestions       ? 20 : 0) +
-    (sessionId             ? 20 : 0) +
-    practiceScore,
-  );
-
-  // Per-tab question counts, scoped to the JD filter
   const tabCounts: Record<Tab, number> = {
     Technical:     scopedQuestions.filter((q) => classifyTopic(q.topic) === "Technical").length,
     Behavioral:    scopedQuestions.filter((q) => classifyTopic(q.topic) === "Behavioral").length,
     "HR & Culture": scopedQuestions.filter((q) => classifyTopic(q.topic) === "HR & Culture").length,
   };
 
-  // Per-tab practice progress (for session mode progress bar)
-  const tabProgress: Record<Tab, number> = {
-    Technical:     tabCounts.Technical     > 0 ? Math.round((scopedQuestions.filter((q) => classifyTopic(q.topic) === "Technical"     && answeredSet.has(q.id)).length / tabCounts.Technical)     * 100) : 0,
-    Behavioral:    tabCounts.Behavioral    > 0 ? Math.round((scopedQuestions.filter((q) => classifyTopic(q.topic) === "Behavioral"    && answeredSet.has(q.id)).length / tabCounts.Behavioral)    * 100) : 0,
-    "HR & Culture": tabCounts["HR & Culture"] > 0 ? Math.round((scopedQuestions.filter((q) => classifyTopic(q.topic) === "HR & Culture" && answeredSet.has(q.id)).length / tabCounts["HR & Culture"]) * 100) : 0,
-  };
-
-  // Strengths / needs focus from real session topics, scoped to the JD filter
-  // Strengths / needs focus, for the JD on screen: the résumé skills its
-  // deep-dive ("overlap") questions build on, and the skill gaps its "gap"
-  // questions cover — still unpracticed ones first. A topic name used to
-  // stand in here, but topics are now just the three tabs.
-  // Chips are skill names; a basis is sometimes a whole phrase ("root cause
-  // analysis of production errors"), which doesn't read as one — skip those.
+  // Focus, for the JD on screen: the résumé skills its deep-dive ("overlap")
+  // questions build on, and the skill gaps its "gap" questions cover — still
+  // unpracticed ones first. Chips are skill names; a basis is sometimes a
+  // whole phrase ("root cause analysis of production errors"), which doesn't
+  // read as one — skip those.
   const unique = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter((x) => x && x.length <= 32))];
   const overlapSkills = unique(
     scopedQuestions.filter((q) => q.source === "overlap").map((q) => q.basis.split(" — ")[0]),
@@ -244,6 +226,8 @@ export default function InterviewIndexPage() {
   ]);
   // The latest run's matched/missing skills only describe its own JD.
   const runIsForThisJd = !selectedJdId || latestRunJdIdFromSession === selectedJdId;
+  const strengths = (overlapSkills.length > 0 ? overlapSkills : runIsForThisJd ? matchedSkills : []).slice(0, 4);
+  const focus = (gapSkills.length > 0 ? gapSkills : runIsForThisJd ? missingSkills : []).slice(0, 4);
 
   const tabQuestions = scopedQuestions.filter((q) => classifyTopic(q.topic) === activeTab);
 
@@ -270,425 +254,278 @@ export default function InterviewIndexPage() {
     }
   }
 
-  // Shared by the laptop's right rail and the phone's strip.
-  // The same steps the score counts, so the list and the number agree.
-  const milestones = [
-    { label: "JD analyzed", done: jds.length > 0 },
-    { label: "Résumé tailored", done: !!sessionId },
-    { label: "Questions ready", done: hasAnyQuestions },
-    { label: "Questions practiced", done: answeredCount > 0 },
-  ];
-  const strengths = (overlapSkills.length > 0 ? overlapSkills : runIsForThisJd ? matchedSkills : []).slice(0, 3);
-  const focus = (gapSkills.length > 0 ? gapSkills : runIsForThisJd ? missingSkills : []).slice(0, 3);
+  const summary = selectedJd
+    ? `${jdOptions.length} job${jdOptions.length !== 1 ? "s" : ""} with questions · ${answeredCount} of ${myQuestions.length} practiced`
+    : "Questions for each job you apply to, built from the résumé you saved for it.";
+  const nothingYet = !isLoading && !selectedJd && readyJds.length === 0 && preparing.length === 0;
 
   return (
-    <div className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col lg:flex-row gap-lg">
+    <div className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col gap-md sm:gap-lg">
+      <ConnectionErrorBanner
+        show={connectionError}
+        onRetry={retryAll}
+        isRetrying={isRetrying}
+        message="Can't reach the server — your generated interview questions aren't loading. Your data is safe."
+      />
 
-      {/* ── Left Column ───────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col gap-lg min-w-0">
+      <header className="pt-xs sm:pt-0">
+        <h2 className="text-headline-md sm:text-headline-lg text-on-surface font-semibold">Interview Center</h2>
+        <p className="mt-xs text-body-sm text-on-surface-variant">{summary}</p>
+      </header>
 
-        <ConnectionErrorBanner
-          show={connectionError}
-          onRetry={retryAll}
-          isRetrying={isRetrying}
-          message="Can't reach the server — your generated interview questions aren't loading. Your data is safe."
-        />
-
-        {/* Header */}
-        <div className="pt-xs sm:pt-0">
-          <h2 className="text-headline-xl text-on-surface font-bold" style={{ letterSpacing: "-0.02em" }}>
-            Interview Center
-          </h2>
-          <p className="hidden sm:block text-body-md text-on-surface-variant mt-sm" style={{ maxWidth: "42rem" }}>
-            Prepare, practice, and perfect your interview skills across technical, behavioral, and HR disciplines.
-          </p>
+      {/* A Save to JD just started making questions; the list refreshes the
+          moment they exist, so say so rather than show an empty page. */}
+      {preparing.length > 0 && (
+        <Notice tone="working">
+          Preparing interview questions
+          {preparing.length === 1 && preparing[0] ? ` for ${preparing[0]}` : ""} — they&apos;ll appear here in a
+          moment.
+        </Notice>
+      )}
+      {firstSetErrors.map((e) => (
+        <div
+          key={e.id}
+          role="alert"
+          className="flex flex-col sm:flex-row sm:items-center gap-xs sm:gap-sm rounded-xl border border-error/25 bg-error-container/40 px-md py-sm text-body-sm text-on-surface"
+        >
+          <span className="min-w-0 flex-1">
+            Couldn&apos;t make interview questions{e.title ? ` for ${e.title}` : ""}: {e.message}
+          </span>
+          <Link href={`/jd/${e.id}`} className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline">
+            Open the JD <ArrowRight size={12} />
+          </Link>
         </div>
+      ))}
+      {regeneratingElsewhere.length > 0 && (
+        <Notice tone="working">Making a new set of questions for {regeneratingElsewhere.join(", ")}.</Notice>
+      )}
+      <PrepQuestionsOffer />
 
-        {/* A Save to JD just started making questions; the list refreshes the
-            moment they exist, so say so rather than show an empty page. */}
-        {preparing.length > 0 && (
-          <div
-            role="status"
-            className="flex items-center gap-sm rounded-2xl border border-primary/20 bg-primary/5 px-md py-sm text-body-sm text-on-surface"
-          >
-            <CircleNotch size={16} className="shrink-0 animate-spin text-primary motion-reduce:animate-none" />
-            <span className="min-w-0">
-              Preparing interview questions
-              {preparing.length === 1 && preparing[0] ? ` for ${preparing[0]}` : ""} — they&apos;ll appear here
-              in a moment.
-            </span>
-          </div>
-        )}
-        {firstSetErrors.map((e) => (
-          <div
-            key={e.id}
-            role="alert"
-            className="flex flex-col sm:flex-row sm:items-center gap-xs sm:gap-sm rounded-2xl border border-error/25 bg-error-container/30 px-md py-sm text-body-sm text-on-surface"
-          >
-            <span className="min-w-0 flex-1">
-              Couldn&apos;t make interview questions{e.title ? ` for ${e.title}` : ""}: {e.message}
-            </span>
-            <Link href={`/jd/${e.id}`} className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline">
-              Open the JD <ArrowRight size={12} />
-            </Link>
-          </div>
-        ))}
-        {regeneratingElsewhere.length > 0 && (
-          <div
-            role="status"
-            className="flex items-center gap-sm rounded-2xl border border-primary/20 bg-primary/5 px-md py-sm text-body-sm text-on-surface"
-          >
-            <CircleNotch size={16} className="shrink-0 animate-spin text-primary motion-reduce:animate-none" />
-            <span className="min-w-0">
-              Making a new set of questions for {regeneratingElsewhere.join(", ")}.
-            </span>
-          </div>
-        )}
+      {nothingYet && <EmptyState onStart={() => router.push("/jd")} />}
 
-        {readyJds.length > 0 && (
-          <ReadyForQuestions
-            jds={readyJds}
-            cost={subscription?.costs?.prep_questions ?? 5}
-            onGenerate={askToGenerate}
-          />
-        )}
-        <PrepQuestionsOffer />
+      {!selectedJd && readyJds.length > 0 && (
+        <ReadyForQuestions jds={readyJds} cost={cost} onGenerate={askToGenerate} />
+      )}
 
-        {/* Which JD's questions are on screen — each JD is its own page. */}
-        {selectedJd && (
-          <JdSwitcher
-            key={selectedJd.jd_id}
-            options={jdOptions}
-            selected={selectedJd}
-            onSelect={selectJd}
-            onRegenerate={regenerate}
-            regenerating={selectedJd.jd_id in pending}
-            error={prepErrors[selectedJd.jd_id] ?? null}
-            cost={subscription?.costs?.prep_questions ?? 5}
-            resumeChanged={resumeChanged}
-            answeredFollowups={answeredFollowups}
-          />
-        )}
-
-        {/* Phones: the laptop's right-hand rail, as a strip under the JD card —
-            below the questions it was out of sight. */}
-        <div className="lg:hidden grid grid-cols-2 gap-sm">
-          <div className="bg-surface-container-lowest rounded-2xl p-md border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex items-center gap-sm">
-            <ReadinessGauge score={readinessScore} className="w-14 h-14 shrink-0" labelClassName="text-label-md" />
-            <div className="min-w-0">
-              <p className="text-label-md text-on-surface font-semibold flex items-center gap-xs">
-                Readiness
-                <InfoTooltip text={READINESS_HELP} />
-              </p>
-              <p className="text-caption text-on-surface-variant">
-                {milestones.filter((m) => m.done).length} of {milestones.length} steps
-              </p>
-            </div>
-          </div>
-          <NextMockCard
-            sessionId={practiceSessionId}
-            ready={scopedQuestions.length}
-            practiced={selectedJd?.practiced ?? 0}
-            onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId, firstUnpracticed?.id) : "/jd")}
-            compact
-          />
-          {(strengths.length > 0 || focus.length > 0) && (
-            <div className="col-span-2 flex flex-wrap items-center gap-xs text-caption">
-              {strengths.map((t) => (
-                <span key={`s-${t}`} className="px-sm py-0.5 bg-surface-container-high text-on-surface-variant rounded-md border border-outline-variant/30">
-                  <ThumbsUp size={11} weight="fill" className="inline -mt-0.5 mr-1 text-success-accent" />{t}
-                </span>
-              ))}
-              {focus.map((t) => (
-                <span key={`f-${t}`} className="px-sm py-0.5 bg-error-container/50 text-error rounded-md border border-error/20">
-                  <TrendDown size={11} weight="fill" className="inline -mt-0.5 mr-1" />{t}
-                </span>
-              ))}
-            </div>
-          )}
+      {isLoading && (
+        <div className="flex flex-col gap-md" aria-hidden>
+          <div className="h-36 rounded-2xl bg-surface-container animate-pulse" />
+          <div className="h-64 rounded-2xl bg-surface-container animate-pulse" />
         </div>
+      )}
 
-        {/* Tab Navigation */}
-        <div className="flex items-center justify-between gap-md border-b border-outline-variant/30 flex-wrap">
-          <div className="flex gap-md sm:gap-lg">
-            {TABS.map((tab) => {
-              const count = hasAnyQuestions && tabCounts[tab] > 0 ? ` (${tabCounts[tab]})` : "";
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`pb-sm text-label-md transition-all duration-200 whitespace-nowrap ${
-                    activeTab === tab
-                      ? "text-primary font-bold border-b-2 border-primary"
-                      : "text-on-surface-variant hover:text-on-surface"
-                  }`}
-                >
-                  {tab}{count}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      {selectedJd && (
+        <div className="flex flex-col lg:flex-row lg:items-start gap-md sm:gap-lg">
+          <div className="flex-1 min-w-0 flex flex-col gap-md">
+            <JobPanel
+              key={selectedJd.jd_id}
+              options={jdOptions}
+              selected={selectedJd}
+              questions={scopedQuestions}
+              onSelect={selectJd}
+              onRegenerate={regenerate}
+              regenerating={selectedJd.jd_id in pending}
+              error={prepErrors[selectedJd.jd_id] ?? null}
+              cost={cost}
+              resumeChanged={resumeChanged}
+              answeredFollowups={answeredFollowups}
+              practiceHref={
+                practiceSessionId ? practiceHref(practiceSessionId, firstUnpracticed?.id) : null
+              }
+            />
 
-        {/* Per-tab practice progress bar (only when there are real questions) */}
-        {hasAnyQuestions && (
-          <div className="flex items-center gap-md">
-            <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-700"
-                style={{ width: `${tabProgress[activeTab]}%` }}
-              />
+            {/* Phones: the side column's content, compact, above the questions
+                rather than after all of them. */}
+            <div className="lg:hidden flex flex-col gap-sm">
+              {readyJds.length > 0 && (
+                <ReadyForQuestions jds={readyJds} cost={cost} onGenerate={askToGenerate} compact />
+              )}
+              <FocusChips strengths={strengths} focus={focus} compact />
             </div>
-            <span className="text-label-sm text-on-surface-variant shrink-0">
-              {tabProgress[activeTab]}% of {activeTab} practiced
-            </span>
-          </div>
-        )}
 
-        {/* Content: the selected JD's questions OR the empty-state CTA */}
-        {hasAnyQuestions ? (
-          <div className="flex flex-col gap-md">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-xl">
-                <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              </div>
-            ) : tabQuestions.length > 0 ? (
-              <>
-                <p className="text-label-md text-on-surface-variant uppercase tracking-wider">
-                  {tabQuestions.length} question{tabQuestions.length !== 1 ? "s" : ""} · {activeTab}
-                </p>
+            <div role="tablist" aria-label="Question topics" className="flex gap-xs p-xs rounded-xl bg-surface-container w-full sm:w-fit">
+              {TABS.map((tab) => {
+                const active = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    role="tab"
+                    aria-selected={active}
+                    aria-label={`${tab} (${tabCounts[tab]})`}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-xs px-sm sm:px-md py-xs rounded-lg text-label-md whitespace-nowrap transition-colors ${FOCUS_RING} ${
+                      active
+                        ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                        : "text-on-surface-variant hover:text-on-surface"
+                    }`}
+                  >
+                    {tab}
+                    <span
+                      className={`font-label-caps text-label-caps tabular-nums ${active ? "text-primary" : "text-on-surface-variant/80"}`}
+                    >
+                      {tabCounts[tab]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {tabQuestions.length > 0 ? (
+              <ol className="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 divide-y divide-outline-variant/25">
                 {tabQuestions.map((q) => {
                   const isPracticed = answeredSet.has(q.id);
+                  const src = sourceOf(q.source);
                   return (
-                    <div
-                      key={q.id}
-                      className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 hover:shadow-xl transition-shadow flex flex-col"
-                    >
-                      <div className="flex justify-between items-center mb-sm sm:mb-md">
-                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${isPracticed ? "bg-success-accent/10 text-success-accent" : "bg-primary/10 text-primary"}`}>
-                          <MicrophoneStage size={20} />
-                        </div>
+                    <li key={q.id} className="p-md sm:p-lg flex flex-col gap-sm">
+                      <div className="flex items-start justify-between gap-sm">
+                        <p className="min-w-0 flex items-baseline gap-xs">
+                          <span className={`shrink-0 font-label-caps text-label-caps uppercase ${src.tone}`}>{src.label}</span>
+                          {q.basis && (
+                            <span className="min-w-0 truncate text-caption text-on-surface-variant" title={q.basis}>
+                              · {q.basis}
+                            </span>
+                          )}
+                        </p>
                         {isPracticed && (
-                          <span className="inline-flex items-center gap-xs px-sm py-xs rounded-full bg-success-accent/10 text-success-accent text-label-sm">
+                          <span className="shrink-0 inline-flex items-center gap-xs rounded-full bg-success-container px-sm py-0.5 text-label-sm text-on-success-container">
                             <Check size={12} weight="bold" /> Practiced
                           </span>
                         )}
                       </div>
-                      <h3 className="text-headline-md text-on-surface mb-sm font-semibold">{q.question}</h3>
-                      {q.basis && (
-                        <p className="text-caption text-primary/80 mb-md flex items-start gap-xs">
-                          <span className="shrink-0 font-semibold">{sourceLabel(q.source)}</span>
-                          <span className="text-on-surface-variant">{q.basis}</span>
-                        </p>
-                      )}
-                      <div className="flex gap-sm">
+                      <p className="text-body-md sm:text-body-lg text-on-surface font-medium">{q.question}</p>
+                      <div className="flex items-center gap-sm pt-xs">
                         <button
                           onClick={() => router.push(practiceHref(q.session_id, q.id))}
-                          className="flex-1 py-sm sm:py-md px-md bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 flex justify-center items-center gap-sm"
+                          className={`inline-flex items-center gap-xs rounded-lg border border-primary/30 px-md py-xs text-label-md text-primary hover:bg-primary/5 transition-colors ${FOCUS_RING}`}
                         >
-                          <Play size={16} weight="fill" />
-                          <span className="sm:hidden">Practice</span>
-                          <span className="hidden sm:inline">Practice This Question</span>
+                          <Play size={14} weight="fill" /> Practice
                         </button>
                         {!isPracticed && (
                           <button
                             onClick={() => handleMarkAnswered(q.id)}
-                            className="py-sm sm:py-md px-md rounded-xl border border-outline-variant/30 text-label-md text-on-surface hover:bg-surface-container transition-all flex items-center gap-sm"
+                            className={`inline-flex items-center gap-xs rounded-lg px-sm py-xs text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors ${FOCUS_RING}`}
                           >
-                            <Check size={16} />
-                            <span className="sm:hidden">Done</span>
-                            <span className="hidden sm:inline">Mark as Practiced</span>
+                            <Check size={14} /> Mark as practiced
                           </button>
                         )}
                       </div>
                       {markError?.id === q.id && (
-                        <p role="alert" className="text-caption text-error mt-sm">{markError.message}</p>
+                        <p role="alert" className="text-caption text-error">{markError.message}</p>
                       )}
-                    </div>
+                    </li>
                   );
                 })}
-              </>
+              </ol>
             ) : (
-              <div className="flex flex-col items-center justify-center py-xl gap-md text-center bg-surface-container-lowest rounded-2xl border border-outline-variant/20">
-                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions for this JD</p>
-                <p className="text-body-sm text-on-surface-variant">Your personalized questions focus on other areas.</p>
+              <div className="rounded-2xl border border-dashed border-outline-variant/60 px-md py-xl text-center">
+                <p className="text-body-md text-on-surface font-medium">No {activeTab} questions for this job</p>
+                <p className="mt-xs text-body-sm text-on-surface-variant">This set focuses on the other topics.</p>
               </div>
             )}
           </div>
-        ) : readyJds.length > 0 ? null : (
-          /* No tailoring-generated questions yet. Interview questions are
-             only ever produced by tailoring a resume against a JD — there
-             is no resume-only or cross-user question list here, so a plain
-             resume uploaded in My Profile shows nothing but this CTA. */
-          <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-sm flex flex-col items-center justify-center gap-md py-xl text-center">
-            <p className="text-body-md text-on-surface font-medium">No interview questions yet</p>
-            <p className="text-body-sm text-on-surface-variant" style={{ maxWidth: "28rem" }}>
-              Interview questions are made for a job on request: analyze a
-              JD, tailor your résumé to it, Save to JD, then choose Make
-              questions. They are built from that résumé and that role.
-            </p>
-            <button
-              onClick={() => router.push("/jd")}
-              className="px-xl py-md rounded-xl text-label-md text-on-primary bg-primary shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200"
-            >
-              Go to JD Analyzer
-            </button>
-          </div>
-        )}
+
+          <aside className="hidden lg:flex w-80 shrink-0 flex-col gap-md">
+            {readyJds.length > 0 && <ReadyForQuestions jds={readyJds} cost={cost} onGenerate={askToGenerate} />}
+            <FocusChips strengths={strengths} focus={focus} />
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Notice({ tone, children }: { tone: "working"; children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      data-tone={tone}
+      className="flex items-center gap-sm rounded-xl border border-primary/20 bg-primary-fixed/40 px-md py-sm text-body-sm text-on-surface"
+    >
+      <CircleNotch size={16} className="shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
+/** Nothing to practise yet: the three steps that get there. A real sequence,
+ * so numbered. */
+function EmptyState({ onStart }: { onStart: () => void }) {
+  const steps = [
+    ["Analyze a job", "Paste the posting into the JD Analyzer."],
+    ["Tailor and save", "Tailor your résumé to it, then Save to JD."],
+    ["Make questions", "Choose Make questions. They're built from that résumé and role."],
+  ];
+  return (
+    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-md sm:p-xl">
+      <p className="text-body-md text-on-surface font-semibold">No interview questions yet</p>
+      <ol className="mt-md grid gap-sm sm:grid-cols-3">
+        {steps.map(([title, detail], i) => (
+          <li key={title} className="flex gap-sm rounded-xl bg-surface-container-low p-sm sm:p-md">
+            <span className="font-label-caps text-label-caps text-primary pt-0.5">{i + 1}</span>
+            <span className="min-w-0">
+              <span className="block text-label-md text-on-surface">{title}</span>
+              <span className="block text-caption text-on-surface-variant mt-0.5">{detail}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <button
+        onClick={onStart}
+        className={`mt-md inline-flex items-center gap-xs rounded-lg bg-primary px-lg py-sm text-label-md text-on-primary hover:bg-primary-container transition-colors ${FOCUS_RING}`}
+      >
+        Go to JD Analyzer <ArrowRight size={14} />
+      </button>
+    </section>
+  );
+}
+
+/** The résumé skills this job's questions build on, and the gaps they
+ * cover — what to practise first. */
+function FocusChips({ strengths, focus, compact = false }: { strengths: string[]; focus: string[]; compact?: boolean }) {
+  if (strengths.length === 0 && focus.length === 0) return null;
+  const chip = "inline-flex items-center rounded-md px-sm py-0.5 text-caption";
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-xs">
+        <span className="text-caption text-on-surface-variant">{focus.length > 0 ? "Prepare:" : "Strengths:"}</span>
+        {focus.map((t) => (
+          <span key={`f-${t}`} className={`${chip} bg-tertiary-fixed/60 text-on-tertiary-fixed-variant`}>{t}</span>
+        ))}
+        {strengths.map((t) => (
+          <span key={`s-${t}`} className={`${chip} bg-surface-container-high text-on-surface-variant`}>{t}</span>
+        ))}
       </div>
-
-      {/* ── Right Column ──────────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex w-80 flex-col gap-md shrink-0">
-
-        {/* Overall Readiness */}
-        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
-          <h3 className="text-headline-md text-on-surface mb-lg font-semibold flex items-center gap-sm">
-            Overall Readiness
-            <InfoTooltip text={READINESS_HELP} />
+    );
+  }
+  return (
+    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-md flex flex-col gap-md">
+      {focus.length > 0 && (
+        <div>
+          <h3 className="flex items-center gap-xs font-label-caps text-label-caps uppercase text-tertiary">
+            Gaps to prepare
+            <InfoTooltip text="Skills this job wants that your résumé doesn't show yet — practice their questions first." />
           </h3>
-
-          {/* Circular gauge */}
-          <ReadinessGauge score={readinessScore} className="w-32 h-32 mx-auto mb-lg" labelClassName="text-headline-lg" />
-
-          {/* Milestone breakdown */}
-          <div className="flex flex-col gap-xs mb-lg text-caption text-on-surface-variant">
-            {milestones.map(({ label, done }) => (
-              <div key={label} className="flex items-center gap-sm">
-                <div className={`w-3 h-3 rounded-full flex items-center justify-center shrink-0 ${done ? "bg-primary" : "bg-surface-variant"}`}>
-                  {done && <Check size={8} weight="bold" className="text-on-primary" />}
-                </div>
-                <span className={done ? "text-on-surface" : "text-on-surface-variant"}>{label}</span>
-              </div>
+          <div className="mt-sm flex flex-wrap gap-xs">
+            {focus.map((t) => (
+              <span key={t} className={`${chip} bg-tertiary-fixed/60 text-on-tertiary-fixed-variant`}>{t}</span>
             ))}
           </div>
-
-          {hasAnyQuestions && (
-            <p className="text-caption text-on-surface-variant text-center mb-md">
-              {answeredCount} of {myQuestions.length} questions practiced
-            </p>
-          )}
-
-          {/* Strengths */}
-          <div className="space-y-md">
-            <div>
-              <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
-                <ThumbsUp size={18} weight="fill" className="text-success-accent" /> Strengths
-                <InfoTooltip text="Skills your résumé already shows for this job — the ones its deep-dive questions build on." />
-              </h4>
-              <div className="flex flex-wrap gap-sm">
-                {strengths.length > 0 ? (
-                  strengths.map((t) => (
-                    <span key={t} className="px-sm py-xs bg-surface-container-high text-on-surface-variant text-caption rounded-md border border-outline-variant/30">{t}</span>
-                  ))
-                ) : (
-                  <span className="text-caption text-on-surface-variant italic">
-                    {hasAnyQuestions ? "None of this job's questions build on a résumé skill" : jds.length > 0 ? "Save a tailored résumé to a JD to see them" : "Analyze a JD to discover strengths"}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Needs Focus */}
-            <div>
-              <h4 className="text-label-md text-on-surface mb-sm flex items-center gap-sm">
-                <TrendDown size={18} weight="fill" className="text-error" /> Needs Focus
-                <InfoTooltip text="Skills this job wants that your résumé doesn't show yet — practice their questions first." />
-              </h4>
-              <div className="flex flex-wrap gap-sm">
-                {focus.length > 0 ? (
-                  focus.map((t) => (
-                    <span key={t} className="px-sm py-xs bg-error-container/50 text-error text-caption rounded-md border border-error/20">{t}</span>
-                  ))
-                ) : (
-                  <span className="text-caption text-on-surface-variant italic">
-                    {hasAnyQuestions ? "No skill gaps in this job's questions" : jds.length > 0 ? "Save a tailored résumé to a JD to see them" : "Analyze a JD to find focus areas"}
-                  </span>
-                )}
-              </div>
-            </div>
+        </div>
+      )}
+      {strengths.length > 0 && (
+        <div>
+          <h3 className="flex items-center gap-xs font-label-caps text-label-caps uppercase text-on-surface-variant">
+            Strengths
+            <InfoTooltip text="Skills your résumé already shows for this job — the ones its deep-dive questions build on." />
+          </h3>
+          <div className="mt-sm flex flex-wrap gap-xs">
+            {strengths.map((t) => (
+              <span key={t} className={`${chip} bg-surface-container-high text-on-surface-variant`}>{t}</span>
+            ))}
           </div>
         </div>
-
-        <NextMockCard
-          sessionId={practiceSessionId}
-          ready={scopedQuestions.length}
-          practiced={selectedJd?.practiced ?? 0}
-          onGo={() => router.push(practiceSessionId ? practiceHref(practiceSessionId, firstUnpracticed?.id) : "/jd")}
-        />
-      </aside>
-    </div>
-  );
-}
-
-function ReadinessGauge({
-  score,
-  className,
-  labelClassName,
-}: {
-  score: number;
-  className: string;
-  labelClassName: string;
-}) {
-  return (
-    <div className={`relative flex items-center justify-center ${className}`}>
-      <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 36 36">
-        <path
-          className="text-surface-variant"
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke="currentColor" strokeWidth="3"
-        />
-        <path
-          className="text-primary"
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke="currentColor"
-          strokeDasharray={`${score}, 100`}
-          strokeLinecap="round" strokeWidth="3"
-          style={{ transition: "stroke-dasharray 1s ease-out" }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`${labelClassName} text-primary font-bold`}>{score}%</span>
-      </div>
-    </div>
-  );
-}
-
-function NextMockCard({
-  sessionId,
-  ready,
-  practiced,
-  onGo,
-  compact = false,
-}: {
-  sessionId: string | null;
-  ready: number;
-  practiced: number;
-  onGo: () => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`bg-primary text-on-primary rounded-2xl shadow-lg shadow-primary/10 relative overflow-hidden ${compact ? "p-md flex flex-col justify-between gap-xs" : "p-md"}`}>
-      <div
-        className="absolute top-0 right-0 w-32 h-32 bg-primary-container/50 rounded-full blur-2xl pointer-events-none"
-        style={{ marginRight: "-2.5rem", marginTop: "-2.5rem" }}
-      />
-      <h4 className="text-label-md font-bold mb-xs relative z-10">{compact ? "Practice" : "Practice Session"}</h4>
-      <p className={`relative z-10 opacity-90 ${compact ? "text-caption" : "text-body-sm mb-md"}`}>
-        {sessionId
-          ? compact
-            ? `${ready} ready · ${practiced} done`
-            : `${ready} questions · ${practiced} practiced`
-          : compact
-            ? "Save a tailored résumé first"
-            : "Save a tailored résumé to a JD to get personalized questions"}
-      </p>
-      <button
-        onClick={onGo}
-        className={`w-full bg-surface-container-lowest text-primary text-label-md rounded-xl shadow-lg shadow-on-surface/10 hover:shadow-xl hover:scale-[0.98] active:scale-95 transition-all duration-200 relative z-10 ${compact ? "py-xs" : "py-md"}`}
-      >
-        {sessionId ? (compact ? "Start" : "Start Practice") : compact ? "Go" : "Analyze a JD First"}
-      </button>
-    </div>
+      )}
+    </section>
   );
 }
 
@@ -698,38 +535,44 @@ function ReadyForQuestions({
   jds,
   cost,
   onGenerate,
+  compact = false,
 }: {
   jds: JobDescription[];
   cost: number;
   onGenerate: (jd: JobDescription) => void;
+  compact?: boolean;
 }) {
   return (
     <section
-      aria-labelledby="ready-for-questions"
-      className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-sm"
+      aria-labelledby={compact ? undefined : "ready-for-questions"}
+      aria-label={compact ? "Ready for interview questions" : undefined}
+      className={`rounded-2xl border border-outline-variant/30 bg-surface-container-lowest flex flex-col ${compact ? "p-sm" : "p-md gap-sm"}`}
     >
-      <div>
-        <h3 id="ready-for-questions" className="text-label-md text-on-surface font-semibold">
-          Ready for interview questions
-        </h3>
-        <p className="text-caption text-on-surface-variant">
-          A tailored résumé is saved to these jobs. Questions are built from it.
-        </p>
-      </div>
-      <ul className="flex flex-col divide-y divide-outline-variant/20">
+      {!compact && (
+        <div>
+          <h3 id="ready-for-questions" className="font-label-caps text-label-caps uppercase text-on-surface-variant">
+            Ready for interview questions
+          </h3>
+          <p className="mt-xs text-caption text-on-surface-variant">
+            A tailored résumé is saved to these jobs. Questions are built from it.
+          </p>
+        </div>
+      )}
+      <ul className="flex flex-col divide-y divide-outline-variant/25">
         {jds.map((j) => (
           <li key={j.id} className="flex items-center gap-sm py-xs first:pt-0 last:pb-0">
             <Link
               href={`/jd/${j.id}`}
               className="min-w-0 flex-1 truncate text-body-sm text-on-surface hover:text-primary hover:underline"
             >
+              {compact && <span className="text-on-surface-variant">Ready: </span>}
               {j.title}
             </Link>
             <button
               type="button"
               onClick={() => onGenerate(j)}
               aria-label={`Generate interview questions for ${j.title}`}
-              className="shrink-0 inline-flex items-center gap-xs px-sm py-xs rounded-lg border border-primary/30 text-label-sm text-primary hover:bg-primary/5 transition-colors"
+              className={`shrink-0 inline-flex items-center gap-xs px-sm py-xs rounded-lg border border-primary/30 text-label-sm text-primary hover:bg-primary/5 transition-colors ${FOCUS_RING}`}
             >
               Generate · {cost} credits
             </button>
@@ -753,9 +596,16 @@ function regenerateLosses(practiced: number, answeredFollowups: number): string 
 
 type JdOption = { jd_id: string; jd_title: string; total: number; practiced: number };
 
-function JdSwitcher({
+/**
+ * The job in view: which one (the switcher), how far its practice has got
+ * (the track — one mark per question, filled once practised, grouped by
+ * topic), and what to do next. Regenerate asks first, inline: it replaces
+ * the set (and its practice) and costs credits.
+ */
+function JobPanel({
   options,
   selected,
+  questions,
   onSelect,
   onRegenerate,
   regenerating,
@@ -763,9 +613,11 @@ function JdSwitcher({
   cost,
   resumeChanged,
   answeredFollowups,
+  practiceHref,
 }: {
   options: JdOption[];
   selected: JdOption;
+  questions: PrepQuestionWithJdOut[];
   onSelect: (jdId: string) => void;
   onRegenerate: () => void;
   regenerating: boolean;
@@ -773,25 +625,24 @@ function JdSwitcher({
   cost: number;
   resumeChanged: boolean;
   answeredFollowups: number;
+  practiceHref: string | null;
 }) {
-  // Regenerate replaces the set (and its practice progress) and costs
-  // credits, so it asks first — inline, right where the button was.
   const [confirming, setConfirming] = useState(false);
   const index = options.findIndex((o) => o.jd_id === selected.jd_id);
   const many = options.length > 1;
-  const pct = selected.total > 0 ? Math.round((selected.practiced / selected.total) * 100) : 0;
-  const stepBtn =
-    "w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl border border-outline-variant/40 text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-on-surface disabled:opacity-40 disabled:pointer-events-none transition-colors";
+  const allDone = selected.total > 0 && selected.practiced === selected.total;
+  const stepBtn = `w-10 h-10 shrink-0 rounded-lg border border-outline-variant/50 text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-on-surface disabled:opacity-40 disabled:pointer-events-none transition-colors ${FOCUS_RING}`;
+  const groups = TABS.map((t) => questions.filter((q) => classifyTopic(q.topic) === t)).filter((g) => g.length > 0);
 
   return (
-    <section className="bg-surface-container-lowest rounded-2xl p-md sm:p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-sm">
+    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-md sm:p-lg flex flex-col gap-md shadow-sm">
       <div className="flex items-center justify-between gap-sm">
-        <label htmlFor="jd-switcher" className="text-label-sm text-on-surface-variant uppercase tracking-wider">
+        <label htmlFor="jd-switcher" className="font-label-caps text-label-caps uppercase text-on-surface-variant">
           Questions for
         </label>
         <div className="flex items-center gap-sm sm:gap-md">
           {many && (
-            <span className="text-caption text-on-surface-variant">
+            <span className="text-caption text-on-surface-variant tabular-nums">
               JD {index + 1} of {options.length}
             </span>
           )}
@@ -799,7 +650,7 @@ function JdSwitcher({
             type="button"
             onClick={() => setConfirming(true)}
             disabled={regenerating || confirming}
-            className="inline-flex items-center gap-xs py-sm -my-sm text-label-sm text-primary hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-default"
+            className={`inline-flex items-center gap-xs rounded-md py-xs text-label-sm text-primary hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-default ${FOCUS_RING}`}
           >
             {regenerating ? (
               <CircleNotch size={14} className="animate-spin motion-reduce:animate-none" />
@@ -829,7 +680,7 @@ function JdSwitcher({
             value={selected.jd_id}
             onChange={(e) => onSelect(e.target.value)}
             disabled={!many}
-            className="w-full appearance-none truncate pl-md pr-xl py-xs sm:py-sm rounded-xl border border-outline-variant/50 bg-surface text-body-md sm:text-headline-md text-on-surface font-semibold disabled:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full h-10 appearance-none truncate pl-sm sm:pl-md pr-xl rounded-lg border border-outline-variant/50 bg-surface text-body-md sm:text-body-lg text-on-surface font-semibold disabled:opacity-100 disabled:border-transparent disabled:bg-transparent disabled:pl-0 focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {options.map((o) => (
               <option key={o.jd_id} value={o.jd_id}>
@@ -858,7 +709,7 @@ function JdSwitcher({
       </div>
 
       {confirming ? (
-        <div className="rounded-xl border border-primary/25 bg-primary/5 p-sm sm:p-md flex flex-col sm:flex-row sm:items-center gap-sm">
+        <div className="rounded-xl border border-primary/25 bg-primary-fixed/40 p-sm sm:p-md flex flex-col sm:flex-row sm:items-center gap-sm">
           <p className="flex-1 min-w-0 text-body-sm text-on-surface">
             Replace these {selected.total} questions with a new set?{" "}
             <span className="text-on-surface-variant">
@@ -870,7 +721,7 @@ function JdSwitcher({
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="flex-1 sm:flex-none px-md py-xs rounded-lg border border-outline-variant/40 text-label-sm text-on-surface hover:bg-surface-container"
+              className={`flex-1 sm:flex-none px-md py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-label-sm text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
             >
               Cancel
             </button>
@@ -880,7 +731,7 @@ function JdSwitcher({
                 setConfirming(false);
                 onRegenerate();
               }}
-              className="flex-1 sm:flex-none px-md py-xs rounded-lg bg-primary text-on-primary text-label-sm shadow-sm hover:shadow-md"
+              className={`flex-1 sm:flex-none px-md py-xs rounded-lg bg-primary text-on-primary text-label-sm hover:bg-primary-container ${FOCUS_RING}`}
             >
               Regenerate
             </button>
@@ -891,20 +742,44 @@ function JdSwitcher({
           Writing a new set — these questions stay until it&apos;s ready.
         </p>
       ) : (
-        <div className="flex items-center gap-sm sm:gap-md text-caption text-on-surface-variant">
-          <span className="shrink-0">
-            {selected.practiced} of {selected.total} practiced
-          </span>
-          <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+        <>
+          {/* The track: one mark per question, filled once practised, in
+              topic groups — the whole set's progress at a glance. */}
+          <div className="flex flex-col gap-xs">
+            <div className="flex items-center gap-sm" aria-hidden>
+              {groups.map((group, gi) => (
+                <div key={gi} className="flex flex-1 gap-0.5" style={{ flexGrow: group.length }}>
+                  {group.map((q) => (
+                    <span
+                      key={q.id}
+                      className={`h-1.5 flex-1 rounded-full ${q.practiced_at ? "bg-primary" : "bg-primary/15"}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-sm text-caption text-on-surface-variant">
+              <span className="tabular-nums">
+                {selected.practiced} of {selected.total} practiced
+              </span>
+              <Link
+                href={`/jd/${selected.jd_id}`}
+                className="inline-flex items-center gap-xs text-label-sm text-primary hover:underline"
+              >
+                View JD <ArrowRight size={12} />
+              </Link>
+            </div>
           </div>
-          <Link
-            href={`/jd/${selected.jd_id}`}
-            className="shrink-0 inline-flex items-center gap-xs text-label-sm text-primary hover:underline"
-          >
-            View JD <ArrowRight size={12} />
-          </Link>
-        </div>
+          {practiceHref && (
+            <Link
+              href={practiceHref}
+              className={`self-stretch sm:self-start inline-flex items-center justify-center gap-sm rounded-lg bg-primary px-lg py-sm text-label-md text-on-primary hover:bg-primary-container transition-colors ${FOCUS_RING}`}
+            >
+              <Play size={14} weight="fill" />
+              {allDone ? "Practice again" : selected.practiced > 0 ? "Continue practice" : "Start practice"}
+            </Link>
+          )}
+        </>
       )}
       {resumeChanged && !confirming && !regenerating && (
         <p className="text-caption text-on-surface-variant">
