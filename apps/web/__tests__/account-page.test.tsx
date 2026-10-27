@@ -143,7 +143,7 @@ describe("Account page", () => {
 
     expect(await screen.findByText("Danger zone")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /delete account/i }));
-    expect(await screen.findByRole("dialog", { name: /delete account/i })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /delete your account/i })).toBeInTheDocument();
     expect(screen.getByText(/type/i)).toBeInTheDocument();
 
     const confirmButton = screen.getByRole("button", { name: /delete my account/i });

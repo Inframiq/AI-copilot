@@ -19,7 +19,6 @@ import {
   UploadSimple,
   X,
   Sparkle,
-  Calendar,
   DotsThreeVertical,
   Trash,
   PencilSimple,
@@ -30,6 +29,8 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { SaveAnalysisModal } from "@/components/jd/SaveAnalysisModal";
+import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
+import { FOCUS_RING } from "@/lib/focus";
 import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
@@ -122,7 +123,7 @@ export default function JDIndexPage() {
   // Held here, not in the store: editing the JD text calls setJd, which
   // clears the store's company. handleTailor writes it once the JD is final.
   const [company, setCompany] = useState(() => useTailoringStore.getState().companyName);
-  const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; sessionId: string } | null>(null);
+  const [interviewPrompt, setInterviewPrompt] = useState<{ jdTitle: string; jdId: string } | null>(null);
   // Pending "Save As" — set when the user submits new JD text, cleared once
   // they confirm a name (or cancel) in SaveAnalysisModal.
   const [pendingSaveText, setPendingSaveText] = useState<string | null>(null);
@@ -177,9 +178,11 @@ export default function JDIndexPage() {
     try {
       await apiClient.updateJdStatus(id, status);
       if (status === "interview") {
+        // Only once something has been tailored for it: that is what interview
+        // prep is built from.
         const { session_id } = await apiClient.getLatestJdSession(id);
         if (session_id) {
-          setInterviewPrompt({ jdTitle: jd?.title ?? "this role", sessionId: session_id });
+          setInterviewPrompt({ jdTitle: jd?.title ?? "this role", jdId: id });
         }
       }
     } catch (err) {
@@ -966,33 +969,34 @@ export default function JDIndexPage() {
       {/* Prompted only on the transition into Interview status — not on every
           tailoring run — since that's the moment prep actually becomes relevant. */}
       {interviewPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-gutter">
-          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl p-xl max-w-[26rem] w-full flex flex-col items-center text-center gap-md">
-            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-              <Calendar size={28} className="text-primary" />
-            </div>
-            <div>
-              <p className="text-headline-md text-on-surface font-bold mb-xs">You&rsquo;re in! 🎉</p>
-              <p className="text-body-sm text-on-surface-variant">
-                {interviewPrompt.jdTitle} moved to Interview. Want to prepare now?
-              </p>
-            </div>
-            <div className="flex gap-sm w-full">
+        <Sheet labelledBy="interview-stage-title" describedBy="interview-stage-help" onClose={() => setInterviewPrompt(null)}>
+          <SheetBody>
+            <SheetHeader
+              eyebrow="Interview stage"
+              titleId="interview-stage-title"
+              title="Prepare for this interview?"
+              descriptionId="interview-stage-help"
+            >
+              <span className="text-on-surface font-medium">{interviewPrompt.jdTitle}</span> moved to Interview. Its
+              questions are in the Interview Center — or can be made there from the résumé saved for it.
+            </SheetHeader>
+            <div className="flex gap-sm">
               <button
                 onClick={() => setInterviewPrompt(null)}
-                className="flex-1 py-sm rounded-xl text-label-md text-on-surface-variant border border-outline-variant hover:bg-surface-container-low transition-colors"
+                className={`flex-1 py-sm rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container ${FOCUS_RING}`}
               >
                 Later
               </button>
               <button
-                onClick={() => router.push(`/interview/${interviewPrompt.sessionId}`)}
-                className="flex-1 py-sm rounded-xl text-label-md text-on-primary bg-primary shadow-md hover:shadow-lg transition-all"
+                onClick={() => router.push(`/interview?jd=${encodeURIComponent(interviewPrompt.jdId)}`)}
+                data-autofocus
+                className={`flex-[1.4] py-sm rounded-lg bg-primary text-on-primary text-label-md font-semibold hover:bg-primary-container ${FOCUS_RING}`}
               >
-                Prepare Now
+                Open interview prep
               </button>
             </div>
-          </div>
-        </div>
+          </SheetBody>
+        </Sheet>
       )}
 
       {pendingSaveText && (

@@ -41,12 +41,20 @@ describe("leave warnings on a security exit", () => {
     confirm.mockRestore();
   });
 
-  it("every page with its own prompt checks the off switch", async () => {
-    const { readFileSync } = await import("node:fs");
+  it("every page that warns does it through the shared hook (which checks the off switch)", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((n) => {
+        const p = join(dir, n);
+        return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(n) ? [p] : [];
+      });
+    // A page's own beforeunload would not stand down on a security exit.
+    for (const file of [...walk("app"), ...walk("components")]) {
+      expect(readFileSync(file, "utf-8"), file).not.toMatch(/addEventListener\("beforeunload"/);
+    }
     for (const page of ["app/(app)/profile/page.tsx", "app/(app)/cover-letters/[id]/page.tsx"]) {
-      const src = readFileSync(page, "utf-8");
-      expect(src, page).toMatch(/beforeunload/);
-      expect(src, page).toMatch(/leaveWarningsStoodDown\(\)/);
+      expect(readFileSync(page, "utf-8"), page).toMatch(/useLeaveWarning\(/);
     }
     const guard = readFileSync("components/auth/SessionGuard.tsx", "utf-8");
     expect(guard).toMatch(/standDownLeaveWarnings\(\);\s*window\.location\.replace\("\/dashboard"\)/);

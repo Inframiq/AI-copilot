@@ -65,7 +65,7 @@ import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
-import { leaveWarningsStoodDown } from "@/lib/leave-warnings";
+import { useLeaveWarning } from "@/lib/use-leave-warning";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -239,42 +239,10 @@ export default function ProfilePage() {
 
   // ── warn before leaving with unsaved changes ─────────────────────────────
   // Nothing is persisted until "Save Profile" is clicked (there is no
-  // silent auto-save). Guard both exit paths while the form is dirty:
-  //  • beforeunload  → browser refresh, tab close, navigating to another site
-  //  • anchor clicks → in-app navigation via <Link> in the sidebar / nav
-  useEffect(() => {
-    if (!isDirty) return;
-
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Never on a security exit (signed out, another account).
-      if (leaveWarningsStoodDown()) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-
-    // Capture phase so we can cancel the navigation before Next's <Link>
-    // click handler runs.
-    const onDocClick = (e: MouseEvent) => {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const anchor = (e.target as HTMLElement | null)?.closest("a");
-      if (!anchor) return;
-      const href = anchor.getAttribute("href");
-      if (!href || href.startsWith("#") || anchor.target === "_blank") return;
-      const dest = new URL(href, window.location.href);
-      if (dest.origin !== window.location.origin || dest.pathname === window.location.pathname) return;
-      if (!window.confirm("You have unsaved changes. Leave without saving?")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    document.addEventListener("click", onDocClick, true);
-
-    return () => {
-      window.removeEventListener("beforeunload", onBeforeUnload);
-      document.removeEventListener("click", onDocClick, true);
-    };
-  }, [isDirty]);
+  // silent auto-save). While the form is dirty every way out asks: refresh,
+  // closing the tab, any in-app link (sidebar, nav) and the browser's Back —
+  // which used to leave without asking.
+  useLeaveWarning(isDirty, "You have unsaved changes. Leave without saving?");
 
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {

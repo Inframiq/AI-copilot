@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Warning } from "@phosphor-icons/react";
 import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { FOCUS_RING } from "@/lib/focus";
+import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
 
 // What a deletion actually removes — shown in the dialog so "permanent" is
 // concrete, not a vague warning. Mirrors the rows DELETE /me wipes.
@@ -23,14 +24,6 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<"form" | "deleting" | "done">("form");
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && phase === "form") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose, phase]);
 
   async function handleDelete(e: React.FormEvent) {
     e.preventDefault();
@@ -62,113 +55,84 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-on-surface/30 backdrop-blur-sm"
-        onClick={() => phase === "form" && onClose()}
-      />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-lg pointer-events-none">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Delete account"
-          className="pointer-events-auto w-full max-w-[28rem] bg-surface-container-lowest rounded-2xl border border-error/30 shadow-2xl p-lg"
-        >
-          <div className="flex items-start justify-between gap-md">
-            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
-              <Warning size={20} weight="fill" className="text-error" />
-            </div>
-            {phase === "form" && (
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className="text-on-surface-variant hover:bg-surface-container-high/50 p-xs rounded-full transition-colors"
-              >
-                <X size={18} />
-              </button>
+    <Sheet
+      labelledBy="delete-account-title"
+      describedBy="delete-account-help"
+      onClose={onClose}
+      dismissible={phase === "form"}
+    >
+      <SheetBody>
+        {phase === "done" ? (
+          <SheetHeader eyebrow="Account" tone="text-error" titleId="delete-account-title" title="Account deleted" descriptionId="delete-account-help">
+            Your account and data have been removed. Taking you to the sign-in page…
+          </SheetHeader>
+        ) : (
+          <>
+            <SheetHeader
+              eyebrow="Delete account"
+              tone="text-error"
+              titleId="delete-account-title"
+              title="Delete your account?"
+              descriptionId="delete-account-help"
+            >
+              This is permanent and cannot be undone. The following is deleted immediately:
+            </SheetHeader>
+            <ul className="rounded-xl bg-error-container/30 p-sm sm:p-md flex flex-col gap-xs">
+              {REMOVED.map((item) => (
+                <li key={item} className="text-body-sm text-on-surface flex items-start gap-sm">
+                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-error" aria-hidden />
+                  {item}
+                </li>
+              ))}
+            </ul>
+
+            {error && (
+              <p role="alert" className="rounded-lg bg-error-container px-md py-sm text-on-error-container text-body-sm">
+                {error}
+              </p>
             )}
-          </div>
 
-          {phase === "done" ? (
-            <>
-              <h2 className="text-headline-md text-on-surface font-semibold mt-md">
-                Account deleted
-              </h2>
-              <p className="text-body-sm text-on-surface-variant mt-xs">
-                Your account and data have been removed. Taking you to the sign-in
-                page…
-              </p>
-            </>
-          ) : (
-            <>
-              <h2 className="text-headline-md text-on-surface font-semibold mt-md">
-                Delete your account?
-              </h2>
-              <p className="text-body-sm text-on-surface-variant mt-xs">
-                This is permanent and cannot be undone. The following will be
-                deleted immediately:
-              </p>
-              <ul className="mt-md flex flex-col gap-xs">
-                {REMOVED.map((item) => (
-                  <li
-                    key={item}
-                    className="text-body-sm text-on-surface-variant flex items-start gap-sm"
-                  >
-                    <span className="text-error mt-[2px]" aria-hidden>
-                      •
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              {error && (
-                <div className="mt-md p-md rounded-lg bg-error-container text-on-error-container text-body-sm">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleDelete} className="mt-md flex flex-col gap-md">
-                <label className="flex flex-col gap-xs">
-                  <span className="text-label-md text-on-surface-variant">
-                    Type <strong className="text-on-surface">{CONFIRM_WORD}</strong> to confirm
-                  </span>
-                  <input
-                    type="text"
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    required
-                    disabled={phase === "deleting"}
-                    placeholder={CONFIRM_WORD}
-                    className="w-full px-md py-md rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-error disabled:opacity-60"
-                  />
-                </label>
-                <div className="flex flex-wrap justify-end gap-sm">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={phase === "deleting"}
-                    className="px-lg py-md rounded-xl text-label-md font-semibold text-on-surface-variant hover:bg-surface-container-high/50 transition-colors disabled:opacity-60"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={confirmText !== CONFIRM_WORD || phase === "deleting"}
-                    className="px-lg py-md rounded-xl text-label-md font-semibold bg-error text-on-error hover:opacity-90 transition-opacity disabled:opacity-50"
-                  >
-                    {phase === "deleting" ? "Deleting…" : "Delete my account"}
-                  </button>
-                </div>
-              </form>
-            </>
-          )}
-        </div>
-      </div>
-    </>
+            <form onSubmit={handleDelete} className="flex flex-col gap-md">
+              <label className="flex flex-col gap-xs">
+                <span className="text-label-md text-on-surface-variant">
+                  Type <strong className="text-on-surface">{CONFIRM_WORD}</strong> to confirm
+                </span>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                  data-autofocus
+                  disabled={phase === "deleting"}
+                  placeholder={CONFIRM_WORD}
+                  className="w-full px-md py-sm rounded-lg border border-outline-variant bg-surface text-on-surface text-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-error disabled:opacity-60"
+                />
+              </label>
+              <div className="flex gap-sm">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={phase === "deleting"}
+                  className={`flex-1 py-sm rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container disabled:opacity-60 ${FOCUS_RING}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={confirmText !== CONFIRM_WORD || phase === "deleting"}
+                  className={`flex-[1.4] py-sm rounded-lg text-label-md font-semibold bg-error text-on-error hover:opacity-90 transition-opacity disabled:opacity-50 ${FOCUS_RING}`}
+                >
+                  {phase === "deleting" ? "Deleting…" : "Delete my account"}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </SheetBody>
+    </Sheet>
   );
 }

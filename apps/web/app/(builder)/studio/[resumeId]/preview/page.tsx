@@ -22,7 +22,9 @@ import { SaveToJd } from "@/components/studio/SaveToJd";
 import { NextSteps } from "@/components/studio/NextSteps";
 import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
 import { offerPrepQuestions } from "@/stores/prep-questions-store";
-import { releaseLeaveWarning, useLeaveWarning } from "@/lib/use-leave-warning";
+import { confirmLeave, releaseLeaveWarning, useLeaveWarning } from "@/lib/use-leave-warning";
+
+const DRAFT_LEAVE = "This tailored résumé isn't saved. Leave without saving? Save to JD keeps it with the job.";
 
 /**
  * The Resume Studio: the document is the interface.
@@ -95,10 +97,7 @@ export default function StudioPreviewPage({
   // A draft lives only in memory: ask before anything drops it — a refresh,
   // closing the tab, a link (the sidebar included) or the browser's Back.
   // Only refresh and close used to ask.
-  useLeaveWarning(
-    !!draftJdId,
-    "This tailored résumé isn't saved. Leave without saving? Save to JD keeps it with the job.",
-  );
+  useLeaveWarning(!!draftJdId, DRAFT_LEAVE);
 
   /** Saves the tailored draft as the JD's résumé, then offers to make the
    * JD's interview questions from it (they cost credits, so they are no
@@ -349,15 +348,19 @@ export default function StudioPreviewPage({
         // Once saved, the review is behind you: it belongs to the source
         // résumé, and this is the JD's own copy.
         backLabel={savedToJd ? "Back to Analyzer" : fromJd ? "Back to Review" : "Back to Builder"}
-        onBack={() =>
+        onBack={async () => {
+          // The page's own Back asks too: it routes in code, so neither the
+          // link guard nor the browser's Back sees it.
+          if (!confirmLeave(!!draftJdId, DRAFT_LEAVE)) return;
+          await releaseLeaveWarning();
           router.push(
             savedToJd
               ? `/jd/${linkedJdId}`
               : fromJd
                 ? `/studio/${resumeId}/review`
                 : `/studio/${resumeId}`,
-          )
-        }
+          );
+        }}
         onExport={handleExport}
         isExporting={isExporting}
         onRefresh={() => refetch()}

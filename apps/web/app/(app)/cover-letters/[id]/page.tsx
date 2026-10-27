@@ -10,7 +10,9 @@ import { Card } from "@/components/ui/Card";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
 import { CoverLetterWriting } from "@/components/cover-letter/CoverLetterWriting";
 import { DeleteLetter } from "@/components/cover-letter/DeleteLetter";
-import { leaveWarningsStoodDown } from "@/lib/leave-warnings";
+import { confirmLeave, releaseLeaveWarning, useLeaveWarning } from "@/lib/use-leave-warning";
+
+const LETTER_LEAVE = "This cover letter has unsaved changes. Leave without saving?";
 import type { CoverLetter } from "@career-copilot/types";
 
 export default function CoverLetterEditorPage({
@@ -87,15 +89,9 @@ export default function CoverLetterEditorPage({
 
   // Leaving an unsaved draft (or unsaved edits) loses it: ask first.
   const unsaved = letter?.status === "completed" && (!isSaved || isDirty);
-  useEffect(() => {
-    if (!unsaved) return;
-    // Never on a security exit (signed out, another account).
-    const warn = (event: BeforeUnloadEvent) => {
-      if (!leaveWarningsStoodDown()) event.preventDefault();
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [unsaved]);
+  // Every way out asks: refresh, closing the tab, a link (the sidebar, the
+  // back link) and the browser's Back. Only refresh and close used to.
+  useLeaveWarning(unsaved, LETTER_LEAVE);
 
   /** Writes the draft to the server; false (with the error shown) on failure. */
   async function persistDraft(over?: string): Promise<boolean> {
@@ -138,6 +134,7 @@ export default function CoverLetterEditorPage({
 
   async function handleRegenerate(nextHumanizeLevel: number) {
     if (!letter || isRegenerating) return;
+    if (!confirmLeave(isDirty, LETTER_LEAVE)) return;
     // The resume this letter was generated from has since been deleted —
     // regenerating needs a real resume to run the AI against, unlike
     // viewing/editing/exporting the existing letter, which only needs its
@@ -156,6 +153,7 @@ export default function CoverLetterEditorPage({
       const { cover_letter_id } = await apiClient.generateCoverLetter(
         letter.resume_id, letter.jd_id, nextHumanizeLevel, letter.tailoring_session_id ?? undefined
       );
+      await releaseLeaveWarning();
       router.push(`/cover-letters/${cover_letter_id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to regenerate");
@@ -189,6 +187,7 @@ export default function CoverLetterEditorPage({
     setSavedTitle(title.trim());
     queryClient.invalidateQueries({ queryKey: ["coverLetters"] });
     queryClient.invalidateQueries({ queryKey: ["jdCoverLetter", letter?.jd_id] });
+    await releaseLeaveWarning();
     router.push("/cover-letters");
   }
 

@@ -54,7 +54,7 @@ describe("PhotoRequirementModal", () => {
 
   it("renders nothing while photoModalOpen is false", () => {
     mount();
-    expect(screen.queryByText(/requires a profile photo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/this template needs a photo/i)).not.toBeInTheDocument();
   });
 
   it("shows a 'Loading your profile…' line while the profile query is in flight", () => {
@@ -113,7 +113,7 @@ describe("PhotoRequirementModal", () => {
     useResumeStore.getState().setPhotoModal(true, "ats_clean");
     mount({ profilePhotoUrl: null, onOpenProfile });
 
-    expect(screen.getByText(/don't have a profile photo yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/has no photo yet/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /upload photo/i }));
     expect(screen.getByRole("checkbox", { name: /also save|also set/i })).toBeChecked();
 

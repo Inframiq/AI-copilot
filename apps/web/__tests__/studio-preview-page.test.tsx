@@ -88,7 +88,7 @@ describe("Studio preview page", () => {
     await renderPage();
     await waitFor(() => screen.getByRole("button", { name: /back to builder/i }));
     fireEvent.click(screen.getByRole("button", { name: /back to builder/i }));
-    expect(push).toHaveBeenCalledWith("/studio/r1");
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1"));
   });
 
   it("writes an inline edit back to the store", async () => {
@@ -340,7 +340,27 @@ describe("Studio preview page", () => {
     await renderPage();
     await waitFor(() => screen.getByRole("button", { name: /back to review/i }));
     fireEvent.click(screen.getByRole("button", { name: /back to review/i }));
-    expect(push).toHaveBeenCalledWith("/studio/r1/review");
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1/review"));
+  });
+
+  it("asks before its own Back drops an unsaved tailored draft, and stays on Cancel", async () => {
+    useTailoringStore.setState({ jdId: "jd1" } as never);
+    useResumeStore.setState({ draftJdId: "jd1" } as never);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      await renderPage();
+      await waitFor(() => screen.getByRole("button", { name: /back to review/i }));
+      fireEvent.click(screen.getByRole("button", { name: /back to review/i }));
+      expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/isn't saved. Leave without saving\?/));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(push).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(screen.getByRole("button", { name: /back to review/i }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1/review"));
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   // The six-section Builder belongs to résumés built there. Tailoring an
@@ -367,7 +387,7 @@ describe("Studio preview page", () => {
     useTailoringStore.setState({ jdId: null, jdText: "" } as never);
     await renderPage();
     fireEvent.click(await waitFor(() => screen.getByRole("button", { name: /back to builder/i })));
-    expect(push).toHaveBeenCalledWith("/studio/r1");
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/studio/r1"));
   });
 
   it("offers formatting while editing — beside the document, or above it where there is no gutter", async () => {
@@ -654,7 +674,7 @@ describe("switching template in the Studio preview", () => {
     });
 
     await waitFor(() => expect(useResumeStore.getState().photoModalOpen).toBe(true));
-    expect(screen.getByText(/requires a profile photo/i)).toBeTruthy();
+    expect(screen.getByText(/this template needs a photo/i)).toBeTruthy();
   });
 
   it("remembers the template to fall back to if the prompt is dismissed", async () => {

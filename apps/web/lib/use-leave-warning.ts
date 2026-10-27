@@ -6,6 +6,9 @@ import { leaveWarningsStoodDown } from "@/lib/leave-warnings";
 const GUARD_KEY = "kripaxLeaveGuard";
 
 let releasing = false;
+// Warnings in force right now. React may unmount and remount an effect at
+// once (development's double run), so the tidy-up below waits for none.
+let activeCount = 0;
 
 /**
  * Asks before leaving while `active` — work that exists only in memory and
@@ -73,8 +76,31 @@ export function useLeaveWarning(active: boolean, message: string): void {
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onDocClick, true);
     window.addEventListener("popstate", onPopState);
-    return detach;
+    const path = window.location.pathname;
+    activeCount += 1;
+    return () => {
+      activeCount -= 1;
+      detach();
+      // Saved and still here: take the extra entry off, or the next Back
+      // only lands on this same page. Gone to another page: leave history
+      // alone (the navigation has already moved past the entry).
+      setTimeout(() => {
+        if (activeCount === 0 && window.location.pathname === path && window.history.state?.[GUARD_KEY]) {
+          void releaseLeaveWarning();
+        }
+      }, 0);
+    };
   }, [active, message]);
+}
+
+/**
+ * For the site's own back and navigation buttons (they route in code, so no
+ * link click or browser Back to catch): true when it is fine to go — nothing
+ * would be lost, the user agreed, or a security exit is under way.
+ */
+export function confirmLeave(unsaved: boolean, message: string): boolean {
+  if (!unsaved || leaveWarningsStoodDown()) return true;
+  return window.confirm(message);
 }
 
 /**

@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleNotch, DownloadSimple, Trash, Warning, X } from "@phosphor-icons/react";
+import { CircleNotch, DownloadSimple, Warning } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { downloadFile } from "@/lib/download";
+import { FOCUS_RING } from "@/lib/focus";
+import { Sheet, SheetBody } from "@/components/ui/Sheet";
 import { useResumeLimitStore, type LimitResume, type ResumeLimitInfo } from "@/stores/resume-limit-store";
 
 /**
@@ -55,10 +57,7 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
 
   useEffect(() => {
     titleRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !deleting && resolve(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [deleting, resolve]);
+  }, []);
 
   function toggle(id: string) {
     setError(null);
@@ -113,22 +112,15 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
       : []),
   ]);
 
+  // Cancel, the X, Escape or a click outside leave everything as it is —
+  // not while résumés are being deleted.
   return (
-    <>
-      <div className="fixed inset-0 z-[70] bg-on-surface/30 backdrop-blur-sm" onClick={() => !deleting && resolve(false)} />
-      <div className="fixed inset-0 z-[71] flex items-end sm:items-center justify-center p-sm sm:p-lg pointer-events-none">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="resume-limit-title"
-          className="pointer-events-auto w-full max-w-[32rem] max-h-[90vh] flex flex-col bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl"
-        >
-          <div className="p-md sm:p-lg pb-sm flex items-start gap-md">
-            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
-              <Trash size={20} className="text-error" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 id="resume-limit-title" ref={titleRef} tabIndex={-1} className="text-headline-md text-on-surface font-semibold outline-none">
+    <Sheet labelledBy="resume-limit-title" onClose={() => resolve(false)} dismissible={!deleting}>
+      <SheetBody>
+          <div className="pr-xl">
+            <p className="font-label-caps text-label-caps uppercase text-error">Résumé limit</p>
+            <div className="mt-sm">
+              <h2 id="resume-limit-title" ref={titleRef} tabIndex={-1} className="text-headline-md text-on-surface outline-none">
                 {chosenRows.length > 0
                   ? `${names(chosenRows)} will be deleted`
                   : single ? "Choose a résumé to delete" : `Choose ${info.need} résumés to delete`}
@@ -140,20 +132,12 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
                 {single ? "a different résumé" : "different ones"} to delete.
               </p>
             </div>
-            <button
-              onClick={() => resolve(false)}
-              disabled={deleting}
-              aria-label="Cancel"
-              className="shrink-0 p-xs -m-xs rounded-full text-on-surface-variant hover:bg-surface-container-high/50 disabled:opacity-40"
-            >
-              <X size={18} />
-            </button>
           </div>
 
           <div
             role={single ? "radiogroup" : "group"}
             aria-label="Résumés"
-            className="flex-1 overflow-y-auto px-md sm:px-lg flex flex-col gap-xs py-xs"
+            className="flex flex-col gap-xs"
           >
             {info.resumes.map((r) => {
               const on = chosen.includes(r.id);
@@ -206,7 +190,7 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
             })}
           </div>
 
-          <div className="p-md sm:p-lg pt-sm flex flex-col gap-sm border-t border-outline-variant/20">
+          <div className="flex flex-col gap-sm border-t border-outline-variant/30 pt-md">
             {warnings.map((w) => (
               <p key={w} className="flex items-start gap-xs text-caption text-on-surface-variant">
                 <Warning size={14} className="shrink-0 mt-0.5 text-error" /> {w}
@@ -223,7 +207,7 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
                 type="button"
                 onClick={() => resolve(false)}
                 disabled={deleting}
-                className="flex-1 py-sm rounded-xl border border-outline-variant/40 text-label-md text-on-surface hover:bg-surface-container disabled:opacity-50"
+                className={`flex-1 py-sm rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container disabled:opacity-50 ${FOCUS_RING}`}
               >
                 Cancel
               </button>
@@ -231,15 +215,14 @@ function LimitDialog({ info, resolve }: { info: ResumeLimitInfo; resolve: (madeR
                 type="button"
                 onClick={deleteAndContinue}
                 disabled={!enough || deleting}
-                className="flex-1 inline-flex items-center justify-center gap-xs py-sm rounded-xl bg-error text-on-error text-label-md font-semibold hover:opacity-90 disabled:opacity-50"
+                className={`flex-[1.4] inline-flex items-center justify-center gap-xs py-sm rounded-lg bg-error text-on-error text-label-md font-semibold hover:opacity-90 disabled:opacity-50 ${FOCUS_RING}`}
               >
                 {deleting && <CircleNotch size={16} className="animate-spin motion-reduce:animate-none" />}
                 {deleting ? "Deleting…" : "Delete & continue"}
               </button>
             </div>
           </div>
-        </div>
-      </div>
-    </>
+      </SheetBody>
+    </Sheet>
   );
 }

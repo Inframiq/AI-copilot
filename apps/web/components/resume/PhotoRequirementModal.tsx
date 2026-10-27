@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useResumeStore } from "@/stores/resume-store";
 import { uploadResumePhoto, uploadProfilePhoto } from "@/lib/photo-upload";
 import { upsertCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { useAvatarSrc } from "@/lib/avatar-url";
+import { FOCUS_RING } from "@/lib/focus";
+import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
 
 interface PhotoRequirementModalProps {
   /** string = profile has a photo (Case A); null = none (Case B); undefined = loading. */
@@ -38,10 +39,6 @@ export function PhotoRequirementModal({
   const [alsoSaveToProfile, setAlsoSaveToProfile] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function handleOpenChange(next: boolean) {
-    if (!next) close();
-  }
 
   function close() {
     if (revertTo) {
@@ -117,119 +114,92 @@ export function PhotoRequirementModal({
     }
   }
 
+  if (!open) return null;
+  const secondary = `py-sm px-md rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container ${FOCUS_RING}`;
+  const primary = `py-sm px-md rounded-lg bg-primary text-on-primary text-label-md font-semibold hover:bg-primary-container ${FOCUS_RING}`;
+
+  // Cancel, the X, Escape or a click outside go back to the previous
+  // template (close()); not mid-upload.
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 z-50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-surface p-lg shadow-2xl border border-outline-variant/20 flex flex-col gap-md">
-          <Dialog.Title className="text-headline-sm font-bold text-on-surface">
-            This template requires a profile photo.
-          </Dialog.Title>
+    <Sheet labelledBy="photo-required-title" describedBy="photo-required-help" onClose={close} dismissible={!busy}>
+      <SheetBody>
+        <SheetHeader eyebrow="Photo template" titleId="photo-required-title" title="This template needs a photo" descriptionId="photo-required-help">
+          {profilePhotoUrl === undefined
+            ? "Loading your profile…"
+            : caseB
+              ? "Your profile has no photo yet. Upload one to use this template."
+              : "Your profile has a photo. Use it, or upload a different one."}
+        </SheetHeader>
 
-          {profilePhotoUrl === undefined ? (
-            <Dialog.Description className="text-body-sm text-on-surface-variant">
-              Loading your profile…
-            </Dialog.Description>
-          ) : caseB ? (
-            <Dialog.Description className="text-body-sm text-on-surface-variant">
-              You don&apos;t have a profile photo yet. Please upload one to continue.
-            </Dialog.Description>
-          ) : (
-            <>
-              <Dialog.Description className="text-body-sm text-on-surface-variant">
-                We found a photo in your profile. Would you like to use this photo or upload a
-                different one?
-              </Dialog.Description>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={profilePhotoSrc ?? undefined}
-                alt="Your profile photo"
-                className="w-20 h-20 rounded-full object-cover border border-outline-variant/30"
+        {typeof profilePhotoUrl === "string" && !caseB && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profilePhotoSrc ?? undefined}
+            alt="Your profile photo"
+            className="w-20 h-20 rounded-full object-cover border border-outline-variant/30"
+          />
+        )}
+
+        {showUpload && (
+          <div className="flex flex-col gap-sm rounded-xl bg-surface-container-low p-md">
+            <label htmlFor="prm-file" className={`self-start cursor-pointer ${primary} ${busy ? "opacity-60" : ""}`}>
+              {busy ? "Uploading…" : "Choose an image"}
+              <input
+                id="prm-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onFile(f);
+                  e.target.value = "";
+                }}
               />
-            </>
-          )}
-
-          {showUpload && (
-            <div className="flex flex-col gap-sm rounded-xl border border-outline-variant/30 p-md">
-              <label htmlFor="prm-file" className="text-label-sm text-primary cursor-pointer">
-                {busy ? "Uploading…" : "Choose an image"}
-                <input
-                  id="prm-file"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={busy}
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onFile(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              <label className="flex items-center gap-sm text-caption text-on-surface-variant">
-                <input
-                  type="checkbox"
-                  checked={alsoSaveToProfile}
-                  onChange={(e) => setAlsoSaveToProfile(e.target.checked)}
-                />
-                {caseB ? "Also save to my profile" : "Also set this as my profile photo"}
-              </label>
-            </div>
-          )}
-
-          {error && <p className="text-label-sm text-error">{error}</p>}
-
-          <div className="flex flex-wrap justify-end gap-sm pt-xs">
-            <button
-              type="button"
-              onClick={close}
-              className="px-md py-sm rounded-lg text-label-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
-            >
-              Cancel
-            </button>
-
-            {caseB ? (
-              <>
-                <button
-                  type="button"
-                  onClick={onOpenProfile}
-                  className="px-md py-sm rounded-lg text-label-sm border border-outline-variant text-on-surface hover:bg-surface-container-low transition-colors"
-                >
-                  Open My Profile
-                </button>
-                {!showUpload && (
-                  <button
-                    type="button"
-                    onClick={beginUpload}
-                    className="px-md py-sm rounded-lg text-label-sm bg-primary text-on-primary hover:opacity-90 transition-opacity"
-                  >
-                    Upload Photo
-                  </button>
-                )}
-              </>
-            ) : (
-              !showUpload && (
-                <>
-                  <button
-                    type="button"
-                    onClick={beginUpload}
-                    className="px-md py-sm rounded-lg text-label-sm border border-outline-variant text-on-surface hover:bg-surface-container-low transition-colors"
-                  >
-                    Upload a Different Photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={useProfilePhoto}
-                    className="px-md py-sm rounded-lg text-label-sm bg-primary text-on-primary hover:opacity-90 transition-opacity"
-                  >
-                    Use Profile Photo
-                  </button>
-                </>
-              )
-            )}
+            </label>
+            <label className="flex items-center gap-sm text-body-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={alsoSaveToProfile}
+                onChange={(e) => setAlsoSaveToProfile(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              {caseB ? "Also save to my profile" : "Also set this as my profile photo"}
+            </label>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        )}
+
+        {error && <p role="alert" className="text-caption text-error">{error}</p>}
+
+        <div className="flex flex-wrap gap-sm">
+          <button type="button" onClick={close} disabled={busy} className={`flex-1 ${secondary} disabled:opacity-50`}>
+            Cancel
+          </button>
+          {caseB ? (
+            <>
+              <button type="button" onClick={onOpenProfile} className={`flex-1 ${secondary}`}>
+                Open My Profile
+              </button>
+              {!showUpload && (
+                <button type="button" onClick={beginUpload} data-autofocus className={`flex-1 ${primary}`}>
+                  Upload Photo
+                </button>
+              )}
+            </>
+          ) : (
+            !showUpload && (
+              <>
+                <button type="button" onClick={beginUpload} className={`flex-1 ${secondary}`}>
+                  Upload a Different Photo
+                </button>
+                <button type="button" onClick={useProfilePhoto} data-autofocus className={`flex-1 ${primary}`}>
+                  Use Profile Photo
+                </button>
+              </>
+            )
+          )}
+        </div>
+      </SheetBody>
+    </Sheet>
   );
 }

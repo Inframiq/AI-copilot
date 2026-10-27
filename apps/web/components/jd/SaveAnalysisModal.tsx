@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
-import { FloppyDisk, WarningCircle, X } from "@phosphor-icons/react";
+import { useState } from "react";
+import { FloppyDisk } from "@phosphor-icons/react";
+import { FOCUS_RING } from "@/lib/focus";
+import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
 
 interface Props {
   defaultName: string;
@@ -16,14 +18,6 @@ export function SaveAnalysisModal({ defaultName, existingTitles, onCancel, onCon
   const [name, setName] = useState(defaultName);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") (conflict ? setConflict(null) : onCancel());
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [conflict, onCancel]);
-
   function handleSaveClick() {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -35,78 +29,68 @@ export function SaveAnalysisModal({ defaultName, existingTitles, onCancel, onCon
     onConfirm(trimmed);
   }
 
+  const secondary = `flex-1 py-sm rounded-lg border border-outline-variant/50 text-label-md text-on-surface hover:bg-surface-container ${FOCUS_RING}`;
+
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-on-surface/30 backdrop-blur-sm" onClick={conflict ? undefined : onCancel} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-lg pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-[26rem] bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-2xl overflow-hidden">
-          {conflict ? (
-            <div className="p-lg flex flex-col gap-md">
-              <div className="flex items-start gap-md">
-                <div className="w-10 h-10 rounded-full bg-error-container/40 flex items-center justify-center shrink-0">
-                  <WarningCircle size={20} className="text-error" />
-                </div>
-                <div>
-                  <p className="text-label-md text-on-surface font-semibold">
-                    &ldquo;{conflict.title}&rdquo; already exists
-                  </p>
-                  <p className="text-body-sm text-on-surface-variant mt-xs">
-                    Replacing it deletes that entry and any tailoring history built on it. This can&apos;t be undone.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-sm">
-                <button
-                  onClick={() => setConflict(null)}
-                  className="px-lg py-sm rounded-lg text-label-sm text-on-surface-variant hover:bg-surface-container transition-colors"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={() => onConfirm(name.trim(), conflict.id)}
-                  className="px-lg py-sm rounded-lg text-label-sm text-on-error bg-error hover:opacity-90 transition-opacity"
-                >
-                  Replace
-                </button>
-              </div>
+    // Closing the name clash goes back to the name, not away.
+    <Sheet
+      labelledBy="save-analysis-title"
+      describedBy={conflict ? "save-analysis-help" : undefined}
+      onClose={conflict ? () => setConflict(null) : onCancel}
+    >
+      <SheetBody>
+        {conflict ? (
+          <>
+            <SheetHeader
+              eyebrow="Name already used"
+              tone="text-error"
+              titleId="save-analysis-title"
+              title={<>&ldquo;{conflict.title}&rdquo; already exists</>}
+              descriptionId="save-analysis-help"
+            >
+              Replacing it deletes that entry and any tailoring history built on it. This can&apos;t be undone.
+            </SheetHeader>
+            <div className="flex gap-sm">
+              <button onClick={() => setConflict(null)} data-autofocus className={secondary}>
+                Back
+              </button>
+              <button
+                onClick={() => onConfirm(name.trim(), conflict.id)}
+                className={`flex-[1.4] py-sm rounded-lg text-label-md font-semibold text-on-error bg-error hover:opacity-90 transition-opacity ${FOCUS_RING}`}
+              >
+                Replace
+              </button>
             </div>
-          ) : (
-            <div className="p-lg flex flex-col gap-md">
-              <div className="flex items-center justify-between">
-                <p className="text-label-md text-on-surface font-semibold">Save analysis as</p>
-                <button onClick={onCancel} className="p-xs rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              <input
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSaveClick(); }}
-                onFocus={(e) => e.currentTarget.select()}
-                placeholder="Name this analysis"
-                className="w-full px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-              <div className="flex items-center justify-end gap-sm">
-                <button
-                  onClick={onCancel}
-                  className="px-lg py-sm rounded-lg text-label-sm text-on-surface-variant hover:bg-surface-container transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveClick}
-                  disabled={!name.trim()}
-                  className="flex items-center gap-xs px-lg py-sm rounded-lg text-label-sm text-on-primary bg-primary hover:opacity-90 transition-opacity disabled:opacity-40"
-                >
-                  <FloppyDisk size={16} />
-                  Save
-                </button>
-              </div>
+          </>
+        ) : (
+          <>
+            <SheetHeader eyebrow="JD Analyzer" titleId="save-analysis-title" title="Save analysis as" />
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSaveClick(); }}
+              onFocus={(e) => e.currentTarget.select()}
+              placeholder="Name this analysis"
+              aria-label="Analysis name"
+              className="w-full px-md py-sm bg-surface border border-outline-variant/60 rounded-lg text-body-md text-on-surface outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <div className="flex gap-sm">
+              <button onClick={onCancel} className={secondary}>
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveClick}
+                disabled={!name.trim()}
+                className={`flex-[1.4] inline-flex items-center justify-center gap-xs py-sm rounded-lg text-label-md font-semibold text-on-primary bg-primary hover:bg-primary-container transition-colors disabled:opacity-40 ${FOCUS_RING}`}
+              >
+                <FloppyDisk size={16} />
+                Save
+              </button>
             </div>
-          )}
-        </div>
-      </div>
-    </>
+          </>
+        )}
+      </SheetBody>
+    </Sheet>
   );
 }

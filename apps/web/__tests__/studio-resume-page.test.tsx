@@ -145,7 +145,7 @@ describe("Studio resume editor page — loading an already-generated PDF on open
     await waitFor(() =>
       expect(useResumeStore.getState().photoModalOpen).toBe(true),
     );
-    expect(await screen.findByText("This template requires a profile photo.")).toBeInTheDocument();
+    expect(await screen.findByText("This template needs a photo")).toBeInTheDocument();
   });
 
   it("does not open the prompt when the resume already has a photo", async () => {
