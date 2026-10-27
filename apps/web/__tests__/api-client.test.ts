@@ -40,7 +40,7 @@ describe("apiClient", () => {
     );
 
     await expect(apiClient.generateCoverLetter("r1", "jd1", 50)).rejects.toBeInstanceOf(ApiError);
-    expect(useCreditsStore.getState().refusal).toEqual({ action: "A cover letter", cost: 3, have: 1 });
+    expect(useCreditsStore.getState().refusal).toEqual({ kind: "credits", action: "A cover letter", cost: 3, have: 1 });
     clearCreditRefusal();
   });
 

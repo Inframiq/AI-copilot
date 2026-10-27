@@ -44,7 +44,12 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
         const isHeading = (f: string) => f.trim().endsWith(":");
         const secondHeading = listed.findIndex((f, i) => i > 0 && isHeading(f));
         const features = compact && secondHeading > 0 ? listed.slice(0, secondHeading) : listed;
-        const label = isCurrent
+        // Premium is renewable from its own card: a fresh allowance now, or
+        // the plan back after it ended. Free has nothing to renew.
+        const renewable = isCurrent && isPremium;
+        const label = renewable
+          ? "Renew Premium"
+          : isCurrent
           ? "Current plan"
           : isPremium
           ? "Upgrade to Premium"
@@ -103,10 +108,10 @@ export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }:
             </ul>
 
             <button
-              onClick={() => !isCurrent && onChoosePlan(plan.id)}
-              disabled={isCurrent}
+              onClick={() => (renewable || !isCurrent) && onChoosePlan(plan.id)}
+              disabled={isCurrent && !renewable}
               className={`mt-md sm:mt-lg py-sm sm:py-md rounded-xl text-label-md font-semibold transition-colors ${
-                isCurrent
+                isCurrent && !renewable
                   ? "bg-surface-container text-on-surface-variant cursor-default"
                   : isPremium
                   ? "bg-primary text-on-primary hover:opacity-90"

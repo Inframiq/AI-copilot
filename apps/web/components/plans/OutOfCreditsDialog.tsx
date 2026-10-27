@@ -29,28 +29,32 @@ export function OutOfCreditsDialog() {
   }, [refusal, queryClient]);
 
   if (!refusal) return null;
-  const { action, cost, have } = refusal;
+  const ended = refusal.kind === "inactive";
 
   return (
     <Sheet labelledBy="out-of-credits-title" describedBy="out-of-credits-help" onClose={clearCreditRefusal}>
       <div className="px-md sm:px-lg pt-md sm:pt-lg pb-md sm:pb-lg flex flex-col gap-md">
         <div className="pr-xl">
-          <p className="font-label-caps text-label-caps uppercase text-error">Out of credits</p>
+          <p className="font-label-caps text-label-caps uppercase text-error">
+            {ended ? "Plan not active" : "Out of credits"}
+          </p>
           <h2 id="out-of-credits-title" className="mt-sm text-headline-md text-on-surface">
-            Not enough credits for this
+            {ended ? "Your plan has ended" : "Not enough credits for this"}
           </h2>
           <p id="out-of-credits-help" className="mt-xs text-body-sm text-on-surface-variant">
             Nothing was charged and nothing changed.
           </p>
         </div>
 
-        <div className="flex items-center justify-between gap-md border-y border-outline-variant/40 py-sm">
-          <span className="min-w-0 text-body-sm text-on-surface">{action}</span>
-          <span className="shrink-0 text-right tabular-nums">
-            {cost !== null && <span className="block text-label-md text-on-surface">{cost} credits</span>}
-            {have !== null && <span className="block text-caption text-error">You have {have}</span>}
-          </span>
-        </div>
+        {refusal.kind === "credits" && (
+          <div className="flex items-center justify-between gap-md border-y border-outline-variant/40 py-sm">
+            <span className="min-w-0 text-body-sm text-on-surface">{refusal.action}</span>
+            <span className="shrink-0 text-right tabular-nums">
+              {refusal.cost !== null && <span className="block text-label-md text-on-surface">{refusal.cost} credits</span>}
+              {refusal.have !== null && <span className="block text-caption text-error">You have {refusal.have}</span>}
+            </span>
+          </div>
+        )}
 
         <PremiumOffer subscription={subscription} onNavigate={clearCreditRefusal} />
 

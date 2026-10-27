@@ -98,19 +98,20 @@ describe("PrepQuestionsOffer", () => {
     // Price and allowance from the server's plan catalog.
     expect(await screen.findByText("Premium · $5 a month")).toBeInTheDocument();
     expect(screen.getByText(/600 credits every 30 days/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /See Premium/ })).toHaveAttribute("href", "/plans");
+    expect(screen.getByRole("link", { name: /Upgrade to Premium/ })).toHaveAttribute("href", "/plans");
   });
 
-  it("short of credits on a paid plan, says when they come back instead", async () => {
+  it("short of credits on Premium, offers to renew instead of upgrading", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue({
-      plan: "premium", credits_remaining: 3, credits_allotment: 600, renews: true,
+      plan: "premium", status: "active", credits_remaining: 3, credits_allotment: 600, renews: true,
       current_period_end: "2026-11-12T00:00:00Z", costs: { prep_questions: 5 },
     } as never);
     offerPrepQuestions({ jdId: "jd-1", sessionId: "run-1", title: "" });
     renderOffer();
 
-    expect(await screen.findByText(/Your 600 credits refill on/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /See Premium/ })).toBeNull();
+    expect(await screen.findByRole("link", { name: /Renew Premium/ })).toHaveAttribute("href", "/plans");
+    expect(screen.getByText(/otherwise they refill on/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Upgrade/ })).toBeNull();
   });
 
   it("doesn't ask when the run this résumé came from already has a set", async () => {

@@ -44,7 +44,9 @@ export default function PlansPage() {
         </p>
       )}
 
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+      {showUpgrade && (
+        <UpgradeModal mode={sub && sub.plan !== "free" ? "renew" : "upgrade"} onClose={() => setShowUpgrade(false)} />
+      )}
     </div>
   );
 }

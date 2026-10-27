@@ -65,6 +65,16 @@ describe("PlansComparison", () => {
     expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeEnabled();
   });
 
+  it("on Premium, the Premium card renews rather than sitting disabled", async () => {
+    vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
+    const { onChoosePlan } = renderIt({ currentPlan: "premium" });
+    const renew = await screen.findByRole("button", { name: "Renew Premium" });
+    expect(renew).toBeEnabled();
+    await userEvent.click(renew);
+    expect(onChoosePlan).toHaveBeenCalledWith("premium");
+    expect(screen.queryByRole("button", { name: "Upgrade to Premium" })).toBeNull();
+  });
+
   it("reads like a pricing page: who each plan is for, and labelled sections", async () => {
     vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
     renderIt();
