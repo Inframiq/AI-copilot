@@ -19,6 +19,7 @@ export function Sheet({
   onClose,
   dismissible = true,
   role = "dialog",
+  wide = false,
   children,
 }: {
   labelledBy: string;
@@ -29,6 +30,8 @@ export function Sheet({
   dismissible?: boolean;
   /** "alertdialog" for a question that has to be answered before going on. */
   role?: "dialog" | "alertdialog";
+  /** Room for a picture (a template preview) rather than a question. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -57,7 +60,7 @@ export function Sheet({
           aria-modal="true"
           aria-labelledby={labelledBy}
           aria-describedby={describedBy}
-          className="sheet-enter pointer-events-auto relative w-full sm:max-w-[30rem] max-h-[92dvh] overflow-y-auto bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl border border-outline-variant/30 shadow-2xl pb-[env(safe-area-inset-bottom)]"
+          className={`sheet-enter pointer-events-auto relative w-full ${wide ? "sm:max-w-[40rem]" : "sm:max-w-[30rem]"} max-h-[92dvh] overflow-y-auto bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl border border-outline-variant/30 shadow-2xl pb-[env(safe-area-inset-bottom)]`}
         >
           <div className="sm:hidden mx-auto mt-sm h-1 w-10 rounded-full bg-outline-variant/70" aria-hidden />
           {dismissible && (

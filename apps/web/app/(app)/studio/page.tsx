@@ -3,11 +3,12 @@ import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash } from "@phosphor-icons/react";
+import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash, MagnifyingGlassPlus } from "@phosphor-icons/react";
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { TemplatePreviewSheet } from "@/components/studio/TemplatePreviewSheet";
 import { getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import type { Resume } from "@career-copilot/types";
 
@@ -32,6 +33,8 @@ export default function StudioIndexPage() {
   const queryClient = useQueryClient();
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("ats_clean");
+  // Index into PICKER_TEMPLATES of the template open full size, or null.
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("blank");
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -338,46 +341,75 @@ export default function StudioIndexPage() {
           Choose a template
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
-          {PICKER_TEMPLATES.map((t) => {
+          {PICKER_TEMPLATES.map((t, i) => {
             const isSelected = selected === t.id;
             return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelected(t.id)}
-                className={`group relative flex flex-col rounded-2xl border-2 overflow-hidden text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                  isSelected
-                    ? "border-primary shadow-lg shadow-primary/20 scale-[1.02]"
-                    : "border-outline-variant/30 hover:border-primary/40 hover:shadow-md"
-                }`}
-              >
-                <div className="relative w-full aspect-[3/4] bg-surface-container overflow-hidden">
-                  <Image
-                    src={`/resume-templates/${t.id}.png`}
-                    alt={`${t.label} template preview`}
-                    fill
-                    className="object-cover object-top"
-                    sizes="(max-width: 768px) 50vw, 25vw"
-                  />
-                  {isSelected && (
-                    <div className="absolute inset-0 bg-primary/10 flex items-start justify-end p-sm">
-                      <CheckCircle size={24} weight="fill" className="text-primary drop-shadow" />
-                    </div>
-                  )}
+              // The Preview button sits beside the card's own button, not
+              // inside it — a button can't hold another button.
+              <div key={t.id} className={`relative transition-transform duration-200 ${isSelected ? "scale-[1.02]" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(t.id)}
+                  aria-pressed={isSelected}
+                  className={`group relative flex w-full h-full flex-col rounded-2xl border-2 overflow-hidden text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    isSelected
+                      ? "border-primary shadow-lg shadow-primary/20"
+                      : "border-outline-variant/30 hover:border-primary/40 hover:shadow-md"
+                  }`}
+                >
+                  <div className="relative w-full aspect-[3/4] bg-surface-container overflow-hidden">
+                    <Image
+                      src={`/resume-templates/${t.id}.png`}
+                      alt={`${t.label} template preview`}
+                      fill
+                      className="object-cover object-top"
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                    />
+                    {isSelected && (
+                      <div className="absolute inset-0 bg-primary/10 flex items-start justify-end p-sm">
+                        <CheckCircle size={24} weight="fill" className="text-primary drop-shadow" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-sm bg-surface-container-lowest border-t border-outline-variant/20">
+                    <p className={`text-label-sm font-semibold ${isSelected ? "text-primary" : "text-on-surface"}`}>
+                      {t.label}
+                    </p>
+                    <p className="text-caption text-on-surface-variant mt-xs line-clamp-2">
+                      {t.description}
+                    </p>
+                  </div>
+                </button>
+                <div className="pointer-events-none absolute inset-x-0 top-0 aspect-[3/4] flex items-end justify-center p-sm">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewIndex(i)}
+                    aria-label={`Preview ${t.label} template`}
+                    className="pointer-events-auto flex items-center gap-xs px-md py-xs rounded-full bg-surface-container-lowest/95 text-label-sm text-on-surface border border-outline-variant/40 shadow-md hover:text-primary hover:border-primary/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <MagnifyingGlassPlus size={14} />
+                    Preview
+                  </button>
                 </div>
-                <div className="p-sm bg-surface-container-lowest border-t border-outline-variant/20">
-                  <p className={`text-label-sm font-semibold ${isSelected ? "text-primary" : "text-on-surface"}`}>
-                    {t.label}
-                  </p>
-                  <p className="text-caption text-on-surface-variant mt-xs line-clamp-2">
-                    {t.description}
-                  </p>
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
       </div>
+
+      {previewIndex !== null && (
+        <TemplatePreviewSheet
+          templates={PICKER_TEMPLATES}
+          index={previewIndex}
+          selectedId={selected}
+          onIndexChange={setPreviewIndex}
+          onUse={(id) => {
+            setSelected(id);
+            setPreviewIndex(null);
+          }}
+          onClose={() => setPreviewIndex(null)}
+        />
+      )}
 
       {/* CTA */}
       <div className="flex flex-col items-center gap-sm">
