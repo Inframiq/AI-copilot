@@ -14,7 +14,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
-import { APP_NAV } from "@/lib/nav";
+import { ACCOUNT_NAV, APP_NAV } from "@/lib/nav";
 import type { CoverLetter, JobDescription, PrepQuestionWithJdOut, Resume } from "@career-copilot/types";
 
 interface Hit {
@@ -66,7 +66,7 @@ function useSearchHits(query: string, enabled: boolean) {
   const hits = useMemo<Hit[]>(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const jdTitle = new Map((jds.data ?? []).map((j) => [j.id, j.title]));
-    const pages: Hit[] = APP_NAV.map((n) => ({
+    const pages: Hit[] = [...APP_NAV, ...ACCOUNT_NAV].map((n) => ({
       key: `page-${n.href}`, group: "Pages", label: n.label, href: n.href, icon: n.icon,
     }));
     const recentJds = [...(jds.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -375,7 +375,7 @@ export function MobileSearch() {
           setUsed(true);
           setOpen(true);
         }}
-        className="w-10 h-10 -mr-xs rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface active:bg-surface-container"
+        className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface active:bg-surface-container"
       >
         <MagnifyingGlass size={22} />
       </button>

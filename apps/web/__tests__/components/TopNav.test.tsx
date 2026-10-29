@@ -14,6 +14,9 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: { getSubscription: vi.fn(() => new Promise(() => {})) },
 }));
 
+// The avatar reads the career profile; pending, it shows its placeholder.
+vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => new Promise(() => {}) }));
+
 import { TopNav } from "../../components/layout/TopNav";
 
 function renderTopNav() {
@@ -51,6 +54,20 @@ describe("TopNav", () => {
       [...tabs.querySelectorAll("a"), ...sheet.querySelectorAll("a")].map((a) => a.getAttribute("href")),
     );
     for (const item of APP_NAV) expect(reachable).toContain(item.href);
+  });
+
+  it("keeps My Profile and Account off the tabs and More, behind the avatar", () => {
+    renderTopNav();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const tabs = screen.getByRole("navigation", { name: "Main" });
+    const sheet = screen.getByRole("dialog", { name: "More pages" });
+    for (const href of ["/profile", "/account"]) {
+      expect(tabs.querySelector(`a[href="${href}"]`)).toBeNull();
+      expect(sheet.querySelector(`a[href="${href}"]`)).toBeNull();
+    }
+    fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
+    expect(screen.getByRole("menuitem", { name: "My Profile" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "/account");
   });
 
   it("closes the More sheet on Escape", () => {

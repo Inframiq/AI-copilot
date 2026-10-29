@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { DotsThreeOutline, X } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
+import { AvatarMenu } from "./AvatarMenu";
 import { GlobalSearch, MobileSearch } from "./GlobalSearch";
 import { FeedbackWidget } from "../feedback/FeedbackWidget";
 import { HelpButton } from "@/components/support/HelpButton";
@@ -36,11 +37,14 @@ export function TopNav() {
           <Image src="/brand/logo-wordmark.png" alt="KripaX" width={100} height={22} priority />
           <BetaBadge />
         </Link>
-        <div className="flex items-center gap-xs">
+        {/* Tight gaps: at 360px the right side (search, help, feedback,
+            credits, avatar) only just clears the wordmark and Beta badge. */}
+        <div className="flex items-center gap-0.5">
           <MobileSearch />
           <HelpButton />
           <FeedbackWidget />
           <CreditMeter variant="compact" />
+          <AvatarMenu variant="header" />
         </div>
       </header>
 

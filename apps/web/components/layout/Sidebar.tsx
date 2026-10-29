@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { CaretDoubleLeft } from "@phosphor-icons/react";
 import { CreditMeter } from "./CreditMeter";
+import { AvatarMenu } from "./AvatarMenu";
 import { useSidebarStore } from "@/stores/sidebar-store";
 import { APP_NAV, isActive } from "@/lib/nav";
 
@@ -143,9 +144,10 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom — credit balance; the collapse flap moved to the nav edge,
-          and sign-out lives on /account */}
-      <div className="shrink-0 mt-auto pt-sm pb-md border-t border-outline-variant/20">
+      {/* Bottom — the avatar (My Profile, Account, Sign out) above the
+          credit balance; the collapse flap moved to the nav edge */}
+      <div className="shrink-0 mt-auto pt-sm pb-md border-t border-outline-variant/20 flex flex-col gap-sm">
+        <AvatarMenu variant={collapsed ? "rail" : "sidebar"} />
         <CreditMeter variant={collapsed ? "rail" : "full"} />
       </div>
     </aside>

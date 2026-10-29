@@ -62,19 +62,22 @@ export function CreditMeter({
         href="/account"
         title={summary}
         aria-label={summary}
-        className={`flex items-center gap-xs px-md py-xs pill pill-interactive rounded-full border text-label-sm font-semibold transition-colors ${
+        className={`shrink-0 whitespace-nowrap flex items-center gap-xs px-sm sm:px-md py-xs pill pill-interactive rounded-full border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
             : "border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/50"
         }`}
       >
         <Lightning size={16} weight="fill" className={low ? "text-error" : "text-primary"} />
+        {/* A phone's top bar also holds search, help, feedback and the
+            avatar: there the count stands alone, as on the sidebar rail.
+            The tooltip and accessible name keep the full sentence. */}
         <span>
           {credits_remaining}
           <span className="hidden lg:inline text-on-surface-variant/60 font-normal">
             {" "}of {credits_allotment}
-          </span>{" "}
-          <span className="font-normal">left</span>
+          </span>
+          <span className="hidden sm:inline font-normal"> left</span>
         </span>
       </Link>
     );

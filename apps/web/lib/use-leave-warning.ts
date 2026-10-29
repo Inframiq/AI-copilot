@@ -93,6 +93,11 @@ export function useLeaveWarning(active: boolean, message: string): void {
   }, [active, message]);
 }
 
+/** True while any page on screen holds work a useLeaveWarning guards. */
+export function hasUnsavedWork(): boolean {
+  return activeCount > 0;
+}
+
 /**
  * For the site's own back and navigation buttons (they route in code, so no
  * link click or browser Back to catch): true when it is fine to go — nothing

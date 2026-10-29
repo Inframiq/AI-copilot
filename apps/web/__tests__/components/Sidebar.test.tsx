@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -12,6 +12,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api-client", () => ({
   apiClient: { getSubscription: vi.fn(() => new Promise(() => {})) },
 }));
+
+// The avatar reads the career profile; pending, it shows its placeholder.
+vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => new Promise(() => {}) }));
 
 const SUB = {
   plan: "free",
@@ -37,20 +40,31 @@ function renderSidebar() {
 }
 
 describe("Sidebar", () => {
-  it("renders all nav links", () => {
-    renderSidebar();
-    for (const label of [
+  it("lists the tools, and only the tools", () => {
+    const { container } = renderSidebar();
+    const labels = [...container.querySelector("nav")!.querySelectorAll("a")].map((a) => a.getAttribute("aria-label"));
+    expect(labels).toEqual([
       "Dashboard",
-      "My Profile",
       "JD Analyzer",
       "Resume Builder",
       "Cover Letter",
       "Interview Center",
       "Analytics",
-      "Account",
-    ]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
+    ]);
+  });
+
+  // Beside Resume Builder, My Profile read as a second way to make a résumé.
+  it("keeps My Profile and Account behind the avatar, above the credit meter", () => {
+    const { container } = renderSidebar();
+    const nav = container.querySelector("nav")!;
+    expect(nav.querySelector('a[href="/profile"]')).toBeNull();
+    expect(nav.querySelector('a[href="/account"]')).toBeNull();
+    const avatar = screen.getByRole("button", { name: /account menu/i });
+    expect(nav.contains(avatar)).toBe(false);
+    fireEvent.click(avatar);
+    expect(screen.getByRole("menuitem", { name: "My Profile" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "/account");
+    expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });
 
   it("links the KripaX wordmark back to the dashboard", () => {
@@ -71,7 +85,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Support")).not.toBeInTheDocument();
   });
 
-  it("no longer renders a Sign Out button (moved to /account)", () => {
+  it("shows Sign out only once the avatar menu is open", () => {
     renderSidebar();
     expect(screen.queryByText(/sign ?out/i)).not.toBeInTheDocument();
   });

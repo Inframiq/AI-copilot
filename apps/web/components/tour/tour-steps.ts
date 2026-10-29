@@ -1,6 +1,6 @@
-// Mirrors components/layout/Sidebar.tsx's NAV list — each `href` must match
-// a Sidebar link's data-tour attribute so GuidedTour can find it to
-// spotlight. Kept as plain data so the copy can be edited without touching
+// Mirrors the sidebar — each `href` must match a sidebar element's data-tour
+// attribute so GuidedTour can find it to spotlight: a nav link, or for
+// "/profile" the avatar that opens My Profile and Account. Kept as plain data so the copy can be edited without touching
 // GuidedTour's rendering logic.
 export interface TourStep {
   href: string;
@@ -16,8 +16,8 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     href: "/profile",
-    title: "My Profile",
-    body: "Fill this in once — your contact info, work history, education, and skills power every resume, cover letter, and tailored suggestion Copilot generates for you from here on.",
+    title: "My Profile & Account",
+    body: "Your avatar opens My Profile, Account and Sign out. Fill in My Profile once — your contact info, work history, education, and skills power every resume and cover letter. Account holds your plan, credits, and a replay of this guide.",
   },
   {
     href: "/jd",
@@ -43,10 +43,5 @@ export const TOUR_STEPS: TourStep[] = [
     href: "/analytics",
     title: "Analytics",
     body: "Track your ATS score trend, applications per week, and your funnel from JD to interview, so you can see what's actually working.",
-  },
-  {
-    href: "/account",
-    title: "Account",
-    body: "Manage your plan, credit balance, and account settings, find the Terms and Privacy Policy — and you can replay this guide from here anytime.",
   },
 ];
