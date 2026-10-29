@@ -17,7 +17,15 @@ const getCareerProfile = vi.fn();
 vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => getCareerProfile() }));
 
 // The signed link for a stored photo is fetched from storage; stand in for it.
-vi.mock("@/lib/avatar-url", () => ({ useAvatarSrc: (url: string | null) => (url ? `${url}?signed` : null) }));
+vi.mock("@/lib/avatar-url", () => ({
+  useAvatarSrc: (url: string | null) => (url ? `${url}?signed` : null),
+  avatarPath: () => null,
+  avatarSrcQuery: () => ({ queryKey: ["avatarSrc"], queryFn: () => null, enabled: false }),
+}));
+
+// The menu waits for the whole shell (lib/reveal), the credit balance too.
+const getSubscription = vi.fn();
+vi.mock("@/lib/api-client", () => ({ apiClient: { getSubscription: () => getSubscription() } }));
 
 const hasUnsavedWork = vi.fn(() => false);
 vi.mock("@/lib/use-leave-warning", async (orig) => ({
@@ -41,8 +49,10 @@ function renderMenu(variant: "sidebar" | "rail" | "header" = "sidebar") {
   );
 }
 
-function openMenu() {
-  fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
+async function openMenu() {
+  const trigger = screen.getByRole("button", { name: /account menu/i });
+  await waitFor(() => expect(trigger).toBeEnabled());
+  fireEvent.click(trigger);
   return screen.getByRole("menu");
 }
 
@@ -58,6 +68,7 @@ describe("initials", () => {
 describe("AvatarMenu", () => {
   beforeEach(() => {
     getCareerProfile.mockResolvedValue({ ...PROFILE });
+    getSubscription.mockResolvedValue({ plan: "free", credits_remaining: 34, credits_allotment: 50, costs: {} });
     hasUnsavedWork.mockReturnValue(false);
     signOutHere.mockClear();
     leaveSignedOut.mockClear();
@@ -87,7 +98,7 @@ describe("AvatarMenu", () => {
   it("opens My Profile · Account · Sign out, in that order", async () => {
     renderMenu();
     await screen.findByText("Asha Rao");
-    const items = [...openMenu().querySelectorAll('[role="menuitem"]')];
+    const items = [...(await openMenu()).querySelectorAll('[role="menuitem"]')];
     expect(items.map((i) => i.textContent)).toEqual(["My Profile", "Account", "Sign out"]);
     expect(items[0]).toHaveAttribute("href", "/profile");
     expect(items[1]).toHaveAttribute("href", "/account");
@@ -95,17 +106,17 @@ describe("AvatarMenu", () => {
 
   it("closes on Escape and on a click outside", async () => {
     renderMenu();
-    openMenu();
+    await openMenu();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
-    openMenu();
+    await openMenu();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("signs out and leaves with a full page load", async () => {
     renderMenu();
-    openMenu();
+    await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(leaveSignedOut).toHaveBeenCalledOnce());
     expect(signOutHere).toHaveBeenCalledOnce();
@@ -118,7 +129,7 @@ describe("AvatarMenu", () => {
     hasUnsavedWork.mockReturnValue(true);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderMenu();
-    openMenu();
+    await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(confirm).toHaveBeenCalledOnce();
     expect(signOutHere).not.toHaveBeenCalled();
@@ -129,7 +140,7 @@ describe("AvatarMenu", () => {
     hasUnsavedWork.mockReturnValue(true);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderMenu();
-    openMenu();
+    await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(leaveSignedOut).toHaveBeenCalledOnce());
   });
@@ -137,10 +148,29 @@ describe("AvatarMenu", () => {
   it("doesn't ask when nothing is unsaved", async () => {
     const confirm = vi.spyOn(window, "confirm");
     renderMenu();
-    openMenu();
+    await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(leaveSignedOut).toHaveBeenCalledOnce());
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  // Each part of the shell used to draw itself when its own request came
+  // back: "My Profile" and a blank circle, then the name, then the balance.
+  it("shows placeholder shapes, not a stand-in name, until the shell has loaded", async () => {
+    let finish!: (v: unknown) => void;
+    getSubscription.mockReturnValue(new Promise((r) => (finish = r)));
+    renderMenu("sidebar");
+    await waitFor(() => expect(getCareerProfile).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    const trigger = screen.getByRole("button", { name: /account menu/i });
+    // The profile is in, but the balance isn't: still the placeholder.
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("My Profile")).toBeNull();
+    expect(screen.queryByText("AR")).toBeNull();
+    finish({ plan: "free", credits_remaining: 34, credits_allotment: 50, costs: {} });
+    expect(await screen.findByText("Asha Rao")).toBeInTheDocument();
+    expect(trigger).toBeEnabled();
   });
 
   it("is the guided tour's profile target in the sidebar, never in the phone header", () => {

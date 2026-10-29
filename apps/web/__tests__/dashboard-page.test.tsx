@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -15,6 +15,7 @@ vi.mock("@/lib/api-client", () => ({
     getJds: vi.fn().mockResolvedValue([]),
     getLearningItems: vi.fn().mockResolvedValue([]),
     getMyQuestions: vi.fn().mockResolvedValue([]),
+    getSubscription: vi.fn().mockResolvedValue({ plan: "free", credits_remaining: 34, credits_allotment: 50, costs: {} }),
   },
 }));
 vi.mock("@/lib/career-profile-client", () => ({
@@ -26,6 +27,7 @@ vi.mock("@/lib/supabase", () => ({
 
 import DashboardPage from "../app/(app)/dashboard/page";
 import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import { apiClient } from "@/lib/api-client";
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -100,5 +102,27 @@ describe("Dashboard page", () => {
       expect(card).toHaveTextContent(label);
       expect(card).not.toHaveTextContent(/needs work|excellent/i);
     });
+  });
+
+  // Each part used to draw itself when its own request came back: "No
+  // resumes yet" and zeros first, then the name, the numbers and the résumés
+  // over the next two seconds. Now nothing shows a value until all of it can.
+  it("shows placeholders, never interim values, until every part has loaded", async () => {
+    let finish!: (v: unknown) => void;
+    vi.mocked(apiClient.getResumes).mockReturnValueOnce(new Promise((r) => (finish = r)) as never);
+    vi.mocked(getCareerProfile).mockResolvedValueOnce({
+      contact: { name: "Jane Doe", email: "jane@example.com" },
+    } as unknown as CareerProfile);
+    const { container } = renderPage();
+    await waitFor(() => expect(apiClient.getJds).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    // Everything else is in; the résumés aren't.
+    expect(screen.queryByText("No resumes yet")).toBeNull();
+    expect(container.querySelector("h1")).toBeNull();
+    expect(screen.getByRole("button", { name: /Profile Health/ })).not.toHaveTextContent("%");
+    finish([{ id: "r1", title: "Backend CV", updated_at: "2026-10-01T00:00:00Z", ats_score: null }]);
+    expect(await screen.findByText("Backend CV")).toBeInTheDocument();
+    expect(container.querySelector("h1")).toHaveTextContent("Jane");
+    expect(screen.getByRole("button", { name: /Profile Health/ })).toHaveTextContent("20%");
   });
 });

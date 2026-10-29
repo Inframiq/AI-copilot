@@ -9,6 +9,10 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: { getSubscription: vi.fn() },
 }));
 
+// The meter waits for the whole shell (lib/reveal), the profile too.
+const getCareerProfile = vi.fn(async () => null as unknown);
+vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => getCareerProfile() }));
+
 import { CreditMeter } from "../../components/layout/CreditMeter";
 import { apiClient } from "../../lib/api-client";
 
@@ -34,13 +38,29 @@ function renderMeter(variant: "compact" | "full" | "rail") {
 describe("CreditMeter", () => {
   beforeEach(() => vi.mocked(apiClient.getSubscription).mockReset());
 
-  it("renders nothing until the balance has loaded", async () => {
+  // A placeholder the meter's size, so the top bar doesn't shift when the
+  // balance arrives — and never a made-up number anyone can read.
+  it("is a hidden placeholder, not a link, until the balance has loaded", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     const { container } = renderMeter("compact");
     // Synchronous first paint — the query hasn't resolved yet.
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(container.firstElementChild).toHaveAttribute("aria-hidden");
+    expect(container.firstElementChild?.className).toContain("skeleton");
     // Let it settle so the test doesn't leave a pending update.
     await screen.findByRole("link");
+  });
+
+  it("waits for the rest of the shell too, so it appears with the avatar", async () => {
+    let finish!: (v: unknown) => void;
+    getCareerProfile.mockReturnValueOnce(new Promise((r) => (finish = r)));
+    vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    renderMeter("compact");
+    await waitFor(() => expect(apiClient.getSubscription).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole("link")).toBeNull();
+    finish(null);
+    expect(await screen.findByRole("link")).toHaveTextContent("34 of 50 left");
   });
 
   // "34 / 50" didn't say whether 34 had been used or was left.
@@ -57,7 +77,8 @@ describe("CreditMeter", () => {
   it("says the balance is what's left, with the plan and a progress bar (full)", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
     renderMeter("full");
-    expect(await screen.findByText(/free plan/i)).toBeInTheDocument();
+    await screen.findByRole("link");
+    expect(screen.getByText(/free plan/i)).toBeInTheDocument();
     expect(screen.getByText("Credits left")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveTextContent("34 of 50");
   });

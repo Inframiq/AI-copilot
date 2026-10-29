@@ -1,6 +1,6 @@
 "use client";
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTourStore } from "@/stores/tour-store";
@@ -13,7 +13,8 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
-import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import type { CareerProfile } from "@/lib/career-profile-client";
+import { careerProfileQuery, useHoldShell, useShellDataReady } from "@/lib/reveal";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
@@ -83,9 +84,6 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const sessionId = useTailoringStore((s) => s.sessionId);
   const [createError, setCreateError] = useState<string | null>(null);
-  // Set after mount, not during render: it depends on the clock and a
-  // random pick, which would differ between the server render and hydration.
-  const [hello, setHello] = useState<Greeting | null>(null);
 
   // "?tour=1" is set by onboarding's finish() and by the Account page's
   // "Replay guide" link — both routes into the same trigger, so there's no
@@ -121,34 +119,31 @@ export default function DashboardPage() {
   // My Profile (career_profiles) — the source of truth behind the Profile
   // Health KPI. Shared ["careerProfile"] key, so this is usually warm from
   // the Profile page / studio editor.
-  const careerProfileQuery = useQuery<CareerProfile | null>({
-    queryKey: ["careerProfile"],
-    queryFn: getCareerProfile,
-    staleTime: 2 * 60 * 1000,
-  });
-  const careerProfile = careerProfileQuery.data ?? null;
+  const profileQuery = useQuery<CareerProfile | null>(careerProfileQuery);
+  const careerProfile = profileQuery.data ?? null;
 
   // Any core query failing means the dashboard's numbers below are partial —
   // surface that instead of rendering confident zeros over a backend outage.
   const connectionError =
-    resumesQuery.isError || jdsQuery.isError || learningQuery.isError || careerProfileQuery.isError;
+    resumesQuery.isError || jdsQuery.isError || learningQuery.isError || profileQuery.isError;
   const isRetrying =
-    resumesQuery.isFetching || jdsQuery.isFetching || learningQuery.isFetching || careerProfileQuery.isFetching;
+    resumesQuery.isFetching || jdsQuery.isFetching || learningQuery.isFetching || profileQuery.isFetching;
   const retryAll = () => {
     resumesQuery.refetch();
     jdsQuery.refetch();
     learningQuery.refetch();
-    careerProfileQuery.refetch();
+    profileQuery.refetch();
   };
 
   // All interview questions the user has generated (across every JD), not
   // just the current session's — this is what "interview prep has begun"
   // actually means. Uploading a resume in My Profile generates none of these.
-  const { data: myQuestions = [] } = useQuery<PrepQuestionWithJdOut[]>({
+  const questionsQuery = useQuery<PrepQuestionWithJdOut[]>({
     queryKey: ["myQuestions"],
     queryFn: () => apiClient.getMyQuestions(),
     staleTime: 2 * 60 * 1000,
   });
+  const myQuestions = questionsQuery.data ?? [];
 
   async function handleCycleStatus(item: LearningItem) {
     const nextStatus = STATUS_CYCLE[item.status];
@@ -212,13 +207,25 @@ export default function DashboardPage() {
       (authUser?.user_metadata?.name as string | undefined),
   );
   const isNew = isNewAccount(authUser?.created_at, authUser?.last_sign_in_at);
-  const greetingReady = !careerProfileQuery.isPending && !authUserQuery.isPending;
 
-  useEffect(() => {
-    // Wait for the name, or the line would appear nameless and then change.
-    if (!greetingReady) return;
-    setHello(greeting({ name: greetingName, isNew, hour: new Date().getHours(), pick: Math.random() }));
-  }, [greetingReady, greetingName, isNew]);
+  // The whole page — greeting, numbers, résumés, learning path — and the
+  // shell's credit balance and avatar appear in one frame, once every query
+  // behind them has settled (lib/reveal). Each used to draw itself when its
+  // own request returned: "No resumes yet" and zeros first, the real values
+  // over the next two seconds.
+  const shellReady = useShellDataReady();
+  const ready =
+    shellReady &&
+    [resumesQuery, jdsQuery, learningQuery, profileQuery, questionsQuery, authUserQuery].every((q) => !q.isPending);
+  useHoldShell(!ready);
+
+  // Picked once per visit. Never part of the server render: no query has
+  // data there, so `ready` is false until the browser has loaded them.
+  const [pick] = useState(Math.random);
+  const hello = useMemo<Greeting | null>(
+    () => (ready ? greeting({ name: greetingName, isNew, hour: new Date().getHours(), pick }) : null),
+    [ready, greetingName, isNew, pick],
+  );
 
   const hasProfile = !!careerProfile?.contact?.name?.trim();
   const { score: profileScore, label: profileLabel } = computeProfileHealth(careerProfile);
@@ -313,9 +320,15 @@ export default function DashboardPage() {
             <p className="text-body-md sm:text-body-lg text-on-surface-variant">{hello.subtitle}</p>
           </>
         ) : (
-          <div aria-hidden className="flex flex-col gap-sm">
-            <div className="skeleton h-9 w-72 max-w-full rounded-full" />
-            <div className="skeleton h-5 w-96 max-w-full rounded-full" />
+          // The real lines' type, so the placeholder is exactly as tall as
+          // the greeting and nothing below moves when it arrives.
+          <div aria-hidden>
+            <p className="text-headline-xl mb-sm flex items-center">
+              &#8203;<span className="skeleton h-[0.75em] w-72 max-w-full rounded-full" />
+            </p>
+            <p className="text-body-md sm:text-body-lg flex items-center">
+              &#8203;<span className="skeleton h-[0.8em] w-96 max-w-full rounded-full" />
+            </p>
           </div>
         )}
       </section>
@@ -355,13 +368,20 @@ export default function DashboardPage() {
                   <Icon size={18} weight="fill" className="text-primary" />
                 </div>
               </div>
-              <div className="flex flex-wrap items-baseline gap-x-sm">
-                <span className="text-headline-xl text-on-surface">{value}</span>
-                {badge && (
-                  <span className="text-label-sm text-success-accent">{badge}</span>
-                )}
-              </div>
-              {barWidth && (
+              {ready ? (
+                <div className="flex flex-wrap items-baseline gap-x-sm">
+                  <span className="text-headline-xl text-on-surface">{value}</span>
+                  {badge && (
+                    <span className="text-label-sm text-success-accent">{badge}</span>
+                  )}
+                </div>
+              ) : (
+                <div aria-hidden className="flex items-center gap-x-sm text-headline-xl">
+                  &#8203;<span className="skeleton h-[0.7em] w-12 rounded-full" />
+                  <span className="skeleton h-3 w-14 rounded-full" />
+                </div>
+              )}
+              {ready && barWidth && (
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-surface-variant">
                   <div className="h-full bg-primary rounded-r-full transition-all duration-700" style={{ width: barWidth }} />
                 </div>
@@ -445,7 +465,19 @@ export default function DashboardPage() {
               + New
             </button>
           </div>
-          {resumes.length === 0 ? (
+          {!ready ? (
+            <div aria-hidden className="flex flex-col gap-sm">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-sm sm:gap-md p-sm sm:p-md rounded-xl border border-outline-variant/20">
+                  <div className="skeleton w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-lg" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="skeleton h-4 w-3/5 rounded-full" />
+                    <div className="skeleton h-3 w-1/4 rounded-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : resumes.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-xl text-center gap-md">
               <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center">
                 <FileDashed size={24} className="text-on-surface-variant" />
@@ -491,7 +523,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Learning Path */}
-      {learningItems.length > 0 && (
+      {ready && learningItems.length > 0 && (
         <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5 flex flex-col gap-md">
           <div className="flex items-center gap-sm">
             <BookOpen size={20} className="text-primary" />

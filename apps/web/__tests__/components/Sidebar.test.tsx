@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -14,7 +14,8 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 // The avatar reads the career profile; pending, it shows its placeholder.
-vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => new Promise(() => {}) }));
+const getCareerProfile = vi.fn(() => new Promise(() => {}));
+vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => getCareerProfile() }));
 
 const SUB = {
   plan: "free",
@@ -54,13 +55,16 @@ describe("Sidebar", () => {
   });
 
   // Beside Resume Builder, My Profile read as a second way to make a résumé.
-  it("keeps My Profile and Account behind the avatar, above the credit meter", () => {
+  it("keeps My Profile and Account behind the avatar, above the credit meter", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValueOnce(SUB);
+    getCareerProfile.mockResolvedValueOnce(null);
     const { container } = renderSidebar();
     const nav = container.querySelector("nav")!;
     expect(nav.querySelector('a[href="/profile"]')).toBeNull();
     expect(nav.querySelector('a[href="/account"]')).toBeNull();
     const avatar = screen.getByRole("button", { name: /account menu/i });
     expect(nav.contains(avatar)).toBe(false);
+    await waitFor(() => expect(avatar).toBeEnabled());
     fireEvent.click(avatar);
     expect(screen.getByRole("menuitem", { name: "My Profile" })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "/account");
@@ -235,6 +239,7 @@ describe("Sidebar collapse", () => {
   // pass no matter what variant the sidebar picked.
   it("uses the rail credit meter when collapsed, which is the one that fits", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    getCareerProfile.mockResolvedValueOnce(null);
     useSidebarStore.setState({ override: "collapsed" });
     renderSidebar();
     await screen.findByText(String(SUB.credits_remaining));
@@ -244,10 +249,12 @@ describe("Sidebar collapse", () => {
 
   it("uses the full credit meter when expanded", async () => {
     vi.mocked(apiClient.getSubscription).mockResolvedValue(SUB);
+    getCareerProfile.mockResolvedValueOnce(null);
     useSidebarStore.setState({ override: "expanded" });
     renderSidebar();
+    await screen.findByRole("link", { name: /credits left/i });
     // Only the full variant names the plan.
-    expect(await screen.findByText(/free/i)).toBeTruthy();
+    expect(screen.getByText(/free/i)).toBeTruthy();
   });
 
   // The control began as a row in the footer, directly beneath eight nav

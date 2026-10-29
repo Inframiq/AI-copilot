@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CaretUpDown, SignOut, User } from "@phosphor-icons/react";
 import { ACCOUNT_NAV } from "@/lib/nav";
-import { getCareerProfile } from "@/lib/career-profile-client";
 import { useAvatarSrc } from "@/lib/avatar-url";
+import { careerProfileQuery, useShellRevealed } from "@/lib/reveal";
 import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { confirmLeave, hasUnsavedWork } from "@/lib/use-leave-warning";
 
@@ -53,8 +53,11 @@ export function AvatarMenu({ variant }: { variant: "sidebar" | "rail" | "header"
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
-  const { data: profile } = useQuery({ queryKey: ["careerProfile"], queryFn: () => getCareerProfile() });
+  const { data: profile } = useQuery(careerProfileQuery);
   const photo = useAvatarSrc(profile?.photo_url ?? null);
+  // Until the shell has loaded (lib/reveal), shimmering shapes the size of
+  // the avatar and name — not a stand-in "My Profile" that then changes.
+  const revealed = useShellRevealed();
   const name = profile?.contact?.name?.trim() ?? "";
   const email = profile?.contact?.email?.trim() ?? "";
 
@@ -112,6 +115,8 @@ export function AvatarMenu({ variant }: { variant: "sidebar" | "rail" | "header"
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
+        disabled={!revealed}
+        aria-busy={!revealed}
         aria-label={label}
         title={variant === "sidebar" ? undefined : label}
         aria-haspopup="menu"
@@ -132,8 +137,25 @@ export function AvatarMenu({ variant }: { variant: "sidebar" | "rail" | "header"
               : "shrink-0 flex items-center justify-center rounded-full active:opacity-80"
         }
       >
-        <Avatar src={photo} name={name} size={variant === "header" ? 28 : 32} />
-        {variant === "sidebar" && (
+        {!revealed ? (
+          <>
+            <span aria-hidden className="skeleton shrink-0 rounded-full" style={{ width: variant === "header" ? 28 : 32, height: variant === "header" ? 28 : 32 }} />
+            {variant === "sidebar" && (
+              // The name's and email's own type, so the row keeps its height.
+              <span aria-hidden className="flex-1 min-w-0">
+                <span className="flex items-center text-label-md">
+                  &#8203;<span className="skeleton h-[0.85em] w-24 rounded-full" />
+                </span>
+                <span className="flex items-center text-caption">
+                  &#8203;<span className="skeleton h-[0.8em] w-36 max-w-full rounded-full" />
+                </span>
+              </span>
+            )}
+          </>
+        ) : (
+          <Avatar src={photo} name={name} size={variant === "header" ? 28 : 32} />
+        )}
+        {revealed && variant === "sidebar" && (
           <>
             <span className="flex-1 min-w-0">
               <span className="block truncate text-label-md font-semibold text-on-surface">

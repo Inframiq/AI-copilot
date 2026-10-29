@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -15,9 +15,11 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 // The avatar reads the career profile; pending, it shows its placeholder.
-vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => new Promise(() => {}) }));
+const getCareerProfile = vi.fn(() => new Promise(() => {}));
+vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: () => getCareerProfile() }));
 
 import { TopNav } from "../../components/layout/TopNav";
+import { apiClient } from "../../lib/api-client";
 
 function renderTopNav() {
   const queryClient = new QueryClient();
@@ -56,7 +58,12 @@ describe("TopNav", () => {
     for (const item of APP_NAV) expect(reachable).toContain(item.href);
   });
 
-  it("keeps My Profile and Account off the tabs and More, behind the avatar", () => {
+  it("keeps My Profile and Account off the tabs and More, behind the avatar", async () => {
+    vi.mocked(apiClient.getSubscription).mockResolvedValueOnce({
+      plan: "free", status: "active", credits_remaining: 34, credits_allotment: 50,
+      current_period_end: null, renews: false, costs: { tailor: 10 },
+    });
+    getCareerProfile.mockResolvedValueOnce(null);
     renderTopNav();
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     const tabs = screen.getByRole("navigation", { name: "Main" });
@@ -65,7 +72,9 @@ describe("TopNav", () => {
       expect(tabs.querySelector(`a[href="${href}"]`)).toBeNull();
       expect(sheet.querySelector(`a[href="${href}"]`)).toBeNull();
     }
-    fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
+    const avatar = screen.getByRole("button", { name: /account menu/i });
+    await waitFor(() => expect(avatar).toBeEnabled());
+    fireEvent.click(avatar);
     expect(screen.getByRole("menuitem", { name: "My Profile" })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "/account");
   });

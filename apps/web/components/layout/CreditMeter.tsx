@@ -1,14 +1,50 @@
 "use client";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Lightning } from "@phosphor-icons/react";
-import { apiClient } from "@/lib/api-client";
+import { subscriptionQuery, useShellRevealed } from "@/lib/reveal";
 import type { Subscription } from "@career-copilot/types";
+
+/** Stands in, unseen, for the balance while it loads — two-digit numbers, so
+ * the placeholder is the width the real meter will be. */
+const PLACEHOLDER: Subscription = {
+  plan: "free",
+  status: "active",
+  credits_remaining: 50,
+  credits_allotment: 50,
+  current_period_end: null,
+  renews: false,
+  costs: { tailor: 10, cover_letter: 3, rewrite_bullet: 1, analyze: 0 },
+};
+
+/** The meter's link, or while loading a shimmering box of its exact size with
+ * nothing readable in it — never a made-up number. */
+function MeterBox({ ghost, className, summary, children }: {
+  ghost: boolean;
+  className: string;
+  summary?: string;
+  children: ReactNode;
+}) {
+  if (ghost) {
+    return (
+      <div aria-hidden className={`${className} skeleton border-transparent! pointer-events-none`}>
+        <span className="contents invisible">{children}</span>
+      </div>
+    );
+  }
+  return (
+    <Link href="/account" title={summary} aria-label={summary} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 /**
  * The signed-in user's credit balance. `compact` sits in the top bar,
- * `full` is the card in the sidebar. Both link to /account. Renders nothing
- * until the balance has loaded, so it never flashes a placeholder number.
+ * `full` is the card in the sidebar. Both link to /account. Until the balance
+ * — and the rest of the shell (lib/reveal) — has loaded it is a placeholder
+ * of the same size, so nothing moves when it arrives.
  */
 export function CreditMeter({
   variant = "compact",
@@ -18,13 +54,10 @@ export function CreditMeter({
    * count + "/ allotment") needs roughly 100px and spills out. */
   variant?: "compact" | "full" | "rail";
 }) {
-  const { data } = useQuery<Subscription>({
-    queryKey: ["subscription"],
-    queryFn: () => apiClient.getSubscription(),
-    staleTime: 30_000,
-  });
-
-  if (!data) return null;
+  const { data: loaded } = useQuery<Subscription>(subscriptionQuery);
+  const revealed = useShellRevealed();
+  const ghost = !loaded || !revealed;
+  const data = ghost ? PLACEHOLDER : loaded;
 
   const { credits_remaining, credits_allotment, plan } = data;
   const tailorCost = data.costs?.tailor ?? 10;
@@ -38,10 +71,9 @@ export function CreditMeter({
 
   if (variant === "rail") {
     return (
-      <Link
-        href="/account"
-        title={summary}
-        aria-label={summary}
+      <MeterBox
+        ghost={ghost}
+        summary={summary}
         className={`flex flex-col items-center justify-center gap-0.5 px-0 py-xs rounded-lg border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
@@ -52,16 +84,15 @@ export function CreditMeter({
         {/* Remaining only — the "/ allotment" is what made this too wide.
             Both numbers stay in the tooltip and the accessible name. */}
         {credits_remaining}
-      </Link>
+      </MeterBox>
     );
   }
 
   if (variant === "compact") {
     return (
-      <Link
-        href="/account"
-        title={summary}
-        aria-label={summary}
+      <MeterBox
+        ghost={ghost}
+        summary={summary}
         className={`shrink-0 whitespace-nowrap flex items-center gap-xs px-sm sm:px-md py-xs pill pill-interactive rounded-full border text-label-sm font-semibold transition-colors ${
           low
             ? "border-error/40 text-error bg-error/5 hover:bg-error/10"
@@ -79,13 +110,13 @@ export function CreditMeter({
           </span>
           <span className="hidden sm:inline font-normal"> left</span>
         </span>
-      </Link>
+      </MeterBox>
     );
   }
 
   return (
-    <Link
-      href="/account"
+    <MeterBox
+      ghost={ghost}
       className="block rounded-xl border border-outline-variant/30 bg-surface-container-low/60 px-md py-sm hover:bg-surface-container-high/40 transition-colors"
     >
       <div className="flex items-center justify-between mb-xs">
@@ -105,6 +136,6 @@ export function CreditMeter({
         />
       </div>
       <span className="text-caption text-on-surface-variant/70 capitalize">{plan} plan</span>
-    </Link>
+    </MeterBox>
   );
 }
