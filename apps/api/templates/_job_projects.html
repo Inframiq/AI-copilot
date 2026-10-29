@@ -1,0 +1,41 @@
+{#
+  Projects inside one experience entry — one per client engagement at a
+  services company, or any project a role was made of. Shared by every
+  résumé template (imported "with context" for body_size, accent and the
+  skills the highlight filter marks).
+
+  Each project prints one compact line from the parts it has, in this
+  order: client (or the project's name when there's no client) · domain ·
+  role, then its dates the way the template prints a role's, then its
+  points. Name and technologies otherwise stay in the profile: the line is
+  kept short on purpose. A project with none of those parts still prints
+  its dates and points under the role.
+
+  Field paths address the project inside its role ("experience.2.projects.0
+  .bullets.1"), so the Studio edits them in place like any other text.
+#}
+{% macro job_projects(job) %}
+  {% for p in job.projects or [] %}
+    {% set base = "experience." ~ job._index ~ ".projects." ~ loop.index0 %}
+    {% set head = p.client or p.name %}
+    {% set head_key = "client" if p.client else "name" %}
+    {% set parts = [] %}
+    {% if head %}{% set _ = parts.append((head_key, head)) %}{% endif %}
+    {% if p.domain %}{% set _ = parts.append(("domain", p.domain)) %}{% endif %}
+    {% if p.role %}{% set _ = parts.append(("role", p.role)) %}{% endif %}
+    <div class="job-project" style="margin: 3pt 0 0 8pt;">
+      {% if parts or p.start %}
+      <div class="project-row" style="font-size: {{ body_size(10) }}pt;">
+        {%- for key, value in parts -%}
+          {%- if not loop.first %} &middot; {% endif -%}
+          <span class="project-part" data-field="{{ base }}.{{ key }}"{% if loop.first %} style="font-weight: 600;"{% endif %}>{{ value }}</span>
+        {%- endfor -%}
+        {%- if p.start %} <span class="dates">{% if parts %}&nbsp;|&nbsp; {% endif %}<span data-field="{{ base }}.start">{{ p.start }}</span> – <span data-field="{{ base }}.end">{{ p.end or "Present" }}</span></span>{% endif -%}
+      </div>
+      {% endif %}
+      {% if p.bullets %}
+      <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="{{ base }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endmacro %}

@@ -631,3 +631,20 @@ def test_a_single_word_is_still_exact():
 
 def test_only_real_inflections_match():
     assert not _skill_matches("own the platform roadmap", "Owner of the platform roadmap", "")
+
+
+def test_build_resume_text_reads_projects_inside_a_role_as_printed():
+    content = {"experience": [{
+        "title": "Engineer", "company": "Infosys", "bullets": [],
+        "projects": [
+            {"client": "Barclays", "name": "Payments Hub", "domain": "Banking", "role": "Module Lead",
+             "tech_stack": "Kafka", "bullets": ["Built settlement reconciliation."]},
+            {"name": "Order Tracker", "bullets": []},
+        ],
+    }]}
+    full_text, _ = build_resume_text(content)
+    for printed in ("Barclays", "Banking", "Module Lead", "settlement reconciliation", "Order Tracker"):
+        assert printed in full_text
+    # Not printed beside a client, so not something an ATS reads.
+    assert "Payments Hub" not in full_text
+    assert "Kafka" not in full_text

@@ -1,4 +1,5 @@
 import type { ResumeContent } from "@career-copilot/types";
+import { projectLine } from "@/lib/work-projects";
 import type { BulletRationale } from "@/lib/api-client";
 import type { BulletChange } from "@/stores/tailoring-store";
 
@@ -22,7 +23,11 @@ function hasTerm(text: string, term: string): boolean {
 
 function resumeText(content: ResumeContent): string {
   const parts: string[] = [content.headline ?? "", content.summary ?? "", ...(content.skills ?? [])];
-  for (const e of content.experience ?? []) parts.push(e.title ?? "", e.company ?? "", ...(e.bullets ?? []));
+  for (const e of content.experience ?? []) {
+    parts.push(e.title ?? "", e.company ?? "", ...(e.bullets ?? []));
+    // As printed: a project's line and points.
+    for (const p of e.projects ?? []) parts.push(projectLine(p), ...(p.bullets ?? []));
+  }
   for (const p of content.projects ?? []) parts.push(p.name ?? "", ...(p.bullets ?? []));
   return parts.join("\n");
 }

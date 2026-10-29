@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { buildIndex, canonicalName, fold, loadSuggestions, suggest, type SuggestKind } from "@/lib/suggest";
 
-const KINDS: SuggestKind[] = ["skill", "jobTitle", "degree", "college", "language", "certification", "city"];
+const KINDS: SuggestKind[] = ["skill", "jobTitle", "degree", "college", "language", "certification", "city", "domain"];
 
 // The college list (64,000 names) loads and indexes on the page here, no
 // worker: done once up front with room to spare, so no single test's
@@ -98,9 +98,10 @@ describe("the lists themselves", () => {
 
   it("are all loadable by a kind", async () => {
     expect(files.sort()).toEqual(
-      ["certifications", "cities", "colleges", "degrees", "job-titles", "languages", "skills"].map((f) => `${f}.json`),
+      ["certifications", "cities", "colleges", "degrees", "domains", "job-titles", "languages", "skills"].map((f) => `${f}.json`),
     );
-    for (const kind of KINDS) expect((await loadSuggestions(kind)).entries.length, kind).toBeGreaterThan(50);
+    // Domains are a short list by nature; every other list is long.
+    for (const kind of KINDS) expect((await loadSuggestions(kind)).entries.length, kind).toBeGreaterThan(kind === "domain" ? 30 : 50);
   });
 
   it.each(files)("%s says where it comes from, and repeats no name", (file) => {
@@ -123,7 +124,7 @@ describe("the lists themselves", () => {
   it("never let an alias stand for a name in another entry by accident", () => {
     // An alias equal to another entry's own name would make that name
     // ambiguous, and stop it ever being chosen for exactly what's typed.
-    for (const file of ["skills", "job-titles", "degrees", "languages", "certifications"]) {
+    for (const file of ["skills", "job-titles", "degrees", "languages", "certifications", "domains"]) {
       const data = JSON.parse(readFileSync(join(dir, `${file}.json`), "utf8"));
       const index = buildIndex(data.names);
       for (const item of data.names) {

@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { SuggestInput } from "@/components/ui/SuggestInput";
 import { MonthYearField } from "@/components/ui/MonthYearPicker";
+import { JobProjects } from "./JobProjects";
 import { useResumeStore } from "@/stores/resume-store";
 import { sameCompany } from "@/lib/career-profile-client";
 import { Trash } from "@phosphor-icons/react";
@@ -37,6 +38,10 @@ export function ExperienceSection({ focusIndex }: { focusIndex?: number }) {
       ...recent,
       start: older.start,
       bullets: [...recent.bullets, ...older.bullets],
+      // Both roles' projects too — spreading `recent` alone dropped the older's.
+      ...(recent.projects?.length || older.projects?.length
+        ? { projects: [...(recent.projects ?? []), ...(older.projects ?? [])] }
+        : {}),
     };
     const updated = content.experience.filter((_, idx) => idx !== i && idx !== i - 1);
     updated.splice(i - 1, 0, merged);
@@ -163,6 +168,16 @@ export function ExperienceSection({ focusIndex }: { focusIndex?: number }) {
                 className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               />
             </div>
+
+            <JobProjects
+              entryIndex={i}
+              projects={job.projects ?? []}
+              onChange={(projects) => {
+                const updated = [...content.experience];
+                updated[i] = { ...updated[i], projects };
+                updateContent({ experience: updated });
+              }}
+            />
           </div>
         </div>
       ))}

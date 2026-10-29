@@ -1,0 +1,11 @@
+{
+  "source": "Kept by hand. Industry domains as recruiters shortlist by them; [name, ...aliases] for short forms.",
+  "names": [
+    ["Banking", "bank"], ["Financial Services", "finance", "fintech"], ["Banking, Financial Services and Insurance (BFSI)", "bfsi"], "Insurance", ["Capital Markets", "investment banking"], "Payments", "Wealth Management", "Lending",
+    "Retail", ["E-commerce", "ecommerce", "e commerce"], ["Consumer Packaged Goods (CPG)", "cpg", "fmcg"], ["Healthcare", "health care"], ["Life Sciences", "pharma", "pharmaceuticals"], "Medical Devices", ["Health Insurance", "payer"],
+    ["Telecom", "telecommunications"], ["Media and Entertainment", "media"], "Gaming", "Advertising", ["Technology", "tech", "software"], ["Software as a Service (SaaS)", "saas"], ["Cloud Services", "cloud"], ["Cybersecurity", "security"],
+    "Manufacturing", "Automotive", ["Aerospace and Defence", "aerospace", "defence", "defense"], ["Energy and Utilities", "energy", "utilities", "oil and gas"], "Logistics", ["Supply Chain", "scm"], "Transportation", ["Travel and Hospitality", "travel", "hospitality", "airlines"],
+    ["Education", "edtech", "e-learning"], ["Government and Public Sector", "government", "public sector"], ["Real Estate", "proptech"], "Construction", "Agriculture", "Mining", "Chemicals", ["Non-profit", "ngo"],
+    ["Human Resources", "hr tech"], "Legal", ["Consulting", "professional services"], "Marketing", ["Artificial Intelligence", "ai"], "Data and Analytics"
+  ]
+}

@@ -12,7 +12,7 @@
  * its kind is used, then stays in memory.
  */
 
-export type SuggestKind = "skill" | "jobTitle" | "degree" | "college" | "language" | "certification" | "city";
+export type SuggestKind = "skill" | "jobTitle" | "degree" | "college" | "language" | "certification" | "city" | "domain";
 
 /** A list as stored: a name, or [name, ...aliases] typed for it. */
 type Stored = { source: string; license?: string; names: Array<string | string[]> };
@@ -25,6 +25,7 @@ const LOADERS: Record<SuggestKind, () => Promise<Stored>> = {
   certification: () => import("./data/certifications.json").then((m) => m.default as Stored),
   college: () => import("./data/colleges.json").then((m) => m.default as Stored),
   city: () => import("./data/cities.json").then((m) => m.default as Stored),
+  domain: () => import("./data/domains.json").then((m) => m.default as Stored),
 };
 
 /** Shown under a list's suggestions where its source asks for credit. */

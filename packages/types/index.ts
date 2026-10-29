@@ -1,5 +1,24 @@
 // Career Copilot shared types — canonical source of truth
 
+/** A project inside one experience entry. Every field is optional but the
+ *  points: most projects have no client or domain — those matter mainly at
+ *  services companies. Name and technologies are kept but not printed. */
+export interface WorkProject {
+  /** "Barclays", or a description for an NDA client: "a leading US bank". */
+  client?: string;
+  name?: string;
+  /** The candidate's role on this project ("Module Lead"), which can differ
+   *  from the designation on the entry. */
+  role?: string;
+  /** "Banking", "Retail" — recruiters shortlist by domain. */
+  domain?: string;
+  /** "Jan 2022" (lib/month-year); projects in one role can overlap. */
+  start?: string;
+  end?: string;
+  tech_stack?: string;
+  bullets: string[];
+}
+
 export interface ResumeContent {
   contact: {
     name: string;
@@ -28,6 +47,11 @@ export interface ResumeContent {
     start: string;
     end?: string;
     bullets: string[];
+    /** Projects inside this role — a services company's client engagements,
+     *  or any project the role was made of. Printed under the role's own
+     *  points as one line each (client, or else name · domain · role), its
+     *  dates and its points; see apps/api/templates/_job_projects.html. */
+    projects?: WorkProject[];
   }>;
   projects?: Array<{
     name: string;

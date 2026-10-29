@@ -137,7 +137,7 @@ const PROJECT_LINKS = [
 /** A link in the document the user asked to edit: its URL and display text
  *  live at `path` and `${path}_label` in the résumé. */
 /** A role's or project's start or end date in the document. */
-const DATE_FIELD = /^(experience|projects)\.\d+\.(start|end)$/;
+const DATE_FIELD = /^(experience|projects)\.\d+(\.projects\.\d+)?\.(start|end)$/;
 
 export interface DateTarget {
   /** "experience.0.start" */

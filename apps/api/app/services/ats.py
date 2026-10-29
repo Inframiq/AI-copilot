@@ -33,6 +33,18 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
         parts.append(str(exp.get("company") or ""))
         for bullet in exp.get("bullets") or []:
             parts.append(str(bullet))
+        # Projects inside the role, as the templates print them
+        # (_job_projects.html): client or else name, domain, role, points.
+        # Name (beside a client) and technologies stay in the profile, so
+        # they aren't evidence an ATS would read.
+        for proj in exp.get("projects") or []:
+            if not isinstance(proj, dict):
+                continue
+            parts.append(str(proj.get("client") or proj.get("name") or ""))
+            parts.append(str(proj.get("domain") or ""))
+            parts.append(str(proj.get("role") or ""))
+            for bullet in proj.get("bullets") or []:
+                parts.append(str(bullet))
 
     # Projects carry a fresher's entire technical evidence and, per
     # resume_spec.SECTION_ORDER, outrank Experience for that candidate type —

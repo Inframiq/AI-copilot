@@ -1,4 +1,5 @@
 import type { ResumeContent } from "@career-copilot/types";
+import { projectBulletKey, projectLine } from "@/lib/work-projects";
 
 /**
  * Two things résumé checkers flag that the ATS score does not measure:
@@ -19,11 +20,17 @@ export interface ResumeBullet {
 export function listBullets(content: ResumeContent | null): ResumeBullet[] {
   if (!content) return [];
   const out: ResumeBullet[] = [];
-  (content.experience ?? []).forEach((e, i) =>
+  (content.experience ?? []).forEach((e, i) => {
     (e.bullets ?? []).forEach((text, j) =>
       out.push({ key: `exp${i}_b${j}`, text, where: [e.title, e.company].filter(Boolean).join(" · ") }),
-    ),
-  );
+    );
+    // A role's projects: where = the project's line, or the company.
+    (e.projects ?? []).forEach((p, k) =>
+      (p.bullets ?? []).forEach((text, j) =>
+        out.push({ key: projectBulletKey(i, k, j), text, where: projectLine(p) || e.company || "" }),
+      ),
+    );
+  });
   (content.projects ?? []).forEach((p, i) =>
     (p.bullets ?? []).forEach((text, j) => out.push({ key: `proj${i}_b${j}`, text, where: p.name ?? "" })),
   );

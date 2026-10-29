@@ -4,6 +4,7 @@
 
 import type { ResumeContent } from "@career-copilot/types";
 import { LINE_SECTIONS } from "@/lib/profile-sections";
+import { allRolePoints } from "@/lib/work-projects";
 
 export type SectionId =
   | "contact"
@@ -39,7 +40,8 @@ function experienceRatio(content: ResumeContent): number {
   // nothing under it, which is the most common half-finished state.
   const scored = content.experience.map((job) => {
     const hasRole = filled(job.company) || filled(job.title);
-    const hasBullets = job.bullets.some(filled);
+    // A role's projects' points count as its points.
+    const hasBullets = allRolePoints(job).some(filled);
     return (hasRole ? 0.5 : 0) + (hasBullets ? 0.5 : 0);
   });
   return clamp01(scored.reduce((a, b) => a + b, 0) / content.experience.length);
