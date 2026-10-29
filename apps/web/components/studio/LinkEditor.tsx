@@ -2,6 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { FOCUS_RING } from "@/lib/focus";
 import type { LinkTarget } from "./ResumeCanvas";
+import { SOCIAL_HINT, tidySocialLink } from "@/lib/social-links";
 
 const WIDTH = 320;
 const GUTTER = 16;
@@ -57,6 +58,11 @@ export function LinkEditor({
   const viewport = typeof window === "undefined" ? 1024 : window.innerWidth;
   const left = Math.max(GUTTER, Math.min(link.rect.left, viewport - WIDTH - GUTTER));
   const trimmedUrl = url.trim();
+  // The contact's LinkedIn and GitHub take a profile link only, saved in
+  // its standard form (lib/social-links.ts).
+  const social = link.path === "contact.linkedin" ? "linkedin" : link.path === "contact.github" ? "github" : null;
+  const tidyUrl = social ? tidySocialLink(social, trimmedUrl) : trimmedUrl;
+  const urlHintId = useId();
 
   return (
     <form
@@ -65,8 +71,8 @@ export function LinkEditor({
       aria-label={adding ? "Add link" : "Edit link"}
       onSubmit={(event) => {
         event.preventDefault();
-        if (!trimmedUrl) return;
-        onSave(trimmedUrl, text.trim());
+        if (!trimmedUrl || !tidyUrl) return;
+        onSave(tidyUrl, text.trim());
       }}
       style={{ top: link.rect.bottom + 8, left, width: `min(${WIDTH}px, calc(100vw - ${GUTTER * 2}px))` }}
       className="fixed z-50 flex flex-col gap-sm rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-md shadow-xl"
@@ -91,9 +97,16 @@ export function LinkEditor({
         inputMode="url"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://"
-        className={`rounded-lg border border-outline-variant/50 bg-surface px-sm py-xs text-body-sm text-on-surface ${FOCUS_RING}`}
+        placeholder={social ? `${social}.com/${social === "linkedin" ? "in/your-name" : "your-username"}` : "https://"}
+        aria-invalid={(social && trimmedUrl && !tidyUrl) || undefined}
+        aria-describedby={social && trimmedUrl && !tidyUrl ? urlHintId : undefined}
+        className={`rounded-lg border bg-surface px-sm py-xs text-body-sm text-on-surface ${
+          social && trimmedUrl && !tidyUrl ? "border-error" : "border-outline-variant/50"
+        } ${FOCUS_RING}`}
       />
+      {social && trimmedUrl && !tidyUrl && (
+        <p id={urlHintId} className="text-caption text-error">{SOCIAL_HINT[social]}</p>
+      )}
       <p className="text-caption text-on-surface-variant">
         Leave the display text blank to show the URL itself.
       </p>
@@ -116,7 +129,7 @@ export function LinkEditor({
         </button>
         <button
           type="submit"
-          disabled={!trimmedUrl}
+          disabled={!trimmedUrl || !tidyUrl}
           className={`rounded-xl bg-primary px-md py-xs text-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
         >
           {adding ? "Add" : "Save"}

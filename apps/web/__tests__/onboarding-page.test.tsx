@@ -135,4 +135,30 @@ describe("Onboarding — a résumé never replaces the details from step 1", () 
     });
     expect(saved.role_status).toBe("working");
   });
+
+  // The database refuses a link that isn't a profile link, and would refuse
+  // the whole save over it: such a link stays on the résumé only.
+  it("keeps a résumé's LinkedIn off the profile when it isn't a profile link", async () => {
+    const { upsertCareerProfile, resumeContentToCareerProfileInput } = await import("../lib/career-profile-client");
+    vi.mocked(upsertCareerProfile).mockClear();
+    vi.mocked(apiClient.parseResumeFile).mockResolvedValue({ id: "r1", content: {} } as never);
+    vi.mocked(resumeContentToCareerProfileInput).mockReturnValue({
+      contact: { name: "", email: "", linkedin: "linkedin.com/company/acme", github: "https://github.com/jane/" },
+      experience: [], projects: [], education: [], skills: [], certifications: [],
+    } as never);
+    const user = userEvent.setup();
+    renderOnboarding();
+    await screen.findByDisplayValue("Jane");
+    await user.selectOptions(screen.getByRole("combobox"), "working");
+    await user.click(screen.getByRole("button", { name: /^continue$/i }));
+    await screen.findByText("Upload your resume");
+    const { fireEvent } = await import("@testing-library/react");
+    const zone = document.querySelector('input[type="file"]')!.closest("label")!;
+    fireEvent.drop(zone, { dataTransfer: { files: [new File(["%PDF"], "resume.pdf", { type: "application/pdf" })] } });
+
+    await vi.waitFor(() => expect(vi.mocked(upsertCareerProfile).mock.calls.length).toBe(2));
+    const saved = vi.mocked(upsertCareerProfile).mock.calls[1][0] as unknown as { contact: Record<string, string> };
+    expect(saved.contact.linkedin).toBe("");
+    expect(saved.contact.github).toBe("github.com/jane");
+  });
 });

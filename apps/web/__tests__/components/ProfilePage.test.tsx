@@ -288,3 +288,57 @@ describe("My Profile — every résumé section", () => {
     expect(leave.defaultPrevented).toBe(false);
   });
 });
+
+describe("My Profile — LinkedIn and GitHub", () => {
+  const profile = (contact: Record<string, string> = {}) => ({
+    user_id: "u1", master_resume_id: null,
+    contact: { name: "Jane", email: "j@x.com", ...contact },
+    experience: [], projects: [], education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  it("puts a profile link in its standard form on leaving the field, and saves that", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    const field = await screen.findByRole("textbox", { name: "LinkedIn profile link" });
+    await userEvent.type(field, "https://www.linkedin.com/in/jane-doe/");
+    await userEvent.tab();
+    expect(field).toHaveValue("linkedin.com/in/jane-doe");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() =>
+      expect(upsertCareerProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ contact: expect.objectContaining({ linkedin: "linkedin.com/in/jane-doe" }) }),
+      ),
+    );
+  });
+
+  it("flags a link that isn't a profile and won't save it", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    const field = await screen.findByRole("textbox", { name: "GitHub profile link" });
+    await userEvent.type(field, "github.com/jane/kripax");
+    await userEvent.tab();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Use your profile link: github.com/your-username")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByText(/Fix the GitHub link before saving/)).toBeInTheDocument();
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+  });
+
+  // Saved before the rule: shown as needing a fix, but the rest of the
+  // profile still saves (the database allows an unchanged one too).
+  it("shows an old untidy link as needing a fix, and still saves other changes", async () => {
+    getCareerProfile.mockResolvedValue(profile({ linkedin: "https://www.linkedin.com/company/acme" }));
+    renderPage();
+    expect(await screen.findByText(/Needs a fix\. Use your profile link: linkedin\.com\/in\/your-name/)).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("San Francisco, CA"), "Pune");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+  });
+});

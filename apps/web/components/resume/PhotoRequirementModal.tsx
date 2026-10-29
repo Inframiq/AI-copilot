@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useResumeStore } from "@/stores/resume-store";
 import { uploadResumePhoto, uploadProfilePhoto } from "@/lib/photo-upload";
 import { upsertCareerProfile, type CareerProfileInput } from "@/lib/career-profile-client";
+import { tidyContactLinks } from "@/lib/social-links";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { useAvatarSrc } from "@/lib/avatar-url";
 import { FOCUS_RING } from "@/lib/focus";
@@ -84,14 +85,16 @@ export function PhotoRequirementModal({
         // contact, matching resumeContentToCareerProfileInput's empty shape.
         const baseProfile: CareerProfileInput = profileForUpsert ?? {
           master_resume_id: null,
-          contact: {
+          // A résumé link that isn't a profile link stays off the new
+          // profile: the database would refuse the save over it.
+          contact: tidyContactLinks({
             name: content.contact.name ?? "",
             email: content.contact.email ?? "",
             phone: content.contact.phone ?? "",
             location: content.contact.location ?? "",
             linkedin: content.contact.linkedin ?? "",
             github: content.contact.github ?? "",
-          },
+          }, { dropBad: true }),
           headline: null,
           experience: [],
           projects: [],

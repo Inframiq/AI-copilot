@@ -14,6 +14,7 @@ import {
 } from "@/lib/career-profile-client";
 import { PlansComparison } from "@/components/plans/PlansComparison";
 import { mergeParsedContact } from "@/lib/contact-lock";
+import { tidyContactLinks } from "@/lib/social-links";
 import { UpgradeModal } from "@/components/plans/UpgradeModal";
 
 const inputCls = "w-full px-md py-sm bg-surface-container border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary focus:border-primary placeholder:text-on-surface-variant/50 transition-all";
@@ -111,7 +112,10 @@ export default function OnboardingPage() {
         ...parsed,
         // The details from step 1 are the user's own: a parsed value only
         // fills a field still empty, and the email stays the sign-in email.
-        contact: mergeParsedContact({ name, email, phone }, parsed.contact, email),
+        // A LinkedIn or GitHub link that isn't a profile link stays off the
+        // profile (the database would refuse the whole save); the résumé
+        // keeps it, flagged in the Builder.
+        contact: tidyContactLinks(mergeParsedContact({ name, email, phone }, parsed.contact, email), { dropBad: true }),
         role_status: roleStatus || null,
       });
       await setProfileMasterResume(resume.id);

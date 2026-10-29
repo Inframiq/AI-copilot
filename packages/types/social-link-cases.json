@@ -1,0 +1,52 @@
+{
+  "_comment": "Read by apps/web/__tests__/social-links.test.ts and apps/api/tests/test_migration_054.py, so the form and the database agree on what a LinkedIn or GitHub profile link is. `tidy` pairs: what someone types → the standard form saved. `refused`: not a profile link.",
+  "linkedin": {
+    "tidy": [
+      ["linkedin.com/in/asha-rao", "linkedin.com/in/asha-rao"],
+      ["https://www.linkedin.com/in/asha-rao/", "linkedin.com/in/asha-rao"],
+      ["http://linkedin.com/in/asha-rao", "linkedin.com/in/asha-rao"],
+      ["https://in.linkedin.com/in/asha-rao-1a2b3c45", "linkedin.com/in/asha-rao-1a2b3c45"],
+      ["https://m.linkedin.com/in/AshaRao?trk=public_profile", "linkedin.com/in/AshaRao"],
+      ["  www.LinkedIn.com/in/asha-rao#about  ", "linkedin.com/in/asha-rao"],
+      ["https://www.linkedin.com/in/%E5%BC%A0%E4%BC%9F-123", "linkedin.com/in/张伟-123"]
+    ],
+    "refused": [
+      "asha-rao",
+      "linkedin.com",
+      "linkedin.com/in/",
+      "linkedin.com/in/ab",
+      "linkedin.com/company/acme",
+      "linkedin.com/pub/asha-rao/1/2/3",
+      "linkedin.com/in/asha-rao/details/experience",
+      "https://notlinkedin.com/in/asha-rao",
+      "https://linkedin.com.evil.example/in/asha-rao",
+      "ftp://linkedin.com/in/asha-rao",
+      "javascript:alert(1)//linkedin.com/in/asha-rao",
+      "linkedin.com/in/asha rao",
+      "github.com/asha-rao"
+    ]
+  },
+  "github": {
+    "tidy": [
+      ["github.com/asharao", "github.com/asharao"],
+      ["https://github.com/AshaRao/", "github.com/AshaRao"],
+      ["http://www.github.com/asha-rao-99", "github.com/asha-rao-99"],
+      ["https://github.com/asharao?tab=repositories", "github.com/asharao"],
+      ["github.com/a", "github.com/a"]
+    ],
+    "refused": [
+      "asharao",
+      "@asharao",
+      "github.com",
+      "github.com/asharao/kripax",
+      "github.com/-asharao",
+      "github.com/asharao-",
+      "github.com/asha--rao",
+      "github.com/asha_rao",
+      "github.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "https://gist.github.com/asharao",
+      "https://github.com.evil.example/asharao",
+      "linkedin.com/in/asharao"
+    ]
+  }
+}

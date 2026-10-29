@@ -75,6 +75,7 @@ import {
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
+import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -136,6 +137,7 @@ export default function ProfilePage() {
   const [sections, setSections] = useState<ProfileSections>(emptyProfileSections());
   const [shownSections, setShownSections] = useState<ExtraSection[]>([]);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
+  const savedLinks = useRef({ linkedin: "", github: "" });
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
   // True when master_resume_id points at a resume that's since been deleted
@@ -196,6 +198,12 @@ export default function ProfilePage() {
     setPhotoUrl(profile.photo_url ?? null);
     setPhotoPath(profile.photo_path ?? null);
     showSections(fitProfileSections(profile));
+    rememberSavedLinks(profile.contact);
+  }
+
+  /** The links as saved, so one left unchanged isn't refused (see handleSave). */
+  function rememberSavedLinks(c: Partial<ContactInfo>) {
+    savedLinks.current = { linkedin: (c.linkedin ?? "").trim(), github: (c.github ?? "").trim() };
   }
 
   /** Fill the sections, showing each optional one that holds something. */
@@ -247,7 +255,18 @@ export default function ProfilePage() {
 
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
-    setSaving(true); setError(null); setSaveOk(false);
+    setError(null); setSaveOk(false);
+    // A LinkedIn or GitHub link typed or uploaded here has to be a profile
+    // link. One saved before the rule, left as it is, still saves (the
+    // database allows it too) — it's shown as needing a fix.
+    for (const [field, name] of [["linkedin", "LinkedIn"], ["github", "GitHub"]] as const) {
+      const raw = (contact[field] ?? "").trim();
+      if (!isSocialLinkOk(field, raw) && raw !== savedLinks.current[field]) {
+        setError(`Fix the ${name} link before saving. ${SOCIAL_HINT[field]}.`);
+        return false;
+      }
+    }
+    setSaving(true);
     try {
       const profileInput: CareerProfileInput = {
         master_resume_id: masterResumeId,
@@ -267,6 +286,7 @@ export default function ProfilePage() {
       // Everything in the form now matches the DB — clear the dirty flag so
       // the unsaved-changes guards stand down.
       savedSnapshotRef.current = formSnapshot;
+      rememberSavedLinks(contact);
       // Deliberately NOT syncing this back into the resume's stored content:
       // profileToResumeContent reconstructs bullets from the profile form's
       // split Responsibilities/Achievements/Projects/Impact fields, which
@@ -695,17 +715,38 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col gap-sm col-span-2 mt-xs">
             <label className={fieldLabelCls}><LinkIcon size={14} className="text-primary/70" /> Social Links</label>
-            <div className="grid grid-cols-2 gap-sm sm:gap-md">
-              <div className="relative">
-                <LinkedinLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-                <input type="url" value={contact.linkedin ?? ""} onChange={e => setContact(p => ({ ...p, linkedin: e.target.value }))}
-                  placeholder="linkedin.com/in/you" className={iconInputCls} />
-              </div>
-              <div className="relative">
-                <GithubLogo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-                <input type="url" value={contact.github ?? ""} onChange={e => setContact(p => ({ ...p, github: e.target.value }))}
-                  placeholder="github.com/you" className={iconInputCls} />
-              </div>
+            <div className="grid grid-cols-2 gap-sm sm:gap-md items-start">
+              {([
+                ["linkedin", LinkedinLogo, "LinkedIn", "linkedin.com/in/you"],
+                ["github", GithubLogo, "GitHub", "github.com/you"],
+              ] as const).map(([field, Logo, name, placeholder]) => {
+                const bad = !isSocialLinkOk(field, contact[field]);
+                return (
+                  <div key={field} className="flex flex-col gap-xs min-w-0">
+                    <div className="relative">
+                      <Logo size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+                      <input type="url" inputMode="url" aria-label={`${name} profile link`}
+                        value={contact[field] ?? ""}
+                        onChange={e => setContact(p => ({ ...p, [field]: e.target.value }))}
+                        // Put in the standard form on leaving the field.
+                        onBlur={e => {
+                          const tidy = tidySocialLink(field, e.target.value);
+                          if (tidy !== null && tidy !== e.target.value) setContact(p => ({ ...p, [field]: tidy }));
+                        }}
+                        aria-invalid={bad || undefined}
+                        aria-describedby={bad ? `profile-${field}-hint` : undefined}
+                        placeholder={placeholder}
+                        className={`${iconInputCls} ${bad ? "border-error! focus:ring-error/15!" : ""}`} />
+                    </div>
+                    {bad && (
+                      <p id={`profile-${field}-hint`} className="text-caption text-error">
+                        {contact[field]?.trim() === savedLinks.current[field] ? "Needs a fix. " : ""}
+                        {SOCIAL_HINT[field]}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="flex flex-col gap-xs col-span-2">

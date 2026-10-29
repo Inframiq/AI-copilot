@@ -9,6 +9,7 @@ import {
   resumeSectionsToProfile,
   type ProfileSections,
 } from "@/lib/profile-sections";
+import { tidyContactLinks } from "@/lib/social-links";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,10 @@ export async function upsertCareerProfile(input: CareerProfileInput): Promise<Ca
   const { miscellaneous: _misc, ...fields } = input as CareerProfileInput & { miscellaneous?: unknown };
   // Kept inside the database's limits (migration 053), which would refuse
   // the whole save otherwise.
-  const row: Record<string, unknown> = { user_id: me, ...fields };
+  // LinkedIn and GitHub in their standard form; one that isn't a profile
+  // link is left for the database to refuse (migration 054), unless it's
+  // an old one saved unchanged.
+  const row: Record<string, unknown> = { user_id: me, ...fields, contact: tidyContactLinks(fields.contact ?? {}) };
   const fit = fitProfileSections(fields);
   for (const k of SECTION_KEYS) if (fields[k] !== undefined) row[k] = fit[k];
   const write = () => sb.from("career_profiles").upsert(row, { onConflict: "user_id" }).select().single();

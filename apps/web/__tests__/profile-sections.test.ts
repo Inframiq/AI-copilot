@@ -166,6 +166,14 @@ describe("upsertCareerProfile", () => {
     expect(upserts[0]).toMatchObject({ summary: FULL.summary, interests: ["Chess"], leadership: FULL.leadership });
   });
 
+  it("saves LinkedIn and GitHub in their standard form, and leaves a bad one for the database", async () => {
+    await upsertCareerProfile({
+      ...BASE,
+      contact: { ...BASE.contact, linkedin: "https://www.linkedin.com/in/asha/", github: "github.com/a/b" },
+    });
+    expect(upserts[0].contact).toMatchObject({ linkedin: "linkedin.com/in/asha", github: "github.com/a/b" });
+  });
+
   it("writes an emptied section, so clearing one on the Profile clears it", async () => {
     await upsertCareerProfile({ ...BASE, ...emptyProfileSections() });
     expect(upserts[0]).toMatchObject({ summary: null, awards: [], languages: [] });

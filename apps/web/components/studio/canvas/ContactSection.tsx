@@ -3,6 +3,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { useAvatarSrc } from "@/lib/avatar-url";
 import type { ResumeContent } from "@career-copilot/types";
+import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -73,21 +74,50 @@ export function ContactSection() {
           </div>
         )}
 
-        {CONTACT_FIELDS.map(({ key, label, type }) => (
-          <div key={key} className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant">{label}</label>
-            <input
-              type={type ?? "text"}
-              value={content.contact[key] ?? ""}
-              onChange={(e) =>
-                updateContent({
-                  contact: { ...content.contact, [key]: e.target.value },
-                })
-              }
-              className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-            />
-          </div>
-        ))}
+        {CONTACT_FIELDS.map(({ key, label, type }) => {
+          // LinkedIn and GitHub: a profile link, put in the standard form on
+          // leaving the field. One that isn't — an upload can bring one in —
+          // stays, flagged.
+          const social = key === "linkedin" || key === "github" ? key : null;
+          const bad = social !== null && !isSocialLinkOk(social, content.contact[social]);
+          const id = `builder-contact-${key}`;
+          return (
+            <div key={key} className="flex flex-col gap-xs">
+              <label htmlFor={id} className="text-label-sm text-on-surface-variant">{label}</label>
+              <input
+                id={id}
+                type={type ?? "text"}
+                value={content.contact[key] ?? ""}
+                onChange={(e) =>
+                  updateContent({
+                    contact: { ...content.contact, [key]: e.target.value },
+                  })
+                }
+                onBlur={
+                  social
+                    ? (e) => {
+                        const tidy = tidySocialLink(social, e.target.value);
+                        if (tidy !== null && tidy !== e.target.value) {
+                          updateContent({ contact: { ...content.contact, [social]: tidy } });
+                        }
+                      }
+                    : undefined
+                }
+                placeholder={social ? `${social}.com/${social === "linkedin" ? "in/your-name" : "your-username"}` : undefined}
+                aria-invalid={bad || undefined}
+                aria-describedby={bad ? `${id}-hint` : undefined}
+                className={`w-full px-md py-sm rounded-lg border bg-surface-container-lowest text-on-surface text-body-md focus:outline-none focus:ring-2 transition-all ${
+                  bad ? "border-error focus:ring-error/20" : "border-outline-variant/50 focus:ring-primary/30 focus:border-primary"
+                }`}
+              />
+              {bad && (
+                <p id={`${id}-hint`} className="text-caption text-error">
+                  {SOCIAL_HINT[social]}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

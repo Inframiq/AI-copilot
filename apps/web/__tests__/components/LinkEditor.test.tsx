@@ -17,6 +17,38 @@ function shadow(container: HTMLElement) {
 
 const LINK = { path: "contact.linkedin", url: "linkedin.com/in/jane", text: "LinkedIn", rect: { top: 0, bottom: 20, left: 10 } };
 
+// ── LinkedIn and GitHub take a profile link only ──────────────────────────────
+describe("the contact's LinkedIn and GitHub in the link editor", () => {
+  const GH = { ...LINK, path: "contact.github", url: "github.com/jane", text: "" };
+
+  it("saves a profile link in its standard form", () => {
+    const onSave = vi.fn();
+    render(<LinkEditor link={LINK} onSave={onSave} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "https://www.linkedin.com/in/jane-doe/" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith("linkedin.com/in/jane-doe", "LinkedIn");
+  });
+
+  it("won't save a link that isn't a profile, and says what one looks like", () => {
+    const onSave = vi.fn();
+    render(<LinkEditor link={GH} onSave={onSave} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "github.com/jane/kripax" } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByText("Use your profile link: github.com/your-username")).toBeInTheDocument();
+    expect(screen.getByLabelText("Link URL")).toHaveAttribute("aria-invalid", "true");
+    fireEvent.submit(screen.getByRole("dialog"));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("leaves other links as typed", () => {
+    const onSave = vi.fn();
+    render(<LinkEditor link={{ ...LINK, path: "contact.website", url: "" }} onSave={onSave} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "https://jane.dev/" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(onSave).toHaveBeenCalledWith("https://jane.dev/", "LinkedIn");
+  });
+});
+
 describe("editing links in the Studio", () => {
   it("opens the link editor instead of following or typing into a link", () => {
     const onEditLink = vi.fn();
