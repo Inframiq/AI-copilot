@@ -4,7 +4,7 @@
  * never holds up typing. Where there's no worker (tests, a browser without
  * module workers) or it fails, the same search runs on the page.
  */
-import { canonicalName, loadSuggestions, suggest, type SuggestKind } from "./index";
+import { canonicalName, fold, loadSuggestions, suggest, type SuggestKind } from "./index";
 import type { WorkerReply, WorkerRequest } from "./suggest.worker";
 
 export interface Answer {
@@ -67,6 +67,20 @@ export function ask(kind: SuggestKind, text: string): Promise<Answer> {
 /** The list's name for exactly this text — "js" → "JavaScript" — or null. */
 export async function canonicalFor(kind: SuggestKind, text: string): Promise<string | null> {
   return text.trim() ? (await ask(kind, text)).exact : null;
+}
+
+/**
+ * The entry among `existing` that is the same as `value`: the same once
+ * folded, or the same name once aliases are read as their names ("JS" and
+ * "JavaScript"). Null when it's new.
+ */
+export async function findRepeat(kind: SuggestKind, value: string, existing: readonly string[]): Promise<string | null> {
+  const key = async (v: string) => fold((await canonicalFor(kind, v).catch(() => null)) ?? v);
+  const mine = await key(value);
+  if (!mine) return null;
+  const theirs = await Promise.all(existing.map(key));
+  const at = theirs.indexOf(mine);
+  return at >= 0 ? existing[at] : null;
 }
 
 /** Start loading a list, so it's ready by the time anything is typed. */

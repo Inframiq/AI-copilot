@@ -1,4 +1,5 @@
 import type { ResumeContent } from "@career-copilot/types";
+import { withoutRepeats } from "@/lib/duplicates";
 
 /**
  * The résumé sections the Profile holds beyond contact, skills, experience,
@@ -112,15 +113,18 @@ export function capWords(value: string, max: number): string {
  */
 export function fitProfileSections(s: Partial<ProfileSections>): ProfileSections {
   const L = PROFILE_LIMITS;
+  // Blanks and repeats dropped (lib/duplicates), then the limits.
   const lines = (v: unknown) =>
-    (Array.isArray(v) ? v : []).map(text).filter(Boolean).slice(0, L.items).map((t) => t.slice(0, L.itemChars));
+    withoutRepeats((Array.isArray(v) ? v : []).map(text).filter(Boolean)).slice(0, L.items).map((t) => t.slice(0, L.itemChars));
   return {
     summary: text(s.summary).slice(0, L.summaryChars) || null,
     objective: text(s.objective).slice(0, L.objectiveChars) || null,
-    languages: (Array.isArray(s.languages) ? s.languages : [])
-      .map((l) => ({ name: text(l?.name).slice(0, L.languageChars), level: text(l?.level).slice(0, L.languageChars) }))
-      .filter((l) => l.name)
-      .slice(0, L.languages),
+    languages: withoutRepeats(
+      (Array.isArray(s.languages) ? s.languages : [])
+        .map((l) => ({ name: text(l?.name).slice(0, L.languageChars), level: text(l?.level).slice(0, L.languageChars) }))
+        .filter((l) => l.name),
+      (l) => l.name,
+    ).slice(0, L.languages),
     awards: lines(s.awards),
     achievements: lines(s.achievements),
     leadership: lines(s.leadership),

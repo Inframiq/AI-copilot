@@ -1,7 +1,8 @@
 "use client";
 import { forwardRef, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SUGGEST_CREDIT, type SuggestKind } from "@/lib/suggest";
+import { SUGGEST_CREDIT, fold, type SuggestKind } from "@/lib/suggest";
+import { withoutRepeats } from "@/lib/duplicates";
 import { ask, canonicalFor, warm, type Answer } from "@/lib/suggest/client";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "list">;
@@ -16,6 +17,11 @@ type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "o
  * chip) instead of keeping it. `list` is for a comma-separated field (a
  * project's tech stack): suggestions are for the part after the last comma.
  *
+ * `exclude` names what's already in the list the field adds to (the skills
+ * already added, the other languages): those aren't suggested again. A
+ * comma-separated field leaves out its own earlier items the same way, and
+ * drops a repeat when it's left.
+ *
  * Arrows move through the suggestions, Enter takes the highlighted one,
  * Escape closes them. Nothing is highlighted unless what's typed is exactly
  * a name or alias, so Enter on new text still means that text.
@@ -26,10 +32,13 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
   onValueChange: (value: string) => void;
   onPick?: (name: string) => void;
   list?: boolean;
-}>(function SuggestInput({ kind, value, onValueChange, onPick, list = false, ...input }, outerRef) {
+  exclude?: readonly string[];
+}>(function SuggestInput({ kind, value, onValueChange, onPick, list = false, exclude, ...input }, outerRef) {
   const [answer, setAnswer] = useState<Answer & { term: string }>({ term: "", items: [], exact: null });
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
+  // A row the arrows or the pointer moved to; null until then, when the
+  // highlighted row is the one exactly matching what's typed, if any.
+  const [moved, setActive] = useState<number | null>(null);
   const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listId = useId();
@@ -48,16 +57,19 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
     ask(kind, term).then((a) => {
       if (!live) return;
       setAnswer({ ...a, term });
-      // Highlight a suggestion only when it's exactly what was typed.
-      setActive(a.exact ? a.items.indexOf(a.exact) : -1);
+      setActive(null);
     }).catch(() => {});
     return () => { live = false; };
   }, [kind, term, open]);
 
-  const current = answer.term === term ? answer.items : [];
+  // Already in the list: the field's own earlier items, and `exclude`.
+  const taken = new Set([...(exclude ?? []), ...(list ? value.slice(0, cut).split(",") : [])].map(fold).filter(Boolean));
+  const current = answer.term === term ? answer.items.filter((n) => !taken.has(fold(n))) : [];
   // Nothing to offer when the one match is already what's there.
   const items = current.length === 1 && current[0] === term ? [] : current;
   const shown = open && items.length > 0;
+  // Highlight a suggestion only when it's exactly what was typed.
+  const active = moved ?? (answer.exact && answer.term === term ? items.indexOf(answer.exact) : -1);
 
   // Under the field, or above it when there's more room there (a phone's
   // keyboard). Rendered into <body>: the cards this sits in clip overflow.
@@ -96,7 +108,7 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
   async function tidy(text: string): Promise<string> {
     const part = async (t: string) => (await canonicalFor(kind, t).catch(() => null)) ?? t.trim();
     return list
-      ? (await Promise.all(text.split(",").map(part))).filter(Boolean).join(", ")
+      ? withoutRepeats((await Promise.all(text.split(",").map(part))).filter(Boolean)).join(", ")
       : part(text);
   }
 
@@ -138,7 +150,7 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
             e.preventDefault();
             const n = items.length;
             const down = e.key === "ArrowDown";
-            setActive((i) => (i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : -1) + n) % n));
+            setActive(active < 0 ? (down ? 0 : n - 1) : (active + (down ? 1 : -1) + n) % n);
             return;
           }
           if (!shown && e.key === "ArrowDown" && items.length > 0) {

@@ -4,7 +4,7 @@ import { X } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { SuggestInput } from "@/components/ui/SuggestInput";
-import { canonicalFor } from "@/lib/suggest/client";
+import { canonicalFor, findRepeat } from "@/lib/suggest/client";
 
 // A chip editor, not the old newline-joined textarea: skills are discrete
 // values and editing them as one blob made reordering and de-duping a
@@ -13,6 +13,8 @@ export function SkillsSection() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
   const [draft, setDraft] = useState("");
+  // Says why a skill wasn't added (it's already there); cleared on typing.
+  const [note, setNote] = useState<string | null>(null);
   if (!content) return null;
 
   const skills = content.skills;
@@ -25,8 +27,12 @@ export function SkillsSection() {
     if (!typed) return;
     const value =
       picked ?? (await canonicalFor("skill", typed).catch(() => null)) ?? typed;
-    if (skills.some((s) => s.toLowerCase() === value.toLowerCase())) return;
-    updateContent({ skills: [...skills, value] });
+    // As the list is now: the lookups above are asynchronous.
+    const current = useResumeStore.getState().content?.skills ?? skills;
+    // Never twice — "js" when JavaScript is there, "node js" for Node.js.
+    const already = await findRepeat("skill", value, current);
+    if (already) return setNote(`${already} is already in your skills.`);
+    updateContent({ skills: [...(useResumeStore.getState().content?.skills ?? current), value] });
   }
 
   return (
@@ -65,8 +71,10 @@ export function SkillsSection() {
         kind="skill"
         aria-label="Add a skill"
         value={draft}
-        onValueChange={setDraft}
+        onValueChange={(v) => { setDraft(v); setNote(null); }}
         onPick={add}
+        exclude={skills}
+        aria-describedby={note ? "builder-skill-note" : undefined}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === ",") {
             e.preventDefault();
@@ -77,6 +85,7 @@ export function SkillsSection() {
         placeholder="Add a skill and press Enter…"
         className="w-full px-md py-sm rounded-xl border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
       />
+      <p id="builder-skill-note" role="status" className="text-caption text-on-surface-variant empty:hidden">{note}</p>
     </section>
   );
 }

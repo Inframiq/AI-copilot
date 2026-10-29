@@ -342,3 +342,44 @@ describe("My Profile — LinkedIn and GitHub", () => {
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
   });
 });
+
+describe("My Profile — no repeats", () => {
+  const profile = (extra: Record<string, unknown> = {}) => ({
+    user_id: "u1", master_resume_id: null,
+    contact: { name: "Jane", email: "j@x.com" },
+    experience: [], projects: [], education: [], skills: ["JavaScript"], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  it("won't add a skill that's already there under another spelling, and says so", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    const box = await screen.findByRole("combobox", { name: "Add a skill" });
+    await userEvent.type(box, "javascript{Enter}");
+    expect(await screen.findByText("JavaScript is already in your skills.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Remove JavaScript" })).toHaveLength(1);
+  });
+
+  it("flags a language listed twice and saves it once", async () => {
+    getCareerProfile.mockResolvedValue(profile({ languages: [{ name: "Hindi", level: "" }, { name: "Telugu", level: "" }] }));
+    renderPage();
+    const second = await screen.findByRole("combobox", { name: "Language 2" });
+    await userEvent.clear(second);
+    await userEvent.type(second, "hindi");
+    await userEvent.keyboard("{Escape}");
+    expect(second).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Already listed.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    // The page sends what's on it; the save keeps one (fitProfileSections).
+    const { fitProfileSections } = await import("@/lib/profile-sections");
+    expect(fitProfileSections(upsertCareerProfile.mock.calls[0][0]).languages.map((l: { name: string }) => l.name)).toEqual(["Hindi"]);
+  });
+});

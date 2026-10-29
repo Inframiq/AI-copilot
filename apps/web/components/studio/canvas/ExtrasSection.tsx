@@ -4,6 +4,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { Trash } from "@phosphor-icons/react";
 import { LINE_SECTIONS, SECTION_INFO } from "@/lib/profile-sections";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { repeatedAt, withoutRepeats } from "@/lib/duplicates";
 
 const textareaCls =
   "w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all";
@@ -26,18 +27,34 @@ function LinesTextarea({ id, lines, onChange, placeholder }: {
   const [draft, setDraft] = useState(lines.join("\n"));
   const joined = lines.join("\n");
   if (toLines(draft).join("\n") !== joined) setDraft(joined);
+  // A line given twice: said here, and dropped on leaving the box — not
+  // while typing, when a line can match another on its way to something
+  // longer.
+  const repeats = [...repeatedAt(lines)].map((i) => lines[i]);
   return (
-    <textarea
-      id={id}
-      value={draft}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        onChange(toLines(e.target.value));
-      }}
-      rows={3}
-      placeholder={placeholder}
-      className={textareaCls}
-    />
+    <>
+      <textarea
+        id={id}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          onChange(toLines(e.target.value));
+        }}
+        onBlur={() => {
+          if (repeats.length) onChange(withoutRepeats(lines));
+        }}
+        aria-invalid={repeats.length > 0 || undefined}
+        aria-describedby={repeats.length ? `${id}-repeats` : undefined}
+        rows={3}
+        placeholder={placeholder}
+        className={textareaCls}
+      />
+      {repeats.length > 0 && (
+        <p id={`${id}-repeats`} className="text-caption text-error">
+          Listed twice: {repeats.join(", ")}. The repeat goes when you leave the box.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -47,6 +64,9 @@ export function ExtrasSection() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
   if (!content) return null;
+  const repeatedLanguages = repeatedAt((content.languages ?? []).map((l) => l.name));
+  // A certification named twice is flagged, not removed: a renewal is real.
+  const repeatedCerts = repeatedAt(content.certifications ?? []);
 
   return (
     <section className="flex flex-col gap-lg">
@@ -70,9 +90,14 @@ export function ExtrasSection() {
                   updated[i] = { ...updated[i], name };
                   updateContent({ languages: updated });
                 }}
+                exclude={(content.languages ?? []).filter((_, idx) => idx !== i).map((l) => l.name)}
+                aria-invalid={repeatedLanguages.has(i) || undefined}
                 placeholder="e.g. Spanish"
-                className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                className={`w-full px-sm py-xs rounded-lg border bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
+                  repeatedLanguages.has(i) ? "border-error" : "border-outline-variant/50"
+                }`}
               />
+              {repeatedLanguages.has(i) && <p className="text-caption text-error">Already listed.</p>}
             </div>
             <div className="flex-1 flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant">Proficiency</label>
@@ -114,7 +139,8 @@ export function ExtrasSection() {
         <h3 className="text-label-caps text-on-surface-variant">Certifications</h3>
         {/* One field each, so each can suggest the certification's own name. */}
         {(content.certifications ?? []).map((cert, i) => (
-          <div key={i} className="flex items-center gap-sm">
+          <div key={i} className="flex flex-col gap-xs">
+          <div className="flex items-center gap-sm">
             <SuggestInput
               kind="certification"
               aria-label={`Certification ${i + 1}`}
@@ -124,8 +150,12 @@ export function ExtrasSection() {
                 updated[i] = name;
                 updateContent({ certifications: updated });
               }}
+              exclude={(content.certifications ?? []).filter((_, idx) => idx !== i)}
+              aria-invalid={repeatedCerts.has(i) || undefined}
               placeholder="e.g. AWS Certified Solutions Architect – Associate"
-              className="flex-1 min-w-0 px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              className={`flex-1 min-w-0 px-sm py-xs rounded-lg border bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
+                repeatedCerts.has(i) ? "border-error" : "border-outline-variant/50"
+              }`}
             />
             <button
               onClick={() =>
@@ -136,6 +166,10 @@ export function ExtrasSection() {
             >
               <Trash size={14} />
             </button>
+          </div>
+          {repeatedCerts.has(i) && (
+            <p className="text-caption text-error">Already listed. A renewal can stay; otherwise remove one.</p>
+          )}
           </div>
         ))}
         <button

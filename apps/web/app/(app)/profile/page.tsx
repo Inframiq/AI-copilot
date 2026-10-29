@@ -76,7 +76,8 @@ import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
-import { canonicalFor } from "@/lib/suggest/client";
+import { canonicalFor, findRepeat } from "@/lib/suggest/client";
+import { repeatedAt } from "@/lib/duplicates";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -129,6 +130,8 @@ export default function ProfilePage() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [skills, setSkills] = useState<string[]>([]);
   const [skillDraft, setSkillDraft] = useState("");
+  // Says why a skill wasn't added (it's already there); cleared on typing.
+  const [skillNote, setSkillNote] = useState<string | null>(null);
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([]);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [education, setEducation] = useState<EducationEntry[]>([]);
@@ -551,12 +554,15 @@ export default function ProfilePage() {
     const typed = (picked ?? skillDraft).trim();
     if (!typed) return;
     const trimmed = picked ?? (await canonicalFor("skill", typed).catch(() => null)) ?? typed;
-    if (!skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
-      setSkills(prev => [...prev, trimmed]);
-    }
+    // Never twice — "js" when JavaScript is there, "node js" for Node.js.
+    const already = await findRepeat("skill", trimmed, skills);
+    if (already) setSkillNote(`${already} is already in your skills.`);
+    else setSkills(prev => [...prev, trimmed]);
     setSkillDraft("");
   }
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
+  // A certification named twice is flagged, not removed: a renewal is real.
+  const repeatedCerts = repeatedAt(certifications.map(c => c.name));
 
   return (
     <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-[calc(var(--spacing-xxl)+64px)] md:pb-xxl flex flex-col gap-section">
@@ -773,8 +779,9 @@ export default function ProfilePage() {
           <div className="flex gap-xs">
             <div className="relative flex-1">
               <MagnifyingGlass size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-              <SuggestInput kind="skill" value={skillDraft} onValueChange={setSkillDraft} onPick={addSkill}
-                aria-label="Add a skill"
+              <SuggestInput kind="skill" value={skillDraft} onValueChange={v => { setSkillDraft(v); setSkillNote(null); }} onPick={addSkill}
+                exclude={skills}
+                aria-label="Add a skill" aria-describedby={skillNote ? "profile-skill-note" : undefined}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
                 placeholder="Add a skill — e.g. React, AWS, Figma…"
                 className={iconInputCls} />
@@ -784,6 +791,7 @@ export default function ProfilePage() {
               <Plus size={16} weight="bold" />
             </button>
           </div>
+          <p id="profile-skill-note" role="status" className="text-caption text-on-surface-variant empty:hidden">{skillNote}</p>
           {skills.length > 0 && (
             <div className="flex flex-wrap gap-sm">
               {skills.map(s => (
@@ -1256,7 +1264,13 @@ export default function ProfilePage() {
                         <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
                           <label className="text-caption text-on-surface-variant">Certification Name *</label>
                           <SuggestInput kind="certification" value={cert.name ?? ""} onValueChange={v => updateCert(cert.id, "name", v)}
-                            placeholder="AWS Solutions Architect" className={inputCls} />
+                            exclude={certifications.filter(c => c.id !== cert.id).map(c => c.name)}
+                            aria-invalid={repeatedCerts.has(certifications.indexOf(cert)) || undefined}
+                            placeholder="AWS Solutions Architect"
+                            className={`${inputCls} ${repeatedCerts.has(certifications.indexOf(cert)) ? "border-error!" : ""}`} />
+                          {repeatedCerts.has(certifications.indexOf(cert)) && (
+                            <p className="text-caption text-error">Already listed. A renewal can stay; otherwise remove one.</p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
                           <label className="text-caption text-on-surface-variant">Issuing Organisation</label>

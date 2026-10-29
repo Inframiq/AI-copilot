@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Plus, Trash, X } from "@phosphor-icons/react";
 import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { repeatedAt } from "@/lib/duplicates";
 import { wordCount } from "@/lib/misc-points";
 import {
   EXTRA_SECTIONS,
@@ -70,18 +71,24 @@ export function SummaryCard({ value, onChange }: { value: string; onChange: (v: 
 function LanguagesEditor({ value, onChange }: { value: LanguageEntry[]; onChange: (v: LanguageEntry[]) => void }) {
   const set = (i: number, patch: Partial<LanguageEntry>) =>
     onChange(value.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  // A language listed twice is flagged here and dropped when the profile is
+  // saved (fitProfileSections).
+  const repeated = repeatedAt(value.map((l) => l.name));
   return (
     <div className="flex flex-col gap-sm">
       {value.map((lang, i) => (
-        <div key={i} className="flex items-center gap-xs sm:gap-sm">
+        <div key={i} className="flex flex-col gap-xs">
+        <div className="flex items-center gap-xs sm:gap-sm">
           <SuggestInput
             kind="language"
             aria-label={`Language ${i + 1}`}
             value={lang.name}
             onValueChange={(name) => set(i, { name })}
+            exclude={value.filter((_, idx) => idx !== i).map((l) => l.name)}
+            aria-invalid={repeated.has(i) || undefined}
             maxLength={L.languageChars}
             placeholder={SECTION_INFO.languages.placeholder}
-            className={`${inputCls} min-w-0 flex-1`}
+            className={`${inputCls} min-w-0 flex-1 ${repeated.has(i) ? "border-error!" : ""}`}
           />
           <input
             aria-label={`Language ${i + 1} level`}
@@ -95,6 +102,8 @@ function LanguagesEditor({ value, onChange }: { value: LanguageEntry[]; onChange
             aria-label={`Remove language ${i + 1}`} className={removeBtnCls}>
             <Trash size={14} />
           </button>
+        </div>
+        {repeated.has(i) && <p className="text-caption text-error">Already listed.</p>}
         </div>
       ))}
       <button type="button" disabled={value.length >= L.languages}
@@ -116,12 +125,17 @@ function LinesEditor({ section, value, onChange }: {
     focusLast.current = false;
     [...(listRef.current?.querySelectorAll("input") ?? [])].at(-1)?.focus();
   }, [value.length]);
+  // A line listed twice is flagged here and dropped when the profile is
+  // saved (fitProfileSections).
+  const repeated = repeatedAt(value);
   return (
     <div ref={listRef} className="flex flex-col gap-sm">
       {value.map((line, i) => (
-        <div key={i} className="flex items-center gap-xs sm:gap-sm">
+        <div key={i} className="flex flex-col gap-xs">
+        <div className="flex items-center gap-xs sm:gap-sm">
           <input
             aria-label={`${label} ${i + 1}`}
+            aria-invalid={repeated.has(i) || undefined}
             value={line}
             onChange={(e) => onChange(value.map((l, idx) => (idx === i ? e.target.value : l)))}
             onKeyDown={(e) => {
@@ -134,12 +148,14 @@ function LinesEditor({ section, value, onChange }: {
             }}
             maxLength={L.itemChars}
             placeholder={i === 0 ? placeholder : undefined}
-            className={`${inputCls} min-w-0 flex-1`}
+            className={`${inputCls} min-w-0 flex-1 ${repeated.has(i) ? "border-error!" : ""}`}
           />
           <button type="button" onClick={() => onChange(value.filter((_, idx) => idx !== i))}
             aria-label={`Remove ${item} ${i + 1}`} className={removeBtnCls}>
             <Trash size={14} />
           </button>
+        </div>
+        {repeated.has(i) && <p className="text-caption text-error">Already listed.</p>}
         </div>
       ))}
       <button type="button" disabled={value.length >= L.items}
