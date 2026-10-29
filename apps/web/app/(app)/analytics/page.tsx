@@ -11,6 +11,8 @@ import {
   ArrowRight,
   Calendar,
 } from "@phosphor-icons/react";
+import { settled, usePageReady } from "@/lib/reveal";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { apiClient } from "@/lib/api-client";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -53,14 +55,18 @@ export default function AnalyticsPage() {
   const router = useRouter();
   const sessionId = useTailoringStore((s) => s.sessionId);
 
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
   });
-  const { data: jds = [] } = useQuery<JobDescription[]>({
+  const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
     queryFn: () => apiClient.getJds(),
   });
+  const resumes = resumesQuery.data ?? [];
+  const jds = jdsQuery.data ?? [];
+  // Every figure and chart and the shell appear together (lib/reveal).
+  const ready = usePageReady(settled(resumesQuery, jdsQuery));
 
   const scoredJds = jds.filter((jd) => jd.ats_score != null);
   const avgAts =
@@ -95,24 +101,43 @@ export default function AnalyticsPage() {
 
   const funnelMax = funnel[0].count > 0 ? funnel[0].count : 1;
 
+  const header = (
+    <section className="pt-xs sm:pt-lg sm:pb-md flex flex-row items-end justify-between gap-md">
+      <div className="min-w-0">
+        <h1 className="text-headline-xl text-on-surface font-bold mb-sm" style={{ letterSpacing: "-0.02em" }}>
+          Analytics
+        </h1>
+        <p className="hidden sm:block text-body-lg text-on-surface-variant">
+          Track your career search performance and optimize your strategy.
+        </p>
+      </div>
+      <div className="shrink-0 flex items-center gap-xs sm:gap-sm text-label-sm text-on-surface-variant bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-sm sm:px-md py-xs sm:py-sm">
+        <Calendar size={16} />
+        <span className="sm:hidden">6 weeks</span>
+        <span className="hidden sm:inline">Last 6 weeks</span>
+      </div>
+    </section>
+  );
+
+  if (!ready) {
+    return (
+      <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        {header}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
+          {[0, 1, 2, 3].map((k) => <SkeletonCard key={k} lines={1} className="min-w-0" />)}
+        </div>
+        <div className="grid grid-cols-2 gap-gutter">
+          <SkeletonCard lines={6} className="min-w-0" />
+          <SkeletonCard lines={6} className="min-w-0" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       {/* Header */}
-      <section className="pt-xs sm:pt-lg sm:pb-md flex flex-row items-end justify-between gap-md">
-        <div className="min-w-0">
-          <h1 className="text-headline-xl text-on-surface font-bold mb-sm" style={{ letterSpacing: "-0.02em" }}>
-            Analytics
-          </h1>
-          <p className="hidden sm:block text-body-lg text-on-surface-variant">
-            Track your career search performance and optimize your strategy.
-          </p>
-        </div>
-        <div className="shrink-0 flex items-center gap-xs sm:gap-sm text-label-sm text-on-surface-variant bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-sm sm:px-md py-xs sm:py-sm">
-          <Calendar size={16} />
-          <span className="sm:hidden">6 weeks</span>
-          <span className="hidden sm:inline">Last 6 weeks</span>
-        </div>
-      </section>
+      {header}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">

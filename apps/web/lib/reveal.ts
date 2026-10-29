@@ -1,8 +1,9 @@
 "use client";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "zustand";
 import { apiClient } from "@/lib/api-client";
+import { createBrowserClient } from "@/lib/supabase";
 import { getCareerProfile } from "@/lib/career-profile-client";
 import { avatarPath, avatarSrcQuery } from "@/lib/avatar-url";
 import type { Subscription } from "@career-copilot/types";
@@ -14,9 +15,10 @@ import type { Subscription } from "@career-copilot/types";
  * numbers → résumés → credit balance in five steps over about two seconds.
  *
  * The shell's own parts (credit balance, avatar) wait for each other:
- * useShellDataReady. A page that draws its data in one go also holds the
- * shell back (useHoldShell) until that page is ready, so the two arrive
- * together. Until then each shows a placeholder the size of what replaces it.
+ * useShellDataReady. Every page with data calls usePageReady with whether
+ * its own data has settled: until that and the shell's data are both in, the
+ * page shows placeholders and holds the shell back too, so page and shell
+ * arrive in the same frame.
  *
  * "Ready" means settled: loaded, or failed after its retries — a failure
  * shows its own error rather than holding the page forever.
@@ -33,6 +35,19 @@ export const careerProfileQuery = {
   queryFn: getCareerProfile,
   staleTime: 2 * 60 * 1000,
 } as const;
+
+/** Who is signed in (Supabase's own record): the sign-in email, the name
+ * Google gave, when the account was made. */
+export const authUserQuery = {
+  queryKey: ["authUser"],
+  queryFn: async () => (await createBrowserClient().auth.getUser()).data.user,
+  staleTime: 5 * 60 * 1000,
+} as const;
+
+/** True when none of these queries is still waiting for its first answer. */
+export function settled(...queries: { isPending: boolean }[]): boolean {
+  return queries.every((q) => !q.isPending);
+}
 
 const useHolds = create<{ holds: number }>(() => ({ holds: 0 }));
 
@@ -63,4 +78,19 @@ export function useHoldShell(holding: boolean): void {
     useHolds.setState((s) => ({ holds: s.holds + 1 }));
     return () => useHolds.setState((s) => ({ holds: s.holds - 1 }));
   }, [holding]);
+}
+
+/**
+ * For a page: true once its own data (`pageReady`) and the shell's have
+ * settled — the moment to replace its placeholders with everything at once.
+ * Holds the shell's placeholders until then. Once true it stays true for
+ * this visit, so a later refetch or a change made on the page never brings
+ * the placeholders back.
+ */
+export function usePageReady(pageReady: boolean): boolean {
+  const shellReady = useShellDataReady();
+  const shown = useRef(false);
+  if (shellReady && pageReady) shown.current = true;
+  useHoldShell(!shown.current);
+  return shown.current;
 }

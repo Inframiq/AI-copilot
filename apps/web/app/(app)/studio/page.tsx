@@ -10,6 +10,7 @@ import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 import { TemplatePreviewSheet } from "@/components/studio/TemplatePreviewSheet";
 import { getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
+import { usePageReady } from "@/lib/reveal";
 import type { Resume } from "@career-copilot/types";
 
 const PICKER_TEMPLATES = RESUME_TEMPLATES.filter((t) =>
@@ -44,6 +45,9 @@ export default function StudioIndexPage() {
   const [existingResumes, setExistingResumes] = useState<Resume[]>([]);
   const [showPrompt, setShowPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Set once the effect below has sorted the loaded résumés, so the page
+  // never shows "create a new résumé" for a frame before the list.
+  const [synced, setSynced] = useState(false);
 
   const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
@@ -66,7 +70,11 @@ export default function StudioIndexPage() {
     );
     setExistingResumes(sorted);
     setShowPrompt(resumes.length > 0);
+    setSynced(true);
   }, [resumes, isLoading]);
+
+  // The list (or the new-résumé form) and the shell appear together (lib/reveal).
+  const ready = usePageReady(synced);
 
   async function handleDeleteResume(id: string) {
     if (deleteConfirm !== id) {
@@ -136,10 +144,19 @@ export default function StudioIndexPage() {
     }
   }
 
-  if (isLoading) {
+  if (!ready) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      <div aria-hidden className="flex-1 flex flex-col items-center justify-center gap-section p-gutter max-w-[32rem] mx-auto w-full">
+        <div className="flex flex-col items-center gap-sm w-full">
+          <div className="skeleton h-7 w-56 rounded-full" />
+          <div className="skeleton h-4 w-72 max-w-full rounded-full" />
+        </div>
+        <div className="skeleton h-12 w-full rounded-xl" />
+        <div className="w-full flex flex-col gap-sm">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton h-[72px] w-full rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }

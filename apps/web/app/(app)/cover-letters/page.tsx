@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { EnvelopeSimple, FilePdf, Sparkle, WarningCircle } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
-import { getCareerProfile } from "@/lib/career-profile-client";
+import { careerProfileQuery, settled, usePageReady } from "@/lib/reveal";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { Card } from "@/components/ui/Card";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -48,10 +49,11 @@ export default function CoverLettersPage() {
     resumesQuery.refetch();
     jdsQuery.refetch();
   };
-  const { data: careerProfile } = useQuery({
-    queryKey: ["careerProfile"],
-    queryFn: getCareerProfile,
-  });
+  const profileQuery = useQuery(careerProfileQuery);
+  const careerProfile = profileQuery.data;
+
+  // The form, the letters and the shell appear together (lib/reveal).
+  const ready = usePageReady(settled(lettersQuery, resumesQuery, jdsQuery, profileQuery));
 
   // Resolve which resume this JD actually uses — same priority order the
   // JD detail page's own cover-letter button uses: the resume already
@@ -112,18 +114,32 @@ export default function CoverLettersPage() {
     }
   }
 
+  const header = (
+    <section className="pb-md">
+      <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
+        Cover Letters
+      </h1>
+      <p className="text-body-lg text-on-surface-variant">
+        Pick a job description — the resume it belongs to is used automatically.
+      </p>
+    </section>
+  );
+
+  if (!ready) {
+    return (
+      <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        {header}
+        <SkeletonCard lines={3} />
+        <SkeletonCard lines={2} />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <ConnectionErrorBanner show={connectionError} onRetry={retryAll} isRetrying={isRetrying} />
 
-      <section className="pb-md">
-        <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
-          Cover Letters
-        </h1>
-        <p className="text-body-lg text-on-surface-variant">
-          Pick a job description — the resume it belongs to is used automatically.
-        </p>
-      </section>
+      {header}
 
       <Card className="flex flex-col gap-md">
         <h2 className="text-headline-md text-on-surface font-semibold flex items-center gap-sm">

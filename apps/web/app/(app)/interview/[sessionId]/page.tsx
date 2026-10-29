@@ -9,6 +9,7 @@ import type { PrepQuestionOut, PrepQuestionWithJdOut } from "@career-copilot/typ
 import Link from "next/link";
 import { ArrowLeft, CaretLeft, CaretRight, Check, Flag } from "@phosphor-icons/react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { settled, usePageReady } from "@/lib/reveal";
 
 // Questions are walked topic by topic, in the Interview Center's tab order —
 // the sidebar groups them that way, and Next stepping across topics in
@@ -33,21 +34,22 @@ export default function InterviewPage({
   // that question is on screen.
   const [markError, setMarkError] = useState<{ id: string; message: string } | null>(null);
 
-  const { data: rawQuestions = [], isLoading } = useQuery<PrepQuestionOut[]>({
+  const questionsQuery = useQuery<PrepQuestionOut[]>({
     queryKey: ["questions", sessionId],
     queryFn: () => apiClient.getQuestions(sessionId),
   });
+  const rawQuestions = questionsQuery.data ?? [];
   const questions = [...rawQuestions].sort(
     (a, b) => topicRank(a.topic) - topicRank(b.topic) || a.order_index - b.order_index,
   );
 
   // Which job these are for — the Interview Center's list knows (and is
   // usually cached already).
-  const { data: myQuestions } = useQuery<PrepQuestionWithJdOut[]>({
+  const myQuestionsQuery = useQuery<PrepQuestionWithJdOut[]>({
     queryKey: ["myQuestions"],
     queryFn: () => apiClient.getMyQuestions(),
   });
-  const mine = myQuestions?.find((q) => q.session_id === sessionId);
+  const mine = myQuestionsQuery.data?.find((q) => q.session_id === sessionId);
   const jdTitle = mine?.jd_title ?? null;
   const jdId = searchParams.get("jd") ?? mine?.jd_id ?? null;
   const centerHref = jdId ? `/interview?jd=${encodeURIComponent(jdId)}` : "/interview";
@@ -63,6 +65,12 @@ export default function InterviewPage({
     if (idx !== -1) setActiveIndex(idx);
     setJumped(true);
   }, [questions, targetId, jumped]);
+
+  // The job's title, the questions — already on the one linked to — and the
+  // shell appear together (lib/reveal).
+  const ready = usePageReady(
+    settled(questionsQuery, myQuestionsQuery) && (!targetId || jumped || rawQuestions.length === 0),
+  );
 
   const active = questions[activeIndex];
   const isLast = activeIndex === questions.length - 1;
@@ -110,21 +118,32 @@ export default function InterviewPage({
         >
           <ArrowLeft size={14} /> Interview Center
         </Link>
-        <h1 className="text-headline-md sm:text-headline-lg text-on-surface mb-xs">{jdTitle ?? "Interview Prep"}</h1>
-        <p className="text-body-lg text-on-surface-variant">
-          {isLoading
-            ? "Loading questions…"
-            : `${questions.length} question${questions.length === 1 ? "" : "s"} · ${practicedCount} practiced`}
-        </p>
+        {ready ? (
+          <>
+            <h1 className="text-headline-md sm:text-headline-lg text-on-surface mb-xs">{jdTitle ?? "Interview Prep"}</h1>
+            <p className="text-body-lg text-on-surface-variant">
+              {`${questions.length} question${questions.length === 1 ? "" : "s"} · ${practicedCount} practiced`}
+            </p>
+          </>
+        ) : (
+          <div aria-hidden>
+            <p className="text-headline-md sm:text-headline-lg mb-xs flex items-center">
+              &#8203;<span className="skeleton h-[0.8em] w-64 max-w-full rounded-full" />
+            </p>
+            <p className="text-body-lg flex items-center">
+              &#8203;<span className="skeleton h-[0.8em] w-44 rounded-full" />
+            </p>
+          </div>
+        )}
       </section>
 
-      {isLoading ? (
+      {!ready ? (
         <div className="flex gap-gutter" aria-hidden>
           <div className="hidden sm:block w-48 lg:w-64 flex-shrink-0 space-y-sm">
-            <div className="h-12 rounded-xl bg-surface-container animate-pulse" />
-            <div className="h-12 rounded-xl bg-surface-container animate-pulse" />
+            <div className="skeleton h-12 rounded-xl" />
+            <div className="skeleton h-12 rounded-xl" />
           </div>
-          <div className="flex-1 min-w-0 h-56 rounded-2xl bg-surface-container animate-pulse" />
+          <div className="skeleton flex-1 min-w-0 h-56 rounded-2xl" />
         </div>
       ) : questions.length === 0 ? (
         /* Empty state */

@@ -1,6 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
-import { createBrowserClient } from "@/lib/supabase";
 import type { ContactInfo } from "@/lib/career-profile-client";
 
 /**
@@ -36,22 +34,4 @@ export function mergeParsedContact(
  * profile already holds. Never anything a résumé or form typed in. */
 export function lockedEmail(current: string | undefined, accountEmail: string | null): string {
   return (accountEmail || current || "").trim();
-}
-
-/** The signed-in account's email, or null until (or unless) it is known. */
-export function useAccountEmail(): string | null {
-  const [email, setEmail] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve()
-      .then(() => createBrowserClient().auth.getUser())
-      .then((res: { data: { user: { email?: string | null } | null } }) => {
-        if (!cancelled) setEmail(res.data.user?.email ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return email;
 }

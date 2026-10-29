@@ -2,7 +2,7 @@
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { safeHref } from "@/lib/safe-url";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   User,
   Briefcase,
@@ -35,7 +35,6 @@ import {
   Link as LinkIcon,
 } from "@phosphor-icons/react";
 import {
-  getCareerProfile,
   upsertCareerProfile,
   inferExpType,
   withWorkProjects,
@@ -76,7 +75,9 @@ import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
-import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
+import { lockedEmail, mergeParsedContact } from "@/lib/contact-lock";
+import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
 import { MonthYearField } from "@/components/ui/MonthYearPicker";
@@ -123,7 +124,8 @@ export default function ProfilePage() {
   // ── form state ─────────────────────────────────────────────────────────────
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
   // The email is the sign-in email: shown and saved as that, never edited.
-  const accountEmail = useAccountEmail();
+  const authUser = useQuery(authUserQuery);
+  const accountEmail = authUser.data?.email ?? null;
   // Read at upload time: handleUpload is reached through a callback made
   // once (acceptFile), so a plain value here would be the first render's.
   const accountEmailRef = useRef(accountEmail);
@@ -156,6 +158,9 @@ export default function ProfilePage() {
   // never having uploaded one, so the UI can say what actually happened
   // instead of silently reverting to the same empty upload prompt.
   const [masterResumeDeleted, setMasterResumeDeleted] = useState(false);
+  // The résumé id whose title lookup has finished, so the page waits for it
+  // rather than showing the upload box and then swapping in the résumé.
+  const [masterLookedUp, setMasterLookedUp] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
   // collapsed state per entry
@@ -183,7 +188,9 @@ export default function ProfilePage() {
 
   // ── load profile on mount ──────────────────────────────────────────────────
   useEffect(() => {
-    getCareerProfile().then(profile => {
+    // Fresh from the database (staleTime 0) — this is the copy being edited —
+    // sharing the request the shell's avatar is already making.
+    queryClient.fetchQuery({ ...careerProfileQuery, staleTime: 0 }).then(profile => {
       if (profile) hydrate(profile);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
@@ -260,7 +267,8 @@ export default function ProfilePage() {
         // A 404 means the resume this profile pointed at was deleted —
         // surface that distinctly rather than looking like "never uploaded."
         setMasterResumeDeleted(err instanceof ApiError && err.status === 404);
-      });
+      })
+      .finally(() => setMasterLookedUp(masterResumeId));
   }, [masterResumeId]);
 
   // ── warn before leaving with unsaved changes ─────────────────────────────
@@ -269,6 +277,12 @@ export default function ProfilePage() {
   // closing the tab, any in-app link (sidebar, nav) and the browser's Back —
   // which used to leave without asking.
   useLeaveWarning(isDirty, "You have unsaved changes. Leave without saving?");
+
+  // The form, the résumé card, the photo and the shell's credit balance and
+  // avatar appear together, once all of them have loaded (lib/reveal).
+  const ready = usePageReady(
+    !loading && !authUser.isPending && (!masterResumeId || masterLookedUp === masterResumeId),
+  );
 
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
@@ -562,10 +576,20 @@ export default function ProfilePage() {
     setCollapsedCert(prev => ({ ...prev, [c.id]: false }));
   };
 
-  if (loading) {
+  if (!ready) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        <div className="pt-xs sm:pt-lg flex flex-col gap-xs">
+          <h1 className="text-headline-xl text-on-surface font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+            My Profile
+          </h1>
+          <p className="hidden sm:block text-body-md text-on-surface-variant max-w-2xl leading-relaxed">
+            Source of truth for your career — used by JD Analyzer and Resume Builder.
+          </p>
+        </div>
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={5} />
       </div>
     );
   }

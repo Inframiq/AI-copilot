@@ -10,12 +10,15 @@ interface Props {
   variant?: "full" | "compact";
 }
 
+/** The plan catalog — shared with the Plans page, which waits for it. */
+export const plansQuery = {
+  queryKey: ["plans"],
+  queryFn: () => apiClient.getPlans(),
+  staleTime: 5 * 60_000,
+} as const;
+
 export function PlansComparison({ currentPlan, onChoosePlan, variant = "full" }: Props) {
-  const { data } = useQuery<{ plans: Plan[] }>({
-    queryKey: ["plans"],
-    queryFn: () => apiClient.getPlans(),
-    staleTime: 5 * 60_000,
-  });
+  const { data } = useQuery<{ plans: Plan[] }>(plansQuery);
 
   if (!data) {
     return (

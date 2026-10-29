@@ -101,7 +101,7 @@ export function AvatarMenu({ variant }: { variant: "sidebar" | "rail" | "header"
     leaveSignedOut();
   }
 
-  const label = name ? `Account menu for ${name}` : "Account menu";
+  const label = revealed && name ? `Account menu for ${name}` : "Account menu";
   const placement =
     variant === "sidebar"
       ? "left-0 right-0 bottom-full mb-xs"

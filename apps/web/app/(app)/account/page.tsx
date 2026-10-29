@@ -3,12 +3,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lightning, Sparkle, Info, User, ArrowRight, SignOut, Warning, Trash, Compass, Question } from "@phosphor-icons/react";
-import { apiClient } from "@/lib/api-client";
 import { leaveSignedOut, signOutHere } from "@/lib/supabase";
-import { getCareerProfile } from "@/lib/career-profile-client";
 import { DeleteAccountModal } from "@/components/account/DeleteAccountModal";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/components/support/HelpButton";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
+import { careerProfileQuery, settled, subscriptionQuery, usePageReady } from "@/lib/reveal";
 import type { Subscription } from "@career-copilot/types";
 
 // Every action that calls a model costs credits; the server's price list
@@ -48,14 +48,13 @@ export default function AccountPage() {
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
 
-  const { data: sub, isLoading: subLoading, isError: subError } = useQuery<Subscription>({
-    queryKey: ["subscription"],
-    queryFn: () => apiClient.getSubscription(),
-  });
-  const { data: profile } = useQuery({
-    queryKey: ["careerProfile"],
-    queryFn: () => getCareerProfile(),
-  });
+  const subQuery = useQuery<Subscription>(subscriptionQuery);
+  const { data: sub, isError: subError } = subQuery;
+  const profileQuery = useQuery(careerProfileQuery);
+  const profile = profileQuery.data;
+  // Details, plan, credits and the shell all appear together (lib/reveal) —
+  // not "Your profile isn't set up yet" first, then the details, then the plan.
+  const ready = usePageReady(settled(subQuery, profileQuery));
 
   async function handleSignOut() {
     await signOutHere();
@@ -71,19 +70,37 @@ export default function AccountPage() {
   const low = !!sub && sub.credits_remaining < tailorCost;
   const tailorsLeft = sub ? Math.floor(sub.credits_remaining / tailorCost) : 0;
 
+  const header = (
+    <section className="pt-xs sm:pt-lg sm:pb-md">
+      <h1
+        className="text-headline-xl text-on-surface font-bold mb-sm"
+        style={{ letterSpacing: "-0.02em" }}
+      >
+        Account
+      </h1>
+      <p className="hidden sm:block text-body-lg text-on-surface-variant">
+        Your details, plan, and credit balance.
+      </p>
+    </section>
+  );
+
+  if (!ready) {
+    return (
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        {header}
+        <SkeletonCard lines={4} />
+        <div className="grid grid-cols-2 gap-gutter">
+          <SkeletonCard lines={2} className="min-w-0" />
+          <SkeletonCard lines={2} className="min-w-0" />
+        </div>
+        <SkeletonCard lines={6} />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
-      <section className="pt-xs sm:pt-lg sm:pb-md">
-        <h1
-          className="text-headline-xl text-on-surface font-bold mb-sm"
-          style={{ letterSpacing: "-0.02em" }}
-        >
-          Account
-        </h1>
-        <p className="hidden sm:block text-body-lg text-on-surface-variant">
-          Your details, plan, and credit balance.
-        </p>
-      </section>
+      {header}
 
       {/* Your details */}
       <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 shadow-lg shadow-on-surface/5">
@@ -130,9 +147,7 @@ export default function AccountPage() {
             Refresh the page to try again.
           </p>
         </div>
-      ) : subLoading || !sub ? (
-        <div className="bg-surface-container-lowest rounded-2xl p-lg border border-outline-variant/20 h-40 animate-pulse" />
-      ) : (
+      ) : !sub ? null : (
         <>
           {/* Plan beside Credits — on a phone too */}
           <div className="grid grid-cols-2 gap-gutter">

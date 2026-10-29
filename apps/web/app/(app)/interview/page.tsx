@@ -17,6 +17,7 @@ import { apiClient } from "@/lib/api-client";
 import { FOCUS_RING } from "@/lib/focus";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { settled, subscriptionQuery, usePageReady } from "@/lib/reveal";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, startPrepQuestions, offerPrepQuestions } from "@/stores/prep-questions-store";
 import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
@@ -68,11 +69,12 @@ export default function InterviewIndexPage() {
   // wipes it. Fall back to the user's actual most recent completed session
   // (real, JD-specific) for picking the job shown first and the focus-skill
   // fallback below.
-  const { data: latestSession } = useQuery({
+  const latestSessionQuery = useQuery({
     queryKey: ["latestSession"],
     queryFn: () => apiClient.getLatestSession(),
     enabled: storeSessionId === null,
   });
+  const latestSession = latestSessionQuery.data;
   const sessionId = storeSessionId ?? latestSession?.session_id ?? null;
   // The JD the latest run was for, when known without the questions list.
   const latestRunJdIdFromSession = storeSessionId ? null : latestSession?.jd_id ?? null;
@@ -96,10 +98,14 @@ export default function InterviewIndexPage() {
   });
   const jds = jdsQuery.data ?? [];
   // Only for the prices shown — the server charges what it charges.
-  const { data: subscription } = useQuery<Subscription>({
-    queryKey: ["subscription"],
-    queryFn: () => apiClient.getSubscription(),
-  });
+  const { data: subscription } = useQuery<Subscription>(subscriptionQuery);
+
+  // The questions, the job switcher and the shell appear together
+  // (lib/reveal). The latest session is only asked for when this tab's
+  // store doesn't know one.
+  const ready = usePageReady(
+    settled(myQuestionsQuery, jdsQuery) && (storeSessionId !== null || !latestSessionQuery.isPending),
+  );
   const cost = subscription?.costs?.prep_questions ?? 5;
 
   const connectionError = myQuestionsQuery.isError || jdsQuery.isError;
@@ -262,6 +268,21 @@ export default function InterviewIndexPage() {
     ? `${jdOptions.length} job${jdOptions.length !== 1 ? "s" : ""} with questions · ${answeredCount} of ${myQuestions.length} practiced`
     : "Questions for each job you apply to, built from the résumé you saved for it.";
   const nothingYet = !isLoading && !selectedJd && readyJds.length === 0 && preparing.length === 0;
+
+  if (!ready) {
+    return (
+      <div aria-hidden className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col gap-md sm:gap-lg">
+        <header className="pt-xs sm:pt-0">
+          <h2 className="text-headline-md sm:text-headline-lg text-on-surface font-semibold">Interview Center</h2>
+          <p className="mt-xs text-body-sm flex items-center">
+            &#8203;<span className="skeleton h-[0.9em] w-80 max-w-full rounded-full" />
+          </p>
+        </header>
+        <div className="skeleton h-36 rounded-2xl" />
+        <div className="skeleton h-64 rounded-2xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-gutter md:p-xl max-w-[1440px] mx-auto w-full min-w-0 flex flex-col gap-md sm:gap-lg">

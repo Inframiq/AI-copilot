@@ -14,6 +14,7 @@ vi.mock("@/lib/api-client", () => ({
     getLearningItems: vi.fn().mockResolvedValue([]),
     getJds: vi.fn().mockResolvedValue([]),
     getResumes: vi.fn().mockResolvedValue([]),
+    getSubscription: vi.fn().mockResolvedValue({ plan: "free", credits_remaining: 34, credits_allotment: 50, costs: {} }),
     createJd: vi.fn(),
     analyzeJd: vi.fn(),
   },
@@ -141,7 +142,8 @@ describe("JDIndexPage — Tailor Resume", () => {
     // Pasted, as the placeholder asks — not typed. Typing re-renders the
     // whole page once per keystroke, which pushed this test past vitest's
     // 5s limit when the full suite ran in parallel.
-    await user.click(screen.getByPlaceholderText(/Paste the full job posting here/));
+    // The page shows placeholders until its data has loaded (lib/reveal).
+    await user.click(await screen.findByPlaceholderText(/Paste the full job posting here/));
     await user.paste("Backend Engineer role needing Python and AWS.");
     await user.click(screen.getByRole("button", { name: /^Analyze$/ }));
 
@@ -181,7 +183,7 @@ describe("JDIndexPage — Tailor Resume", () => {
 
     renderWithQueryClient(<JDIndexPage />);
 
-    const jdTextarea = screen.getByPlaceholderText(/Paste the full job posting here/);
+    const jdTextarea = await screen.findByPlaceholderText(/Paste the full job posting here/);
     await user.clear(jdTextarea);
     await user.click(jdTextarea);
     await user.paste("Frontend Engineer role needing React and TypeScript.");

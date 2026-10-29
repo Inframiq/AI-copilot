@@ -7,6 +7,8 @@ import { ArrowLeft, DownloadSimple, Copy, FloppyDisk, Sparkle, Check, WarningCir
 import { apiClient, isLetterChanged } from "@/lib/api-client";
 import { downloadFile } from "@/lib/download";
 import { Card } from "@/components/ui/Card";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
+import { usePageReady } from "@/lib/reveal";
 import { HumanizeSlider } from "@/components/resume/HumanizeSlider";
 import { CoverLetterWriting } from "@/components/cover-letter/CoverLetterWriting";
 import { DeleteLetter } from "@/components/cover-letter/DeleteLetter";
@@ -31,7 +33,7 @@ export default function CoverLetterEditorPage({
   const [error, setError] = useState<string | null>(null);
   const [sliderValue, setSliderValue] = useState<number | null>(null);
 
-  const { data: letter, isError, refetch } = useQuery<CoverLetter>({
+  const letterQuery = useQuery<CoverLetter>({
     queryKey: ["coverLetter", id],
     queryFn: () => apiClient.getCoverLetter(id),
     // Poll while generation is in flight; stop once it lands on a terminal status.
@@ -44,6 +46,7 @@ export default function CoverLetterEditorPage({
     // status=completed; a reload showed it instantly.
     refetchIntervalInBackground: true,
   });
+  const { data: letter, isError, refetch } = letterQuery;
 
   // Defense in depth on top of refetchIntervalInBackground above — if
   // polling ever stalls for any other reason, don't leave the user staring
@@ -82,6 +85,13 @@ export default function CoverLetterEditorPage({
       setSeededFor(id);
     }
   }, [letter, id, seededFor]);
+
+  // The letter — already in its editor — and the shell appear together
+  // (lib/reveal). Loading a finished letter used to show the "writing"
+  // animation until it arrived.
+  const ready = usePageReady(
+    !letterQuery.isPending && !(letter?.status === "completed" && letter.content !== null && seededFor !== id),
+  );
   const isDirty = draft !== savedContent || title.trim() !== savedTitle;
   // A generated letter is a draft: nothing keeps it but the Save button.
   const [savedNow, setSavedNow] = useState(false);
@@ -195,6 +205,18 @@ export default function CoverLetterEditorPage({
     await navigator.clipboard.writeText(draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (!ready && !isError) {
+    return (
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        <div aria-hidden className="flex flex-col gap-sm pt-xs">
+          <div className="skeleton h-4 w-32 rounded-full" />
+          <div className="skeleton h-8 w-72 max-w-full rounded-full" />
+        </div>
+        <SkeletonCard lines={10} />
+      </div>
+    );
   }
 
   if (isError) {

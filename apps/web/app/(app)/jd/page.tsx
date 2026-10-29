@@ -34,7 +34,9 @@ import { FOCUS_RING } from "@/lib/focus";
 import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
-import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import type { CareerProfile } from "@/lib/career-profile-client";
+import { careerProfileQuery, settled, usePageReady } from "@/lib/reveal";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import type { JobDescription, JDStatus, Resume, LearningItem } from "@career-copilot/types";
@@ -148,10 +150,11 @@ export default function JDIndexPage() {
     setOverrideError(null); setOverrideFile(f);
   }
 
-  const { data: learningItems = [] } = useQuery<LearningItem[]>({
+  const learningQuery = useQuery<LearningItem[]>({
     queryKey: ["learning"],
     queryFn: () => apiClient.getLearningItems(),
   });
+  const learningItems = learningQuery.data ?? [];
 
   const jdsQuery = useQuery<JobDescription[]>({
     queryKey: ["jds"],
@@ -258,19 +261,22 @@ export default function JDIndexPage() {
   }
 
   // Resumes list (for pick mode)
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
     staleTime: 2 * 60 * 1000,
   });
+  const resumes = resumesQuery.data ?? [];
 
   // Career profile — same query key as the profile page so a
   // profile save (which invalidates ["careerProfile"]) is reflected here too,
   // instead of this page only ever seeing what was loaded on mount.
-  const { data: careerProfile, isLoading: profileLoading } = useQuery<CareerProfile | null>({
-    queryKey: ["careerProfile"],
-    queryFn: () => getCareerProfile(),
-  });
+  const profileQuery = useQuery<CareerProfile | null>(careerProfileQuery);
+  const { data: careerProfile, isLoading: profileLoading } = profileQuery;
+
+  // The profile banner, saved analyses and the shell appear together once
+  // all of them have loaded (lib/reveal).
+  const ready = usePageReady(settled(jdsQuery, learningQuery, resumesQuery, profileQuery));
 
   // Priority: manual override > career profile master resume > store resume
   const activeResumeId = overrideResumeId ?? careerProfile?.master_resume_id ?? storeResumeId;
@@ -401,6 +407,30 @@ export default function JDIndexPage() {
   // Extract insights from the stored JD text when results are available
   const insights = hasResults && storedJdText ? extractInsights(storedJdText) : null;
 
+  const header = (
+    <section className="sm:pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
+      <div>
+        <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
+          JD Analyzer
+        </h1>
+        <p className="hidden sm:block text-body-lg text-on-surface-variant">
+          Paste a job description to instantly analyze fit, extract key skills, and identify gaps.
+        </p>
+      </div>
+    </section>
+  );
+
+  if (!ready) {
+    return (
+      <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        {header}
+        <div aria-hidden className="skeleton h-14 rounded-2xl" />
+        <SkeletonCard lines={6} />
+        <SkeletonCard lines={3} />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
       <ConnectionErrorBanner
@@ -411,16 +441,7 @@ export default function JDIndexPage() {
       />
 
       {/* Page Header */}
-      <section className="sm:pb-md flex flex-col md:flex-row md:items-end justify-between gap-md">
-        <div>
-          <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
-            JD Analyzer
-          </h1>
-          <p className="hidden sm:block text-body-lg text-on-surface-variant">
-            Paste a job description to instantly analyze fit, extract key skills, and identify gaps.
-          </p>
-        </div>
-      </section>
+      {header}
 
       {/* Profile status banner */}
       {!profileLoading && (

@@ -2,6 +2,7 @@
 import { use, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -9,7 +10,9 @@ import { TargetCompanyField } from "@/components/tailoring/TargetCompanyField";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { usePrepQuestionsStore, offerPrepQuestions } from "@/stores/prep-questions-store";
 import { PrepQuestionsOffer } from "@/components/interview/PrepQuestionsOffer";
-import { getCareerProfile, type CareerProfile } from "@/lib/career-profile-client";
+import type { CareerProfile } from "@/lib/career-profile-client";
+import { careerProfileQuery, settled, subscriptionQuery, usePageReady } from "@/lib/reveal";
+import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import type { AnalyzeOut, JobDescription, Resume, JDDetails, JDCoverLetter, Subscription } from "@career-copilot/types";
 import {
   CheckCircle,
@@ -42,10 +45,11 @@ export default function JDPage({
   const setJd = useTailoringStore((s) => s.setJd);
   const setAnalysisResults = useTailoringStore((s) => s.setAnalysisResults);
 
-  const { data: jd } = useQuery<JobDescription>({
+  const jdQuery = useQuery<JobDescription>({
     queryKey: ["jd", jdId],
     queryFn: () => apiClient.getJd(jdId),
   });
+  const jd = jdQuery.data;
 
   // Once the JD loads, an empty field takes the company saved for it.
   const [prefilled, setPrefilled] = useState(false);
@@ -60,31 +64,37 @@ export default function JDPage({
     void queryClient.invalidateQueries({ queryKey: ["jds"] });
   }
 
-  const { data: careerProfile } = useQuery<CareerProfile | null>({
-    queryKey: ["careerProfile"],
-    queryFn: () => getCareerProfile(),
-  });
+  const profileQuery = useQuery<CareerProfile | null>(careerProfileQuery);
+  const careerProfile = profileQuery.data;
 
-  const { data: resumes = [] } = useQuery<Resume[]>({
+  const resumesQuery = useQuery<Resume[]>({
     queryKey: ["resumes"],
     queryFn: () => apiClient.getResumes(),
   });
+  const resumes = resumesQuery.data ?? [];
 
   // Everything already generated for this JD — the latest tailored resume
   // and its interview prep progress — so this page can show that work
   // instead of only ever offering to start it over.
-  const { data: jdDetails } = useQuery<JDDetails>({
+  const jdDetailsQuery = useQuery<JDDetails>({
     queryKey: ["jdDetails", jdId],
     queryFn: () => apiClient.getJdDetails(jdId),
   });
+  const jdDetails = jdDetailsQuery.data;
 
   const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
   const [letterError, setLetterError] = useState<string | null>(null);
 
-  const { data: coverLetter } = useQuery<JDCoverLetter>({
+  const coverLetterQuery = useQuery<JDCoverLetter>({
     queryKey: ["jdCoverLetter", jdId],
     queryFn: () => apiClient.getJdCoverLetter(jdId),
   });
+  const coverLetter = coverLetterQuery.data;
+
+  // The JD, its saved work and the shell appear together (lib/reveal). The
+  // match analysis isn't waited for: it can be a model call, and shows its
+  // own "Analyzing…".
+  const ready = usePageReady(settled(jdQuery, profileQuery, resumesQuery, jdDetailsQuery, coverLetterQuery));
 
   async function handleGenerateCoverLetter() {
     if (!masterResume) return;
@@ -170,10 +180,7 @@ export default function JDPage({
   // failed. Either way the same in-flight state shows here.
   const isGeneratingQuestions = usePrepQuestionsStore((s) => jdId in s.pending);
   // Only for the price shown — the server charges what it charges.
-  const { data: subscription } = useQuery<Subscription>({
-    queryKey: ["subscription"],
-    queryFn: () => apiClient.getSubscription(),
-  });
+  const { data: subscription } = useQuery<Subscription>(subscriptionQuery);
   const questionsCost = subscription?.costs?.prep_questions ?? 5;
   const prepError = usePrepQuestionsStore((s) => s.errors[jdId] ?? null);
   // Asks first, with the price and balance — the same sheet as after a
@@ -199,6 +206,43 @@ export default function JDPage({
     // separate session/content hydration is needed here.
     router.push(`/studio/${jdDetails?.resume_id ?? masterResume.id}`);
     setIsOpening(false);
+  }
+
+  if (!ready) {
+    return (
+      <div className="w-full min-w-0 max-w-[1440px] mx-auto p-gutter pb-xxl flex flex-col gap-section">
+        <section className="pt-xs sm:pt-lg sm:pb-md">
+          <h1 className="text-headline-xl text-on-surface mb-xs font-bold" style={{ letterSpacing: "-0.02em" }}>
+            JD Analysis
+          </h1>
+          <p aria-hidden className="text-body-md sm:text-body-lg flex items-center">
+            &#8203;<span className="skeleton h-[0.8em] w-72 max-w-full rounded-full" />
+          </p>
+        </section>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter">
+          <SkeletonCard lines={3} className="min-w-0 lg:col-span-2" />
+          <SkeletonCard lines={3} className="min-w-0 lg:col-span-2" />
+        </div>
+        <SkeletonCard lines={4} />
+      </div>
+    );
+  }
+
+  // A JD that's gone (deleted, or not this user's) used to sit on
+  // "Loading…" for good.
+  if (jdQuery.isError) {
+    return (
+      <div className="w-full min-w-0 max-w-[900px] mx-auto p-gutter pb-xxl flex flex-col items-center justify-center gap-md py-xxl text-center">
+        <p className="text-body-md text-error font-medium">
+          {jdQuery.error instanceof ApiError && jdQuery.error.status === 404
+            ? "This job description no longer exists. It may have been deleted."
+            : "Couldn't load this job description. Check your connection and try again."}
+        </p>
+        <Link href="/jd" className="text-label-md text-primary hover:underline">
+          Back to JD Analyzer
+        </Link>
+      </div>
+    );
   }
 
   return (
