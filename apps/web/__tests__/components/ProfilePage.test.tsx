@@ -448,16 +448,18 @@ describe("My Profile — projects inside a role", () => {
     upsertCareerProfile.mockResolvedValue({});
   });
 
-  it("shows what was in the old Projects box in the first card, and saves it there", async () => {
+  it("shows what was in the old Projects box as the first card's name, and saves it there", async () => {
     getCareerProfile.mockResolvedValue(profile([role({ projects: "Payment gateway v2" })]));
     renderPage();
-    expect(await screen.findByLabelText("Responsibilities")).toHaveValue("Payment gateway v2");
+    // The card folds to its line, which is the moved text.
+    await userEvent.click(await screen.findByRole("button", { name: /Payment gateway v2/ }));
+    expect(screen.getByLabelText("Project name")).toHaveValue("Payment gateway v2");
     await userEvent.type(screen.getByPlaceholderText("San Francisco, CA"), "Pune");
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
     const saved = upsertCareerProfile.mock.calls[0][0].experience[0];
     expect(saved.projects).toBe("");
-    expect(saved.workProjects).toEqual([expect.objectContaining({ responsibilities: "Payment gateway v2" })]);
+    expect(saved.workProjects).toEqual([expect.objectContaining({ name: "Payment gateway v2", responsibilities: "" })]);
   });
 
   it("adds a project card and saves what's typed into it", async () => {

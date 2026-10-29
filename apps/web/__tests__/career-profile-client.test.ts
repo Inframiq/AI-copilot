@@ -226,14 +226,35 @@ describe("career-profile-client", () => {
   });
 
   describe("profileToResumeContent", () => {
-    it("maps experience with type-annotated company and filtered bullets", () => {
+    // A standard résumé: the company as it is (the title says "Intern"),
+    // and plain points with no "Responsibilities:" label in front.
+    it("maps experience as a standard résumé shows it", () => {
       const result = profileToResumeContent(SAMPLE_PROFILE) as any;
-      expect(result.experience[0].company).toBe("Acme (Internship)");
+      expect(result.experience[0].company).toBe("Acme");
+      expect(result.experience[0].title).toBe("SWE Intern");
       expect(result.experience[0].end).toBe("2024-08");
-      expect(result.experience[0].bullets).toEqual([
-        "Responsibilities: Built things",
-        "Achievements: Shipped a feature",
-      ]);
+      expect(result.experience[0].bullets).toEqual(["Built things", "Shipped a feature"]);
+    });
+
+    it("says an internship in the title, once", () => {
+      const intern = (title: string) =>
+        (profileToResumeContent({ ...SAMPLE_PROFILE, experience: [{ ...SAMPLE_PROFILE.experience[0], title }] }) as any).experience[0];
+      expect(intern("Software Engineer").title).toBe("Software Engineer Intern");
+      expect(intern("Data Science Intern").title).toBe("Data Science Intern");
+      expect(intern("Summer Internship").title).toBe("Summer Internship");
+      expect(intern("").title).toBe("Intern");
+      const fullTime = { ...SAMPLE_PROFILE, experience: [{ ...SAMPLE_PROFILE.experience[0], type: "full-time" as const, title: "Engineer" }] };
+      expect((profileToResumeContent(fullTime) as any).experience[0].title).toBe("Engineer");
+    });
+
+    it("makes one point per item in a box, without labels or typed bullet marks", async () => {
+      const { resumePoints } = await import("../lib/career-profile-client");
+      expect(resumePoints("Built the API; Mentored two juniors")).toEqual(["Built the API", "Mentored two juniors"]);
+      expect(resumePoints("• Built the API\n- Cut costs 20%\n\n3. Led the launch")).toEqual(["Built the API", "Cut costs 20%", "Led the launch"]);
+      // A semicolon inside a point without a space after it stays.
+      expect(resumePoints("Owned A;B testing")).toEqual(["Owned A;B testing"]);
+      expect(resumePoints("  ")).toEqual([]);
+      expect(resumePoints(undefined)).toEqual([]);
     });
 
     it("marks current roles as Present", () => {
@@ -248,7 +269,7 @@ describe("career-profile-client", () => {
     it("maps education and certifications", () => {
       const result = profileToResumeContent(SAMPLE_PROFILE) as any;
       expect(result.education[0]).toEqual({ institution: "MIT", degree: "BSc in CS", year: "2025" });
-      expect(result.certifications).toEqual(["AWS SAA — AWS"]);
+      expect(result.certifications).toEqual(["AWS SAA — AWS (2025)"]);
     });
 
     it("maps projects, splitting the description into bullets", () => {

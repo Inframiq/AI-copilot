@@ -130,13 +130,13 @@ describe("project cards in the Profile, and their way onto a résumé", () => {
     const moved = withWorkProjects(old);
     expect(moved.projects).toBe("");
     expect(moved.workProjects).toHaveLength(1);
-    expect(moved.workProjects![0]).toMatchObject({ responsibilities: "Payment gateway v2, Search re-index", client: "" });
+    expect(moved.workProjects![0]).toMatchObject({ name: "Payment gateway v2, Search re-index", client: "", responsibilities: "" });
     // A role that already has cards keeps them; one with neither gets none.
     expect(withWorkProjects(moved)).toEqual(moved);
     expect(withWorkProjects(blankExperienceEntry()).workProjects).toEqual([]);
   });
 
-  it("starts a résumé with each card as a project, its points labelled like the role's", async () => {
+  it("starts a résumé with each card as a project, with standard points like the role's", async () => {
     const { blankExperienceEntry, blankWorkProject, profileToResumeContent } = await import("@/lib/career-profile-client");
     const role = blankExperienceEntry({
       company: "Infosys", title: "Senior Systems Engineer", start: "Jun 2019", current: true,
@@ -150,10 +150,10 @@ describe("project cards in the Profile, and their way onto a résumé", () => {
       master_resume_id: null, contact: { name: "A", email: "a@x.com" }, headline: null, experience: [role],
       projects: [], education: [], skills: [], certifications: [], role_status: null, photo_url: null, photo_path: null,
     });
-    expect(resume.experience[0].bullets).toEqual(["Responsibilities: Mentored joiners"]);
+    expect(resume.experience[0].bullets).toEqual(["Mentored joiners"]);
     expect(resume.experience[0].projects).toEqual([{
       client: "Barclays", name: "Payments Hub", role: "Module Lead", domain: "Banking", start: "Jan 2022",
-      tech_stack: "Java", bullets: ["Responsibilities: Led the payments module", "Impact: Cut settlement time by 30%"],
+      tech_stack: "Java", bullets: ["Led the payments module", "Cut settlement time by 30%"],
     }]);
   });
 
@@ -226,5 +226,30 @@ describe("reviewing a tailored role's project points", () => {
     const { projectFit } = await import("@/lib/work-projects");
     expect(projectFit({ name: "Search re-index", bullets: ["Moved search to Elasticsearch."] }, ["Elasticsearch"])).toBe(1);
     expect(projectFit({ bullets: ["Fixed batch jobs."] }, ["Elasticsearch"])).toBe(0);
+  });
+});
+
+describe("old Projects text on a résumé started from the Profile", () => {
+  it("prints as the project's line, not under a misleading label", async () => {
+    const { blankExperienceEntry, profileToResumeContent } = await import("@/lib/career-profile-client");
+    const old = blankExperienceEntry({ company: "Acme", title: "Eng", start: "Jan 2020", current: true, responsibilities: "Built APIs", projects: "Payment gateway v2, Search re-index" });
+    delete (old as { workProjects?: unknown }).workProjects;
+    const resume = profileToResumeContent({
+      master_resume_id: null, contact: { name: "A", email: "a@x.com" }, headline: null, experience: [old],
+      projects: [], education: [], skills: [], certifications: [], role_status: null, photo_url: null, photo_path: null,
+    });
+    expect(resume.experience[0].bullets).toEqual(["Built APIs"]);
+    expect(resume.experience[0].projects).toEqual([{ name: "Payment gateway v2, Search re-index", bullets: [] }]);
+    expect(projectLine(resume.experience[0].projects![0])).toBe("Payment gateway v2, Search re-index");
+  });
+});
+
+describe("old Projects text beside cards an old tab saved", () => {
+  it("still reaches the résumé, as a card of its own in front", async () => {
+    const { blankExperienceEntry, blankWorkProject, withWorkProjects } = await import("@/lib/career-profile-client");
+    const both = blankExperienceEntry({ projects: "Search re-index", workProjects: [blankWorkProject({ client: "Barclays" })] });
+    const moved = withWorkProjects(both);
+    expect(moved.projects).toBe("");
+    expect(moved.workProjects!.map((p) => p.name || p.client)).toEqual(["Search re-index", "Barclays"]);
   });
 });

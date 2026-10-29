@@ -342,17 +342,16 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
     // The old Projects box becomes the first card first, so a profile saved
     // before cards starts a résumé the same way it would after.
     experience: profile.experience.map(withWorkProjects).map(e => ({
-      company: `${e.company}${e.type === "internship" ? " (Internship)" : ""}`,
-      title: e.title,
+      // As a standard résumé shows an internship: in the title ("Software
+      // Engineer Intern"), never as "(Internship)" stuck to the company —
+      // which also came back as part of the company name on an upload.
+      company: e.company,
+      title: internTitle(e),
       ...(e.location?.trim() ? { location: e.location.trim() } : {}),
       start: e.start,
       end: e.current ? "Present" : e.end || "Present",
-      bullets: [
-        e.responsibilities && `Responsibilities: ${e.responsibilities}`,
-        e.achievements && `Achievements: ${e.achievements}`,
-        e.projects && `Projects: ${e.projects}`,
-        e.impact && `Impact: ${e.impact}`,
-      ].filter(Boolean),
+      // Standard résumé points: one per item, no "Responsibilities:" label.
+      bullets: [...resumePoints(e.responsibilities), ...resumePoints(e.achievements), ...resumePoints(e.impact)],
       ...(e.workProjects?.length ? { projects: e.workProjects.map(workToResumeProject) } : {}),
     })),
     projects: profile.projects.map(p => ({
@@ -375,7 +374,9 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
       gpa: e.gpa || undefined,
     })),
     skills: profile.skills,
-    certifications: profile.certifications.map(c => `${c.name}${c.issuer ? ` — ${c.issuer}` : ""}`),
+    // "Name — Issuer (Year)", the year as a standard résumé lists it.
+    certifications: profile.certifications.map(c =>
+      `${c.name}${c.issuer?.trim() ? ` — ${c.issuer.trim()}` : ""}${c.year?.trim() ? ` (${c.year.trim()})` : ""}`),
   };
 }
 
@@ -431,20 +432,45 @@ export function blankWorkProject(overrides: Partial<WorkProjectEntry> = {}): Wor
 
 /**
  * The entry with its project cards in place: text typed into the old
- * Projects box moves into the first card's Responsibilities, so nothing is
- * lost, and the box is emptied. An entry that already has cards keeps
- * them; one with neither gets an empty list.
+ * Projects box ("Payment gateway v2, Search re-index") becomes the first
+ * card's name, so nothing is lost and a résumé prints it as that project's
+ * line — as Responsibilities it printed under a "Responsibilities:" label
+ * that misdescribed it. The box is emptied; cards already there follow
+ * that one. An entry with neither gets an empty list.
  */
 export function withWorkProjects(e: ExperienceEntry): ExperienceEntry {
   const legacy = (e.projects ?? "").trim();
   const cards = e.workProjects ?? [];
-  if (legacy && cards.length === 0) {
-    return { ...e, projects: "", workProjects: [blankWorkProject({ responsibilities: legacy })] };
+  // Also beside cards already there: a tab still on the old code can write
+  // the box after cards exist, and the résumé would otherwise drop it.
+  if (legacy) {
+    return { ...e, projects: "", workProjects: [blankWorkProject({ name: legacy }), ...cards] };
   }
   return { ...e, workProjects: cards };
 }
 
-/** A card as a résumé carries it: the same labelled points a role gets. */
+/**
+ * A Profile box as standard résumé points: one point per item — the box
+ * takes several, one per line or separated by "; " (how an upload fills
+ * it) — each without the box's name in front and without a typed bullet
+ * mark. A résumé never labels its points "Responsibilities:".
+ */
+export function resumePoints(text: string | undefined | null): string[] {
+  return (text ?? "")
+    .split(/\n|;\s+/)
+    .map((t) => t.replace(/^\s*(?:[-*•–·]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean);
+}
+
+/** An internship's title as a résumé prints it: "Intern" added unless the
+ * title already says so; any other role's title as it is. */
+function internTitle(e: Pick<ExperienceEntry, "type" | "title">): string {
+  const title = (e.title ?? "").trim();
+  if (e.type !== "internship" || /\bintern(ship)?\b/i.test(title)) return e.title;
+  return title ? `${title} Intern` : "Intern";
+}
+
+/** A card as a résumé carries it: standard points, as a role gets. */
 export function workToResumeProject(p: WorkProjectEntry): WorkProject {
   const text = (v: string | undefined) => v?.trim() || undefined;
   return {
@@ -455,11 +481,7 @@ export function workToResumeProject(p: WorkProjectEntry): WorkProject {
     ...(text(p.start) ? { start: text(p.start) } : {}),
     ...(text(p.end) ? { end: text(p.end) } : {}),
     ...(text(p.techStack) ? { tech_stack: text(p.techStack) } : {}),
-    bullets: [
-      p.responsibilities?.trim() && `Responsibilities: ${p.responsibilities.trim()}`,
-      p.achievements?.trim() && `Achievements: ${p.achievements.trim()}`,
-      p.impact?.trim() && `Impact: ${p.impact.trim()}`,
-    ].filter((b): b is string => !!b),
+    bullets: [...resumePoints(p.responsibilities), ...resumePoints(p.achievements), ...resumePoints(p.impact)],
   };
 }
 
