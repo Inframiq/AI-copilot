@@ -50,7 +50,7 @@ async function advanceToPlanStep(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("Welcome to KripaX");
   await screen.findByDisplayValue("Jane"); // wait for the prefill effect to land
   await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "5551234567");
-  await user.selectOptions(screen.getByRole("combobox"), "working");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
   await user.click(screen.getByRole("button", { name: /^continue$/i }));
   // Step 2 — résumé. Skip.
   await screen.findByText("Upload your resume");
@@ -91,7 +91,7 @@ describe("Onboarding — details step", () => {
     const user = userEvent.setup();
     renderOnboarding();
     await screen.findByDisplayValue("Jane");
-    await user.selectOptions(screen.getByRole("combobox"), "working");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
     const next = screen.getByRole("button", { name: /^continue$/i });
     expect(next).toBeEnabled();
     await user.click(next);
@@ -116,7 +116,7 @@ describe("Onboarding — a résumé never replaces the details from step 1", () 
     // The email is the sign-in email, shown read-only.
     expect((screen.getByDisplayValue("jane@example.com") as HTMLInputElement).readOnly).toBe(true);
     await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "+91 98765 43210");
-    await user.selectOptions(screen.getByRole("combobox"), "working");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
     await user.click(screen.getByRole("button", { name: /^continue$/i }));
     await screen.findByText("Upload your resume");
 
@@ -149,7 +149,7 @@ describe("Onboarding — a résumé never replaces the details from step 1", () 
     const user = userEvent.setup();
     renderOnboarding();
     await screen.findByDisplayValue("Jane");
-    await user.selectOptions(screen.getByRole("combobox"), "working");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
     await user.click(screen.getByRole("button", { name: /^continue$/i }));
     await screen.findByText("Upload your resume");
     const { fireEvent } = await import("@testing-library/react");

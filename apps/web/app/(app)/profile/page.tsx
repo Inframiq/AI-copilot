@@ -717,8 +717,8 @@ export default function ProfilePage() {
               placeholder="Jane Smith" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs">
-            <label className={fieldLabelCls}><Briefcase size={14} className="text-primary/70" /> Job Role</label>
-            <select value={roleStatus} onChange={e => setRoleStatus(e.target.value as RoleStatus | "")}
+            <label htmlFor="profile-experience-level" className={fieldLabelCls}><Briefcase size={14} className="text-primary/70" /> Experience Level</label>
+            <select id="profile-experience-level" value={roleStatus} onChange={e => setRoleStatus(e.target.value as RoleStatus | "")}
               className={inputCls}>
               <option value="">Select…</option>
               <option value="working">Working Professional</option>

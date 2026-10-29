@@ -107,6 +107,7 @@ describe("Account page", () => {
     expect(await screen.findByText("Jordan Ramirez")).toBeInTheDocument();
     expect(screen.getByText("jordan@example.com")).toBeInTheDocument();
     expect(screen.getByText("+1 415 555 0182")).toBeInTheDocument();
+    expect(screen.getByText("Experience Level")).toBeInTheDocument();
     expect(screen.getByText("Working")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /edit in my profile/i })).toHaveAttribute("href", "/profile");
   });

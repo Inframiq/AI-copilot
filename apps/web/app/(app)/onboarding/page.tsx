@@ -129,7 +129,7 @@ export default function OnboardingPage() {
 
   // A plain function, not a once-made useCallback: that kept step 1's
   // first-render values (all empty), so a dropped résumé replaced the
-  // details the user had just typed and dropped their job role.
+  // details the user had just typed and dropped their experience level.
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
@@ -172,8 +172,8 @@ export default function OnboardingPage() {
                 placeholder="+1 (555) 000-0000" className={inputCls} />
             </div>
             <div className="flex flex-col gap-xs">
-              <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Briefcase size={14} /> Job Role</label>
-              <select value={roleStatus} onChange={(e) => setRoleStatus(e.target.value as RoleStatus | "")} required
+              <label htmlFor="onboarding-experience-level" className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Briefcase size={14} /> Experience Level</label>
+              <select id="onboarding-experience-level" value={roleStatus} onChange={(e) => setRoleStatus(e.target.value as RoleStatus | "")} required
                 className={inputCls}>
                 <option value="" disabled>Select one…</option>
                 <option value="working">Working Professional</option>

@@ -231,6 +231,15 @@ describe("My Profile — every résumé section", () => {
     return upsertCareerProfile.mock.calls[0][0];
   }
 
+  it("asks for the Experience Level and saves the choice", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
+    renderPage();
+    const level = await screen.findByLabelText("Experience Level");
+    await waitFor(() => expect(level).toHaveValue("student"));
+    await userEvent.selectOptions(level, "working");
+    expect((await save()).role_status).toBe("working");
+  });
+
   it("always shows Summary, and offers the rest from Add section with a hint each", async () => {
     getCareerProfile.mockResolvedValue(profile());
     renderPage();

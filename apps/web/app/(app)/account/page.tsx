@@ -108,7 +108,7 @@ export default function AccountPage() {
             <DetailRow label="Email" value={profile.contact?.email} />
             <DetailRow label="Phone" value={profile.contact?.phone} />
             <DetailRow
-              label="Status"
+              label="Experience Level"
               value={profile.role_status ? STATUS_LABEL[profile.role_status] : undefined}
             />
           </div>
