@@ -136,6 +136,16 @@ const PROJECT_LINKS = [
 
 /** A link in the document the user asked to edit: its URL and display text
  *  live at `path` and `${path}_label` in the résumé. */
+/** A role's or project's start or end date in the document. */
+const DATE_FIELD = /^(experience|projects)\.\d+\.(start|end)$/;
+
+export interface DateTarget {
+  /** "experience.0.start" */
+  path: string;
+  /** The date as the document shows it ("Present" for an open end). */
+  value: string;
+}
+
 export interface LinkTarget {
   path: string;
   url: string;
@@ -182,6 +192,7 @@ export function ResumeCanvas({
   pageCount: pages,
   onPageCount,
   onEditLink,
+  onEditDate,
 }: {
   html: string;
   editable: boolean;
@@ -190,6 +201,10 @@ export function ResumeCanvas({
    *  text shown and the address it opens are two values, so they get an
    *  editor of their own. */
   onEditLink?: (link: LinkTarget) => void;
+  /** A role's or project's start or end date was chosen for editing. Dates
+   *  are picked, not typed, so they keep the one form durations and the
+   *  templates read (lib/month-year). */
+  onEditDate?: (date: DateTarget) => void;
   /** Pages to mark boundaries for. Measured here when not supplied. */
   pageCount?: number;
   /** How many pages the document currently takes, reported as it changes. */
@@ -408,6 +423,33 @@ export function ResumeCanvas({
     }
 
     for (const node of nodes) {
+      const path = node.dataset.field ?? "";
+      if (DATE_FIELD.test(path) && onEditDate) {
+        node.setAttribute("contenteditable", "false");
+        if (!editable) {
+          node.removeAttribute("tabindex");
+          node.removeAttribute("role");
+          continue;
+        }
+        node.setAttribute("tabindex", "0");
+        node.setAttribute("role", "button");
+        node.setAttribute("aria-label", `Edit ${path.endsWith(".start") ? "start" : "end"} date: ${node.textContent ?? ""}`);
+        const open = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onEditDate({ path, value: node.textContent ?? "" });
+        };
+        const onKey = (event: KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") open(event);
+        };
+        node.addEventListener("click", open);
+        node.addEventListener("keydown", onKey);
+        cleanups.push(() => {
+          node.removeEventListener("click", open);
+          node.removeEventListener("keydown", onKey);
+        });
+        continue;
+      }
       // A field that holds a link is edited through the link editor: typed
       // into in place, the caret would land inside the <a> and change the
       // text while leaving the address behind.
@@ -470,7 +512,7 @@ export function ResumeCanvas({
       });
     }
     return () => cleanups.forEach((fn) => fn());
-  }, [html, editable, onEdit, onEditLink]);
+  }, [html, editable, onEdit, onEditLink, onEditDate]);
 
   return (
     <div ref={frameRef} className="mx-auto">

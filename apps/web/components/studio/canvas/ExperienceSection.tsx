@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { MonthYearField } from "@/components/ui/MonthYearPicker";
 import { useResumeStore } from "@/stores/resume-store";
 import { sameCompany } from "@/lib/career-profile-client";
 import { Trash } from "@phosphor-icons/react";
@@ -109,13 +110,14 @@ export function ExperienceSection({ focusIndex }: { focusIndex?: number }) {
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-label-sm text-on-surface-variant">Start</label>
-                <input
-                  type="text"
+                <label htmlFor={`builder-exp-start-${i}`} className="text-label-sm text-on-surface-variant">Start</label>
+                <MonthYearField
+                  id={`builder-exp-start-${i}`}
+                  label="Start"
                   value={job.start}
-                  onChange={(e) => {
+                  onChange={(start) => {
                     const updated = [...content.experience];
-                    updated[i] = { ...updated[i], start: e.target.value };
+                    updated[i] = { ...updated[i], start };
                     updateContent({ experience: updated });
                   }}
                   placeholder="e.g. Jan 2021"
@@ -123,13 +125,17 @@ export function ExperienceSection({ focusIndex }: { focusIndex?: number }) {
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-label-sm text-on-surface-variant">End</label>
-                <input
-                  type="text"
+                <label htmlFor={`builder-exp-end-${i}`} className="text-label-sm text-on-surface-variant">End</label>
+                {/* "Present" is in the picker: the Builder has no current-role box. */}
+                <MonthYearField
+                  id={`builder-exp-end-${i}`}
+                  label="End"
                   value={job.end ?? ""}
-                  onChange={(e) => {
+                  start={job.start}
+                  allowPresent
+                  onChange={(end) => {
                     const updated = [...content.experience];
-                    updated[i] = { ...updated[i], end: e.target.value };
+                    updated[i] = { ...updated[i], end };
                     updateContent({ experience: updated });
                   }}
                   placeholder="e.g. Present"

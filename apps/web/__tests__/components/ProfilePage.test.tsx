@@ -181,15 +181,15 @@ describe("My Profile — experience dates", () => {
 
   it("'I work here now' shows Present, and unticking brings back the typed end date", async () => {
     renderPage();
-    const end = (await screen.findByLabelText("End")) as HTMLInputElement;
-    expect(end.value).toBe("Dec 2023");
+    // End is a month-year picker; ticked, it's a read-only "Present".
+    expect(await screen.findByRole("button", { name: "End: Dec 2023" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "I work here now" }));
     expect((screen.getByLabelText("End") as HTMLInputElement).value).toBe("Present");
     expect((screen.getByLabelText("End") as HTMLInputElement).readOnly).toBe(true);
 
     await userEvent.click(screen.getByRole("checkbox", { name: "I work here now" }));
-    expect((screen.getByLabelText("End") as HTMLInputElement).value).toBe("Dec 2023");
+    expect(screen.getByRole("button", { name: "End: Dec 2023" })).toBeInTheDocument();
   });
 
   it("saves a ticked role as current", async () => {
@@ -381,5 +381,52 @@ describe("My Profile — no repeats", () => {
     // The page sends what's on it; the save keeps one (fitProfileSections).
     const { fitProfileSections } = await import("@/lib/profile-sections");
     expect(fitProfileSections(upsertCareerProfile.mock.calls[0][0]).languages.map((l: { name: string }) => l.name)).toEqual(["Hindi"]);
+  });
+});
+
+describe("My Profile — month-year dates", () => {
+  const profile = (experience: unknown[], projects: unknown[] = []) => ({
+    user_id: "u1", master_resume_id: null,
+    contact: { name: "Jane", email: "j@x.com" },
+    experience, projects, education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+  });
+  const role = (start: string, end: string, current = false) => ({
+    id: "e1", type: "full-time", company: "Acme", title: "Engineer", location: "",
+    start, end, current, responsibilities: "", achievements: "", projects: "", impact: "",
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  it("converts dates typed before the picker, and saves them that way", async () => {
+    getCareerProfile.mockResolvedValue(profile(
+      [role("January 2021", "06/2023")],
+      [{ id: "p1", name: "Site", techStack: "", start: "2022-03", end: "2022", description: "" }],
+    ));
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Start: Jan 2021" })).toBeInTheDocument();
+    // Loading converted them; that alone isn't an unsaved change.
+    const leave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(false);
+    await userEvent.type(screen.getByPlaceholderText("San Francisco, CA"), "Pune");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    const saved = upsertCareerProfile.mock.calls[0][0];
+    expect(saved.experience[0]).toMatchObject({ start: "Jan 2021", end: "Jun 2023" });
+    expect(saved.projects[0]).toMatchObject({ start: "Mar 2022", end: "2022" });
+  });
+
+  it("won't save an end before its start", async () => {
+    getCareerProfile.mockResolvedValue(profile([role("Mar 2022", "Jan 2021")]));
+    renderPage();
+    expect(await screen.findByText("Ends before it starts.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByText(/An end date comes before its start \(Engineer\)/)).toBeInTheDocument();
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
   });
 });

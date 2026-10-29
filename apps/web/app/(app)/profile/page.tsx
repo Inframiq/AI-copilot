@@ -76,6 +76,8 @@ import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { MonthYearField } from "@/components/ui/MonthYearPicker";
+import { endsBeforeStart, isPresent, tidyDate } from "@/lib/month-year";
 import { canonicalFor, findRepeat } from "@/lib/suggest/client";
 import { repeatedAt } from "@/lib/duplicates";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
@@ -195,8 +197,10 @@ export default function ProfilePage() {
     setRoleStatus(profile.role_status ?? "");
     setHeadline(profile.headline ?? "");
     setSkills(profile.skills);
-    setExperiences(profile.experience);
-    setProjects(profile.projects ?? []);
+    // Dates typed before the month-year picker read in its form ("January
+    // 2022" → "Jan 2022"), and are saved that way with the next Save.
+    setExperiences(profile.experience.map(e => ({ ...e, start: tidyDate(e.start), end: tidyDate(e.end) })));
+    setProjects((profile.projects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })));
     setEducation(profile.education);
     setCertifications(profile.certifications);
     setMasterResumeId(profile.master_resume_id);
@@ -270,6 +274,15 @@ export default function ProfilePage() {
         setError(`Fix the ${name} link before saving. ${SOCIAL_HINT[field]}.`);
         return false;
       }
+    }
+    // The picker won't take an end before its start, but a start moved later
+    // can leave one behind.
+    const backwards =
+      experiences.find(e => !e.current && endsBeforeStart(e.start, e.end))?.title ||
+      projects.find(p => endsBeforeStart(p.start, p.end))?.name;
+    if (backwards !== undefined) {
+      setError(`An end date comes before its start${backwards ? ` (${backwards})` : ""}. Fix it before saving.`);
+      return false;
     }
     setSaving(true);
     try {
@@ -348,8 +361,8 @@ export default function ProfilePage() {
             id: newId(), type: inferExpType(e.title, e.company),
             company: e.company, title: e.title,
             location: e.location ?? "",
-            start: e.start, end: e.end || "Present",
-            current: !e.end || e.end === "Present",
+            start: tidyDate(e.start), end: tidyDate(e.end) || "Present",
+            current: !e.end || isPresent(e.end),
             responsibilities: (e.bullets ?? []).join("; "),
             achievements: "", projects: "", impact: "",
           }))
@@ -358,7 +371,7 @@ export default function ProfilePage() {
         ? (c.projects as Array<{name:string;tech_stack?:string;link?:string;link_label?:string;live_link?:string;live_link_label?:string;start?:string;end?:string;bullets?:string[]}>).map(p => ({
             id: newId(), name: p.name, techStack: p.tech_stack ?? "", link: p.link ?? "",
             linkLabel: p.link_label ?? "", liveLink: p.live_link ?? "", liveLinkLabel: p.live_link_label ?? "",
-            start: p.start ?? "", end: p.end ?? "",
+            start: tidyDate(p.start), end: tidyDate(p.end),
             description: (p.bullets ?? []).join("; "),
           }))
         : [];
@@ -946,8 +959,8 @@ export default function ProfilePage() {
                             it back instead of leaving "Present" in the box. */}
                         <div className="flex flex-col gap-xs">
                           <label htmlFor={`exp-start-${exp.id}`} className="text-caption text-on-surface-variant">Start</label>
-                          <input id={`exp-start-${exp.id}`} value={exp.start ?? ""} onChange={e => updateExp(exp.id, "start", e.target.value)}
-                            placeholder="Jan 2022" className={inputCls} />
+                          <MonthYearField id={`exp-start-${exp.id}`} label="Start" value={exp.start ?? ""}
+                            onChange={v => updateExp(exp.id, "start", v)} placeholder="Jan 2022" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs">
                           <label htmlFor={`exp-end-${exp.id}`} className="text-caption text-on-surface-variant">End</label>
@@ -955,8 +968,8 @@ export default function ProfilePage() {
                             <input id={`exp-end-${exp.id}`} value="Present" readOnly tabIndex={-1}
                               className={`${inputCls} bg-surface-container-high! focus:bg-surface-container-high! hover:border-outline-variant/40 text-on-surface-variant cursor-default`} />
                           ) : (
-                            <input id={`exp-end-${exp.id}`} value={exp.end === "Present" ? "" : exp.end ?? ""}
-                              onChange={e => updateExp(exp.id, "end", e.target.value)}
+                            <MonthYearField id={`exp-end-${exp.id}`} label="End" value={exp.end === "Present" ? "" : exp.end ?? ""}
+                              start={exp.start} onChange={v => updateExp(exp.id, "end", v)}
                               placeholder="Dec 2023" className={inputCls} />
                           )}
                         </div>
@@ -1091,14 +1104,14 @@ export default function ProfilePage() {
                               placeholder="React, Node.js, PostgreSQL" className={inputCls} />
                           </div>
                           <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Start</label>
-                            <input value={proj.start ?? ""} onChange={e => updateProj(proj.id, "start", e.target.value)}
-                              placeholder="Jan 2024" className={inputCls} />
+                            <label htmlFor={`proj-start-${proj.id}`} className="text-caption text-on-surface-variant">Start</label>
+                            <MonthYearField id={`proj-start-${proj.id}`} label="Start" value={proj.start ?? ""}
+                              onChange={v => updateProj(proj.id, "start", v)} placeholder="Jan 2024" className={inputCls} />
                           </div>
                           <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">End</label>
-                            <input value={proj.end ?? ""} onChange={e => updateProj(proj.id, "end", e.target.value)}
-                              placeholder="May 2024 or Present" className={inputCls} />
+                            <label htmlFor={`proj-end-${proj.id}`} className="text-caption text-on-surface-variant">End</label>
+                            <MonthYearField id={`proj-end-${proj.id}`} label="End" value={proj.end ?? ""} start={proj.start} allowPresent
+                              onChange={v => updateProj(proj.id, "end", v)} placeholder="May 2024 or Present" className={inputCls} />
                           </div>
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Code link (optional)</label>

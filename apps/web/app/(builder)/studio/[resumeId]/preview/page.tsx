@@ -9,9 +9,10 @@ import { useResumeStore } from "@/stores/resume-store";
 import { useHydratedResume } from "@/lib/use-hydrated-resume";
 import { FOCUS_RING } from "@/lib/focus";
 import { useTailoringStore } from "@/stores/tailoring-store";
-import { writeField } from "@/lib/field-path";
+import { readField, writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
-import { ResumeCanvas, type LinkTarget } from "@/components/studio/ResumeCanvas";
+import { ResumeCanvas, type DateTarget, type LinkTarget } from "@/components/studio/ResumeCanvas";
+import { MonthYearSheet } from "@/components/ui/MonthYearPicker";
 import { LinkEditor } from "@/components/studio/LinkEditor";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
 import { PageMeter } from "@/components/studio/PageMeter";
@@ -183,6 +184,9 @@ export default function StudioPreviewPage({
   );
 
   const [editingLink, setEditingLink] = useState<LinkTarget | null>(null);
+  // A date on the résumé is picked, not typed (lib/month-year).
+  const [editingDate, setEditingDate] = useState<DateTarget | null>(null);
+  const closeDatePicker = useCallback(() => setEditingDate(null), []);
   const closeLinkEditor = useCallback(() => setEditingLink(null), []);
 
   function handleSaveLink(url: string, text: string) {
@@ -333,6 +337,7 @@ export default function StudioPreviewPage({
         editable={mode === "edit"}
         onEdit={handleEdit}
         onEditLink={setEditingLink}
+        onEditDate={setEditingDate}
         pageCount={pages}
         onPageCount={setPages}
       />
@@ -439,6 +444,19 @@ export default function StudioPreviewPage({
         </div>
         {body()}
       </div>
+      {editingDate && mode === "edit" && content && (
+        <MonthYearSheet
+          key={editingDate.path}
+          title={editingDate.path.endsWith(".start") ? "Start date" : "End date"}
+          // The stored value, not the shown one: an open end shows "Present"
+          // but is stored blank.
+          value={readField(content, editingDate.path) ?? ""}
+          start={editingDate.path.endsWith(".end") ? readField(content, editingDate.path.replace(/\.end$/, ".start")) : undefined}
+          allowPresent={editingDate.path.endsWith(".end")}
+          onPick={(value) => handleEdit(editingDate.path, value)}
+          onClose={closeDatePicker}
+        />
+      )}
       {editingLink && mode === "edit" && (
         <LinkEditor
           key={editingLink.path}

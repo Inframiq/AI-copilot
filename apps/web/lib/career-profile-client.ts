@@ -10,6 +10,7 @@ import {
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { tidyContactLinks } from "@/lib/social-links";
+import { isPresent as saysPresent, tidyDate } from "@/lib/month-year";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -259,9 +260,9 @@ export function resumeContentToCareerProfileInput(
           company: e.company,
           title: e.title,
           location: e.location ?? "",
-          start: e.start,
-          end: e.end || "Present",
-          current: !e.end || e.end === "Present",
+          start: tidyDate(e.start),
+          end: tidyDate(e.end) || "Present",
+          current: !e.end || saysPresent(e.end),
           responsibilities: (e.bullets ?? []).join("; "),
           achievements: "",
           projects: "",
@@ -277,8 +278,8 @@ export function resumeContentToCareerProfileInput(
           linkLabel: p.link_label ?? "",
           liveLink: p.live_link ?? "",
           liveLinkLabel: p.live_link_label ?? "",
-          start: p.start ?? "",
-          end: p.end ?? "",
+          start: tidyDate(p.start),
+          end: tidyDate(p.end),
           description: (p.bullets ?? []).join("; "),
         }))
       : [],
