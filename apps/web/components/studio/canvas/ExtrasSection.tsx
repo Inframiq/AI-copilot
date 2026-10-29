@@ -1,9 +1,47 @@
 "use client";
+import { useState } from "react";
 import { useResumeStore } from "@/stores/resume-store";
 import { Trash } from "@phosphor-icons/react";
+import { LINE_SECTIONS, SECTION_INFO } from "@/lib/profile-sections";
 
-// Ported from EditorPanel's "Languages Tab" and "Certifications Tab" —
-// combined into one section with three sub-headings, same store calls.
+const textareaCls =
+  "w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all";
+
+const toLines = (text: string) => text.split("\n").filter((line) => line.trim());
+
+/**
+ * A list edited as one line per item. The text is kept as typed — rebuilding
+ * it from the saved lines on every keystroke dropped the empty line Enter
+ * had just made, so a second item could never be started at the end. The
+ * store gets the non-empty lines; a change from outside (an undo, a tailor)
+ * replaces the draft.
+ */
+function LinesTextarea({ id, lines, onChange, placeholder }: {
+  id: string;
+  lines: string[];
+  onChange: (lines: string[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState(lines.join("\n"));
+  const joined = lines.join("\n");
+  if (toLines(draft).join("\n") !== joined) setDraft(joined);
+  return (
+    <textarea
+      id={id}
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onChange(toLines(e.target.value));
+      }}
+      rows={3}
+      placeholder={placeholder}
+      className={textareaCls}
+    />
+  );
+}
+
+// Languages, Certifications, and every one-per-line section the Profile
+// holds too — a section added there is edited here as well.
 export function ExtrasSection() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
@@ -74,45 +112,39 @@ export function ExtrasSection() {
         <h3 className="text-label-caps text-on-surface-variant">Certifications</h3>
         <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
           <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant">
+            <label htmlFor="extras-certifications" className="text-label-sm text-on-surface-variant">
               Certifications <span className="font-normal">(one per line)</span>
             </label>
-            <textarea
-              value={(content.certifications ?? []).join("\n")}
-              onChange={(e) =>
-                updateContent({
-                  certifications: e.target.value.split("\n").filter(Boolean),
-                })
-              }
-              rows={3}
-              placeholder="AWS Certified Solutions Architect&#10;PMP"
-              className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+            <LinesTextarea
+              id="extras-certifications"
+              lines={content.certifications ?? []}
+              onChange={(certifications) => updateContent({ certifications })}
+              placeholder={"AWS Certified Solutions Architect\nPMP"}
             />
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col gap-md">
-        <h3 className="text-label-caps text-on-surface-variant">Awards</h3>
-        <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
-          <div className="flex flex-col gap-xs">
-            <label className="text-label-sm text-on-surface-variant">
-              Awards <span className="font-normal">(one per line)</span>
-            </label>
-            <textarea
-              value={(content.awards ?? []).join("\n")}
-              onChange={(e) =>
-                updateContent({
-                  awards: e.target.value.split("\n").filter(Boolean),
-                })
-              }
-              rows={3}
-              placeholder="Employee of the Year 2023"
-              className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-            />
+      {/* Awards, Achievements, Leadership, Volunteer, Interests — the same
+          sections the Profile holds (lib/profile-sections.ts). */}
+      {LINE_SECTIONS.map((key) => (
+        <div key={key} className="flex flex-col gap-md">
+          <h3 className="text-label-caps text-on-surface-variant">{SECTION_INFO[key].label}</h3>
+          <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
+            <div className="flex flex-col gap-xs">
+              <label htmlFor={`extras-${key}`} className="text-label-sm text-on-surface-variant">
+                {SECTION_INFO[key].label} <span className="font-normal">(one per line)</span>
+              </label>
+              <LinesTextarea
+                id={`extras-${key}`}
+                lines={content[key] ?? []}
+                onChange={(lines) => updateContent({ [key]: lines })}
+                placeholder={SECTION_INFO[key].placeholder}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      ))}
     </section>
   );
 }

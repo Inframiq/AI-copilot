@@ -199,3 +199,46 @@ def test_the_photo_templates_are_addressable_too(template_id, avatar_store, trus
     html = render_resume_html(_with_trusted_photo(CONTENT, avatar_store), template_id)
     assert 'data-field="summary"' in html
     assert 'data-field="experience.2.bullets.0"' in html
+
+
+# ── Interests ────────────────────────────────────────────────────────────────
+# The profile holds every résumé section, and Interests was the one no
+# template printed. Each template prints it on one line, each item editable
+# in place; it comes last unless the résumé's section order says otherwise.
+
+WITH_INTERESTS = {**CONTENT, "interests": ["Chess", "Trekking", "Film photography"], "volunteer": ["Taught Python"]}
+
+
+def _check_interests(html):
+    text = _visible_text(html)
+    assert "Interests" in text
+    assert re.search(r"Chess\s*,\s*Trekking\s*,\s*Film photography", text)
+    for i in range(3):
+        assert f'data-field="interests.{i}"' in html
+    # After Volunteer, the section before it in every default order.
+    assert text.index("Interests") > text.index("Taught Python")
+
+
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_every_template_prints_interests(template_id):
+    _check_interests(render_resume_html(WITH_INTERESTS, template_id))
+
+
+@pytest.mark.parametrize("template_id", PHOTO_TEMPLATES)
+def test_the_photo_templates_print_interests_too(template_id, avatar_store, trusted_settings):
+    _check_interests(render_resume_html(_with_trusted_photo(WITH_INTERESTS, avatar_store), template_id))
+
+
+@pytest.mark.parametrize("template_id", TEMPLATES)
+def test_no_interests_prints_no_heading(template_id):
+    assert "Interests" not in _visible_text(render_resume_html(CONTENT, template_id))
+
+
+def test_interests_follows_a_section_order_that_names_it():
+    from app.services.resume_spec import resolve_section_order
+
+    order = resolve_section_order("experienced", WITH_INTERESTS)
+    assert order[-1] == "interests"
+    html = render_resume_html({**WITH_INTERESTS, "section_order": order}, "ats_clean")
+    assert 'data-field="interests.0"' in html
+    assert "interests" not in resolve_section_order("experienced", CONTENT)

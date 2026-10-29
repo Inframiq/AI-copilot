@@ -1,5 +1,7 @@
 "use client";
 import { useResumeStore } from "@/stores/resume-store";
+import { wordCount } from "@/lib/misc-points";
+import { PROFILE_LIMITS, SECTION_INFO, capWords } from "@/lib/profile-sections";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
@@ -51,6 +53,25 @@ export function SummarySection() {
           one — trim before adding more.
         </p>
       )}
+
+      {/* The Profile's Objective, here too (lib/profile-sections.ts). A
+          template prints the summary when there is one, else this. */}
+      <header className="flex items-baseline justify-between gap-sm mt-sm">
+        <label htmlFor="builder-objective" className="text-label-caps text-on-surface-variant">
+          Objective
+        </label>
+        <span className="tabular text-caption text-on-surface-variant">
+          {wordCount(content.objective ?? "")} / {PROFILE_LIMITS.objectiveWords} words
+        </span>
+      </header>
+      <textarea
+        id="builder-objective"
+        value={content.objective ?? ""}
+        onChange={(e) => updateContent({ objective: capWords(e.target.value, PROFILE_LIMITS.objectiveWords) })}
+        rows={3}
+        placeholder={SECTION_INFO.objective.placeholder}
+        className="w-full px-md py-md rounded-xl border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+      />
     </section>
   );
 }

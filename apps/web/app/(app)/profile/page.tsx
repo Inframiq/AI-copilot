@@ -37,8 +37,6 @@ import {
 import {
   getCareerProfile,
   upsertCareerProfile,
-  keepResumeExtrasInMisc,
-  NoProfileError,
   inferExpType,
   sameCompany,
   formatRoleDuration,
@@ -56,13 +54,24 @@ import {
   type ExpType,
   type RoleStatus,
 } from "@/lib/career-profile-client";
-import type { ResumeContent } from "@career-copilot/types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
 import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { AddSectionButton, ExtraSectionCard, SummaryCard } from "@/components/profile/ProfileSections";
+import {
+  EXTRA_SECTIONS,
+  emptyProfileSections,
+  fitProfileSections,
+  resumeSectionsToProfile,
+  sectionHasContent,
+  type ExtraSection,
+  type ProfileSections,
+} from "@/lib/profile-sections";
+import {
+  SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
+} from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
@@ -85,43 +94,6 @@ const emptyCert = (): CertEntry => ({ id: newId(), name: "", issuer: "", year: "
 const emptyProject = (): ProjectEntry => ({
   id: newId(), name: "", techStack: "", link: "", liveLink: "", start: "", end: "", description: "",
 });
-
-// ── Section header ─────────────────────────────────────────────────────────────
-function SectionHeader({ title, info, onAdd, addLabel }: {
-  title: string; info?: string; onAdd?: () => void; addLabel?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-sm mb-md sm:mb-lg">
-      <h2 className="text-headline-md text-on-surface font-bold tracking-tight flex items-center gap-sm">
-        {title}
-        {info && <InfoTooltip text={info} />}
-      </h2>
-      {onAdd && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="shrink-0 flex items-center gap-xs px-sm sm:px-md py-xs pill pill-interactive rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-all"
-        >
-          <Plus size={14} weight="bold" />
-          <span className="sm:hidden">Add</span>
-          <span className="hidden sm:inline">{addLabel ?? "Add"}</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Card shell ────────────────────────────────────────────────────────────────
-const cardCls = "bg-surface-container-lowest/80 backdrop-blur-xl rounded-2xl p-lg border border-outline-variant/30 shadow-lg shadow-primary/5";
-
-// ── Input / Textarea helpers ───────────────────────────────────────────────────
-const inputCls = "w-full px-sm sm:px-md py-sm bg-surface-container-lowest/80 border border-outline-variant/40 rounded-xl text-body-sm text-on-surface outline-none transition-all placeholder:text-on-surface-variant/50 hover:border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-surface-container-lowest";
-const textareaCls = `${inputCls} resize-none`;
-// A field with an icon drawn at its left. The left padding is repeated at
-// sm: because inputCls's own sm:px-md comes later in the CSS and would
-// otherwise win there, sliding the text under the icon.
-const iconInputCls = `${inputCls} pl-[2.75rem] sm:pl-[2.75rem]`;
-const fieldLabelCls = "text-label-sm text-on-surface-variant/90 flex items-center gap-xs font-semibold tracking-wide";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
@@ -159,9 +131,11 @@ export default function ProfilePage() {
   const [education, setEducation] = useState<EducationEntry[]>([]);
   const [certifications, setCertifications] = useState<CertEntry[]>([]);
   const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
-  // An uploaded résumé whose awards, summary… are waiting for the profile's
-  // first save before they can go into Miscellaneous (see keepResumeExtras).
-  const pendingExtrasRef = useRef<ResumeContent | null>(null);
+  // Summary, Objective, Languages, Awards… (lib/profile-sections.ts). The
+  // optional ones are shown when they hold something or were just added.
+  const [sections, setSections] = useState<ProfileSections>(emptyProfileSections());
+  const [shownSections, setShownSections] = useState<ExtraSection[]>([]);
+  const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
   // True when master_resume_id points at a resume that's since been deleted
@@ -187,9 +161,9 @@ export default function ProfilePage() {
     () => JSON.stringify({
       contact, roleStatus, headline, skills,
       experiences, projects, education, certifications,
-      masterResumeId, photoUrl, photoPath,
+      masterResumeId, photoUrl, photoPath, sections,
     }),
-    [contact, roleStatus, headline, skills, experiences, projects, education, certifications, masterResumeId, photoUrl, photoPath],
+    [contact, roleStatus, headline, skills, experiences, projects, education, certifications, masterResumeId, photoUrl, photoPath, sections],
   );
   const savedSnapshotRef = useRef<string | null>(null);
   const isDirty = savedSnapshotRef.current !== null && savedSnapshotRef.current !== formSnapshot;
@@ -221,6 +195,33 @@ export default function ProfilePage() {
     setMasterResumeId(profile.master_resume_id);
     setPhotoUrl(profile.photo_url ?? null);
     setPhotoPath(profile.photo_path ?? null);
+    showSections(fitProfileSections(profile));
+  }
+
+  /** Fill the sections, showing each optional one that holds something. */
+  function showSections(next: ProfileSections) {
+    setSections(next);
+    setShownSections(EXTRA_SECTIONS.filter((k) => sectionHasContent(next, k)));
+  }
+
+  const updateSections = (patch: Partial<ProfileSections>) => setSections((prev) => ({ ...prev, ...patch }));
+
+  function addSection(section: ExtraSection) {
+    setShownSections((prev) => [...prev, section]);
+    // A list opens with a line to type in.
+    if (section !== "objective" && sections[section].length === 0) {
+      updateSections(section === "languages" ? { languages: [{ name: "", level: "" }] } : { [section]: [""] });
+    }
+    requestAnimationFrame(() => {
+      const card = document.getElementById(`profile-section-${section}`);
+      card?.scrollIntoView({ behavior: "smooth", block: "center" });
+      card?.querySelector<HTMLElement>("input, textarea")?.focus({ preventScroll: true });
+    });
+  }
+
+  function removeSection(section: ExtraSection) {
+    setShownSections((prev) => prev.filter((s) => s !== section));
+    updateSections({ [section]: emptyProfileSections()[section] });
   }
 
   // ── load master resume title ───────────────────────────────────────────────
@@ -260,13 +261,9 @@ export default function ProfilePage() {
         role_status: roleStatus || null,
         photo_url: photoUrl,
         photo_path: photoPath,
+        ...sections,
       };
       await upsertCareerProfile(profileInput);
-      if (pendingExtrasRef.current) {
-        const extras = pendingExtrasRef.current;
-        pendingExtrasRef.current = null;
-        await keepResumeExtras(extras);
-      }
       // Everything in the form now matches the DB — clear the dirty flag so
       // the unsaved-changes guards stand down.
       savedSnapshotRef.current = formSnapshot;
@@ -294,19 +291,6 @@ export default function ProfilePage() {
   }
 
   // ── resume upload ──────────────────────────────────────────────────────────
-  // What the profile has no field for (awards, summary, languages…) goes
-  // into Miscellaneous. Never fails the upload or save: it's all still on
-  // the résumé itself.
-  async function keepResumeExtras(content: ResumeContent) {
-    try {
-      const updated = await keepResumeExtrasInMisc(content);
-      if (updated) queryClient.setQueryData<CareerProfile | null>(["careerProfile"], updated);
-    } catch (err) {
-      if (err instanceof NoProfileError) pendingExtrasRef.current = content;
-      else console.error("Couldn't keep résumé extras in Miscellaneous:", err);
-    }
-  }
-
   const acceptFile = useCallback((f: File) => {
     if (!f.name.match(/\.pdf$/i)) {
       setError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return;
@@ -385,10 +369,9 @@ export default function ProfilePage() {
       setMasterResumeId(resume.id);
       setMasterResumeTitle(resume.title);
       setMasterResumeTemplateId(resume.template_id);
-      // Unlike the form, Miscellaneous only ever gains points, so these are
-      // kept now rather than at "Save Profile" — unless there's no profile
-      // row to keep them in yet.
-      await keepResumeExtras(c);
+      // Summary, Objective, Languages, Awards… fill their own sections,
+      // replaced like everything else here.
+      showSections(resumeSectionsToProfile(c));
 
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
@@ -732,6 +715,9 @@ export default function ProfilePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Summary — always shown ────────────────────────────────────────── */}
+      <SummaryCard value={sections.summary ?? ""} onChange={(summary) => updateSections({ summary })} />
 
       {/* ── Skills ──────────────────────────────────────────────────────────── */}
       <section className={cardCls}>
@@ -1243,6 +1229,23 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
+
+      {/* ── Objective, Languages, Awards… — added from the sheet ───────────── */}
+      {EXTRA_SECTIONS.filter((s) => shownSections.includes(s)).map((s) => (
+        <ExtraSectionCard
+          key={s}
+          section={s}
+          sections={sections}
+          onChange={updateSections}
+          onRemove={() => removeSection(s)}
+        />
+      ))}
+      <AddSectionButton
+        hidden={shownSections}
+        onPick={addSection}
+        open={addSectionOpen}
+        setOpen={setAddSectionOpen}
+      />
 
       {/* ── Miscellaneous ── */}
       <section id="miscellaneous" className={cardCls}>

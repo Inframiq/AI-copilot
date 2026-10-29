@@ -221,13 +221,14 @@ def validate_resume(
             cat_limits["max"] * per_cat_limits["max"],
         ))
 
-    # ── Certifications / Achievements / Awards / Leadership / Volunteer ─────
+    # ── Certifications / Achievements / Awards / Leadership / Volunteer / Interests
     for key, label, limit_key in [
         ("certifications", "Certifications", "certifications"),
         ("achievements", "Achievements", "achievements"),
         ("awards", "Awards", "awards"),
         ("leadership", "Leadership", "leadership"),
         ("volunteer", "Volunteer", "volunteer"),
+        ("interests", "Interests", "interests"),
     ]:
         items = resume_content.get(key) or []
         limits = HARD_LIMITS[limit_key]

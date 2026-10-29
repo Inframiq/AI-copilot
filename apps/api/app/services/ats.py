@@ -53,7 +53,7 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
     # Every remaining free-text section a résumé can carry. These hold real
     # JD-relevant evidence ("Led the campus coding club", "Taught Python at a
     # local school") and were previously invisible to the scorer.
-    for key in ("certifications", "awards", "achievements", "leadership", "volunteer"):
+    for key in ("certifications", "awards", "achievements", "leadership", "volunteer", "interests"):
         for item in resume_content.get(key) or []:
             parts.append(str(item))
 

@@ -15,14 +15,13 @@ vi.mock("@/lib/supabase", () => ({
   }),
 }));
 
-const { getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc } = vi.hoisted(() => ({
+const { getCareerProfile, upsertCareerProfile } = vi.hoisted(() => ({
   getCareerProfile: vi.fn(),
   upsertCareerProfile: vi.fn(),
-  keepResumeExtrasInMisc: vi.fn(),
 }));
 vi.mock("@/lib/career-profile-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
-  return { ...actual, getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc };
+  return { ...actual, getCareerProfile, upsertCareerProfile };
 });
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto: vi.fn(), uploadResumePhoto: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({
@@ -53,7 +52,6 @@ describe("My Profile — contact information is fixed against résumé uploads",
       created_at: "", updated_at: "",
     });
     upsertCareerProfile.mockResolvedValue({});
-    keepResumeExtrasInMisc.mockResolvedValue(null);
     vi.mocked(apiClient.getResume).mockResolvedValue({ id: "r1", title: "Résumé", template_id: "ats_clean", content: {} } as never);
   });
 

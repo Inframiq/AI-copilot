@@ -3,6 +3,7 @@
 // silence. Pure and store-free so the thresholds can be tested directly.
 
 import type { ResumeContent } from "@career-copilot/types";
+import { LINE_SECTIONS } from "@/lib/profile-sections";
 
 export type SectionId =
   | "contact"
@@ -52,13 +53,13 @@ function educationRatio(content: ResumeContent): number {
   return clamp01(scored.reduce((a, b) => a + b, 0) / content.education.length);
 }
 
+/** Extras filled for a full ring: nobody fills all seven, and three
+ * (languages, certifications and one more, say) already reads complete. */
+const EXTRAS_TARGET = 3;
+
 function extrasRatio(content: ResumeContent): number {
-  const buckets = [
-    (content.languages ?? []).length > 0,
-    (content.certifications ?? []).length > 0,
-    (content.awards ?? []).length > 0,
-  ];
-  return buckets.filter(Boolean).length / buckets.length;
+  const lists = [content.languages, content.certifications, ...LINE_SECTIONS.map((k) => content[k])];
+  return clamp01(lists.filter((l) => (l ?? []).length > 0).length / EXTRAS_TARGET);
 }
 
 const LABELS: Record<SectionId, string> = {

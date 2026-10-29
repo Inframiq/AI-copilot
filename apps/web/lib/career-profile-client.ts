@@ -1,7 +1,14 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
 import type { ResumeContent } from "@career-copilot/types";
-import { MAX_MISC_POINTS, resumeContentToMiscPoints, type MiscPoint } from "@/lib/misc-points";
+import { MAX_MISC_POINTS, type MiscPoint } from "@/lib/misc-points";
+import {
+  EXTRA_SECTIONS,
+  fitProfileSections,
+  profileSectionsToResume,
+  resumeSectionsToProfile,
+  type ProfileSections,
+} from "@/lib/profile-sections";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,7 +76,9 @@ export interface CertEntry {
 
 export type RoleStatus = "working" | "student";
 
-export interface CareerProfile {
+/** Summary, Objective, Languages, Awards… (lib/profile-sections.ts) are
+ * optional here: a database without migration 053 has no such columns. */
+export interface CareerProfile extends Partial<ProfileSections> {
   user_id: string;
   master_resume_id: string | null;
   contact: ContactInfo;
@@ -96,12 +105,16 @@ export interface CareerProfile {
 /** What "Save Profile" writes. Never `miscellaneous`: that column is written
  * only by appendMiscPoints / setMiscPoints, so a save from a stale tab can't
  * drop points saved elsewhere, and a database without migration 009 still
- * saves. */
+ * saves. Sections are written only when given — a caller that doesn't deal
+ * in them (saving a photo) leaves them as they are; the Profile page gives
+ * them all, so clearing one there clears it. */
 export type CareerProfileInput = Omit<
   CareerProfile, "user_id" | "created_at" | "updated_at" | "miscellaneous"
 >;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const SECTION_KEYS = ["summary", ...EXTRA_SECTIONS] as const satisfies readonly (keyof ProfileSections)[];
 
 async function uid(): Promise<string> {
   const sb = createBrowserClient();
@@ -131,11 +144,23 @@ export async function upsertCareerProfile(input: CareerProfileInput): Promise<Ca
   // as an input. Stripped here so its (possibly stale) Miscellaneous never
   // rides along — see CareerProfileInput.
   const { miscellaneous: _misc, ...fields } = input as CareerProfileInput & { miscellaneous?: unknown };
-  const { data, error } = await sb
-    .from("career_profiles")
-    .upsert({ user_id: me, ...fields }, { onConflict: "user_id" })
-    .select()
-    .single();
+  // Kept inside the database's limits (migration 053), which would refuse
+  // the whole save otherwise.
+  const row: Record<string, unknown> = { user_id: me, ...fields };
+  const fit = fitProfileSections(fields);
+  for (const k of SECTION_KEYS) if (fields[k] !== undefined) row[k] = fit[k];
+  const write = () => sb.from("career_profiles").upsert(row, { onConflict: "user_id" }).select().single();
+  let { data, error } = await write();
+  // PGRST204: a column the database doesn't have — the sections, for the
+  // minutes between this code going live and migration 053 running. With
+  // nothing in them the save goes ahead without them.
+  if (error?.code === "PGRST204") {
+    if (Object.keys(profileSectionsToResume(fields)).length > 0) {
+      throw new Error("The new profile sections aren't available yet. Try saving again in a few minutes.");
+    }
+    for (const k of SECTION_KEYS) delete row[k];
+    ({ data, error } = await write());
+  }
   if (error) throw new Error(error.message);
   return data as CareerProfile;
 }
@@ -183,19 +208,6 @@ export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfi
     );
   }
   return setMiscPoints(next);
-}
-
-/** Save what an uploaded résumé holds that the profile has no field for
- * (awards, summary, languages…) into Miscellaneous — see
- * resumeContentToMiscPoints. Adds only; nothing saved there is touched.
- * Resolves null when the database has no Miscellaneous yet. */
-export async function keepResumeExtrasInMisc(content: ResumeContent): Promise<CareerProfile | null> {
-  const current = await getCareerProfile();
-  if (!current) throw new NoProfileError();
-  if (!Array.isArray(current.miscellaneous)) return null;
-  const points = resumeContentToMiscPoints(content, current.miscellaneous);
-  if (points.length === 0) return current;
-  return setMiscPoints([...current.miscellaneous, ...points]);
 }
 
 export async function setProfileMasterResume(resumeId: string): Promise<void> {
@@ -283,15 +295,19 @@ export function resumeContentToCareerProfileInput(
     role_status: null,
     photo_url: null,
     photo_path: null,
+    // Summary, Objective, Languages, Awards… fill the profile's own
+    // sections; they used to wait in Miscellaneous.
+    ...resumeSectionsToProfile(c),
   };
 }
 
 /** Convert a CareerProfile into a ResumeContent-compatible object for tailoring
  * and for keeping the master resume's stored content in sync with profile edits. */
-export function profileToResumeContent(profile: CareerProfileInput): ResumeContent {
+export function profileToResumeContent(profile: CareerProfileInput | CareerProfile): ResumeContent {
   return {
     contact: profile.contact,
     headline: profile.headline ?? undefined,
+    ...profileSectionsToResume(profile),
     experience: profile.experience.map(e => ({
       company: `${e.company}${e.type === "internship" ? " (Internship)" : ""}`,
       title: e.title,

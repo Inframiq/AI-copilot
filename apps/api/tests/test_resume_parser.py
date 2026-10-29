@@ -36,7 +36,7 @@ def test_parse_system_prompt_tells_the_model_to_use_hyperlink_urls():
 
 
 @pytest.mark.parametrize("field", ['"headline"', '"objective"', '"website"', '"awards"',
-                                   '"achievements"', '"leadership"', '"volunteer"'])
+                                   '"achievements"', '"leadership"', '"volunteer"', '"interests"'])
 def test_parse_system_prompt_asks_for_every_field_the_resume_can_hold(field):
     # The headline under the name was never asked for, so it always came
     # back empty — same for these other sections the templates print.
@@ -64,6 +64,22 @@ async def test_headline_and_the_other_sections_come_through_cleaned():
     assert result["objective"] is None  # never printed twice
     assert result["awards"] == ["Spot Award 2023"]
     assert result["volunteer"] == [] and result["leadership"] == []
+    assert result["interests"] == []
+
+
+def test_hobbies_are_read_as_interests():
+    assert re.search(r'"interests".{0,400}"Hobbies"', PARSE_SYSTEM, re.S)
+
+
+@pytest.mark.asyncio
+async def test_interests_come_through_cleaned():
+    payload = {
+        "contact": {"name": "Jane Doe", "email": "jane@example.com"},
+        "experience": [], "education": [], "skills": [],
+        "interests": [" Chess ", "", None, "Trekking"],
+    }
+    result = await parse_resume_text("<resume text>", _provider_returning(payload))
+    assert result["interests"] == ["Chess", "Trekking"]
 
 
 @pytest.mark.asyncio

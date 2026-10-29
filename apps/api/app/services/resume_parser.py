@@ -92,7 +92,8 @@ Return a JSON object with EXACTLY this shape:
   "awards": ["award as printed"],
   "achievements": ["achievement as printed"],
   "leadership": ["leadership role or activity as printed"],
-  "volunteer": ["volunteer role or activity as printed"]
+  "volunteer": ["volunteer role or activity as printed"],
+  "interests": ["interest or hobby as printed"]
 }
 
 Rules:
@@ -109,11 +110,12 @@ Rules:
   "About Me" or "Professional Summary" goes in "summary". A paragraph with
   no heading at the top of the resume is the summary. Never put the same
   text in both.
-- "awards", "achievements", "leadership", "volunteer": take these only from
-  a section with that heading or a close equivalent ("Honors & Awards",
-  "Key Achievements", "Positions of Responsibility", "Extracurriculars",
-  "Volunteering"). One entry per item, copied verbatim. Never move an
-  Experience bullet into them, and never leave a section like this out —
+- "awards", "achievements", "leadership", "volunteer", "interests": take
+  these only from a section with that heading or a close equivalent
+  ("Honors & Awards", "Key Achievements", "Positions of Responsibility",
+  "Extracurriculars", "Volunteering", "Hobbies", "Hobbies & Interests").
+  One entry per item, copied verbatim. Never move an Experience bullet into
+  them, and never leave a section like this out —
   if it is on the resume, it belongs in one of these lists.
 - LINKS: the resume text may end with a "Hyperlinks found in this document"
   block — these are the real destination URLs behind clickable text that
@@ -193,7 +195,7 @@ class ResumeUnreadable(ValueError):
 
 # Optional one-line text fields and plain lists of lines the prompt asks for.
 _TEXT_FIELDS = ("headline", "summary", "objective")
-_LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer")
+_LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer", "interests")
 
 
 async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:

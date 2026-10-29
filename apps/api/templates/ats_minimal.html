@@ -179,6 +179,12 @@
   <ul class="additional">{% for v in volunteer %}<li data-field="volunteer.{{ loop.index0 }}">{{ v }}</li>{% endfor %}</ul>
   {% endif %}
 {% endmacro %}
+{% macro render_interests() %}
+  {% if interests %}
+  <h2>Interests</h2>
+  <div class="skills-list">{% for it in interests %}<span data-field="interests.{{ loop.index0 }}">{{ it }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</div>
+  {% endif %}
+{% endmacro %}
 
 {% macro render_links() %}
   {% if contact.website %}
@@ -187,7 +193,7 @@
   {% endif %}
 {% endmacro %}
 
-{% set default_order = ["summary_or_objective", "experience", "projects", "education", "skills", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer"] %}
+{% set default_order = ["summary_or_objective", "experience", "projects", "education", "skills", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer", "interests"] %}
 {% for section in (section_order or default_order) %}
   {% if section == "summary_or_objective" %}{{ render_summary_or_objective() }}
   {% elif section == "experience" %}{{ render_experience() }}
@@ -200,6 +206,7 @@
   {% elif section == "achievements" %}{{ render_achievements() }}
   {% elif section == "leadership" %}{{ render_leadership() }}
   {% elif section == "volunteer" %}{{ render_volunteer() }}
+  {% elif section == "interests" %}{{ render_interests() }}
   {% elif section == "links" %}{{ render_links() }}
   {% endif %}
 {% endfor %}

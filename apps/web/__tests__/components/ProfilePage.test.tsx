@@ -9,15 +9,14 @@ vi.mock("@/components/resume/ResumePreviewModal", () => ({ ResumePreviewModal: (
 
 // vi.hoisted keeps these fn refs available inside the hoisted vi.mock factories
 // below without tripping the "cannot access before initialization" TDZ error.
-const { getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc, uploadProfilePhoto } = vi.hoisted(() => ({
+const { getCareerProfile, upsertCareerProfile, uploadProfilePhoto } = vi.hoisted(() => ({
   getCareerProfile: vi.fn(),
   upsertCareerProfile: vi.fn(),
-  keepResumeExtrasInMisc: vi.fn(),
   uploadProfilePhoto: vi.fn(),
 }));
 vi.mock("@/lib/career-profile-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
-  return { ...actual, getCareerProfile, upsertCareerProfile, keepResumeExtrasInMisc };
+  return { ...actual, getCareerProfile, upsertCareerProfile };
 });
 
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto, uploadResumePhoto: vi.fn() }));
@@ -129,7 +128,6 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
       id: "r1", title: "Jane's Resume", template_id: "ats_modern",
       content: { contact: { name: "Jane Parsed" }, skills: ["Python"], awards: ["Spot Award"] },
     });
-    keepResumeExtrasInMisc.mockResolvedValue(null);
     global.fetch = vi.fn().mockResolvedValue({
       ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
     }) as unknown as typeof fetch;
@@ -142,10 +140,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
       expect(apiClient.parseResumeFile).toHaveBeenCalledWith(expect.any(File), "ats_modern", "r1"),
     );
     expect(apiClient.getOriginalResumeFile).toHaveBeenCalledWith("r1");
-    // What the profile has no field for lands in Miscellaneous.
-    await waitFor(() =>
-      expect(keepResumeExtrasInMisc).toHaveBeenCalledWith(expect.objectContaining({ awards: ["Spot Award"] })),
-    );
+    // Awards fill the profile's own Awards section — no longer Miscellaneous.
+    expect(await screen.findByRole("textbox", { name: "Awards 1" })).toHaveValue("Spot Award");
   });
 
   it("prompts before leaving once the form has unsaved edits", async () => {
@@ -205,5 +201,90 @@ describe("My Profile — experience dates", () => {
         experience: [expect.objectContaining({ current: true })],
       })),
     );
+  });
+});
+
+describe("My Profile — every résumé section", () => {
+  const profile = (extra: Record<string, unknown> = {}) => ({
+    user_id: "u1", master_resume_id: null,
+    contact: { name: "Jane", email: "j@x.com" },
+    experience: [], projects: [], education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  async function save() {
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    return upsertCareerProfile.mock.calls[0][0];
+  }
+
+  it("always shows Summary, and offers the rest from Add section with a hint each", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Summary" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Leadership" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /add section/i }));
+    const sheet = screen.getByRole("dialog", { name: "Add a section" });
+    for (const label of ["Objective", "Languages", "Awards", "Achievements", "Leadership", "Volunteer", "Interests"]) {
+      expect(sheet).toHaveTextContent(label);
+    }
+    expect(sheet).toHaveTextContent("Clubs, class rep, team lead, event organiser.");
+  });
+
+  it("adds a section with a line to type in, and saves it", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /add section/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Leadership/ }));
+
+    expect(screen.queryByRole("dialog", { name: "Add a section" })).toBeNull();
+    await userEvent.type(screen.getByRole("textbox", { name: "Leadership 1" }), "President, Coding Club");
+    expect((await save()).leadership).toEqual(["President, Coding Club"]);
+  });
+
+  it("no longer offers a section that's already on the Profile", async () => {
+    getCareerProfile.mockResolvedValue(profile({ interests: ["Chess"] }));
+    renderPage();
+    expect(await screen.findByRole("textbox", { name: "Interests 1" })).toHaveValue("Chess");
+    await userEvent.click(screen.getByRole("button", { name: /add section/i }));
+    expect(screen.getByRole("dialog", { name: "Add a section" })).not.toHaveTextContent("Interests");
+  });
+
+  it("removing a section clears it on Save", async () => {
+    getCareerProfile.mockResolvedValue(profile({ awards: ["Dean's List"], summary: "Engineer." }));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Remove Awards section" }));
+    expect(screen.queryByRole("heading", { name: "Awards" })).toBeNull();
+    const saved = await save();
+    expect(saved.awards).toEqual([]);
+    expect(saved.summary).toBe("Engineer.");
+  });
+
+  it("caps the summary at 80 words", async () => {
+    getCareerProfile.mockResolvedValue(profile());
+    renderPage();
+    await screen.findByRole("heading", { name: "Summary" });
+    const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
+    await userEvent.click(summary);
+    await userEvent.paste(Array.from({ length: 90 }, (_, i) => `w${i}`).join(" "));
+    expect(summary.value.split(" ")).toHaveLength(80);
+    expect(screen.getByText("80 / 80 words")).toBeInTheDocument();
+  });
+
+  it("isn't counted as unsaved just for loading a profile with sections", async () => {
+    getCareerProfile.mockResolvedValue(profile({ summary: "Engineer.", languages: [{ name: "Hindi", level: "" }] }));
+    renderPage();
+    expect(await screen.findByRole("textbox", { name: "Language 1" })).toHaveValue("Hindi");
+    const leave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(false);
   });
 });

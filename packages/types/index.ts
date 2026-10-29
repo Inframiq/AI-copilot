@@ -60,6 +60,8 @@ export interface ResumeContent {
   achievements?: string[];
   leadership?: string[];
   volunteer?: string[];
+  /** Hobbies and interests, one per line; printed on one line. */
+  interests?: string[];
   /** Server-computed, content-aware section order for this resume — see
    * apps/api/app/services/resume_spec.py::resolve_section_order. Optional:
    * when absent, PDF templates fall back to their default order. */

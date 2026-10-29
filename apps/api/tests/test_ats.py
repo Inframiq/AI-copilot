@@ -362,6 +362,11 @@ def test_build_resume_text_includes_achievements_leadership_and_volunteer():
     assert "Taught Python" in full_text
 
 
+def test_build_resume_text_includes_interests():
+    full_text, _ = build_resume_text({"interests": ["Open-source Rust tooling"]})
+    assert "Open-source Rust tooling" in full_text
+
+
 def test_build_resume_text_includes_language_names():
     content = {"languages": [{"name": "German", "level": "Fluent"}]}
     full_text, _ = build_resume_text(content)
