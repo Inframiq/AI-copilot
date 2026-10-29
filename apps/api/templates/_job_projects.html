@@ -14,8 +14,8 @@
   Field paths address the project inside its role ("experience.2.projects.0
   .bullets.1"), so the Studio edits them in place like any other text.
 #}
-{% macro job_projects(job) %}
-  {% for p in job.projects or [] %}
+{% macro job_projects(job) -%}
+  {%- for p in job.projects or [] %}
     {% set base = "experience." ~ job._index ~ ".projects." ~ loop.index0 %}
     {% set head = p.client or p.name %}
     {% set head_key = "client" if p.client else "name" %}
@@ -37,5 +37,5 @@
       <table class="bullets">{% for b in p.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="{{ base }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
       {% endif %}
     </div>
-  {% endfor %}
-{% endmacro %}
+  {%- endfor %}
+{%- endmacro %}
