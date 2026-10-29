@@ -4,7 +4,7 @@ import { X } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { useResumeStore } from "@/stores/resume-store";
 import { SuggestInput } from "@/components/ui/SuggestInput";
-import { canonicalName, loadSuggestions } from "@/lib/suggest";
+import { canonicalFor } from "@/lib/suggest/client";
 
 // A chip editor, not the old newline-joined textarea: skills are discrete
 // values and editing them as one blob made reordering and de-duping a
@@ -24,7 +24,7 @@ export function SkillsSection() {
     setDraft("");
     if (!typed) return;
     const value =
-      picked ?? (await loadSuggestions("skill").then((i) => canonicalName(i, typed)).catch(() => null)) ?? typed;
+      picked ?? (await canonicalFor("skill", typed).catch(() => null)) ?? typed;
     if (skills.some((s) => s.toLowerCase() === value.toLowerCase())) return;
     updateContent({ skills: [...skills, value] });
   }

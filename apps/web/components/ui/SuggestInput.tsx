@@ -1,14 +1,8 @@
 "use client";
-import { forwardRef, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  SUGGEST_CREDIT,
-  canonicalName,
-  loadSuggestions,
-  suggest,
-  type SuggestIndex,
-  type SuggestKind,
-} from "@/lib/suggest";
+import { SUGGEST_CREDIT, type SuggestKind } from "@/lib/suggest";
+import { ask, canonicalFor, warm, type Answer } from "@/lib/suggest/client";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "list">;
 
@@ -33,7 +27,7 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
   onPick?: (name: string) => void;
   list?: boolean;
 }>(function SuggestInput({ kind, value, onValueChange, onPick, list = false, ...input }, outerRef) {
-  const [index, setIndex] = useState<SuggestIndex | null>(null);
+  const [answer, setAnswer] = useState<Answer & { term: string }>({ term: "", items: [], exact: null });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
@@ -42,19 +36,28 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
 
   const cut = list ? value.lastIndexOf(",") + 1 : 0;
   const term = value.slice(cut).trim();
-  const items = useMemo(() => {
-    if (!index || !term) return [];
-    const found = suggest(index, term);
-    // Nothing to offer when the one match is already what's there.
-    return found.length === 1 && found[0] === term ? [] : found;
-  }, [index, term]);
-  const shown = open && items.length > 0;
+  // The latest value, for answers that arrive after it has moved on.
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
-  // Highlight a suggestion only when it's exactly what was typed.
+  // Ask for suggestions while the list is open. Answers come back from a
+  // worker (lib/suggest/client); one for text no longer typed is dropped.
   useEffect(() => {
-    const exact = index && term ? canonicalName(index, term) : null;
-    setActive(exact ? items.indexOf(exact) : -1);
-  }, [index, term, items]);
+    if (!open || !term) return;
+    let live = true;
+    ask(kind, term).then((a) => {
+      if (!live) return;
+      setAnswer({ ...a, term });
+      // Highlight a suggestion only when it's exactly what was typed.
+      setActive(a.exact ? a.items.indexOf(a.exact) : -1);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [kind, term, open]);
+
+  const current = answer.term === term ? answer.items : [];
+  // Nothing to offer when the one match is already what's there.
+  const items = current.length === 1 && current[0] === term ? [] : current;
+  const shown = open && items.length > 0;
 
   // Under the field, or above it when there's more room there (a phone's
   // keyboard). Rendered into <body>: the cards this sits in clip overflow.
@@ -80,7 +83,7 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
   }, [shown]);
 
   function load() {
-    if (!index) loadSuggestions(kind).then(setIndex).catch(() => {});
+    warm(kind);
   }
 
   function pick(name: string) {
@@ -90,10 +93,11 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
   }
 
   /** What's typed, with each exact name or alias in the list's spelling. */
-  function tidy(text: string): string {
-    if (!index) return text;
-    const part = (t: string) => canonicalName(index, t) ?? t.trim();
-    return list ? text.split(",").map(part).filter(Boolean).join(", ") : part(text);
+  async function tidy(text: string): Promise<string> {
+    const part = async (t: string) => (await canonicalFor(kind, t).catch(() => null)) ?? t.trim();
+    return list
+      ? (await Promise.all(text.split(",").map(part))).filter(Boolean).join(", ")
+      : part(text);
   }
 
   return (
@@ -159,9 +163,12 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
         }}
         onBlur={(e) => {
           setOpen(false);
-          if (!onPick) {
-            const tidied = tidy(value);
-            if (tidied !== value && tidied !== value.trim()) onValueChange(tidied);
+          if (!onPick && value.trim()) {
+            const left = value;
+            void tidy(left).then((tidied) => {
+              // Only if nothing was typed since leaving.
+              if (valueRef.current === left && tidied !== left && tidied !== left.trim()) onValueChange(tidied);
+            });
           }
           input.onBlur?.(e);
         }}

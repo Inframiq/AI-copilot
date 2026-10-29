@@ -76,7 +76,7 @@ import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
-import { canonicalName, loadSuggestions } from "@/lib/suggest";
+import { canonicalFor } from "@/lib/suggest/client";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -550,7 +550,7 @@ export default function ProfilePage() {
   async function addSkill(picked?: string) {
     const typed = (picked ?? skillDraft).trim();
     if (!typed) return;
-    const trimmed = picked ?? (await loadSuggestions("skill").then((i) => canonicalName(i, typed)).catch(() => null)) ?? typed;
+    const trimmed = picked ?? (await canonicalFor("skill", typed).catch(() => null)) ?? typed;
     if (!skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
       setSkills(prev => [...prev, trimmed]);
     }

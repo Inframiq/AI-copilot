@@ -1,9 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { buildIndex, canonicalName, fold, loadSuggestions, suggest, type SuggestKind } from "@/lib/suggest";
 
 const KINDS: SuggestKind[] = ["skill", "jobTitle", "degree", "college", "language", "certification", "city"];
+
+// The college list (64,000 names) loads and indexes on the page here, no
+// worker: done once up front with room to spare, so no single test's
+// five-second limit has to absorb it under a full parallel run.
+beforeAll(async () => {
+  await Promise.all(KINDS.map((k) => loadSuggestions(k)));
+}, 60_000);
 
 describe("fold", () => {
   it("ignores case, accents, and how a name is punctuated or spaced", () => {
@@ -50,7 +57,22 @@ describe("suggestions from the app's own lists", () => {
   it("finds colleges worldwide, by any word of the name", async () => {
     const colleges = await loadSuggestions("college");
     expect(suggest(colleges, "stanford")).toContain("Stanford University");
-    expect(suggest(colleges, "bombay")).toContain("Indian Institute of Technology, Bombay");
+    expect(suggest(colleges, "technology, bombay")).toContain("Indian Institute of Technology, Bombay");
+  });
+
+  // From India's AISHE directory: universities and their affiliated colleges.
+  it("finds Indian universities and colleges, universities first", async () => {
+    const colleges = await loadSuggestions("college");
+    expect(suggest(colleges, "gitam")).toContain("Gandhi Institute of Technology & Management (GITAM) University, Visakhapatnam");
+    expect(suggest(colleges, "andhra university")[0]).toBe("Andhra University, Visakhapatnam");
+    expect(suggest(colleges, "jawaharlal nehru technological")).toContain("Jawaharlal Nehru Technological University, Kakinada");
+  });
+
+  it("tells colleges with the same name apart by their district", async () => {
+    const colleges = await loadSuggestions("college");
+    const nursing = suggest(colleges, "government college of nursing", 50);
+    expect(nursing.length).toBeGreaterThan(5);
+    expect(new Set(nursing).size).toBe(nursing.length);
   });
 
   it("finds degrees by the abbreviation people type", async () => {
@@ -94,6 +116,8 @@ describe("the lists themselves", () => {
     const colleges = JSON.parse(readFileSync(join(dir, "colleges.json"), "utf8"));
     expect(cities.license).toMatch(/CC BY 4\.0/);
     expect(colleges.license).toMatch(/MIT License/);
+    expect(colleges.license).toMatch(/Government Open Data License – India/);
+    expect(colleges.source).toMatch(/AISHE/);
   });
 
   it("never let an alias stand for a name in another entry by accident", () => {

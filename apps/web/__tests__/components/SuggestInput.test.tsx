@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SuggestInput } from "@/components/ui/SuggestInput";
-import type { SuggestKind } from "@/lib/suggest";
+import { loadSuggestions, type SuggestKind } from "@/lib/suggest";
 
 function Field({ kind = "skill", list = false, onPick, onKeyDown, onSaved }: {
   kind?: SuggestKind; list?: boolean; onPick?: (n: string) => void;
@@ -25,6 +25,14 @@ function Field({ kind = "skill", list = false, onPick, onKeyDown, onSaved }: {
 }
 
 const field = () => screen.getByRole("combobox", { name: "Field" });
+
+// The college list is 64,000 names. Here (no worker) it loads and indexes
+// on the page, which under a full parallel run took longer than a find's
+// one-second wait. These tests are about the field, not that load — the
+// lists' own tests load them — so they start with the big lists ready.
+beforeAll(async () => {
+  await Promise.all([loadSuggestions("college"), loadSuggestions("city")]);
+}, 60_000);
 
 describe("SuggestInput", () => {
   it("suggests as you type, and Enter takes the standard name for an alias", async () => {
@@ -99,6 +107,12 @@ describe("SuggestInput", () => {
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(outer).not.toHaveBeenCalled();
+  });
+
+  it("credits AISHE under college suggestions", async () => {
+    render(<Field kind="college" />);
+    await userEvent.type(field(), "gitam");
+    expect(await screen.findByText(/Indian institutions: AISHE, Ministry of Education/)).toBeInTheDocument();
   });
 
   it("credits GeoNames under city suggestions", async () => {
