@@ -1,6 +1,6 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
-import type { ResumeContent } from "@career-copilot/types";
+import type { ResumeContent, WorkProject } from "@career-copilot/types";
 import { MAX_MISC_POINTS, type MiscPoint } from "@/lib/misc-points";
 import {
   EXTRA_SECTIONS,
@@ -40,7 +40,32 @@ export interface ExperienceEntry {
   current: boolean;
   responsibilities: string;
   achievements: string;
+  /** The free-text Projects box from before project cards. Kept under its
+   *  own key — a tab still running the old code reads it as text — and
+   *  moved into the first card (withWorkProjects) the next time it's read. */
   projects: string;
+  impact: string;
+  /** The role's projects: one per client at a services company, or any
+   *  project the role was made of. Absent on entries saved before cards. */
+  workProjects?: WorkProjectEntry[];
+}
+
+/** A project inside an experience entry, as the Profile keeps it — every
+ *  field optional; a résumé prints client (or name) · domain · role, its
+ *  dates and its points (lib/work-projects). */
+export interface WorkProjectEntry {
+  id: string;
+  client: string;
+  name: string;
+  /** The role on this project ("Module Lead"); can differ from the
+   *  designation on the entry. */
+  role: string;
+  domain: string;
+  start: string;
+  end: string;
+  techStack: string;
+  responsibilities: string;
+  achievements: string;
   impact: string;
 }
 
@@ -267,6 +292,7 @@ export function resumeContentToCareerProfileInput(
           achievements: "",
           projects: "",
           impact: "",
+          workProjects: (e.projects ?? []).map(resumeProjectToWork),
         }))
       : [],
     projects: Array.isArray(c.projects)
@@ -313,7 +339,9 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
     contact: profile.contact,
     headline: profile.headline ?? undefined,
     ...profileSectionsToResume(profile),
-    experience: profile.experience.map(e => ({
+    // The old Projects box becomes the first card first, so a profile saved
+    // before cards starts a résumé the same way it would after.
+    experience: profile.experience.map(withWorkProjects).map(e => ({
       company: `${e.company}${e.type === "internship" ? " (Internship)" : ""}`,
       title: e.title,
       ...(e.location?.trim() ? { location: e.location.trim() } : {}),
@@ -325,6 +353,7 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
         e.projects && `Projects: ${e.projects}`,
         e.impact && `Impact: ${e.impact}`,
       ].filter(Boolean),
+      ...(e.workProjects?.length ? { projects: e.workProjects.map(workToResumeProject) } : {}),
     })),
     projects: profile.projects.map(p => ({
       name: p.name,
@@ -385,8 +414,63 @@ export function blankExperienceEntry(
     achievements: "",
     projects: "",
     impact: "",
+    workProjects: [],
     ...overrides,
   };
+}
+
+/** A fresh, all-blank project card. */
+export function blankWorkProject(overrides: Partial<WorkProjectEntry> = {}): WorkProjectEntry {
+  return {
+    id: crypto.randomUUID(),
+    client: "", name: "", role: "", domain: "", start: "", end: "", techStack: "",
+    responsibilities: "", achievements: "", impact: "",
+    ...overrides,
+  };
+}
+
+/**
+ * The entry with its project cards in place: text typed into the old
+ * Projects box moves into the first card's Responsibilities, so nothing is
+ * lost, and the box is emptied. An entry that already has cards keeps
+ * them; one with neither gets an empty list.
+ */
+export function withWorkProjects(e: ExperienceEntry): ExperienceEntry {
+  const legacy = (e.projects ?? "").trim();
+  const cards = e.workProjects ?? [];
+  if (legacy && cards.length === 0) {
+    return { ...e, projects: "", workProjects: [blankWorkProject({ responsibilities: legacy })] };
+  }
+  return { ...e, workProjects: cards };
+}
+
+/** A card as a résumé carries it: the same labelled points a role gets. */
+export function workToResumeProject(p: WorkProjectEntry): WorkProject {
+  const text = (v: string | undefined) => v?.trim() || undefined;
+  return {
+    ...(text(p.client) ? { client: text(p.client) } : {}),
+    ...(text(p.name) ? { name: text(p.name) } : {}),
+    ...(text(p.role) ? { role: text(p.role) } : {}),
+    ...(text(p.domain) ? { domain: text(p.domain) } : {}),
+    ...(text(p.start) ? { start: text(p.start) } : {}),
+    ...(text(p.end) ? { end: text(p.end) } : {}),
+    ...(text(p.techStack) ? { tech_stack: text(p.techStack) } : {}),
+    bullets: [
+      p.responsibilities?.trim() && `Responsibilities: ${p.responsibilities.trim()}`,
+      p.achievements?.trim() && `Achievements: ${p.achievements.trim()}`,
+      p.impact?.trim() && `Impact: ${p.impact.trim()}`,
+    ].filter((b): b is string => !!b),
+  };
+}
+
+/** A résumé's project as a card: its points go into Responsibilities, as a
+ *  role's do. */
+export function resumeProjectToWork(p: WorkProject): WorkProjectEntry {
+  return blankWorkProject({
+    client: p.client ?? "", name: p.name ?? "", role: p.role ?? "", domain: p.domain ?? "",
+    start: tidyDate(p.start), end: tidyDate(p.end), techStack: p.tech_stack ?? "",
+    responsibilities: (p.bullets ?? []).join("; "),
+  });
 }
 
 /** Insert a new blank role directly after `index`, pre-filled with that

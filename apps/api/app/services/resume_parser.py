@@ -62,7 +62,19 @@ Return a JSON object with EXACTLY this shape:
       "location": "City, State/Country or 'Remote' if present, else null",
       "start": "Mon YYYY or YYYY",
       "end": "Mon YYYY or 'Present'",
-      "bullets": ["bullet 1", "bullet 2"]
+      "bullets": ["bullet 1", "bullet 2"],
+      "projects": [
+        {
+          "client": "client as printed, else null",
+          "name": "project name as printed, else null",
+          "role": "the candidate's role on this project as printed, else null",
+          "domain": "industry or domain as printed, else null",
+          "start": "Mon YYYY or YYYY, if printed",
+          "end": "Mon YYYY, YYYY or 'Present', if printed",
+          "tech_stack": "technologies printed for this project, else null",
+          "bullets": ["this project's own bullet"]
+        }
+      ]
     }
   ],
   "projects": [
@@ -156,7 +168,18 @@ Rules:
   extract anything from it into "skills".
 - "projects" is for personal/academic/hackathon projects listed under a
   "Projects" (or similar) heading — do NOT duplicate work performed under
-  an employer, which belongs in "experience" instead.
+  an employer, which belongs in that job's "experience" entry instead (its
+  "bullets", or its own "projects" below).
+- PROJECTS INSIDE A JOB: when a job lists projects or client engagements
+  under it — often a line like "Project: Payments Hub | Client: Barclays |
+  Role: Module Lead | Domain: Banking", or a project or client sub-heading
+  with its own dates and bullets, as services companies' résumés do — put
+  each one in that job's "projects", with only its own bullets. Bullets
+  printed under the job itself, outside any project, stay in the job's
+  "bullets". Copy every value as printed and leave a field null when the
+  resume does not state it: never guess a domain from a client's name, a
+  role from the job title, or dates from the job's dates. A job with no
+  such sub-blocks gives "projects": [].
 - MULTIPLE ROLES AT ONE COMPANY: if the resume lists more than one job
   title under the same employer (a promotion, an internal transfer — often
   shown as one company heading with two or more role/date sub-blocks
@@ -189,6 +212,26 @@ Rules:
 """
 
 
+_JOB_PROJECT_FIELDS = ("client", "name", "role", "domain", "start", "end", "tech_stack")
+
+
+def _clean_job_projects(value) -> list[dict]:
+    """A job's projects as the résumé model holds them: text fields trimmed
+    and left out when empty, bullets a list of non-empty strings, and a
+    project with nothing in it dropped. Anything that isn't a list of
+    objects reads as no projects."""
+    out = []
+    for p in value if isinstance(value, list) else []:
+        if not isinstance(p, dict):
+            continue
+        project = {k: p[k].strip() for k in _JOB_PROJECT_FIELDS if isinstance(p.get(k), str) and p[k].strip()}
+        bullets = p.get("bullets")
+        project["bullets"] = [b.strip() for b in bullets if isinstance(b, str) and b.strip()] if isinstance(bullets, list) else []
+        if len(project) > 1 or project["bullets"]:
+            out.append(project)
+    return out
+
+
 class ResumeUnreadable(ValueError):
     """The model's answer wasn't a résumé we could read (cut off, or not JSON)."""
 
@@ -214,6 +257,9 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     if not isinstance(data.get("contact"), dict):
         data["contact"] = {"name": "", "email": ""}
     data.setdefault("experience", [])
+    for job in data["experience"] if isinstance(data["experience"], list) else []:
+        if isinstance(job, dict):
+            job["projects"] = _clean_job_projects(job.get("projects"))
     data.setdefault("projects", [])
     data.setdefault("education", [])
     data.setdefault("skills", [])

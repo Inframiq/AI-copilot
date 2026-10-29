@@ -119,3 +119,53 @@ describe("the review's merge of accepted points", () => {
     expect(merged.experience[0].projects).toEqual([BARCLAYS]);
   });
 });
+
+// ── The Profile's project cards (phase 2) ────────────────────────────────────
+
+describe("project cards in the Profile, and their way onto a résumé", () => {
+  it("moves the old Projects box into the first card, so nothing is lost", async () => {
+    const { blankExperienceEntry, withWorkProjects } = await import("@/lib/career-profile-client");
+    const old = blankExperienceEntry({ company: "Infosys", projects: "Payment gateway v2, Search re-index" });
+    delete (old as { workProjects?: unknown }).workProjects; // saved before cards existed
+    const moved = withWorkProjects(old);
+    expect(moved.projects).toBe("");
+    expect(moved.workProjects).toHaveLength(1);
+    expect(moved.workProjects![0]).toMatchObject({ responsibilities: "Payment gateway v2, Search re-index", client: "" });
+    // A role that already has cards keeps them; one with neither gets none.
+    expect(withWorkProjects(moved)).toEqual(moved);
+    expect(withWorkProjects(blankExperienceEntry()).workProjects).toEqual([]);
+  });
+
+  it("starts a résumé with each card as a project, its points labelled like the role's", async () => {
+    const { blankExperienceEntry, blankWorkProject, profileToResumeContent } = await import("@/lib/career-profile-client");
+    const role = blankExperienceEntry({
+      company: "Infosys", title: "Senior Systems Engineer", start: "Jun 2019", current: true,
+      responsibilities: "Mentored joiners",
+      workProjects: [blankWorkProject({
+        client: "Barclays", name: "Payments Hub", role: "Module Lead", domain: "Banking", start: "Jan 2022",
+        techStack: "Java", responsibilities: "Led the payments module", impact: "Cut settlement time by 30%",
+      })],
+    });
+    const resume = profileToResumeContent({
+      master_resume_id: null, contact: { name: "A", email: "a@x.com" }, headline: null, experience: [role],
+      projects: [], education: [], skills: [], certifications: [], role_status: null, photo_url: null, photo_path: null,
+    });
+    expect(resume.experience[0].bullets).toEqual(["Responsibilities: Mentored joiners"]);
+    expect(resume.experience[0].projects).toEqual([{
+      client: "Barclays", name: "Payments Hub", role: "Module Lead", domain: "Banking", start: "Jan 2022",
+      tech_stack: "Java", bullets: ["Responsibilities: Led the payments module", "Impact: Cut settlement time by 30%"],
+    }]);
+  });
+
+  it("reads a résumé's projects back into cards (an upload)", async () => {
+    const { resumeContentToCareerProfileInput } = await import("@/lib/career-profile-client");
+    const input = resumeContentToCareerProfileInput(
+      content([role({ projects: [{ ...BARCLAYS, start: "January 2022", bullets: ["Led the module.", "Shipped v2."] }] })]),
+      null,
+    );
+    expect(input.experience[0].workProjects).toEqual([expect.objectContaining({
+      client: "Barclays", domain: "Banking", role: "Module Lead", start: "Jan 2022",
+      techStack: "Java", responsibilities: "Led the module.; Shipped v2.",
+    })]);
+  });
+});

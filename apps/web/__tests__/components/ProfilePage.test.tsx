@@ -430,3 +430,59 @@ describe("My Profile — month-year dates", () => {
     expect(upsertCareerProfile).not.toHaveBeenCalled();
   });
 });
+
+describe("My Profile — projects inside a role", () => {
+  const role = (extra: Record<string, unknown> = {}) => ({
+    id: "e1", type: "full-time", company: "Infosys", title: "Senior Systems Engineer", location: "",
+    start: "Jun 2019", end: "", current: true, responsibilities: "", achievements: "", projects: "", impact: "",
+    ...extra,
+  });
+  const profile = (experience: unknown[]) => ({
+    user_id: "u1", master_resume_id: null, contact: { name: "Jane", email: "j@x.com" },
+    experience, projects: [], education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null, created_at: "", updated_at: "",
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  it("shows what was in the old Projects box in the first card, and saves it there", async () => {
+    getCareerProfile.mockResolvedValue(profile([role({ projects: "Payment gateway v2" })]));
+    renderPage();
+    expect(await screen.findByLabelText("Responsibilities")).toHaveValue("Payment gateway v2");
+    await userEvent.type(screen.getByPlaceholderText("San Francisco, CA"), "Pune");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    const saved = upsertCareerProfile.mock.calls[0][0].experience[0];
+    expect(saved.projects).toBe("");
+    expect(saved.workProjects).toEqual([expect.objectContaining({ responsibilities: "Payment gateway v2" })]);
+  });
+
+  it("adds a project card and saves what's typed into it", async () => {
+    getCareerProfile.mockResolvedValue(profile([role()]));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Add project" }));
+    await userEvent.type(screen.getByLabelText("Client"), "Barclays");
+    await userEvent.type(screen.getByLabelText("Responsibilities"), "Led the payments module");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].experience[0].workProjects).toEqual([
+      expect.objectContaining({ client: "Barclays", responsibilities: "Led the payments module" }),
+    ]);
+  });
+
+  it("won't save a project that ends before it starts", async () => {
+    getCareerProfile.mockResolvedValue(profile([role({
+      workProjects: [{ id: "p1", client: "Barclays", name: "", role: "", domain: "", start: "Mar 2022", end: "Jan 2021",
+        techStack: "", responsibilities: "", achievements: "", impact: "" }],
+    })]));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /Barclays/ }));
+    expect(screen.getByText("Ends before it starts.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByText(/An end date comes before its start \(Barclays\)/)).toBeInTheDocument();
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+  });
+});

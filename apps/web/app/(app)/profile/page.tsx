@@ -38,6 +38,8 @@ import {
   getCareerProfile,
   upsertCareerProfile,
   inferExpType,
+  withWorkProjects,
+  resumeProjectToWork,
   sameCompany,
   formatRoleDuration,
   formatCompanyTotalDuration,
@@ -55,6 +57,7 @@ import {
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { apiClient, ApiError } from "@/lib/api-client";
+import type { WorkProject } from "@career-copilot/types";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
@@ -77,6 +80,7 @@ import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
 import { MonthYearField } from "@/components/ui/MonthYearPicker";
+import { WorkProjects } from "@/components/profile/WorkProjects";
 import { endsBeforeStart, isPresent, tidyDate } from "@/lib/month-year";
 import { canonicalFor, findRepeat } from "@/lib/suggest/client";
 import { repeatedAt } from "@/lib/duplicates";
@@ -199,7 +203,11 @@ export default function ProfilePage() {
     setSkills(profile.skills);
     // Dates typed before the month-year picker read in its form ("January
     // 2022" → "Jan 2022"), and are saved that way with the next Save.
-    setExperiences(profile.experience.map(e => ({ ...e, start: tidyDate(e.start), end: tidyDate(e.end) })));
+    // The old Projects box moves into the role's first project card.
+    setExperiences(profile.experience.map(withWorkProjects).map(e => ({
+      ...e, start: tidyDate(e.start), end: tidyDate(e.end),
+      workProjects: (e.workProjects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })),
+    })));
     setProjects((profile.projects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })));
     setEducation(profile.education);
     setCertifications(profile.certifications);
@@ -279,6 +287,8 @@ export default function ProfilePage() {
     // can leave one behind.
     const backwards =
       experiences.find(e => !e.current && endsBeforeStart(e.start, e.end))?.title ||
+      experiences.flatMap(e => (e.workProjects ?? []).filter(p => endsBeforeStart(p.start, p.end))
+        .map(p => p.client || p.name || e.company))[0] ||
       projects.find(p => endsBeforeStart(p.start, p.end))?.name;
     if (backwards !== undefined) {
       setError(`An end date comes before its start${backwards ? ` (${backwards})` : ""}. Fix it before saving.`);
@@ -357,7 +367,7 @@ export default function ProfilePage() {
       const newHeadline = (c.headline as string) ?? "";
       const newSkills = Array.isArray(c.skills) ? (c.skills as string[]) : [];
       const newExperiences: ExperienceEntry[] = Array.isArray(c.experience)
-        ? (c.experience as Array<{company:string;title:string;location?:string;start:string;end?:string;bullets?:string[]}>).map(e => ({
+        ? (c.experience as Array<{company:string;title:string;location?:string;start:string;end?:string;bullets?:string[];projects?:WorkProject[]}>).map(e => ({
             id: newId(), type: inferExpType(e.title, e.company),
             company: e.company, title: e.title,
             location: e.location ?? "",
@@ -365,6 +375,7 @@ export default function ProfilePage() {
             current: !e.end || isPresent(e.end),
             responsibilities: (e.bullets ?? []).join("; "),
             achievements: "", projects: "", impact: "",
+            workProjects: (e.projects ?? []).map(resumeProjectToWork),
           }))
         : [];
       const newProjects: ProjectEntry[] = Array.isArray(c.projects)
@@ -990,18 +1001,18 @@ export default function ProfilePage() {
                         <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
                           rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
                       </div>
-                      <div className="grid grid-cols-2 gap-sm">
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Projects completed</label>
-                          <textarea value={exp.projects ?? ""} onChange={e => updateExp(exp.id, "projects", e.target.value)}
-                            rows={2} placeholder="Payment gateway v2, Search re-index…" className={textareaCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Impact</label>
-                          <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
-                            rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
-                        </div>
+                      <div className="flex flex-col gap-xs">
+                        <label className="text-caption text-on-surface-variant">Impact</label>
+                        <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
+                          rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
                       </div>
+                      {/* The role's projects — the old free-text Projects box
+                          became the first card (withWorkProjects). */}
+                      <WorkProjects
+                        entryId={exp.id}
+                        projects={exp.workProjects ?? []}
+                        onChange={workProjects => setExperiences(prev => prev.map(e => e.id === exp.id ? { ...e, workProjects } : e))}
+                      />
                     </div>
                   )}
                   </div>

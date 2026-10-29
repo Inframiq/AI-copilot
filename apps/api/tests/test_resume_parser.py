@@ -173,3 +173,36 @@ async def test_two_roles_at_one_company_survive_as_separate_entries():
     # Each role keeps only its own bullets — no cross-contamination or merge.
     assert exp[0]["bullets"] == ["Led the payments platform rewrite."]
     assert exp[1]["bullets"] == ["Built the original checkout service."]
+
+
+def test_the_prompt_reads_projects_inside_a_job():
+    assert re.search(r"PROJECTS INSIDE A JOB.{0,900}never guess a domain", PARSE_SYSTEM, re.S)
+    assert '"client": "client as printed, else null"' in PARSE_SYSTEM
+
+
+@pytest.mark.asyncio
+async def test_projects_inside_a_job_come_through_cleaned():
+    payload = {
+        "contact": {"name": "Asha", "email": "a@x.com"},
+        "experience": [
+            {"company": "Infosys", "title": "Senior Systems Engineer", "start": "Jun 2019", "end": "Present",
+             "bullets": ["Mentored joiners."],
+             "projects": [
+                 {"client": " Barclays ", "name": "Payments Hub", "role": "Module Lead", "domain": None,
+                  "start": "Jan 2022", "end": "", "tech_stack": "Java", "bullets": [" Led the module. ", "", 4]},
+                 {"client": None, "bullets": []},          # empty: dropped
+                 "Project: Order Tracker",                  # not an object: dropped
+             ]},
+            {"company": "Acme", "title": "Intern", "start": "2019", "end": "2019", "bullets": [], "projects": "n/a"},
+            {"company": "Beta", "title": "Engineer", "start": "2018", "bullets": []},
+        ],
+        "education": [], "skills": [],
+    }
+    result = await parse_resume_text("<resume text>", _provider_returning(payload))
+    jobs = result["experience"]
+    assert jobs[0]["projects"] == [{
+        "client": "Barclays", "name": "Payments Hub", "role": "Module Lead",
+        "start": "Jan 2022", "tech_stack": "Java", "bullets": ["Led the module."],
+    }]
+    assert jobs[0]["bullets"] == ["Mentored joiners."]
+    assert jobs[1]["projects"] == [] and jobs[2]["projects"] == []
