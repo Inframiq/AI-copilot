@@ -329,46 +329,77 @@ def _sanitize_skill_list(skills: list[str]) -> list[str]:
     return result
 
 
-# Every résumé section whose entries carry rewritable bullets, with the
-# bullet_id prefix each one uses. Projects are here because a fresher's
-# technical evidence lives there — indexing only "experience" meant Agent 2
-# and Agent 3 never saw those bullets and a fresher's tailor run was a no-op.
-_BULLET_SECTIONS: list[tuple[str, str]] = [("experience", "exp"), ("projects", "proj")]
-_BULLET_ID_RE = re.compile(r"^(exp|proj)(\d+)_b(\d+)$")
+# Every list of rewritable bullets, and the bullet_id each bullet gets:
+#   exp{i}_b{k}        — role i's own points
+#   exp{i}_p{j}_b{k}   — project j inside role i (a services company's
+#                        client engagement, or any project the role had)
+#   proj{i}_b{k}       — standalone project i
+# Projects are here because a fresher's technical evidence lives there —
+# indexing only "experience" meant Agent 2 and Agent 3 never saw those
+# bullets and a fresher's tailor run was a no-op. The web review parses the
+# same ids (apps/web/stores/tailoring-store.ts, lib/work-projects.ts).
+_BULLET_ID_RE = re.compile(r"^(exp|proj)(\d+)(?:_p(\d+))?_b(\d+)$")
+
+
+def _bullet_lists(content: dict):
+    """(id_stem, holder) for every list of rewritable bullets, in résumé
+    order — each role's own, then that role's projects, then the standalone
+    projects. `holder` is the dict whose "bullets" list it is, so a caller
+    walking a copy can rewrite it in place; bullet k's id is f"{stem}_b{k}"."""
+    for i, role in enumerate(content.get("experience") or []):
+        if not isinstance(role, dict):
+            continue
+        yield f"exp{i}", role
+        for j, project in enumerate(role.get("projects") or []):
+            if isinstance(project, dict):
+                yield f"exp{i}_p{j}", project
+    for i, project in enumerate(content.get("projects") or []):
+        if isinstance(project, dict):
+            yield f"proj{i}", project
+
+
+def _stem_path(stem: str) -> str:
+    """"exp0_p1" → "experience[0].projects[1]"; "proj2" → "projects[2]"."""
+    m = re.match(r"^(exp|proj)(\d+)(?:_p(\d+))?$", stem)
+    path = f"{'experience' if m.group(1) == 'exp' else 'projects'}[{m.group(2)}]"
+    return path + (f".projects[{m.group(3)}]" if m.group(3) is not None else "")
+
+
+def _holder(content: dict, bullet_id: str) -> tuple[dict, int] | None:
+    """The dict holding *bullet_id*'s list, and its position in it."""
+    m = _BULLET_ID_RE.match(bullet_id)
+    if not m or (m.group(1) == "proj" and m.group(3) is not None):
+        return None
+    try:
+        entry = content.get("experience" if m.group(1) == "exp" else "projects")[int(m.group(2))]
+        if m.group(3) is not None:
+            entry = entry.get("projects")[int(m.group(3))]
+    except (TypeError, IndexError, AttributeError):
+        return None
+    if not isinstance(entry, dict):
+        return None
+    k = int(m.group(4))
+    return (entry, k) if k < len(entry.get("bullets") or []) else None
 
 
 def _bullet_text(content: dict, bullet_id: str) -> str | None:
-    """The text of *bullet_id* ("exp0_b2") in plain résumé content."""
-    m = _BULLET_ID_RE.match(bullet_id)
-    if not m:
-        return None
-    section = dict((p, s) for s, p in _BULLET_SECTIONS)[m.group(1)]
-    entries = content.get(section) or []
-    e, b = int(m.group(2)), int(m.group(3))
-    if e >= len(entries) or b >= len(entries[e].get("bullets") or []):
-        return None
-    return entries[e]["bullets"][b]
+    """The text of *bullet_id* ("exp0_b2", "exp0_p1_b0") in plain résumé content."""
+    found = _holder(content, bullet_id)
+    return found[0]["bullets"][found[1]] if found else None
 
 
 def _with_bullet(content: dict, bullet_id: str, text: str) -> dict:
     """A copy of *content* with *bullet_id* set to *text*."""
-    m = _BULLET_ID_RE.match(bullet_id)
     out = deepcopy(content)
-    if not m:
-        return out
-    section = dict((p, s) for s, p in _BULLET_SECTIONS)[m.group(1)]
-    out[section][int(m.group(2))]["bullets"][int(m.group(3))] = text
+    found = _holder(out, bullet_id)
+    if found:
+        found[0]["bullets"][found[1]] = text
     return out
 
 
 def _collect_all_bullets(content: dict) -> list[str]:
-    """Every bullet string across all rewritable sections, in section order."""
-    return [
-        b
-        for section, _prefix in _BULLET_SECTIONS
-        for entry in (content.get(section) or [])
-        for b in (entry.get("bullets") or [])
-    ]
+    """Every bullet string across all rewritable lists, in résumé order."""
+    return [b for _stem, holder in _bullet_lists(content) for b in (holder.get("bullets") or [])]
 
 
 def _index_bullets(resume_content: dict) -> tuple[dict, dict[str, str]]:
@@ -377,22 +408,21 @@ def _index_bullets(resume_content: dict) -> tuple[dict, dict[str, str]]:
     Returns:
         indexed_content  — deep copy with bullet_id injected into each bullet dict
                            (or, for plain strings, wraps them as dicts)
-        id_to_index      — mapping of bullet_id → (exp_index, bullet_index) as string
+        id_to_index      — mapping of bullet_id → its path, as a string
     """
     content = deepcopy(resume_content)
     bullet_index: dict[str, str] = {}
-    for section, prefix in _BULLET_SECTIONS:
-        for entry_i, entry in enumerate(content.get(section) or []):
-            new_bullets = []
-            for b_i, bullet in enumerate(entry.get("bullets") or []):
-                bid = f"{prefix}{entry_i}_b{b_i}"
-                bullet_index[bid] = f"{section}[{entry_i}].bullets[{b_i}]"
-                if isinstance(bullet, str):
-                    new_bullets.append({"bullet_id": bid, "text": bullet})
-                else:
-                    bullet["bullet_id"] = bid
-                    new_bullets.append(bullet)
-            entry["bullets"] = new_bullets
+    for stem, holder in _bullet_lists(content):
+        new_bullets = []
+        for b_i, bullet in enumerate(holder.get("bullets") or []):
+            bid = f"{stem}_b{b_i}"
+            bullet_index[bid] = f"{_stem_path(stem)}.bullets[{b_i}]"
+            if isinstance(bullet, str):
+                new_bullets.append({"bullet_id": bid, "text": bullet})
+            else:
+                bullet["bullet_id"] = bid
+                new_bullets.append(bullet)
+        holder["bullets"] = new_bullets
     return content, bullet_index
 
 
@@ -416,11 +446,10 @@ def _guard_writer_output(
     replaced reverting still load. Persisted as TailoringSession.reverted_bullets.
     """
     originals: dict[str, str] = {}
-    for section, _prefix in _BULLET_SECTIONS:
-        for entry in indexed_resume.get(section) or []:
-            for bullet in entry.get("bullets") or []:
-                if isinstance(bullet, dict) and bullet.get("bullet_id"):
-                    originals[bullet["bullet_id"]] = bullet.get("text", "")
+    for _stem, holder in _bullet_lists(indexed_resume):
+        for bullet in holder.get("bullets") or []:
+            if isinstance(bullet, dict) and bullet.get("bullet_id"):
+                originals[bullet["bullet_id"]] = bullet.get("text", "")
 
     metrics: dict[str, list[str]] = {}
     plan_originals: dict[str, str] = {}
@@ -497,23 +526,22 @@ def _apply_writer_output(
         rewrite_map.pop(bid, None)
 
     missing_ids: list[str] = []
-    for section, _prefix in _BULLET_SECTIONS:
-        for entry in content.get(section) or []:
-            patched = []
-            for bullet in entry.get("bullets") or []:
-                if isinstance(bullet, dict):
-                    bid = bullet.get("bullet_id", "")
-                    if bid and bid not in rewrite_map:
-                        missing_ids.append(bid)
-                    # Fallback chain: rewrite → mapping plan original → indexed dict text
-                    text = rewrite_map.get(
-                        bid,
-                        plan_originals.get(bid, bullet.get("text", ""))
-                    )
-                    patched.append(text)
-                else:
-                    patched.append(bullet)
-            entry["bullets"] = patched
+    for _stem, holder in _bullet_lists(content):
+        patched = []
+        for bullet in holder.get("bullets") or []:
+            if isinstance(bullet, dict):
+                bid = bullet.get("bullet_id", "")
+                if bid and bid not in rewrite_map:
+                    missing_ids.append(bid)
+                # Fallback chain: rewrite → mapping plan original → indexed dict text
+                text = rewrite_map.get(
+                    bid,
+                    plan_originals.get(bid, bullet.get("text", ""))
+                )
+                patched.append(text)
+            else:
+                patched.append(bullet)
+        holder["bullets"] = patched
 
     if missing_ids:
         logger.warning(
@@ -1005,9 +1033,8 @@ async def _agent_quantify_questions(content: dict, provider: AIProvider) -> dict
     indexed, _ = _index_bullets(content)
     bullets = [
         {"bullet_id": b["bullet_id"], "text": b.get("text", "")}
-        for section, _prefix in _BULLET_SECTIONS
-        for entry in indexed.get(section) or []
-        for b in entry.get("bullets") or []
+        for _stem, holder in _bullet_lists(indexed)
+        for b in holder.get("bullets") or []
         if isinstance(b, dict) and b.get("text") and not re.search(r"\d", b["text"])
     ][:_MAX_QUANTIFY_BULLETS]
     if not bullets:
@@ -1105,7 +1132,15 @@ never a sentence or duty.
 these. Always include every one in plausible_skills_to_add verbatim (outside \
 the 15-skill cap) and INJECT each into a bullet whose work genuinely shows \
 it — but never fabricate a metric or experience to force it in.
-11. Output ONLY valid JSON.
+11. PROJECTS INSIDE A ROLE: a role in original_resume can hold "projects" \
+— a services company's client engagements, or the projects the role was \
+made of — each with its own bullets ("exp0_p1_b2" is role 0, project 1, \
+bullet 2). A project's client, name, domain, role and tech_stack are facts \
+about that project's bullets only: rule-2 evidence for them, never for the \
+role's other projects or its own bullets. Never plan moving a bullet into, \
+out of or between projects, and never plan a change to a project's client, \
+name, domain or role.
+12. Output ONLY valid JSON.
 </rules>
 
 <examples>
@@ -1350,7 +1385,10 @@ outcomes delivered through others; for executive roles, strategic outcomes. \
 If the signals are sparse, use a balanced technical-plus-impact framing — \
 and never claim scope the original does not show.
 13. TONE: {tone}
-14. reasoning: at most 15 words — name the duty evidenced and confirm nothing \
+14. PROJECT BULLETS: a bullet_id with "_p" ("exp0_p1_b2") belongs to a \
+project inside a role. Keep that project's client, product and domain exactly \
+as they are, and name only the technologies that project or the résumé shows.
+15. reasoning: at most 15 words — name the duty evidenced and confirm nothing \
 was added. Output ONLY valid JSON matching the schema.
 </rules>
 

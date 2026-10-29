@@ -169,3 +169,62 @@ describe("project cards in the Profile, and their way onto a résumé", () => {
     })]);
   });
 });
+
+// ── Phase 3: the review and the JD ordering ──────────────────────────────────
+
+describe("reviewing a tailored role's project points", () => {
+  const ORDER: WorkProject = { name: "Order Tracker", role: "Developer", tech_stack: "Node.js", bullets: ["Built the order API."] };
+  const original = content([role({ projects: [ORDER, BARCLAYS] })]);
+  const tailored = content([role({
+    bullets: ["Mentored new joiners to independence."],
+    projects: [ORDER, { ...BARCLAYS, bullets: ["Led the payments module for 12 developers."] }],
+  })]);
+
+  it("parses and resolves a project point's key", async () => {
+    const { parseBulletKey, withBulletText } = await import("@/stores/tailoring-store");
+    expect(parseBulletKey("exp0_p1_b0")).toEqual({ section: "experience", entryIdx: 0, projectIdx: 1, bulletIdx: 0 });
+    expect(parseBulletKey("exp0_b2")).toEqual({ section: "experience", entryIdx: 0, projectIdx: null, bulletIdx: 2 });
+    expect(parseBulletKey("proj0_p1_b0")).toBeNull();
+    const edited = withBulletText(tailored, "exp0_p1_b0", "Edited.");
+    expect(edited.experience[0].projects![1].bullets).toEqual(["Edited."]);
+    expect(edited.experience[0].projects![0]).toBe(ORDER);
+    expect(withBulletText(tailored, "exp0_p7_b0", "x")).toBe(tailored);
+  });
+
+  it("lists a project's rewritten point under the role's company and the project's line", async () => {
+    const { deriveBulletChanges } = await import("@/stores/tailoring-store");
+    const changes = deriveBulletChanges(tailored, original);
+    expect(changes.map((c) => [c.key, c.company, c.jobTitle])).toEqual([
+      ["exp0_b0", "Infosys", "Senior Systems Engineer"],
+      ["exp0_p1_b0", "Infosys", "Barclays · Banking · Module Lead"],
+    ]);
+    expect(changes[1]).toMatchObject({ jobIdx: 0, projectIdx: 1, original: "Led the payments module.", tailored: "Led the payments module for 12 developers." });
+  });
+
+  it("keeps a rejected project point as it was", async () => {
+    const { buildMergedContent } = await import("@/stores/tailoring-store");
+    const merged = buildMergedContent(tailored, original, { exp0_p1_b0: "reject" }, []);
+    expect(merged.experience[0].projects![1].bullets).toEqual(["Led the payments module."]);
+    expect(merged.experience[0].bullets).toEqual(["Mentored new joiners to independence."]);
+  });
+
+  it("puts the project that fits the JD first, drops none, and keeps order on a tie", async () => {
+    const { buildMergedContent } = await import("@/stores/tailoring-store");
+    const banking = buildMergedContent(tailored, original, {}, [], [], {}, undefined, {
+      terms: ["payments", "Java"], text: "Backend engineer for a banking platform: payments, Java, Kafka.",
+    });
+    expect(banking.experience[0].projects!.map(projectLine)).toEqual(["Barclays · Banking · Module Lead", "Order Tracker · Developer"]);
+    const retail = buildMergedContent(tailored, original, {}, [], [], {}, undefined, { terms: ["Node.js", "order"] });
+    expect(retail.experience[0].projects!.map(projectLine)).toEqual(["Order Tracker · Developer", "Barclays · Banking · Module Lead"]);
+    const nothing = buildMergedContent(tailored, original, {}, [], [], {}, undefined, { terms: ["Haskell"] });
+    expect(nothing.experience[0].projects!.map(projectLine)).toEqual(["Order Tracker · Developer", "Barclays · Banking · Module Lead"]);
+    // Without a JD, nothing moves.
+    expect(buildMergedContent(tailored, original, {}, []).experience[0].projects![0]).toEqual(ORDER);
+  });
+
+  it("judges a project with no client or domain on its points too", async () => {
+    const { projectFit } = await import("@/lib/work-projects");
+    expect(projectFit({ name: "Search re-index", bullets: ["Moved search to Elasticsearch."] }, ["Elasticsearch"])).toBe(1);
+    expect(projectFit({ bullets: ["Fixed batch jobs."] }, ["Elasticsearch"])).toBe(0);
+  });
+});

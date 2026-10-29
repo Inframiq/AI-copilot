@@ -3,7 +3,8 @@ import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { apiClient, type AtsFix, type RevertedBullet, type BulletRationale } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
-import type { ResumeContent } from "@career-copilot/types";
+import type { ResumeContent, WorkProject } from "@career-copilot/types";
+import { orderProjectsForJd, projectLine } from "@/lib/work-projects";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
 import { classifyChange } from "@/lib/point-kind";
 import {
@@ -100,36 +101,73 @@ export function startingSkills(original: string[], matched: string[]): Set<strin
 }
 
 export interface BulletChange {
-  key: string; // e.g. "exp0_b2" or "skills"
+  key: string; // e.g. "exp0_b2", "exp0_p1_b0" or "skills"
   jobIdx: number; // -1 for skills
   bulletIdx: number; // -1 for skills
+  /** The project inside the role, for a project's point; else undefined. */
+  projectIdx?: number;
   jobTitle: string;
   company: string;
   original: string;
   tailored: string;
 }
 
-// Every bullet the tailoring pass actually rewrote, in the order the review
-// screen lists them. Experience first, then projects — matching the
-// bullet_id prefixes in apps/api/app/services/tailoring.py's _BULLET_SECTIONS.
-// A rewritten bullet missing from this list is one that ships without the
-// user ever seeing it, so both sections must be walked here.
-// "exp0_b2" / "proj1_b0" -> which section, which entry, which bullet. The
-// prefixes mirror _BULLET_SECTIONS in apps/api/app/services/tailoring.py.
-const _BULLET_KEY_RE = /^(exp|proj)(\d+)_b(\d+)$/;
+// "exp0_b2" / "exp0_p1_b0" / "proj1_b0" -> which section, which entry, which
+// project inside a role (if any), which bullet. Mirrors _BULLET_ID_RE and
+// _bullet_lists in apps/api/app/services/tailoring.py.
+const _BULLET_KEY_RE = /^(exp|proj)(\d+)(?:_p(\d+))?_b(\d+)$/;
 
-export function parseBulletKey(
-  key: string,
-): { section: "experience" | "projects"; entryIdx: number; bulletIdx: number } | null {
+export interface BulletRef {
+  section: "experience" | "projects";
+  entryIdx: number;
+  /** A project inside role `entryIdx`; null for the role's own points. */
+  projectIdx: number | null;
+  bulletIdx: number;
+}
+
+export function parseBulletKey(key: string): BulletRef | null {
   const m = _BULLET_KEY_RE.exec(key);
-  if (!m) return null;
+  if (!m || (m[1] === "proj" && m[3] !== undefined)) return null;
   return {
     section: m[1] === "exp" ? "experience" : "projects",
     entryIdx: Number(m[2]),
-    bulletIdx: Number(m[3]),
+    projectIdx: m[3] === undefined ? null : Number(m[3]),
+    bulletIdx: Number(m[4]),
   };
 }
 
+/** The bullet list a key points into, or undefined. */
+function bulletList(content: ResumeContent, ref: BulletRef): string[] | undefined {
+  const entry = content[ref.section]?.[ref.entryIdx] as { bullets?: string[]; projects?: WorkProject[] } | undefined;
+  if (!entry) return undefined;
+  return ref.projectIdx === null ? entry.bullets : entry.projects?.[ref.projectIdx]?.bullets;
+}
+
+/** `content` with the bullet `key` names set to `text` — a copy; unchanged
+ * when the key doesn't resolve. */
+export function withBulletText(content: ResumeContent, key: string, text: string): ResumeContent {
+  const ref = parseBulletKey(key);
+  if (!ref || bulletList(content, ref)?.[ref.bulletIdx] === undefined) return content;
+  const swap = (bullets: string[]) => bullets.map((b, i) => (i === ref.bulletIdx ? text : b));
+  if (ref.section === "projects") {
+    return { ...content, projects: content.projects!.map((p, i) => (i === ref.entryIdx ? { ...p, bullets: swap(p.bullets) } : p)) };
+  }
+  return {
+    ...content,
+    experience: content.experience.map((role, i) => {
+      if (i !== ref.entryIdx) return role;
+      if (ref.projectIdx === null) return { ...role, bullets: swap(role.bullets) };
+      return { ...role, projects: role.projects!.map((p, j) => (j === ref.projectIdx ? { ...p, bullets: swap(p.bullets) } : p)) };
+    }),
+  };
+}
+
+// Every bullet the tailoring pass actually rewrote, in the order the review
+// screen lists them: each role's own points, then that role's projects',
+// then the standalone projects' — the order of _bullet_lists in
+// apps/api/app/services/tailoring.py. A rewritten bullet missing from this
+// list is one that ships without the user ever seeing it, so every list must
+// be walked here.
 export function deriveBulletChanges(
   pendingContent: ResumeContent | null,
   originalContent: ResumeContent | null,
@@ -138,42 +176,37 @@ export function deriveBulletChanges(
   const out: BulletChange[] = [];
 
   const walk = (
-    entries: Array<{ bullets: string[] }> | undefined,
-    originals: Array<{ bullets: string[] }> | undefined,
-    prefix: string,
-    label: (entryIdx: number) => { jobTitle: string; company: string },
+    bullets: string[] | undefined,
+    originals: string[] | undefined,
+    stem: string,
+    at: { jobIdx: number; projectIdx?: number; jobTitle: string; company: string },
   ) => {
-    (entries ?? []).forEach((entry, entryIdx) => {
-      const origEntry = originals?.[entryIdx];
-      (entry.bullets ?? []).forEach((bullet, bulletIdx) => {
-        const original = origEntry?.bullets?.[bulletIdx] ?? "";
-        if (bullet.trim() === original.trim()) return;
-        out.push({
-          key: `${prefix}${entryIdx}_b${bulletIdx}`,
-          jobIdx: entryIdx,
-          bulletIdx,
-          original,
-          tailored: bullet,
-          ...label(entryIdx),
-        });
-      });
+    (bullets ?? []).forEach((bullet, bulletIdx) => {
+      const original = originals?.[bulletIdx] ?? "";
+      if (bullet.trim() === original.trim()) return;
+      out.push({ key: `${stem}_b${bulletIdx}`, bulletIdx, original, tailored: bullet, ...at });
     });
   };
 
-  walk(pendingContent.experience, originalContent.experience, "exp", (i) => {
-    const job = pendingContent.experience?.[i];
+  (pendingContent.experience ?? []).forEach((job, i) => {
     const orig = originalContent.experience?.[i];
-    return {
-      jobTitle: job?.title || orig?.title || "Unknown Role",
-      company: job?.company || orig?.company || "",
-    };
+    const company = job?.company || orig?.company || "";
+    walk(job.bullets, orig?.bullets, `exp${i}`, { jobIdx: i, jobTitle: job?.title || orig?.title || "Unknown Role", company });
+    // A project's points say where they are: the role's company, then the
+    // line the project prints ("Barclays · Banking · Module Lead").
+    (job.projects ?? []).forEach((proj, j) => {
+      const origProj = orig?.projects?.[j];
+      walk(proj.bullets, origProj?.bullets, `exp${i}_p${j}`, {
+        jobIdx: i, projectIdx: j, company,
+        jobTitle: projectLine(proj) || (origProj ? projectLine(origProj) : "") || "Project",
+      });
+    });
   });
-  walk(pendingContent.projects, originalContent.projects, "proj", (i) => {
-    const proj = pendingContent.projects?.[i];
+  (pendingContent.projects ?? []).forEach((proj, i) => {
     const orig = originalContent.projects?.[i];
     // Projects have no company — the name carries the grouping label, and an
     // empty company keeps the review screen's "Title · Company" join clean.
-    return { jobTitle: proj?.name || orig?.name || "Project", company: "" };
+    walk(proj.bullets, orig?.bullets, `proj${i}`, { jobIdx: i, jobTitle: proj?.name || orig?.name || "Project", company: "" });
   });
 
   return out;
@@ -192,32 +225,33 @@ export function buildMergedContent(
   atsFixes: AtsFix[] = [],
   fixExperienceIndex: Record<string, number> = {},
   misc: MiscMerge = NO_MISC,
+  /** The JD the résumé is tailored to: each role's projects that fit it
+   *  best go first (orderProjectsForJd). Omitted, their order is kept. */
+  jd?: { terms: readonly string[]; text?: string },
 ): ResumeContent {
-  // Merge: use tailored bullet unless user rejected it. The bullet_id prefixes
-  // ("exp"/"proj") mirror _BULLET_SECTIONS in apps/api/app/services/tailoring.py
-  // — the pipeline rewrites project bullets too, and a rewrite the user can't
-  // reject is a rewrite that ships silently.
-  function mergeBullets<T extends { bullets: string[] }>(
-    entries: T[] | undefined,
-    originals: T[] | undefined,
-    prefix: string,
-  ): T[] | undefined {
-    if (!entries) return entries;
-    return entries.map((entry, entryIdx) => {
-      const origEntry = originals?.[entryIdx];
-      const mergedBullets = entry.bullets.map((bullet, bulletIdx) => {
-        const decision = bulletDecisions[`${prefix}${entryIdx}_b${bulletIdx}`] ?? "accept";
-        return decision === "reject" ? (origEntry?.bullets[bulletIdx] ?? "") : bullet;
-      });
-      return { ...entry, bullets: mergedBullets };
-    });
-  }
+  // Merge: use tailored bullet unless user rejected it. The keys mirror
+  // _bullet_lists in apps/api/app/services/tailoring.py — every list the
+  // pipeline rewrites (a role's points, its projects', a standalone
+  // project's), since a rewrite the user can't reject ships silently.
+  const merge = (bullets: string[], originals: string[] | undefined, stem: string) =>
+    bullets.map((bullet, k) =>
+      (bulletDecisions[`${stem}_b${k}`] ?? "accept") === "reject" ? (originals?.[k] ?? "") : bullet,
+    );
 
-  const mergedExperience =
-    mergeBullets(pendingContent.experience, originalContent.experience, "exp") ?? [];
-  const mergedProjects = mergeBullets(
-    pendingContent.projects, originalContent.projects, "proj",
-  );
+  const mergedExperience = (pendingContent.experience ?? []).map((job, i) => {
+    const orig = originalContent.experience?.[i];
+    return {
+      ...job,
+      bullets: merge(job.bullets, orig?.bullets, `exp${i}`),
+      ...(job.projects
+        ? { projects: job.projects.map((p, j) => ({ ...p, bullets: merge(p.bullets, orig?.projects?.[j]?.bullets, `exp${i}_p${j}`) })) }
+        : {}),
+    };
+  });
+  const mergedProjects = pendingContent.projects?.map((p, i) => ({
+    ...p,
+    bullets: merge(p.bullets, originalContent.projects?.[i]?.bullets, `proj${i}`),
+  }));
 
   // Summary: untouched by the initial tailoring pass (pendingContent.summary
   // starts identical to originalContent.summary) — only ever diverges once
@@ -303,7 +337,8 @@ export function buildMergedContent(
     summary: mergedSummary,
   };
   // The profile's Miscellaneous points go in last, and only the ones ticked.
-  return applyMiscPoints(merged, misc, bulletDecisions);
+  const withMisc = applyMiscPoints(merged, misc, bulletDecisions);
+  return jd ? orderProjectsForJd(withMisc, jd.terms, jd.text) : withMisc;
 }
 
 /** The profile's Miscellaneous points as buildMergedContent takes them. */
@@ -354,6 +389,12 @@ export function applyMiscPoints(
     }
   }
   return out;
+}
+
+/** The JD the review is tailoring to, for ordering each role's projects
+ * by fit (buildMergedContent): its terms, and its text for the domain. */
+export function jdForOrdering(s: { matchedSkills: string[]; missingSkills: string[]; jdText: string }) {
+  return { terms: [...s.matchedSkills, ...s.missingSkills], text: s.jdText };
 }
 
 /** The current review's Miscellaneous state, for buildMergedContent. */
@@ -653,7 +694,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       pendingContent && originalContent
         ? buildMergedContent(
             pendingContent, originalContent, bulletDecisions,
-            suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()),
+            suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()), jdForOrdering(get()),
           )
         : undefined;
     if (_projectScoreTimer) clearTimeout(_projectScoreTimer);
@@ -733,18 +774,10 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   updatePendingBullet: (key, text) => {
     const { pendingContent } = get();
     if (!pendingContent) return;
-    const parsed = parseBulletKey(key);
-    if (!parsed) return;
-    const { section, entryIdx, bulletIdx } = parsed;
-    const entries = pendingContent[section];
-    if (!entries?.[entryIdx]) return;
-    const updated = entries.map((entry, ei) =>
-      ei === entryIdx
-        ? { ...entry, bullets: entry.bullets.map((b, bi) => (bi === bulletIdx ? text : b)) }
-        : entry,
-    );
+    const updated = withBulletText(pendingContent, key, text);
+    if (updated === pendingContent) return;
     set({
-      pendingContent: { ...pendingContent, [section]: updated },
+      pendingContent: updated,
       previewPdfUrl: null,
     });
     useResumeStore.getState().setPdfSignedUrl(null);
@@ -1062,7 +1095,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     if (!pendingContent || !originalContent || !jdId) return false;
     const mergedContent = buildMergedContent(
       pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
-      miscMerge(get()),
+      miscMerge(get()), jdForOrdering(get()),
     );
     set({ mergedContent });
     // A draft, not updateContent: the store's résumé is the one tailoring ran
@@ -1081,7 +1114,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()));
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()), jdForOrdering(get()));
 
     set({ isApplying: true, error: null, mergedContent });
     try {
@@ -1122,7 +1155,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     const originalContent = useResumeStore.getState().content;
     if (!pendingContent || !originalContent || !jdId) return;
 
-    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()));
+    const mergedContent = buildMergedContent(pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscMerge(get()), jdForOrdering(get()));
 
     set({ isReanalyzing: true, error: null });
     try {

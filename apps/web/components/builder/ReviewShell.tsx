@@ -140,6 +140,8 @@ export function ReviewShell({
         ? buildMergedContent(
             pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex,
             { points: miscPoints, destinations: miscDestinations },
+            // No JD ordering here: these checks pair points by their review
+            // key ("exp0_p1_b2"), which is the position before ordering.
           )
         : null,
     [pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes, fixExperienceIndex, miscPoints, miscDestinations],

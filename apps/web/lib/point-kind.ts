@@ -1,5 +1,6 @@
 import type { ResumeContent } from "@career-copilot/types";
 import { projectLine } from "@/lib/work-projects";
+import { hasTerm } from "@/lib/terms";
 import type { BulletRationale } from "@/lib/api-client";
 import type { BulletChange } from "@/stores/tailoring-store";
 
@@ -14,12 +15,6 @@ import type { BulletChange } from "@/stores/tailoring-store";
  */
 export type PointKind = "reworded" | "adds_terms";
 
-function hasTerm(text: string, term: string): boolean {
-  const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (!escaped) return false;
-  // Whole-term match: "Go" must not match "go-to-market" or "Google".
-  return new RegExp(`(^|[^a-z0-9])${escaped}(?![a-z0-9-])`, "i").test(text);
-}
 
 function resumeText(content: ResumeContent): string {
   const parts: string[] = [content.headline ?? "", content.summary ?? "", ...(content.skills ?? [])];
