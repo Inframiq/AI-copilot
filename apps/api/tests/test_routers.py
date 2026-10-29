@@ -179,7 +179,8 @@ async def test_create_resume_with_jd_id_links_new_resume_to_the_jd():
                 headers=make_auth_header(),
             )
         assert r.status_code == 201
-        assert r.json()["title"] == "Resume — Acme"
+        # Saved as keyboard text (services/plain_text.py).
+        assert r.json()["title"] == "Resume - Acme"
         # The newly created resume gets linked back onto the JD.
         assert jd_row.tailored_resume_id == created_resume.id
     finally:
@@ -237,7 +238,7 @@ async def test_create_resume_with_jd_id_overwrites_the_already_linked_resume():
         data = r.json()
         # Same resume id — overwritten in place, not a new row.
         assert data["id"] == str(existing_resume_id)
-        assert data["title"] == "Resume — Acme v2"
+        assert data["title"] == "Resume - Acme v2"  # keyboard text
         assert data["content"] == {"new": True}
     finally:
         app.dependency_overrides.pop(get_db, None)

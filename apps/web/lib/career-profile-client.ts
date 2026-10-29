@@ -10,6 +10,7 @@ import {
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { tidyContactLinks } from "@/lib/social-links";
+import { plainDeep } from "@/lib/plain-text";
 import { isPresent as saysPresent, tidyDate } from "@/lib/month-year";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -161,7 +162,9 @@ export async function getCareerProfile(): Promise<CareerProfile | null> {
     .eq("user_id", me)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data as CareerProfile | null;
+  // A profile saved before lib/plain-text existed reads back as keyboard
+  // text, which the next save stores.
+  return data ? plainDeep(data as CareerProfile) : null;
 }
 
 export async function upsertCareerProfile(input: CareerProfileInput): Promise<CareerProfile> {
@@ -171,6 +174,9 @@ export async function upsertCareerProfile(input: CareerProfileInput): Promise<Ca
   // as an input. Stripped here so its (possibly stale) Miscellaneous never
   // rides along — see CareerProfileInput.
   const { miscellaneous: _misc, ...fields } = input as CareerProfileInput & { miscellaneous?: unknown };
+  // Saved as keyboard text: no curly quotes, long dashes or odd spaces
+  // (lib/plain-text) — the API does the same for everything it saves.
+  Object.assign(fields, plainDeep(fields));
   // Kept inside the database's limits (migration 053), which would refuse
   // the whole save otherwise.
   // LinkedIn and GitHub in their standard form; one that isn't a profile
@@ -217,7 +223,7 @@ export async function setMiscPoints(points: MiscPoint[]): Promise<CareerProfile>
   const me = await uid();
   const { data, error } = await sb
     .from("career_profiles")
-    .update({ miscellaneous: points })
+    .update({ miscellaneous: plainDeep(points) })
     .eq("user_id", me)
     .select()
     .single();
@@ -375,9 +381,9 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
       ...(e.honors?.trim() ? { honors: e.honors.trim() } : {}),
     })),
     skills: profile.skills,
-    // "Name — Issuer (Year)", the year as a standard résumé lists it.
+    // "Name - Issuer (Year)", the year as a standard résumé lists it.
     certifications: profile.certifications.map(c =>
-      `${c.name}${c.issuer?.trim() ? ` — ${c.issuer.trim()}` : ""}${c.year?.trim() ? ` (${c.year.trim()})` : ""}`),
+      `${c.name}${c.issuer?.trim() ? ` - ${c.issuer.trim()}` : ""}${c.year?.trim() ? ` (${c.year.trim()})` : ""}`),
   };
 }
 

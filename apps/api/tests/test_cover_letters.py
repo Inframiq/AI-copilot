@@ -114,7 +114,7 @@ async def test_generate_creates_pending_row_and_returns_202():
         assert added.jd_id == jd.id
         # A draft, named after its job.
         assert added.saved_at is None
-        assert added.title == "Cover letter — Backend Engineer"
+        assert added.title == "Cover letter - Backend Engineer"
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -561,8 +561,8 @@ async def test_a_draft_downloads_the_text_on_screen_and_keeps_nothing():
 
 def test_a_letter_is_named_after_its_job():
     from app.routers.cover_letters import letter_title
-    assert letter_title("Platform Engineer", "Stripe") == "Cover letter — Platform Engineer, Stripe"
-    assert letter_title(" Platform Engineer ", "  ") == "Cover letter — Platform Engineer"
+    assert letter_title("Platform Engineer", "Stripe") == "Cover letter - Platform Engineer, Stripe"
+    assert letter_title(" Platform Engineer ", "  ") == "Cover letter - Platform Engineer"
     assert len(letter_title("x" * 400, None)) == 255
 
 
@@ -577,7 +577,7 @@ async def test_save_can_rename_the_letter_and_a_blank_name_keeps_it():
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.patch(f"/cover-letters/{letter.id}", json={"content": "x", "title": "   "}, headers=make_auth_header())
-            assert letter.title == "Cover letter — Backend Engineer"
+            assert letter.title == "Cover letter - Backend Engineer"
             r = await client.patch(
                 f"/cover-letters/{letter.id}", json={"content": "x", "title": " Stripe letter "}, headers=make_auth_header(),
             )
@@ -608,7 +608,16 @@ async def _first_save(letter, taken: list, title: str | None = None):
 async def test_a_second_letter_for_the_same_job_is_numbered_when_saved():
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
     await _first_save(letter, ["Cover letter — Backend Engineer"], title="Cover letter — Backend Engineer")
-    assert letter.title == "Cover letter — Backend Engineer (2)"
+    assert letter.title == "Cover letter - Backend Engineer (2)"
+
+
+@pytest.mark.asyncio
+async def test_a_letter_saved_before_plain_text_still_takes_its_name():
+    # Saved letters from before services/plain_text.py hold "Cover letter —";
+    # they read back as "-", so a new letter beside one is still numbered.
+    letter = _letter(title="Cover letter - Backend Engineer", saved_at=None)
+    await _first_save(letter, ["Cover letter — Backend Engineer"])
+    assert letter.title == "Cover letter - Backend Engineer (2)"
 
 
 @pytest.mark.asyncio
@@ -617,17 +626,17 @@ async def test_a_deleted_letters_number_is_reused_not_doubled():
     # a second "X (2)".
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
     await _first_save(letter, ["Cover letter — Backend Engineer (2)"])
-    assert letter.title == "Cover letter — Backend Engineer"
+    assert letter.title == "Cover letter - Backend Engineer"
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
     await _first_save(letter, ["Cover letter — Backend Engineer", "Cover letter — Backend Engineer (3)"])
-    assert letter.title == "Cover letter — Backend Engineer (2)"
+    assert letter.title == "Cover letter - Backend Engineer (2)"
 
 
 @pytest.mark.asyncio
 async def test_the_first_letter_for_a_job_keeps_its_plain_name():
     letter = _letter(title="Cover letter — Backend Engineer", saved_at=None)
     await _first_save(letter, [])
-    assert letter.title == "Cover letter — Backend Engineer"
+    assert letter.title == "Cover letter - Backend Engineer"
 
 
 @pytest.mark.asyncio

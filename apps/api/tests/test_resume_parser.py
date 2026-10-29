@@ -59,7 +59,8 @@ async def test_headline_and_the_other_sections_come_through_cleaned():
         "volunteer": "not a list",
     }
     result = await parse_resume_text("<resume text>", _provider_returning(payload))
-    assert result["headline"] == "Supply Chain Analyst | SAP · Power BI"
+    # Keyboard text: the middle dot is one of the bullets plain_text replaces.
+    assert result["headline"] == "Supply Chain Analyst | SAP - Power BI"
     assert result["summary"] == "Analyst with five years in procurement."
     assert result["objective"] is None  # never printed twice
     assert result["awards"] == ["Spot Award 2023"]

@@ -3,6 +3,7 @@ import re
 import json
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
+from app.services.plain_text import plain_deep
 from app.services.tailoring import _looks_like_a_skill
 # PDF text extraction lives apart so the sandbox can load it without the app
 # (see app/services/pdf_text.py); re-exported here for callers and tests.
@@ -263,6 +264,8 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     # lets the caller refund and say so.
     if not isinstance(data, dict):
         raise ResumeUnreadable("model output was not a JSON object")
+    # Keyboard text only — what the upload and the model put there alike.
+    data = plain_deep(data)
     # Ensure required keys exist
     if not isinstance(data.get("contact"), dict):
         data["contact"] = {"name": "", "email": ""}

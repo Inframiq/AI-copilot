@@ -5,6 +5,7 @@ import { queryClient } from "@/lib/query-client";
 import { useResumeStore } from "@/stores/resume-store";
 import type { ResumeContent, WorkProject } from "@career-copilot/types";
 import { orderProjectsForJd, projectLine } from "@/lib/work-projects";
+import { plainText } from "@/lib/plain-text";
 import type { ImportanceLevel } from "@/components/resume/ImportanceBadge";
 import { classifyChange } from "@/lib/point-kind";
 import {
@@ -183,7 +184,9 @@ export function deriveBulletChanges(
   ) => {
     (bullets ?? []).forEach((bullet, bulletIdx) => {
       const original = originals?.[bulletIdx] ?? "";
-      if (bullet.trim() === original.trim()) return;
+      // Compared as keyboard text: a point that differs only by a curly
+      // quote or a long dash (typed before it was saved) wasn't rewritten.
+      if (plainText(bullet.trim()) === plainText(original.trim())) return;
       out.push({ key: `${stem}_b${bulletIdx}`, bulletIdx, original, tailored: bullet, ...at });
     });
   };

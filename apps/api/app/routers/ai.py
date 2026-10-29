@@ -24,6 +24,7 @@ from app.services.tailoring import (
     build_single_bullet_system, tailor_fingerprint, _bullet_text,
 )
 from app.services.bullet_guard import guard_rewrite
+from app.services.plain_text import plain_deep, plain_text
 from app.services.prep_questions import (
     answer_followup_for_user, followups_by_question, latest_with_questions_per_jd, resume_fingerprint,
 )
@@ -240,10 +241,10 @@ async def _run_tailoring_background(
         row.ats_score_before = result.ats_score_before
         row.matched_skills = result.matched_skills
         row.missing_skills = result.missing_skills
-        row.tailored_content = result.tailored_content
+        row.tailored_content = plain_deep(result.tailored_content)
         row.company_keywords = result.company_keywords
         row.suggested_skills = result.suggested_skills
-        row.ats_fixes = [f.model_dump() for f in result.ats_fixes]
+        row.ats_fixes = [plain_deep(f.model_dump()) for f in result.ats_fixes]
         row.bullet_importance = result.bullet_importance
         row.reverted_bullets = result.reverted_bullets
         row.bullet_rationale = result.bullet_rationale
@@ -384,7 +385,9 @@ async def tailor_resume(
         _run_tailoring_background,
         session.id,
         uid,
-        resume_row.content,
+        # Keyboard text in, so a rewrite never differs from its original by a
+        # curly quote alone (services/plain_text.py).
+        plain_deep(resume_row.content),
         jd_row.raw_text,
         body.humanize_level,
         provider,
@@ -485,8 +488,9 @@ async def rewrite_bullet(
         await refund_credits(db, uid, "rewrite_bullet", email=user.get("email"))
         await db.commit()
         raise
-    # Strip surrounding quotes if the model wrapped the output
-    rewritten = rewritten.strip().strip('"').strip("'").strip()
+    # Keyboard text (services/plain_text.py), then strip surrounding quotes
+    # if the model wrapped the output — curly ones are straight by now.
+    rewritten = plain_text(rewritten).strip().strip('"').strip("'").strip()
     # Same deterministic fact-lock the pipeline applies to Agent 3: a rewrite
     # that invents a number, pads an ending or overruns comes back WITH the
     # reasons, and the review leaves it for the candidate to confirm.
@@ -675,7 +679,9 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
     session = result.scalars().first()
     if not session:
         return {"session_id": None}
-    return {
+    # Runs saved before services/plain_text.py still hold model typography;
+    # the review compares this with the (cleaned) résumé, so it's cleaned too.
+    return plain_deep({
         "session_id": str(session.id),
         # None once the input resume has since been deleted — tailored_content
         # below is a self-contained snapshot and doesn't depend on it.
@@ -694,7 +700,7 @@ async def get_latest_session(user=Depends(get_current_user), db: AsyncSession = 
         "reverted_bullets": session.reverted_bullets or [],
         "bullet_rationale": session.bullet_rationale or {},
         "quantify_prompts": session.quantify_prompts or {},
-    }
+    })
 
 
 @router.get("/sessions/{session_id}")
@@ -711,7 +717,9 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {
+    # Runs saved before services/plain_text.py still hold model typography;
+    # the review compares this with the (cleaned) résumé, so it's cleaned too.
+    return plain_deep({
         "session_id": str(session.id),
         # None once the input resume has since been deleted — tailored_content
         # below is a self-contained snapshot and doesn't depend on it.
@@ -730,7 +738,7 @@ async def get_session(session_id: uuid.UUID, user=Depends(get_current_user), db:
         "reverted_bullets": session.reverted_bullets or [],
         "bullet_rationale": session.bullet_rationale or {},
         "quantify_prompts": session.quantify_prompts or {},
-    }
+    })
 
 
 @router.get("/sessions/{session_id}/questions", response_model=list[PrepQuestionOut])

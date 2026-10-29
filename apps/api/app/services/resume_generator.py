@@ -39,6 +39,7 @@ from app.services.resume_spec import (
     resolve_section_order,
 )
 from app.services.pdf import measure_pdf
+from app.services.plain_text import plain_deep
 from app.services.resume_validator import Violation, ValidationResult, validate_resume
 
 logger = logging.getLogger("app")
@@ -447,6 +448,8 @@ async def generate_resume(
     candidate's full history. This never uses all of it: only the smallest
     set of CORE/strong-SUPPORTING content survives selection.
     """
+    # Keyboard text from the start, so the pages measured are the pages saved.
+    profile = plain_deep(profile)
     items = _index_profile(profile)
     tiers: dict[str, str] = {}
     if items:

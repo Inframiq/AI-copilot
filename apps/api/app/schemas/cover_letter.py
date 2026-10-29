@@ -1,6 +1,13 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.services.plain_text import plain_text
+
+
+def _plain(value):
+    """Keyboard text only (services/plain_text.py)."""
+    return plain_text(value) if isinstance(value, str) else value
 
 
 class CoverLetterGenerateRequest(BaseModel):
@@ -36,6 +43,10 @@ class CoverLetterOut(BaseModel):
     title: str | None = None
     model_config = {"from_attributes": True}
 
+    # Letters saved before plain_text existed open in the editor clean, as
+    # the next save will store them.
+    _plain_text = field_validator("content", "title")(_plain)
+
 
 class CoverLetterUpdate(BaseModel):
     content: str = Field(max_length=20000)
@@ -45,6 +56,8 @@ class CoverLetterUpdate(BaseModel):
     # saved since (another tab or device), the save is refused with 409
     # letter_changed instead of overwriting it. Omitted: saved regardless.
     expected_saved_at: datetime | None = None
+
+    _plain_text = field_validator("content", "title")(_plain)
 
 
 class CoverLetterPdfRequest(BaseModel):

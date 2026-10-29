@@ -20,7 +20,7 @@ from app.schemas.cover_letter import (
 
 def letter_title(jd_title: str, company: str | None) -> str:
     """A letter's name, after the job it is for."""
-    name = f"Cover letter — {jd_title.strip()}"
+    name = f"Cover letter - {jd_title.strip()}"
     if company and company.strip():
         name += f", {company.strip()}"
     return name[:255]
@@ -42,6 +42,7 @@ _DRAFT_TTL = timedelta(days=1)
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import write_cover_letter, analyze_jd_match, JDAnalysis
 from app.services.pdf import generate_letter_pdf, upload_letter_pdf
+from app.services.plain_text import plain_text
 
 router = APIRouter(prefix="/cover-letters", tags=["cover-letters"])
 logger = logging.getLogger("app")
@@ -114,7 +115,7 @@ async def _run_cover_letter_background(
         row = row_result.scalar_one_or_none()
         if not row:
             return
-        row.content = result.body
+        row.content = plain_text(result.body)
         row.status = "completed"
         await session_db.commit()
 
@@ -243,8 +244,11 @@ async def _numbered_title(db: AsyncSession, letter: CoverLetter, title: str) -> 
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
         {"key": f"kripax:letters:{letter.user_id}:{letter.jd_id}"},
     )
+    # Compared as keyboard text: a letter saved before services/plain_text.py
+    # may still hold "Cover letter — ...", and reads back as "- ".
     taken = set(
-        (
+        plain_text(t) if t else t
+        for t in (
             await db.execute(
                 select(CoverLetter.title).where(
                     CoverLetter.user_id == letter.user_id,
@@ -292,13 +296,14 @@ async def update_cover_letter(
             )
     # The editor's Save: the only thing that keeps a letter.
     letter.content = body.content
-    title = body.title.strip() if body.title and body.title.strip() else letter.title
+    current = plain_text(letter.title) if letter.title else letter.title
+    title = body.title.strip() if body.title and body.title.strip() else current
     # Saved for the first time under the name it was given, beside other
     # saved letters for the same job: numbered, so they can be told apart
     # ("… (2)"). The lowest free name is used, so a deleted letter's number
     # is reused rather than doubled up. Done at save, so drafts nobody kept
     # use no numbers, and a name the user chose is left as they wrote it.
-    if letter.saved_at is None and title and title == letter.title:
+    if letter.saved_at is None and title and title == current:
         title = await _numbered_title(db, letter, title)
     letter.title = title
     letter.saved_at = datetime.now(timezone.utc)

@@ -8,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
 from app.services.rich_text import sanitize_inline
+from app.services.plain_text import plain_deep, plain_text
 from app.services import sandbox
 
 from app.core.config import settings
@@ -497,6 +498,9 @@ def _render_html_meta(
         raise ValueError(
             f"Unknown template: {template_id!r}. Use one of {sorted(ALLOWED_TEMPLATES)}"
         )
+    # Keyboard text only, whatever was saved before services/plain_text.py
+    # existed: every preview, export and page count renders from this.
+    resume_content = plain_deep(resume_content)
     resume_content, photo_status = _sanitize_resume_content(resume_content)
     used_placeholder = False
     if template_id in TEMPLATES_REQUIRING_PHOTO:
@@ -771,7 +775,7 @@ def _render_letter_html(contact: dict, date_str: str, body: str) -> str:
     education/skills sections) and needs no photo_url sanitization — the
     letter template never renders an image."""
     template = _jinja_env.get_template("cover_letter.html")
-    return template.render(contact=contact, date_str=date_str, body=body)
+    return template.render(contact=plain_deep(contact), date_str=date_str, body=plain_text(body))
 
 
 def generate_letter_pdf(contact: dict, date_str: str, body: str) -> bytes:

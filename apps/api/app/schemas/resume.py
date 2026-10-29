@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.plain_text import plain_deep
+
 ValidTemplateId = Literal[
     "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
     "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
@@ -31,6 +33,12 @@ def _validate_content_size(value: dict | None) -> dict | None:
     return value
 
 
+def _plain(value):
+    """Keyboard text only — curly quotes, long dashes, odd spaces and the
+    like never reach a saved résumé (services/plain_text.py)."""
+    return plain_deep(value)
+
+
 class ResumeCreate(BaseModel):
     title: str = Field(max_length=255)
     content: dict = {}
@@ -55,6 +63,7 @@ class ResumeCreate(BaseModel):
     jd_id: uuid.UUID | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
+    _plain_text = field_validator("title", "content")(_plain)
 
 
 class ResumeUpdate(BaseModel):
@@ -73,6 +82,7 @@ class ResumeUpdate(BaseModel):
     expected_updated_at: datetime | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
+    _plain_text = field_validator("title", "content")(_plain)
 
 
 class PdfGenerateRequest(BaseModel):
@@ -120,6 +130,9 @@ class ResumeOut(BaseModel):
     _sizes_default = field_validator(
         "heading_size_delta", "body_size_delta", mode="before"
     )(_standard_when_unset)
+    # Résumés saved before plain_text existed read back clean: the editor and
+    # the review start from the text the next save will store.
+    _plain_text = field_validator("title", "content")(_plain)
     pdf_url: str | None
     # Presence (not the raw storage path) is what the frontend needs — it
     # decides whether Preview can show the untouched original vs. falling

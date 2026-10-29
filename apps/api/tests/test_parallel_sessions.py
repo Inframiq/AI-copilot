@@ -67,7 +67,7 @@ async def test_two_letters_for_one_job_saved_at_once_get_different_names(Session
                 c.patch(f"/cover-letters/{b}", headers=auth(), json={"content": "Kept B"}),
             )
     assert ra.status_code == rb.status_code == 200, (ra.text, rb.text)
-    assert {ra.json()["title"], rb.json()["title"]} == {"Cover letter — Acme", "Cover letter — Acme (2)"}
+    assert {ra.json()["title"], rb.json()["title"]} == {"Cover letter - Acme", "Cover letter - Acme (2)"}
 
 
 async def test_a_letter_saved_in_another_tab_is_not_overwritten(Session):

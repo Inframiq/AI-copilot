@@ -10,6 +10,7 @@ from app.services.ai_engine.base import (
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.core.ai_budget import WEB_SEARCH_MODEL, check_input_size, ensure_ai_budget, note_spend
+from app.services.plain_text import plain_model
 
 logger = logging.getLogger("app")
 
@@ -179,7 +180,9 @@ class OpenAIProvider(AIProvider):
         budget = max_output_tokens or self._max_output_tokens
         if response.output_parsed is None:
             self._raise_for_empty(response, call_name, model, budget)
-        return response.output_parsed, self._sources(searches)
+        # Every structured answer reaches the app as keyboard text: no
+        # curly quotes, long dashes or odd spaces (see services/plain_text.py).
+        return plain_model(response.output_parsed), self._sources(searches)
 
     def _log_search_calls(self, call_name: str, count: int) -> None:
         """Bill `count` web-search tool calls: a usage row whose input_tokens
@@ -239,4 +242,4 @@ class OpenAIProvider(AIProvider):
         budget = max_output_tokens or self._max_output_tokens
         if response.output_parsed is None:
             self._raise_for_empty(response, call_name, model, budget)
-        return response.output_parsed
+        return plain_model(response.output_parsed)

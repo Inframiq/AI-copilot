@@ -12,6 +12,7 @@ from app.core.credits import spend_credits, refund_credits
 from app.core.usage import record_ai_usage
 from app.routers.cover_letters import remove_letter_files
 from app.schemas.jd import JDCompanyUpdate, JDCreate, JDOut, JDStatusUpdate, JDTitleUpdate
+from app.services.plain_text import plain_text
 from app.services.prep_questions import (
     generate_for_session, latest_session_with_questions, resume_fingerprint, run_for_saved_resume,
     set_for_saved_resume,
@@ -30,7 +31,10 @@ async def create_jd(
     db: AsyncSession = Depends(get_db),
 ):
     uid = uuid.UUID(user["sub"])
-    raw_text = body.raw_text.strip()
+    # Saved as keyboard text (services/plain_text.py); the text as pasted is
+    # kept only to find a JD saved before that, which still holds it.
+    pasted = body.raw_text.strip()
+    raw_text = plain_text(pasted)
     company_name = (body.company_name or "").strip() or None
 
     # Re-submitting the same JD text (e.g. clicking "Analyze Description"
@@ -49,7 +53,7 @@ async def create_jd(
             select(JobDescription)
             .where(
                 JobDescription.user_id == uid,
-                JobDescription.raw_text == raw_text,
+                JobDescription.raw_text.in_({raw_text, pasted}),
             )
             .order_by(JobDescription.created_at.asc())
             .limit(1)

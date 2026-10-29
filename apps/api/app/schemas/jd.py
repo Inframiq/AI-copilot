@@ -1,7 +1,14 @@
 import uuid
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
+
+from app.services.plain_text import plain_text
+
+def _plain(value):
+    """Keyboard text only (services/plain_text.py)."""
+    return plain_text(value) if isinstance(value, str) else value
+
 
 JDStatus = Literal["not_applied", "applied", "interview", "final_round", "offer", "accepted", "rejected"]
 
@@ -12,6 +19,9 @@ class JDCreate(BaseModel):
     # The target company typed with it (Studio's paste form), saved to the JD.
     company_name: str | None = Field(default=None, max_length=200)
 
+    # raw_text is cleaned in create_jd, which also needs it as pasted.
+    _plain_text = field_validator("title", "company_name")(_plain)
+
 
 class JDStatusUpdate(BaseModel):
     status: JDStatus
@@ -20,10 +30,14 @@ class JDStatusUpdate(BaseModel):
 class JDTitleUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
 
+    _plain_text = field_validator("title")(_plain)
+
 
 class JDCompanyUpdate(BaseModel):
     # Blank clears it.
     company_name: str = Field(max_length=200)
+
+    _plain_text = field_validator("company_name")(_plain)
 
 
 class JDOut(BaseModel):

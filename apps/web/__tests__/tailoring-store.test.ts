@@ -1668,6 +1668,14 @@ describe("deriveBulletChanges", () => {
     expect(changes[0].tailored).toBe("Did stuff, tailored");
   });
 
+  // The API sends rewrites back as keyboard text; a point typed with curly
+  // quotes or a long dash wasn't rewritten just because those came back plain.
+  it("doesn't list a point that differs only by its typography", () => {
+    const original = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Led Jane\u2019s \u201cPay\u201d rollout\u2014fast"] }] };
+    const pending = { ...base, experience: [{ company: "Acme", title: "Eng", start: "2020", bullets: ["Led Jane's \"Pay\" rollout - fast"] }] };
+    expect(deriveBulletChanges(pending as never, original as never)).toEqual([]);
+  });
+
   it("lists a changed project bullet", () => {
     const original = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Built a thing"] }] };
     const pending = { ...base, experience: [], projects: [{ name: "Pipeline", bullets: ["Engineered a thing"] }] };

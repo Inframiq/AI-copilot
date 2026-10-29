@@ -41,6 +41,7 @@ import {
   getCareerProfile,
   upsertCareerProfile,
   appendMiscPoints,
+  setMiscPoints,
   NoProfileError,
   MiscUnavailableError,
   setProfileMasterResume,
@@ -142,6 +143,30 @@ describe("career-profile-client", () => {
       expect(result).toEqual(SAMPLE_PROFILE);
       expect(upsertCalls[0].payload).toMatchObject({ user_id: "user-1" });
       expect(upsertCalls[0].opts).toEqual({ onConflict: "user_id" });
+    });
+
+    it("saves keyboard text: no curly quotes, long dashes or odd spaces", async () => {
+      queryResult = { data: SAMPLE_PROFILE, error: null };
+      const { user_id: _uid, created_at: _c, updated_at: _u, ...input } = SAMPLE_PROFILE;
+      await upsertCareerProfile({
+        ...input,
+        headline: "Engineer\u00a0\u2014 \u201cPayments\u201d",
+        experience: [{ ...SAMPLE_PROFILE.experience[0], responsibilities: "Owned Jane\u2019s rollout\u2026" }],
+      });
+      const row = upsertCalls[0].payload as any;
+      expect(row.headline).toBe('Engineer - "Payments"');
+      expect(row.experience[0].responsibilities).toBe("Owned Jane's rollout...");
+    });
+
+    it("reads a profile saved before that as keyboard text", async () => {
+      queryResult = { data: { ...SAMPLE_PROFILE, headline: "Aspiring\u00a0SWE \u2192 SRE" }, error: null };
+      expect((await getCareerProfile())!.headline).toBe("Aspiring SWE -> SRE");
+    });
+
+    it("keeps Miscellaneous points as keyboard text", async () => {
+      queryResult = { data: SAMPLE_PROFILE, error: null };
+      await setMiscPoints([{ id: "m1", text: "Won the \u201cbest demo\u201d award" } as never]);
+      expect((updateCalls[0] as any).miscellaneous[0].text).toBe('Won the "best demo" award');
     });
 
     it("forwards photo_url and photo_path in the upsert payload", async () => {
@@ -269,7 +294,7 @@ describe("career-profile-client", () => {
     it("maps education and certifications", () => {
       const result = profileToResumeContent(SAMPLE_PROFILE) as any;
       expect(result.education[0]).toEqual({ institution: "MIT", degree: "BSc in CS", year: "2025" });
-      expect(result.certifications).toEqual(["AWS SAA — AWS (2025)"]);
+      expect(result.certifications).toEqual(["AWS SAA - AWS (2025)"]);
     });
 
     // The templates print honors after the year and GPA; a blank one stays
