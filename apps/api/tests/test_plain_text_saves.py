@@ -204,7 +204,7 @@ async def test_every_structured_model_answer_arrives_plain():
     from app.services.ai_engine import openai_provider
     from app.services.ai_engine.openai_provider import OpenAIProvider
 
-    provider = OpenAIProvider(api_key="test", fast_model="m", premium_model="m",
+    provider = OpenAIProvider(api_key="k", fast_model="m", premium_model="m",
                               standard_model="m", max_output_tokens=100, research_model="m")
     answer = _Answer(bullets=[_Bullet(text=AI, reasons=[AI])], note=AI, score=3)
     response = MagicMock(output_parsed=answer, usage=None, output=[])
