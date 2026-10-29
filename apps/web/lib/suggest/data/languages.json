@@ -1,0 +1,10 @@
+{
+  "source": "Kept by hand from the ISO 639-1 language names, most spoken first, with Indian languages' common spellings as aliases.",
+  "names": [
+    "English", ["Mandarin Chinese", "chinese", "mandarin"], "Hindi", "Spanish", "French", "Arabic", "Bengali", "Portuguese", "Russian", "Urdu", "Indonesian", "German", "Japanese", "Marathi", "Telugu", "Turkish", "Tamil", ["Cantonese", "yue"], "Vietnamese", "Korean", "Italian", "Gujarati", "Thai", "Kannada", "Persian", ["Malayalam", "malyalam"], ["Odia", "oriya"], ["Punjabi", "panjabi"], "Polish", "Ukrainian", "Malay", "Burmese", "Filipino", "Tagalog", "Swahili", "Hausa", "Yoruba", "Igbo", "Amharic", "Oromo", "Somali", "Zulu", "Xhosa", "Afrikaans",
+    "Assamese", "Maithili", "Santali", "Kashmiri", "Nepali", "Sindhi", "Konkani", "Dogri", "Manipuri", "Bodo", "Sanskrit", "Sinhala", "Pashto", "Dari", "Kurdish", "Tajik", "Uzbek", "Kazakh", "Kyrgyz", "Turkmen", "Azerbaijani", "Armenian", "Georgian", "Mongolian", "Tibetan", "Khmer", "Lao", "Javanese", "Sundanese",
+    "Dutch", "Flemish", "Romanian", "Greek", "Czech", "Slovak", "Hungarian", "Swedish", "Norwegian", "Danish", "Finnish", "Icelandic", "Estonian", "Latvian", "Lithuanian", "Serbian", "Croatian", "Bosnian", "Slovenian", "Bulgarian", "Macedonian", "Albanian", "Belarusian", "Catalan", "Basque", "Galician", "Irish", "Welsh", "Scottish Gaelic", "Maltese", "Luxembourgish",
+    "Hebrew", "Yiddish", "Maori", "Samoan", "Tongan", "Fijian", "Hawaiian", "Haitian Creole", "Quechua", "Guarani", "Latin", "Esperanto",
+    ["American Sign Language", "asl"], ["British Sign Language", "bsl"], ["Indian Sign Language", "isl"]
+  ]
+}

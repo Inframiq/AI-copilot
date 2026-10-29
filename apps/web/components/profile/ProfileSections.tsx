@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { Plus, Trash, X } from "@phosphor-icons/react";
 import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
+import { SuggestInput } from "@/components/ui/SuggestInput";
 import { wordCount } from "@/lib/misc-points";
 import {
   EXTRA_SECTIONS,
@@ -73,10 +74,11 @@ function LanguagesEditor({ value, onChange }: { value: LanguageEntry[]; onChange
     <div className="flex flex-col gap-sm">
       {value.map((lang, i) => (
         <div key={i} className="flex items-center gap-xs sm:gap-sm">
-          <input
+          <SuggestInput
+            kind="language"
             aria-label={`Language ${i + 1}`}
             value={lang.name}
-            onChange={(e) => set(i, { name: e.target.value })}
+            onValueChange={(name) => set(i, { name })}
             maxLength={L.languageChars}
             placeholder={SECTION_INFO.languages.placeholder}
             className={`${inputCls} min-w-0 flex-1`}

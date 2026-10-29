@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useResumeStore } from "@/stores/resume-store";
 import { Trash } from "@phosphor-icons/react";
 import { LINE_SECTIONS, SECTION_INFO } from "@/lib/profile-sections";
+import { SuggestInput } from "@/components/ui/SuggestInput";
 
 const textareaCls =
   "w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all";
@@ -60,12 +61,13 @@ export function ExtrasSection() {
           >
             <div className="flex-1 flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant">Language</label>
-              <input
-                type="text"
+              <SuggestInput
+                kind="language"
+                aria-label={`Language ${i + 1}`}
                 value={lang.name}
-                onChange={(e) => {
+                onValueChange={(name) => {
                   const updated = [...(content.languages ?? [])];
-                  updated[i] = { ...updated[i], name: e.target.value };
+                  updated[i] = { ...updated[i], name };
                   updateContent({ languages: updated });
                 }}
                 placeholder="e.g. Spanish"
@@ -110,19 +112,38 @@ export function ExtrasSection() {
 
       <div className="flex flex-col gap-md">
         <h3 className="text-label-caps text-on-surface-variant">Certifications</h3>
-        <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
-          <div className="flex flex-col gap-xs">
-            <label htmlFor="extras-certifications" className="text-label-sm text-on-surface-variant">
-              Certifications <span className="font-normal">(one per line)</span>
-            </label>
-            <LinesTextarea
-              id="extras-certifications"
-              lines={content.certifications ?? []}
-              onChange={(certifications) => updateContent({ certifications })}
-              placeholder={"AWS Certified Solutions Architect\nPMP"}
+        {/* One field each, so each can suggest the certification's own name. */}
+        {(content.certifications ?? []).map((cert, i) => (
+          <div key={i} className="flex items-center gap-sm">
+            <SuggestInput
+              kind="certification"
+              aria-label={`Certification ${i + 1}`}
+              value={cert}
+              onValueChange={(name) => {
+                const updated = [...(content.certifications ?? [])];
+                updated[i] = name;
+                updateContent({ certifications: updated });
+              }}
+              placeholder="e.g. AWS Certified Solutions Architect – Associate"
+              className="flex-1 min-w-0 px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
             />
+            <button
+              onClick={() =>
+                updateContent({ certifications: (content.certifications ?? []).filter((_, idx) => idx !== i) })
+              }
+              aria-label={`Remove certification ${i + 1}`}
+              className="flex items-center text-label-sm text-error px-sm py-sm rounded-lg hover:bg-error-container/30 transition-colors"
+            >
+              <Trash size={14} />
+            </button>
           </div>
-        </div>
+        ))}
+        <button
+          onClick={() => updateContent({ certifications: [...(content.certifications ?? []), ""] })}
+          className="flex items-center justify-center gap-sm px-md py-sm rounded-lg border border-dashed border-outline-variant text-primary text-label-md hover:bg-surface-container-low transition-colors"
+        >
+          + Add Certification
+        </button>
       </div>
 
       {/* Awards, Achievements, Leadership, Volunteer, Interests — the same

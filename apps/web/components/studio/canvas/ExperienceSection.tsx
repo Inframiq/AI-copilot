@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { SuggestInput } from "@/components/ui/SuggestInput";
 import { useResumeStore } from "@/stores/resume-store";
 import { sameCompany } from "@/lib/career-profile-client";
 import { Trash } from "@phosphor-icons/react";
@@ -95,12 +96,12 @@ export function ExperienceSection({ focusIndex }: { focusIndex?: number }) {
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="text-label-sm text-on-surface-variant">Role</label>
-                <input
-                  type="text"
+                <SuggestInput
+                  kind="jobTitle"
                   value={job.title}
-                  onChange={(e) => {
+                  onValueChange={(title) => {
                     const updated = [...content.experience];
-                    updated[i] = { ...updated[i], title: e.target.value };
+                    updated[i] = { ...updated[i], title };
                     updateContent({ experience: updated });
                   }}
                   placeholder="Job title"

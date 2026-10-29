@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { SuggestInput } from "@/components/ui/SuggestInput";
 import { useResumeStore } from "@/stores/resume-store";
 import { Trash } from "@phosphor-icons/react";
 
@@ -45,12 +46,12 @@ export function EducationSection({ focusIndex }: { focusIndex?: number }) {
 
           <div className="flex flex-col gap-xs">
             <label className="text-label-sm text-on-surface-variant">Institution</label>
-            <input
-              type="text"
+            <SuggestInput
+              kind="college"
               value={edu.institution}
-              onChange={(e) => {
+              onValueChange={(institution) => {
                 const updated = [...content.education];
-                updated[i] = { ...updated[i], institution: e.target.value };
+                updated[i] = { ...updated[i], institution };
                 updateContent({ education: updated });
               }}
               placeholder="University name"
@@ -60,12 +61,12 @@ export function EducationSection({ focusIndex }: { focusIndex?: number }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
             <div className="flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant">Degree</label>
-              <input
-                type="text"
+              <SuggestInput
+                kind="degree"
                 value={edu.degree}
-                onChange={(e) => {
+                onValueChange={(degree) => {
                   const updated = [...content.education];
-                  updated[i] = { ...updated[i], degree: e.target.value };
+                  updated[i] = { ...updated[i], degree };
                   updateContent({ education: updated });
                 }}
                 placeholder="e.g. B.S. Computer Science"

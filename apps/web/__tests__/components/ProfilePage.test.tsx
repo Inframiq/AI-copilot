@@ -282,7 +282,7 @@ describe("My Profile — every résumé section", () => {
   it("isn't counted as unsaved just for loading a profile with sections", async () => {
     getCareerProfile.mockResolvedValue(profile({ summary: "Engineer.", languages: [{ name: "Hindi", level: "" }] }));
     renderPage();
-    expect(await screen.findByRole("textbox", { name: "Language 1" })).toHaveValue("Hindi");
+    expect(await screen.findByRole("combobox", { name: "Language 1" })).toHaveValue("Hindi");
     const leave = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(leave);
     expect(leave.defaultPrevented).toBe(false);

@@ -4,6 +4,7 @@ import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { useAvatarSrc } from "@/lib/avatar-url";
 import type { ResumeContent } from "@career-copilot/types";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
+import { SuggestInput } from "@/components/ui/SuggestInput";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -84,32 +85,42 @@ export function ContactSection() {
           return (
             <div key={key} className="flex flex-col gap-xs">
               <label htmlFor={id} className="text-label-sm text-on-surface-variant">{label}</label>
-              <input
-                id={id}
-                type={type ?? "text"}
-                value={content.contact[key] ?? ""}
-                onChange={(e) =>
-                  updateContent({
-                    contact: { ...content.contact, [key]: e.target.value },
-                  })
-                }
-                onBlur={
-                  social
-                    ? (e) => {
-                        const tidy = tidySocialLink(social, e.target.value);
-                        if (tidy !== null && tidy !== e.target.value) {
-                          updateContent({ contact: { ...content.contact, [social]: tidy } });
+              {key === "location" ? (
+                <SuggestInput
+                  id={id}
+                  kind="city"
+                  value={content.contact.location ?? ""}
+                  onValueChange={(location) => updateContent({ contact: { ...content.contact, location } })}
+                  className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                />
+              ) : (
+                <input
+                  id={id}
+                  type={type ?? "text"}
+                  value={content.contact[key] ?? ""}
+                  onChange={(e) =>
+                    updateContent({
+                      contact: { ...content.contact, [key]: e.target.value },
+                    })
+                  }
+                  onBlur={
+                    social
+                      ? (e) => {
+                          const tidy = tidySocialLink(social, e.target.value);
+                          if (tidy !== null && tidy !== e.target.value) {
+                            updateContent({ contact: { ...content.contact, [social]: tidy } });
+                          }
                         }
-                      }
-                    : undefined
-                }
-                placeholder={social ? `${social}.com/${social === "linkedin" ? "in/your-name" : "your-username"}` : undefined}
-                aria-invalid={bad || undefined}
-                aria-describedby={bad ? `${id}-hint` : undefined}
-                className={`w-full px-md py-sm rounded-lg border bg-surface-container-lowest text-on-surface text-body-md focus:outline-none focus:ring-2 transition-all ${
-                  bad ? "border-error focus:ring-error/20" : "border-outline-variant/50 focus:ring-primary/30 focus:border-primary"
-                }`}
-              />
+                      : undefined
+                  }
+                  placeholder={social ? `${social}.com/${social === "linkedin" ? "in/your-name" : "your-username"}` : undefined}
+                  aria-invalid={bad || undefined}
+                  aria-describedby={bad ? `${id}-hint` : undefined}
+                  className={`w-full px-md py-sm rounded-lg border bg-surface-container-lowest text-on-surface text-body-md focus:outline-none focus:ring-2 transition-all ${
+                    bad ? "border-error focus:ring-error/20" : "border-outline-variant/50 focus:ring-primary/30 focus:border-primary"
+                  }`}
+                />
+              )}
               {bad && (
                 <p id={`${id}-hint`} className="text-caption text-error">
                   {SOCIAL_HINT[social]}

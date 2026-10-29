@@ -1,0 +1,19 @@
+{
+  "source": "Kept by hand. Degrees as a résumé prints them; [name, ...aliases] for the abbreviations people type.",
+  "names": [
+    ["Bachelor of Technology (B.Tech)", "btech", "b.tech", "b tech"], ["Bachelor of Engineering (B.E.)", "be", "b.e", "b.e."], ["Master of Technology (M.Tech)", "mtech", "m.tech"], ["Master of Engineering (M.E.)", "me", "m.e", "m.e."],
+    ["Bachelor of Science (B.Sc.)", "bsc", "b.sc", "bs", "b.s."], ["Master of Science (M.Sc.)", "msc", "m.sc", "ms", "m.s."], ["Bachelor of Arts (B.A.)", "ba", "b.a"], ["Master of Arts (M.A.)", "ma", "m.a"],
+    ["Bachelor of Commerce (B.Com)", "bcom", "b.com"], ["Master of Commerce (M.Com)", "mcom", "m.com"], ["Bachelor of Computer Applications (BCA)", "bca"], ["Master of Computer Applications (MCA)", "mca"],
+    ["Bachelor of Business Administration (BBA)", "bba"], ["Master of Business Administration (MBA)", "mba"], ["Executive MBA (EMBA)", "emba"], ["Post Graduate Diploma in Management (PGDM)", "pgdm"], ["Post Graduate Program (PGP)", "pgp"],
+    ["Bachelor of Architecture (B.Arch)", "barch", "b.arch"], ["Master of Architecture (M.Arch)", "march", "m.arch"], ["Bachelor of Design (B.Des)", "bdes", "b.des"], ["Master of Design (M.Des)", "mdes", "m.des"], ["Bachelor of Fine Arts (BFA)", "bfa"], ["Master of Fine Arts (MFA)", "mfa"],
+    ["Bachelor of Pharmacy (B.Pharm)", "bpharm", "b.pharm"], ["Master of Pharmacy (M.Pharm)", "mpharm", "m.pharm"], ["Doctor of Pharmacy (Pharm.D)", "pharmd", "pharm.d"], ["Bachelor of Medicine, Bachelor of Surgery (MBBS)", "mbbs"], ["Doctor of Medicine (MD)", "md"], ["Master of Surgery (MS)", "ms surgery"], ["Bachelor of Dental Surgery (BDS)", "bds"], ["Bachelor of Science in Nursing (B.Sc. Nursing)", "bsc nursing"], ["Bachelor of Physiotherapy (BPT)", "bpt"],
+    ["Bachelor of Laws (LL.B.)", "llb", "ll.b"], ["Master of Laws (LL.M.)", "llm", "ll.m"], ["Bachelor of Arts, Bachelor of Laws (B.A. LL.B.)", "ba llb"], ["Juris Doctor (J.D.)", "jd"],
+    ["Bachelor of Education (B.Ed)", "bed", "b.ed"], ["Master of Education (M.Ed)", "med", "m.ed"], ["Bachelor of Hotel Management (BHM)", "bhm"], ["Bachelor of Journalism and Mass Communication (BJMC)", "bjmc"], ["Master of Journalism and Mass Communication (MJMC)", "mjmc"], ["Bachelor of Social Work (BSW)", "bsw"], ["Master of Social Work (MSW)", "msw"],
+    ["Doctor of Philosophy (Ph.D.)", "phd", "ph.d", "doctorate"], ["Master of Philosophy (M.Phil)", "mphil", "m.phil"], ["Master of Public Health (MPH)", "mph"], ["Master of Public Administration (MPA)", "mpa"], ["Master of Finance (MFin)", "mfin"], ["Master in Management (MiM)", "mim"],
+    ["Integrated M.Tech", "dual degree", "integrated mtech"], ["Integrated M.Sc.", "integrated msc"], ["Integrated MBA", "ipm"],
+    ["Diploma in Engineering", "diploma", "polytechnic"], "Post Graduate Diploma", "Advanced Diploma", ["Associate Degree", "associate"], ["Associate of Science (A.S.)", "as"], ["Associate of Arts (A.A.)", "aa"],
+    ["Chartered Accountant (CA)", "ca"], ["Company Secretary (CS)", "cs"], ["Cost and Management Accountant (CMA)", "cma", "icwa"],
+    ["Higher Secondary Certificate (Class XII)", "12th", "class 12", "xii", "hsc", "intermediate", "puc"], ["Secondary School Certificate (Class X)", "10th", "class 10", "x", "ssc", "matriculation"], ["High School Diploma", "high school"], ["GED", "general educational development"],
+    ["A Levels", "a-levels", "gce a level"], ["International Baccalaureate (IB) Diploma", "ib"], ["Bachelor of Applied Science (BASc)", "basc"], ["Bachelor of Engineering (BEng)", "beng"], ["Master of Engineering (MEng)", "meng"], ["Master of Research (MRes)", "mres"], ["Bachelor of Science (Honours)", "bsc hons", "b.sc hons"], ["Bachelor of Arts (Honours)", "ba hons"]
+  ]
+}

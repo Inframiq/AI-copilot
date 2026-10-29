@@ -3,6 +3,8 @@ import { useState } from "react";
 import { X } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { useResumeStore } from "@/stores/resume-store";
+import { SuggestInput } from "@/components/ui/SuggestInput";
+import { canonicalName, loadSuggestions } from "@/lib/suggest";
 
 // A chip editor, not the old newline-joined textarea: skills are discrete
 // values and editing them as one blob made reordering and de-duping a
@@ -15,10 +17,14 @@ export function SkillsSection() {
 
   const skills = content.skills;
 
-  function add() {
-    const value = draft.trim();
+  /** Adds what's typed, or a suggestion picked. Typed text that is exactly
+   * a known skill or its alias ("js") goes in as the list's name. */
+  async function add(picked?: string) {
+    const typed = (picked ?? draft).trim();
     setDraft("");
-    if (!value) return;
+    if (!typed) return;
+    const value =
+      picked ?? (await loadSuggestions("skill").then((i) => canonicalName(i, typed)).catch(() => null)) ?? typed;
     if (skills.some((s) => s.toLowerCase() === value.toLowerCase())) return;
     updateContent({ skills: [...skills, value] });
   }
@@ -55,17 +61,19 @@ export function SkillsSection() {
         </AnimatePresence>
       </div>
 
-      <input
-        type="text"
+      <SuggestInput
+        kind="skill"
+        aria-label="Add a skill"
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onValueChange={setDraft}
+        onPick={add}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === ",") {
             e.preventDefault();
             add();
           }
         }}
-        onBlur={add}
+        onBlur={() => add()}
         placeholder="Add a skill and press Enter…"
         className="w-full px-md py-sm rounded-xl border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
       />

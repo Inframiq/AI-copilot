@@ -75,6 +75,8 @@ import {
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { lockedEmail, mergeParsedContact, useAccountEmail } from "@/lib/contact-lock";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
+import { SuggestInput } from "@/components/ui/SuggestInput";
+import { canonicalName, loadSuggestions } from "@/lib/suggest";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -542,9 +544,13 @@ export default function ProfilePage() {
   }
 
   // ── skill add/remove ─────────────────────────────────────────────────────────
-  function addSkill() {
-    const trimmed = skillDraft.trim();
-    if (!trimmed) return;
+  /** Adds what's typed, or a suggestion picked from the list. Typed text
+   * that is exactly a known skill or its alias ("js") goes in under the
+   * list's name ("JavaScript"). */
+  async function addSkill(picked?: string) {
+    const typed = (picked ?? skillDraft).trim();
+    if (!typed) return;
+    const trimmed = picked ?? (await loadSuggestions("skill").then((i) => canonicalName(i, typed)).catch(() => null)) ?? typed;
     if (!skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
       setSkills(prev => [...prev, trimmed]);
     }
@@ -710,7 +716,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}><MapPin size={14} className="text-primary/70" /> Location</label>
-            <input value={contact.location ?? ""} onChange={e => setContact(p => ({ ...p, location: e.target.value }))}
+            <SuggestInput kind="city" value={contact.location ?? ""} onValueChange={v => setContact(p => ({ ...p, location: v }))}
               placeholder="San Francisco, CA" className={inputCls} />
           </div>
           <div className="flex flex-col gap-sm col-span-2 mt-xs">
@@ -767,12 +773,13 @@ export default function ProfilePage() {
           <div className="flex gap-xs">
             <div className="relative flex-1">
               <MagnifyingGlass size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-              <input value={skillDraft} onChange={e => setSkillDraft(e.target.value)}
+              <SuggestInput kind="skill" value={skillDraft} onValueChange={setSkillDraft} onPick={addSkill}
+                aria-label="Add a skill"
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
                 placeholder="Add a skill — e.g. React, AWS, Figma…"
                 className={iconInputCls} />
             </div>
-            <button type="button" onClick={addSkill} disabled={!skillDraft.trim()}
+            <button type="button" onClick={() => addSkill()} disabled={!skillDraft.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
               <Plus size={16} weight="bold" />
             </button>
@@ -917,12 +924,12 @@ export default function ProfilePage() {
                         </div>
                         <div className="flex flex-col gap-xs">
                           <label className="text-caption text-on-surface-variant">Role / Title *</label>
-                          <input value={exp.title ?? ""} onChange={e => updateExp(exp.id, "title", e.target.value)}
+                          <SuggestInput kind="jobTitle" value={exp.title ?? ""} onValueChange={v => updateExp(exp.id, "title", v)}
                             placeholder="Software Engineer" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs col-span-2">
                           <label className="text-caption text-on-surface-variant">Location</label>
-                          <input value={exp.location ?? ""} onChange={e => updateExp(exp.id, "location", e.target.value)}
+                          <SuggestInput kind="city" value={exp.location ?? ""} onValueChange={v => updateExp(exp.id, "location", v)}
                             placeholder="London, UK or Remote" className={inputCls} />
                         </div>
                         {/* Start and End side by side, with one plain checkbox
@@ -1072,7 +1079,7 @@ export default function ProfilePage() {
                           </div>
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant">Tech Stack</label>
-                            <input value={proj.techStack ?? ""} onChange={e => updateProj(proj.id, "techStack", e.target.value)}
+                            <SuggestInput kind="skill" list value={proj.techStack ?? ""} onValueChange={v => updateProj(proj.id, "techStack", v)}
                               placeholder="React, Node.js, PostgreSQL" className={inputCls} />
                           </div>
                           <div className="flex flex-col gap-xs">
@@ -1148,12 +1155,12 @@ export default function ProfilePage() {
                     <div className="p-sm sm:p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
                       <div className="flex flex-col gap-xs col-span-2">
                         <label className="text-caption text-on-surface-variant">Institution *</label>
-                        <input value={edu.institution ?? ""} onChange={e => updateEdu(edu.id, "institution", e.target.value)}
+                        <SuggestInput kind="college" value={edu.institution ?? ""} onValueChange={v => updateEdu(edu.id, "institution", v)}
                           placeholder="Stanford University" className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
                         <label className="text-caption text-on-surface-variant">Degree</label>
-                        <input value={edu.degree ?? ""} onChange={e => updateEdu(edu.id, "degree", e.target.value)}
+                        <SuggestInput kind="degree" value={edu.degree ?? ""} onValueChange={v => updateEdu(edu.id, "degree", v)}
                           placeholder="B.S. / M.S. / Ph.D." className={inputCls} />
                       </div>
                       <div className="flex flex-col gap-xs">
@@ -1248,7 +1255,7 @@ export default function ProfilePage() {
                       <div className="p-sm sm:p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
                         <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
                           <label className="text-caption text-on-surface-variant">Certification Name *</label>
-                          <input value={cert.name ?? ""} onChange={e => updateCert(cert.id, "name", e.target.value)}
+                          <SuggestInput kind="certification" value={cert.name ?? ""} onValueChange={v => updateCert(cert.id, "name", v)}
                             placeholder="AWS Solutions Architect" className={inputCls} />
                         </div>
                         <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
