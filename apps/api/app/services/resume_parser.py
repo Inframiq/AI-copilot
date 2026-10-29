@@ -95,7 +95,8 @@ Return a JSON object with EXACTLY this shape:
       "institution": "University Name",
       "degree": "Degree and major",
       "year": "YYYY or YYYY-YYYY",
-      "gpa": "grade exactly as printed, or null"
+      "gpa": "grade exactly as printed, or null",
+      "honors": "honors or distinction printed on this entry, or null"
     }
   ],
   "skills": ["Skill1", "Skill2"],
@@ -158,6 +159,15 @@ Rules:
   SAME field — capture whichever the resume shows, copied verbatim with its
   scale or "%" sign (e.g. "8.6", "8.6/10", "3.9/4.0", "85%"). Never convert
   between scales, and never invent a value.
+- education "honors": a distinction printed on that education entry itself
+  — "First Class with Distinction", "Summa Cum Laude", "Dean's List",
+  "Gold Medalist". Copy it as printed; several on one entry are joined with
+  ", ". The number goes in "gpa" and the words in "honors" ("First Class
+  with Distinction (78%)" gives gpa "78%"). It is not coursework, a thesis,
+  or part of the degree's name ("B.Sc. (Hons)" stays in "degree"). An item
+  under a separate "Honors & Awards" or "Awards" section stays in "awards"
+  and is never copied into an education entry. An entry with none gives
+  "honors": null.
 - skills must be a flat list of individual skill strings, each a short tool/
   technology/methodology name — 1 to 4 words, no verbs, no punctuation, never
   a sentence. "Python", "Stakeholder Management", "CI/CD" are valid entries.
@@ -262,6 +272,9 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
             job["projects"] = _clean_job_projects(job.get("projects"))
     data.setdefault("projects", [])
     data.setdefault("education", [])
+    for edu in data["education"] if isinstance(data["education"], list) else []:
+        if isinstance(edu, dict):
+            _clean_honors(edu)
     data.setdefault("skills", [])
     for key in _TEXT_FIELDS:
         value = data.get(key)
@@ -281,6 +294,17 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
         if isinstance(project, dict):
             _keep_only_real_urls(project)
     return data
+
+
+def _clean_honors(edu: dict) -> None:
+    """Honors print after the GPA, so a blank or non-text value is dropped
+    (no separator with nothing after it), and one that just repeats the GPA
+    is dropped so the line doesn't say it twice."""
+    honors = edu.get("honors")
+    if isinstance(honors, str) and honors.strip() and honors.strip() != str(edu.get("gpa") or "").strip():
+        edu["honors"] = honors.strip()
+    else:
+        edu.pop("honors", None)
 
 
 def _keep_only_real_urls(project: dict) -> None:

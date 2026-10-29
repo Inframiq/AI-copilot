@@ -206,3 +206,31 @@ async def test_projects_inside_a_job_come_through_cleaned():
     }]
     assert jobs[0]["bullets"] == ["Mentored joiners."]
     assert jobs[1]["projects"] == [] and jobs[2]["projects"] == []
+
+
+def test_the_prompt_reads_an_educations_honors():
+    assert '"honors": "honors or distinction printed on this entry, or null"' in PARSE_SYSTEM
+    # Never pulled out of a separate awards section, so nothing prints twice.
+    assert re.search(r'education "honors".{0,700}stays in "awards"\s+and is never copied', PARSE_SYSTEM, re.S)
+
+
+@pytest.mark.asyncio
+async def test_education_honors_come_through_cleaned():
+    payload = {
+        "contact": {"name": "Asha", "email": "a@x.com"},
+        "experience": [], "skills": [],
+        "education": [
+            {"institution": "GITAM", "degree": "B.Tech", "year": "2019", "gpa": "78%",
+             "honors": " First Class with Distinction "},
+            {"institution": "MIT", "degree": "BSc", "year": "2015", "gpa": "3.9/4.0", "honors": ""},
+            {"institution": "IIT", "degree": "MTech", "year": "2021", "gpa": "8.6", "honors": None},
+            {"institution": "NIT", "degree": "BE", "year": "2012", "gpa": "8.1", "honors": " 8.1"},
+            {"institution": "VIT", "degree": "BCA", "year": "2010", "honors": ["Dean's List"]},
+        ],
+    }
+    result = await parse_resume_text("<resume text>", _provider_returning(payload))
+    edu = result["education"]
+    assert edu[0]["honors"] == "First Class with Distinction"
+    # Blank, missing, a repeat of the GPA, or not text: no key at all.
+    assert all("honors" not in e for e in edu[1:])
+    assert edu[0]["gpa"] == "78%" and edu[3]["gpa"] == "8.1"
