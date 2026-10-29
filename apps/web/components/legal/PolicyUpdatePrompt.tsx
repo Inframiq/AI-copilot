@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Scales } from "@phosphor-icons/react";
 import { apiClient, type PolicyAcceptance } from "@/lib/api-client";
 import { leaveSignedOut, signOutHere } from "@/lib/supabase";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
+import { usePolicyStore } from "@/stores/policy-store";
 
 /**
  * Asks a signed-in user to agree to the current Terms and Privacy Policy
@@ -14,18 +15,25 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
  * Privacy Policy promises not to rely on where consent is needed.
  *
  * Says nothing while loading or if the check fails: an API hiccup must not
- * lock anyone out of their own work.
+ * lock anyone out of their own work. A feature that needs agreement to a
+ * newer version is refused by the server until then (app/core/policy.py);
+ * each refusal checks again here, so this asks even when the first check
+ * failed or a click beat it.
  */
 export function PolicyUpdatePrompt() {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const { data } = useQuery<PolicyAcceptance>({
+  const { data, refetch } = useQuery<PolicyAcceptance>({
     queryKey: ["policyAcceptance"],
     queryFn: () => apiClient.getPolicyAcceptance(),
     staleTime: Infinity,
     retry: false,
   });
+  const refusals = usePolicyStore((s) => s.refusals);
+  useEffect(() => {
+    if (refusals > 0) void refetch();
+  }, [refusals, refetch]);
 
   if (!data) return null;
   if (data.terms_version === TERMS_VERSION && data.privacy_version === PRIVACY_VERSION) return null;

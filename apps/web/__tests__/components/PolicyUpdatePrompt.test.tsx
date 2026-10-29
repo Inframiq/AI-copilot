@@ -18,6 +18,8 @@ vi.mock("@/lib/api-client", () => ({
 vi.mock("@/lib/supabase", () => ({ createBrowserClient: () => ({ auth: { signOut } }), signOutHere: () => signOut(), leaveSignedOut: () => leave() }));
 
 import { PolicyUpdatePrompt } from "../../components/legal/PolicyUpdatePrompt";
+import { reportPolicyRefusal, usePolicyStore } from "../../stores/policy-store";
+import { act } from "@testing-library/react";
 
 function renderPrompt() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -78,5 +80,26 @@ describe("PolicyUpdatePrompt", () => {
     renderPrompt();
     await waitFor(() => expect(getPolicyAcceptance).toHaveBeenCalled());
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  // The server refuses a feature that needs newer terms (app/core/policy.py).
+  // The prompt then checks again, so it asks even if its first check failed
+  // or a click beat it.
+  it("asks when the server refuses a feature for want of agreement, even after a failed first check", async () => {
+    usePolicyStore.setState({ refusals: 0 });
+    getPolicyAcceptance.mockRejectedValueOnce(new Error("API down"));
+    renderPrompt();
+    await waitFor(() => expect(getPolicyAcceptance).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    getPolicyAcceptance.mockResolvedValue({ terms_version: "2026-01-01", privacy_version: "2026-01-01", accepted_at: null });
+    act(() => reportPolicyRefusal({ code: "policy_update_required", message: "Agree to the updated Terms" }));
+    expect(await screen.findByText("We've updated our terms")).toBeTruthy();
+  });
+
+  it("ignores other refusals", () => {
+    usePolicyStore.setState({ refusals: 0 });
+    reportPolicyRefusal("Admin access required");
+    reportPolicyRefusal({ code: "something_else" });
+    expect(usePolicyStore.getState().refusals).toBe(0);
   });
 });
