@@ -214,7 +214,7 @@ export default function ProfilePage() {
     }
     requestAnimationFrame(() => {
       const card = document.getElementById(`profile-section-${section}`);
-      card?.scrollIntoView({ behavior: "smooth", block: "center" });
+      card?.scrollIntoView?.({ behavior: "smooth", block: "center" });
       card?.querySelector<HTMLElement>("input, textarea")?.focus({ preventScroll: true });
     });
   }
