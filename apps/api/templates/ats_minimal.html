@@ -123,7 +123,7 @@
   <h2>Education</h2>
   {% for edu in education %}
   <div class="edu-row"><span class="edu-degree" data-field="education.{{ loop.index0 }}.degree">{{ edu.degree }}</span> <span class="job-dates">| <span data-field="education.{{ loop.index0 }}.year">{{ edu.year }}</span></span></div>
-  <div class="edu-institution" data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</div>
+  {% if edu.gpa or edu.honors %}<div class="edu-institution"><span data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</span>{% if edu.gpa %} &middot; {{ edu.gpa | gpa_label }}<span data-field="education.{{ loop.index0 }}.gpa">{{ edu.gpa }}</span>{% endif %}{% if edu.honors %} &middot; <span data-field="education.{{ loop.index0 }}.honors">{{ edu.honors }}</span>{% endif %}</div>{% else %}<div class="edu-institution" data-field="education.{{ loop.index0 }}.institution">{{ edu.institution }}</div>{% endif %}
   {% endfor %}
   {% endif %}
 {% endmacro %}

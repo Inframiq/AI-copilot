@@ -317,7 +317,7 @@ export function resumeContentToCareerProfileInput(
           field: "",
           year: e.year,
           gpa: e.gpa ?? "",
-          honors: "",
+          honors: e.honors ?? "",
         }))
       : [],
     certifications: Array.isArray(c.certifications)
@@ -372,6 +372,7 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
       degree: `${e.degree}${e.field ? ` in ${e.field}` : ""}`,
       year: e.year,
       gpa: e.gpa || undefined,
+      ...(e.honors?.trim() ? { honors: e.honors.trim() } : {}),
     })),
     skills: profile.skills,
     // "Name — Issuer (Year)", the year as a standard résumé lists it.

@@ -204,6 +204,20 @@ _jinja_env.filters["phone_link"] = _phone_link
 _jinja_env.filters["url_link"] = _url_link
 
 
+def _gpa_label(value: str | None) -> str:
+    """"GPA " before a bare grade ("8.6", "3.9/4.0"), so it reads as one;
+    nothing when the value already says what it is ("CGPA 8.6", "85%",
+    "First Class"). Printed outside the editable value, which stays the
+    grade as written."""
+    text = (value or "").strip()
+    if not text or "%" in text or re.search(r"[A-Za-z]", text):
+        return ""
+    return "GPA "
+
+
+_jinja_env.filters["gpa_label"] = _gpa_label
+
+
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB — a portrait photo has no business being bigger
 
 

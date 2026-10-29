@@ -126,7 +126,10 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     });
     (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "r1", title: "Jane's Resume", template_id: "ats_modern",
-      content: { contact: { name: "Jane Parsed" }, skills: ["Python"], awards: ["Spot Award"] },
+      content: {
+        contact: { name: "Jane Parsed" }, skills: ["Python"], awards: ["Spot Award"],
+        education: [{ institution: "GITAM", degree: "B.Tech", year: "2019", gpa: "8.6/10", honors: "Dean's List" }],
+      },
     });
     global.fetch = vi.fn().mockResolvedValue({
       ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
@@ -142,6 +145,9 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(apiClient.getOriginalResumeFile).toHaveBeenCalledWith("r1");
     // Awards fill the profile's own Awards section — no longer Miscellaneous.
     expect(await screen.findByRole("textbox", { name: "Awards 1" })).toHaveValue("Spot Award");
+    // An education's grade and honors come across with it.
+    expect(screen.getByPlaceholderText("e.g. 3.8/4.0 or 8.5/10")).toHaveValue("8.6/10");
+    expect(screen.getByPlaceholderText(/Magna Cum Laude/)).toHaveValue("Dean's List");
   });
 
   it("prompts before leaving once the form has unsaved edits", async () => {

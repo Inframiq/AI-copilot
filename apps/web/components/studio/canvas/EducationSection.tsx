@@ -87,6 +87,38 @@ export function EducationSection({ focusIndex }: { focusIndex?: number }) {
                 className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               />
             </div>
+            {/* Printed after the year ("· GPA 8.6/10 · First Class with
+                Distinction"), as a standard résumé shows them. */}
+            <div className="flex flex-col gap-xs">
+              <label htmlFor={`builder-edu-gpa-${i}`} className="text-label-sm text-on-surface-variant">GPA / CGPA / %</label>
+              <input
+                id={`builder-edu-gpa-${i}`}
+                type="text"
+                value={edu.gpa ?? ""}
+                onChange={(e) => {
+                  const updated = [...content.education];
+                  updated[i] = { ...updated[i], gpa: e.target.value };
+                  updateContent({ education: updated });
+                }}
+                placeholder="e.g. 8.6/10 or 3.8/4.0"
+                className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+            </div>
+            <div className="flex flex-col gap-xs">
+              <label htmlFor={`builder-edu-honors-${i}`} className="text-label-sm text-on-surface-variant">Honors</label>
+              <input
+                id={`builder-edu-honors-${i}`}
+                type="text"
+                value={edu.honors ?? ""}
+                onChange={(e) => {
+                  const updated = [...content.education];
+                  updated[i] = { ...updated[i], honors: e.target.value };
+                  updateContent({ education: updated });
+                }}
+                placeholder="e.g. First Class with Distinction"
+                className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+            </div>
           </div>
         </div>
       ))}

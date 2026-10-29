@@ -272,6 +272,22 @@ describe("career-profile-client", () => {
       expect(result.certifications).toEqual(["AWS SAA — AWS (2025)"]);
     });
 
+    // The templates print honors after the year and GPA; a blank one stays
+    // off the résumé so no separator prints with nothing after it.
+    it("carries an education's honors onto the résumé, and leaves a blank one off", () => {
+      const withHonors = profileToResumeContent({
+        ...SAMPLE_PROFILE,
+        education: [
+          { id: "ed1", institution: "MIT", degree: "BSc", field: "CS", year: "2025", gpa: "3.9/4.0", honors: "  Summa Cum Laude " },
+          { id: "ed2", institution: "MIT", degree: "MSc", field: "", year: "2026", honors: "  " },
+        ],
+      }) as any;
+      expect(withHonors.education[0]).toEqual({
+        institution: "MIT", degree: "BSc in CS", year: "2025", gpa: "3.9/4.0", honors: "Summa Cum Laude",
+      });
+      expect("honors" in withHonors.education[1]).toBe(false);
+    });
+
     it("maps projects, splitting the description into bullets", () => {
       const result = profileToResumeContent(SAMPLE_PROFILE) as any;
       expect(result.projects[0]).toEqual({
@@ -376,6 +392,21 @@ describe("career-profile-client", () => {
       expect(result.experience[0].location).toBe("Berlin, DE");
       // Absent upstream becomes blank here, not undefined — the form binds to it.
       expect(result.experience[1].location).toBe("");
+    });
+  });
+
+  describe("the education honors round trip", () => {
+    it("survives résumé -> profile -> résumé", () => {
+      const content = {
+        contact: { name: "Jane Doe", email: "jane@example.com" },
+        experience: [],
+        education: [{ institution: "GITAM", degree: "B.Tech", year: "2019", gpa: "8.6/10", honors: "First Class with Distinction" }],
+        skills: [],
+      } as any;
+      const profile = resumeContentToCareerProfileInput(content, null) as any;
+      expect(profile.education[0].honors).toBe("First Class with Distinction");
+      const back = profileToResumeContent(profile) as any;
+      expect(back.education[0]).toMatchObject({ gpa: "8.6/10", honors: "First Class with Distinction" });
     });
   });
 

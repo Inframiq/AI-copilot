@@ -58,6 +58,8 @@ def build_resume_text(resume_content: dict) -> tuple[str, str]:
     for edu in resume_content.get("education") or []:
         parts.append(str(edu.get("degree") or ""))
         parts.append(str(edu.get("institution") or ""))
+        # Printed after the year, so evidence like any other line.
+        parts.append(str(edu.get("honors") or ""))
 
     skills: list[str] = [str(s) for s in (resume_content.get("skills") or []) if s]
     parts.extend(skills)
