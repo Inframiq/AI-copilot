@@ -275,27 +275,28 @@ describe("career-profile-client", () => {
         expect(updateCalls).toEqual([]);
       });
 
-      it("on a replace, swaps the last upload's waiting points for the new ones; typed and filed ones stay", async () => {
-        const waiting = { ...point("Old duty."), heading: "Key Responsibilities" };
-        const typed = point("My own note.");
-        const filed = { ...point("Filed duty."), section: "experience" } as MiscPoint;
-        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [waiting, typed, filed] }, error: null };
-        await fileUnplacedPoints(duties, { replace: true });
+      it("removes only the points chosen with the upload, then files the new ones", async () => {
+        const old1 = { ...point("Old duty."), heading: "Key Responsibilities" };
+        const old2 = { ...point("Other duty."), heading: "Key Responsibilities" };
+        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [old1, old2, point("Mine.")] }, error: null };
+        await fileUnplacedPoints(duties, { drop: [old1.id] });
         const saved = (updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous;
-        expect(saved.map((p) => p.text)).toEqual(["Point My own note.", "Point Filed duty.", "Monitored SOC alerts.", "Point a"]);
+        expect(saved.map((p) => p.text)).toEqual(["Point Other duty.", "Point Mine.", "Monitored SOC alerts.", "Point a"]);
       });
 
-      it("on a replace with no loose points, still clears the last upload's", async () => {
-        const waiting = { ...point("Old duty."), heading: "Key Responsibilities" };
-        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [waiting, point("Mine.")] }, error: null };
-        await fileUnplacedPoints([], { replace: true });
+      it("keeps every old point when none is chosen", async () => {
+        const old = { ...point("Old duty."), heading: "Key Responsibilities" };
+        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [old] }, error: null };
+        await fileUnplacedPoints([{ heading: "Duties", points: ["New."] }]);
+        expect((updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous.map((p) => p.text))
+          .toEqual(["Point Old duty.", "New."]);
+      });
+
+      it("removes the chosen points even when the new résumé has none", async () => {
+        const old = { ...point("Old duty."), heading: "Key Responsibilities" };
+        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [old, point("Mine.")] }, error: null };
+        await fileUnplacedPoints([], { drop: [old.id] });
         expect((updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous.map((p) => p.text)).toEqual(["Point Mine."]);
-      });
-
-      it("on a replace with nothing to swap, saves nothing", async () => {
-        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [point("Mine.")] }, error: null };
-        expect(await fileUnplacedPoints([], { replace: true })).toBeNull();
-        expect(updateCalls).toEqual([]);
       });
     });
   });

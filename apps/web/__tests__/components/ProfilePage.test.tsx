@@ -9,14 +9,15 @@ vi.mock("@/components/resume/ResumePreviewModal", () => ({ ResumePreviewModal: (
 
 // vi.hoisted keeps these fn refs available inside the hoisted vi.mock factories
 // below without tripping the "cannot access before initialization" TDZ error.
-const { getCareerProfile, upsertCareerProfile, uploadProfilePhoto } = vi.hoisted(() => ({
+const { getCareerProfile, upsertCareerProfile, uploadProfilePhoto, fileUnplacedPoints } = vi.hoisted(() => ({
   getCareerProfile: vi.fn(),
   upsertCareerProfile: vi.fn(),
   uploadProfilePhoto: vi.fn(),
+  fileUnplacedPoints: vi.fn(),
 }));
 vi.mock("@/lib/career-profile-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/career-profile-client")>();
-  return { ...actual, getCareerProfile, upsertCareerProfile };
+  return { ...actual, getCareerProfile, upsertCareerProfile, fileUnplacedPoints };
 });
 
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto, uploadResumePhoto: vi.fn() }));
@@ -122,6 +123,7 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.saveUploadedResume as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "r1", title: "Jane Parsed's Resume", template_id: "ats_modern", content: {},
     });
+    fileUnplacedPoints.mockResolvedValue(null);
   });
 
   it("Re-parse re-runs extraction on the stored file, in place, without a re-upload", async () => {
@@ -208,6 +210,75 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
     expect(apiClient.saveUploadedResume).toHaveBeenCalledWith(file, expect.any(Object), "ats_clean", undefined);
     expect(upsertCareerProfile.mock.calls[0][0].master_resume_id).toBe("new1");
+  });
+
+  it("keeps the previous résumé's Miscellaneous points unless marked, and shows the new ones", async () => {
+    fileUnplacedPoints.mockResolvedValue(null);
+    getCareerProfile.mockResolvedValue({
+      ...withMasterResume,
+      miscellaneous: [
+        { id: "old1", text: "Old duty one.", section: "miscellaneous", heading: "Key Responsibilities", created_at: "" },
+        { id: "old2", text: "Old duty two.", section: "miscellaneous", heading: "Key Responsibilities", created_at: "" },
+        { id: "mine", text: "My own note.", section: "miscellaneous", created_at: "" },
+      ],
+    });
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", content: { contact: { name: "Jane" }, skills: [], education: [] },
+      unplaced: [{ heading: "Roles and Responsibilities", points: ["New duty."] }],
+    });
+    renderPage();
+    await screen.findByText("Jane's Resume");
+    expect(screen.queryByRole("region", { name: "Points from the new résumé" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /remove on save/i })).toBeNull();
+    await userEvent.upload(
+      document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!,
+      new File(["%PDF"], "new.pdf", { type: "application/pdf" }),
+    );
+
+    const notice = await screen.findByRole("region", { name: "Points from the new résumé" });
+    expect(notice).toHaveTextContent("The previous résumé's points stay unless marked to remove.");
+    expect(notice).toHaveTextContent("Added on saveNew duty. · Roles and Responsibilities");
+    // Only the previous résumé's points can be marked; a typed note can't.
+    expect(screen.getByRole("button", { name: "Remove on save: Old duty one." })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove on save: My own note." })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Remove on save: Old duty one." }));
+    expect(screen.getByText("Removed on save")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep: Old duty one." })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(fileUnplacedPoints).toHaveBeenCalled());
+    expect(fileUnplacedPoints).toHaveBeenCalledWith(
+      [{ heading: "Roles and Responsibilities", points: ["New duty."] }], { drop: ["old1"] },
+    );
+  });
+
+  it("removes all of the previous résumé's points only when asked", async () => {
+    fileUnplacedPoints.mockResolvedValue(null);
+    getCareerProfile.mockResolvedValue({
+      ...withMasterResume,
+      miscellaneous: [
+        { id: "old1", text: "Old duty one.", section: "miscellaneous", heading: "Key Responsibilities", created_at: "" },
+        { id: "old2", text: "Old duty two.", section: "miscellaneous", heading: "Key Responsibilities", created_at: "" },
+      ],
+    });
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", content: { contact: { name: "Jane" }, skills: [], education: [] }, unplaced: [],
+    });
+    renderPage();
+    await screen.findByText("Jane's Resume");
+    await userEvent.upload(
+      document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!,
+      new File(["%PDF"], "new.pdf", { type: "application/pdf" }),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Remove all from the previous résumé on save" }));
+    expect(screen.getAllByText("Removed on save")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Keep all from the previous résumé" }));
+    expect(screen.queryByText("Removed on save")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Remove all from the previous résumé on save" }));
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(fileUnplacedPoints).toHaveBeenCalledWith([], { drop: ["old1", "old2"] }));
   });
 
   it("doesn't save the profile when the résumé couldn't be saved", async () => {

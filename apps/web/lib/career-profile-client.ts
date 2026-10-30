@@ -258,18 +258,16 @@ export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfi
  * résumé is the same either way. Returns the saved profile, or null when
  * nothing changed.
  *
- * `replace`: this upload replaces the profile's résumé (the Profile's
- * Replace and Re-parse), so the last upload's points still waiting under
- * their heading go first. Points typed in, or already filed by the user (a
- * filed point loses its heading), stay. */
+ * `drop`: points the user chose to remove with this upload (the Profile's
+ * Replace: the previous résumé's points, kept unless chosen). */
 export async function fileUnplacedPoints(
   sections: UnplacedSection[] | undefined,
-  { replace = false }: { replace?: boolean } = {},
+  { drop = [] }: { drop?: string[] } = {},
 ): Promise<CareerProfile | null> {
-  if (!sections?.length && !replace) return null;
+  if (!sections?.length && !drop.length) return null;
   const current = await getCareerProfile();
   if (!current || !Array.isArray(current.miscellaneous)) return null;
-  const kept = replace ? current.miscellaneous.filter((p) => typeof p.heading !== "string") : current.miscellaneous;
+  const kept = current.miscellaneous.filter((p) => !drop.includes(p.id));
   const have = new Set(kept.map((p) => p.text.trim().toLowerCase()));
   const now = new Date().toISOString();
   const fresh: MiscPoint[] = [];
