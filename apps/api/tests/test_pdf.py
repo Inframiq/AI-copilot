@@ -887,9 +887,11 @@ def test_email_link_empty_renders_nothing():
     assert _email_link(None) == ""
 
 
-def test_phone_link_normalizes_digits_but_displays_original_formatting():
-    html = _phone_link("(555) 123-4567")
-    assert html == '<a href="tel:5551234567">(555) 123-4567</a>'
+def test_phone_link_dials_the_digits_and_shows_the_standard_form():
+    # Shown the one standard way (services/phone.py), so a résumé saved
+    # before that prints clean too: no brackets or hyphens around the code.
+    assert _phone_link("(555) 123-4567") == '<a href="tel:5551234567">555 123 4567</a>'
+    assert _phone_link("(+91)-9966009727") == '<a href="tel:+919966009727">+91 99660 09727</a>'
 
 
 def test_phone_link_keeps_leading_plus_for_international_numbers():

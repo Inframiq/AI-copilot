@@ -69,6 +69,7 @@ import {
   fitProfileSections,
   resumeSectionsToProfile,
   sectionHasContent,
+  wordCapError,
   type ExtraSection,
   type ProfileSections,
 } from "@/lib/profile-sections";
@@ -76,7 +77,8 @@ import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
-import { contactDifferences, lockedEmail, mergeParsedContact, type ContactDifference, type FillableContactField } from "@/lib/contact-lock";
+import { contactDifferences, lockedEmail, mergeParsedContact, type ContactDifference } from "@/lib/contact-lock";
+import { ContactOffers } from "@/components/profile/ContactOffers";
 import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
@@ -87,6 +89,7 @@ import { endsBeforeStart, isPresent, tidyDate } from "@/lib/month-year";
 import { canonicalFor, findRepeat } from "@/lib/suggest/client";
 import { repeatedAt } from "@/lib/duplicates";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
+import { tidyPhone } from "@/lib/phone";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -108,11 +111,6 @@ const emptyProject = (): ProjectEntry => ({
 });
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-const CONTACT_FIELD_LABEL: Record<FillableContactField, string> = {
-  name: "Full name", phone: "Phone", location: "Location",
-  linkedin: "LinkedIn", github: "GitHub", website: "Website",
-};
-
 export default function ProfilePage() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -214,7 +212,12 @@ export default function ProfilePage() {
   }, [loading, formSnapshot]);
 
   function hydrate(profile: CareerProfile) {
-    setContact({ ...emptyContact(), ...profile.contact });
+    // A phone saved before lib/phone shows in the standard form, which the
+    // next save stores.
+    setContact({
+      ...emptyContact(), ...profile.contact,
+      ...(profile.contact.phone ? { phone: tidyPhone(profile.contact.phone) } : {}),
+    });
     setRoleStatus(profile.role_status ?? "");
     setHeadline(profile.headline ?? "");
     setSkills(profile.skills);
@@ -297,6 +300,9 @@ export default function ProfilePage() {
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
     setError(null); setSaveOk(false);
+    // An uploaded summary past 80 words is shown whole; it saves once trimmed.
+    const overCap = wordCapError(sections);
+    if (overCap) { setError(overCap); return false; }
     // A LinkedIn or GitHub link typed or uploaded here has to be a profile
     // link. One saved before the rule, left as it is, still saves (the
     // database allows it too) — it's shown as needing a fix.
@@ -753,37 +759,22 @@ export default function ProfilePage() {
       {/* ── Contact information ───────────────────────────────────────────── */}
       <section className={cardCls}>
         <SectionHeader title="Contact Information" />
-        {contactOffers.length > 0 && (
-          <div role="region" aria-label="Details from the uploaded résumé"
-            className="flex flex-col gap-xs rounded-xl border border-primary/25 bg-primary/5 p-sm">
-            <div className="flex items-center justify-between gap-sm">
-              <p className="text-body-sm text-on-surface">The uploaded résumé shows different details.</p>
-              <button type="button" onClick={() => setContactOffers([])}
-                className="shrink-0 text-label-sm font-semibold text-on-surface-variant hover:text-on-surface">
-                Keep mine
-              </button>
-            </div>
-            <ul className="flex flex-col gap-xs">
-              {contactOffers.map(({ field, value }) => (
-                <li key={field} className="flex items-center justify-between gap-sm min-w-0">
-                  <span className="min-w-0 text-body-sm">
-                    <span className="text-on-surface-variant">{CONTACT_FIELD_LABEL[field]}: </span>
-                    <span className="break-all text-on-surface">{value}</span>
-                  </span>
-                  <button type="button" aria-label={`Use ${value} as ${CONTACT_FIELD_LABEL[field]}`}
-                    onClick={() => {
-                      const tidy = field === "linkedin" || field === "github" ? tidySocialLink(field, value) : null;
-                      setContact(p => ({ ...p, [field]: tidy || value }));
-                      setContactOffers(o => o.filter(d => d.field !== field));
-                    }}
-                    className="shrink-0 rounded-full bg-primary/10 px-sm py-xs text-label-sm font-semibold text-primary hover:bg-primary/15">
-                    Use this
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <ContactOffers
+          offers={contactOffers}
+          contact={contact}
+          onUse={(picked) => {
+            setContact(p => ({
+              ...p,
+              ...Object.fromEntries(picked.map(({ field, value }) => [
+                field,
+                field === "phone" ? tidyPhone(value)
+                  : (field === "linkedin" || field === "github" ? tidySocialLink(field, value) : null) || value,
+              ])),
+            }));
+            setContactOffers(o => o.filter(d => !picked.includes(d)));
+          }}
+          onDismiss={() => setContactOffers([])}
+        />
         <div className="grid grid-cols-2 gap-x-sm sm:gap-x-lg gap-y-sm sm:gap-y-md">
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>
@@ -815,8 +806,10 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><Phone size={14} className="text-primary/70" /> Phone Number</label>
-            <input value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
-              placeholder="+1 (555) 000-0000" className={inputCls} />
+            <input aria-label="Phone number" type="tel" value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
+              // In the standard form on leaving the field (lib/phone).
+              onBlur={e => { const tidy = tidyPhone(e.target.value); if (tidy !== e.target.value) setContact(p => ({ ...p, phone: tidy })); }}
+              placeholder="+91 98765 43210" className={inputCls} />
           </div>
           <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}><MapPin size={14} className="text-primary/70" /> Location</label>

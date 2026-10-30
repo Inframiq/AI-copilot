@@ -7,6 +7,7 @@ from urllib.parse import unquote, urlparse
 from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
+from app.services.phone import tidy_phone
 from app.services.rich_text import sanitize_inline
 from app.services.plain_text import plain_deep, plain_text
 from app.services import sandbox
@@ -157,11 +158,14 @@ def _email_link(email: str) -> Markup:
 
 
 def _phone_link(phone: str) -> Markup:
-    """tel: link — dials the normalized digits, displays the original
-    formatting. Falls back to plain (escaped) text if nothing dialable
-    survives normalization, e.g. a phone field that's actually free text."""
+    """tel: link — dials the normalized digits, displays the number in its
+    standard form (services/phone.py), so a résumé saved before that prints
+    "+91 99660 09727", not "(+91)-9966009727". Falls back to plain (escaped)
+    text if nothing dialable survives normalization, e.g. a phone field
+    that's actually free text."""
     if not phone:
         return Markup("")
+    phone = tidy_phone(phone)
     digits = _tel_href(phone)
     if not digits:
         return Markup(escape(phone))

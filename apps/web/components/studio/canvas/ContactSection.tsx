@@ -4,6 +4,7 @@ import { templateRequiresPhoto } from "@/lib/resume-templates";
 import { useAvatarSrc } from "@/lib/avatar-url";
 import type { ResumeContent } from "@career-copilot/types";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
+import { tidyPhone } from "@/lib/phone";
 import { SuggestInput } from "@/components/ui/SuggestInput";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
@@ -111,7 +112,13 @@ export function ContactSection() {
                             updateContent({ contact: { ...content.contact, [social]: tidy } });
                           }
                         }
-                      : undefined
+                      : key === "phone"
+                        // "(+91)-9966009727" → "+91 99660 09727" (lib/phone).
+                        ? (e) => {
+                            const tidy = tidyPhone(e.target.value);
+                            if (tidy !== e.target.value) updateContent({ contact: { ...content.contact, phone: tidy } });
+                          }
+                        : undefined
                   }
                   placeholder={social ? `${social}.com/${social === "linkedin" ? "in/your-name" : "your-username"}` : undefined}
                   aria-invalid={bad || undefined}

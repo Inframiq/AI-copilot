@@ -147,6 +147,13 @@ describe("career-profile-client", () => {
       expect(upsertCalls[0].opts).toEqual({ onConflict: "user_id" });
     });
 
+    it("saves the phone in its standard form, however it was typed", async () => {
+      queryResult = { data: SAMPLE_PROFILE, error: null };
+      const { user_id: _uid, created_at: _c, updated_at: _u, ...input } = SAMPLE_PROFILE;
+      await upsertCareerProfile({ ...input, contact: { ...input.contact, phone: "(+91)-9966009727" } });
+      expect((upsertCalls[0].payload as any).contact.phone).toBe("+91 99660 09727");
+    });
+
     it("saves keyboard text: no curly quotes, long dashes or odd spaces", async () => {
       queryResult = { data: SAMPLE_PROFILE, error: null };
       const { user_id: _uid, created_at: _c, updated_at: _u, ...input } = SAMPLE_PROFILE;

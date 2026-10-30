@@ -97,6 +97,23 @@ describe("saving a résumé open on more than one device", () => {
     expect(updateResume.mock.calls[1][1].content?.skills).toEqual(["Rust"]);
   });
 
+  it("a summary past 80 words isn't saved: the edits stay and the header says why", async () => {
+    load();
+    const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
+    useResumeStore.getState().updateContent({ summary: long });
+    await expect(useResumeStore.getState().saveNow()).rejects.toThrow(/330 words/);
+    expect(updateResume).not.toHaveBeenCalled();
+    expect(useResumeStore.getState().saveError).toBe("The summary is 330 words. Trim it to 80 or fewer to save.");
+    expect(useResumeStore.getState().isDirty).toBe(true);
+
+    // Trimmed, it saves.
+    updateResume.mockResolvedValueOnce(saved(V2));
+    useResumeStore.getState().updateContent({ summary: "Backend engineer." });
+    await useResumeStore.getState().saveNow();
+    expect(updateResume).toHaveBeenCalledTimes(1);
+    expect(useResumeStore.getState().saveError).toBeNull();
+  });
+
   it("a refused save opens the conflict instead of an error, and keeps the edits unsaved", async () => {
     load();
     updateResume.mockRejectedValueOnce(changedOnAnotherDevice(V2));

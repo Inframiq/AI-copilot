@@ -15,6 +15,7 @@ import {
 } from "@/lib/career-profile-client";
 import { PlansComparison } from "@/components/plans/PlansComparison";
 import { mergeParsedContact } from "@/lib/contact-lock";
+import { tidyPhone } from "@/lib/phone";
 import { tidyContactLinks } from "@/lib/social-links";
 import { UpgradeModal } from "@/components/plans/UpgradeModal";
 
@@ -173,7 +174,8 @@ export default function OnboardingPage() {
             <div className="flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Phone size={14} /> Phone Number <span className="font-normal">(optional)</span></label>
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 (555) 000-0000" className={inputCls} />
+                onBlur={(e) => setPhone(tidyPhone(e.target.value))}
+                placeholder="+91 98765 43210" className={inputCls} />
             </div>
             <div className="flex flex-col gap-xs">
               <label htmlFor="onboarding-experience-level" className="text-label-sm text-on-surface-variant flex items-center gap-xs"><Briefcase size={14} /> Experience Level</label>

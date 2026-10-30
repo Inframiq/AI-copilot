@@ -45,7 +45,7 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
         {count} / {maxWords} words
       </span>
       {count > maxWords && (
-        <p className="text-caption text-error">Longer than {maxWords} words. Trim it to keep it quick to read.</p>
+        <p className="text-caption text-error">Longer than {maxWords} words. Trim it to save.</p>
       )}
     </div>
   );

@@ -174,13 +174,37 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     const offers = await screen.findByRole("region", { name: "Details from the uploaded résumé" });
     // The name differs, so it's offered; the phone is the same number; the
     // empty location just fills; the email is never offered.
-    expect(offers).toHaveTextContent("Full name: Jane Smith");
-    expect(offers).not.toHaveTextContent("9876543210");
+    // Each beside the profile's own, to compare without scrolling.
+    expect(offers).toHaveTextContent("Full nameProfileJaneRésuméJane Smith");
+    expect(offers).not.toHaveTextContent("98765");
     expect(offers).not.toHaveTextContent("old@work.com");
     expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane");
 
     await userEvent.click(screen.getByRole("button", { name: "Use Jane Smith as Full name" }));
     expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane Smith");
+    expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
+  });
+
+  it("takes every offered detail at once with Use all", async () => {
+    getCareerProfile.mockResolvedValue({
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210" },
+    });
+    (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
+    });
+    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+      content: { contact: { name: "Jane Smith", phone: "(+91)-9123456780" }, skills: [], education: [] },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
+    }) as unknown as typeof fetch;
+
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use all" }));
+    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane Smith");
+    expect(screen.getByRole("textbox", { name: "Phone number" })).toHaveValue("+91 91234 56780");
     expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
   });
 
@@ -315,6 +339,20 @@ describe("My Profile — every résumé section", () => {
     const saved = await save();
     expect(saved.awards).toEqual([]);
     expect(saved.summary).toBe("Engineer.");
+  });
+
+  it("shows an uploaded summary past 80 words whole, and won't save it until it's trimmed", async () => {
+    const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
+    getCareerProfile.mockResolvedValue(profile({ summary: long }));
+    renderPage();
+    await screen.findByRole("heading", { name: "Summary" });
+    const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
+    expect(summary.value).toBe(long);
+    expect(screen.getByText("330 / 80 words")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByText("The summary is 330 words. Trim it to 80 or fewer to save.")).toBeInTheDocument();
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
   });
 
   it("caps the summary at 80 words", async () => {

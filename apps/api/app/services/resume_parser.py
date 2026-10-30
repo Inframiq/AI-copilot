@@ -3,6 +3,7 @@ import re
 import json
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
+from app.services.phone import tidy_phone
 from app.services.plain_text import _BULLETS, plain_deep, plain_text
 from app.services.tailoring import _looks_like_a_skill
 # PDF text extraction lives apart so the sandbox can load it without the app
@@ -310,6 +311,8 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     # Ensure required keys exist
     if not isinstance(data.get("contact"), dict):
         data["contact"] = {"name": "", "email": ""}
+    if isinstance(data["contact"].get("phone"), str):
+        data["contact"]["phone"] = tidy_phone(data["contact"]["phone"])
     for key, required in _REQUIRED_TEXT.items():
         data[key] = [_with_text(e, required) for e in data.get(key) or [] if isinstance(e, dict)] \
             if isinstance(data.get(key), list) else []

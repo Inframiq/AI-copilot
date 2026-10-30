@@ -43,7 +43,7 @@ export function SummarySection() {
       {count >= SUMMARY_MAX_WORDS && (
         <p className="text-caption text-error">
           {count > SUMMARY_MAX_WORDS
-            ? `Longer than ${SUMMARY_MAX_WORDS} words. Trim it to keep it quick to read.`
+            ? `Longer than ${SUMMARY_MAX_WORDS} words, so this résumé isn't being saved. Trim it to save.`
             : `A tight, ${SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long one — trim before adding more.`}
         </p>
       )}

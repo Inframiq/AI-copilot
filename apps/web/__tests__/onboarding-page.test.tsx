@@ -49,7 +49,7 @@ async function advanceToPlanStep(user: ReturnType<typeof userEvent.setup>) {
   // Step 1 — details. Name/email prefill from the mocked getUser (async effect).
   await screen.findByText("Welcome to KripaX");
   await screen.findByDisplayValue("Jane"); // wait for the prefill effect to land
-  await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "5551234567");
+  await user.type(screen.getByPlaceholderText("+91 98765 43210"), "5551234567");
   await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
   await user.click(screen.getByRole("button", { name: /^continue$/i }));
   // Step 2 — résumé. Skip.
@@ -115,7 +115,7 @@ describe("Onboarding — a résumé never replaces the details from step 1", () 
     await screen.findByDisplayValue("Jane");
     // The email is the sign-in email, shown read-only.
     expect((screen.getByDisplayValue("jane@example.com") as HTMLInputElement).readOnly).toBe(true);
-    await user.type(screen.getByPlaceholderText("+1 (555) 000-0000"), "+91 98765 43210");
+    await user.type(screen.getByPlaceholderText("+91 98765 43210"), "+91 98765 43210");
     await user.selectOptions(screen.getByRole("combobox", { name: "Experience Level" }), "working");
     await user.click(screen.getByRole("button", { name: /^continue$/i }));
     await screen.findByText("Upload your resume");

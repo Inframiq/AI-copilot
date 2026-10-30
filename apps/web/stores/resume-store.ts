@@ -3,6 +3,7 @@ import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { apiClient, isResumeChanged } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import type { Resume, ResumeContent } from "@career-copilot/types";
+import { wordCapError } from "@/lib/profile-sections";
 
 const DEFAULT_LINE_SPACING = 1.25;
 const DEFAULT_PARAGRAPH_SPACING = 12;
@@ -395,6 +396,13 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       // Saving now would overwrite the other device's work, or be refused
       // again. The conflict popup is already asking which to keep.
       if (conflictUpdatedAt) throw new Error("This résumé was changed on another device.");
+      // A summary past 80 words (an upload's, shown whole) isn't saved until
+      // it's trimmed; the edits stay, unsaved, and the header says why.
+      const overCap = wordCapError(content);
+      if (overCap) {
+        set({ saveError: overCap });
+        throw new Error(overCap);
+      }
       set({ isSaving: true });
       try {
         const saved = await apiClient.updateResume(resumeId, {

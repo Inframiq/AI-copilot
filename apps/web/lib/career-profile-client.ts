@@ -10,6 +10,7 @@ import {
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { tidyContactLinks } from "@/lib/social-links";
+import { tidyPhone } from "@/lib/phone";
 import { plainDeep } from "@/lib/plain-text";
 import { isPresent as saysPresent, tidyDate } from "@/lib/month-year";
 
@@ -182,7 +183,10 @@ export async function upsertCareerProfile(input: CareerProfileInput): Promise<Ca
   // LinkedIn and GitHub in their standard form; one that isn't a profile
   // link is left for the database to refuse (migration 054), unless it's
   // an old one saved unchanged.
-  const row: Record<string, unknown> = { user_id: me, ...fields, contact: tidyContactLinks(fields.contact ?? {}) };
+  // The phone in its standard form too (lib/phone), however it was typed.
+  const links = tidyContactLinks(fields.contact ?? {});
+  const contact = links.phone ? { ...links, phone: tidyPhone(links.phone) } : links;
+  const row: Record<string, unknown> = { user_id: me, ...fields, contact };
   const fit = fitProfileSections(fields);
   for (const k of SECTION_KEYS) if (fields[k] !== undefined) row[k] = fit[k];
   const write = () => sb.from("career_profiles").upsert(row, { onConflict: "user_id" }).select().single();

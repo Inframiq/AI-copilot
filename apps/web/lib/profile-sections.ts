@@ -108,6 +108,23 @@ export function capWords(value: string, max: number): string {
   return words.length <= max ? value : words.slice(0, max).join(" ");
 }
 
+/** Why the summary or objective can't be saved yet: past its word cap. An
+ * uploaded résumé's longer text is shown whole, never cut, but a save waits
+ * until the person trims it — the Profile's Save and the Builder's autosave
+ * both refuse with this. Null when both fit. */
+export function wordCapError(s: { summary?: string | null; objective?: string | null }): string | null {
+  const count = (v?: string | null) => (v ?? "").trim().split(/\s+/).filter(Boolean).length;
+  const summary = count(s.summary);
+  if (summary > PROFILE_LIMITS.summaryWords) {
+    return `The summary is ${summary} words. Trim it to ${PROFILE_LIMITS.summaryWords} or fewer to save.`;
+  }
+  const objective = count(s.objective);
+  if (objective > PROFILE_LIMITS.objectiveWords) {
+    return `The objective is ${objective} words. Trim it to ${PROFILE_LIMITS.objectiveWords} or fewer to save.`;
+  }
+  return null;
+}
+
 /** What a word-capped box keeps when its text changes from `previous` to
  * `next`: up to `max` words as usual, and past that never more words than
  * were already there. Text that arrived longer (an uploaded résumé's
