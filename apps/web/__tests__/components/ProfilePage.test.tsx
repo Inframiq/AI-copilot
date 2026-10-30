@@ -208,6 +208,33 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
   });
 
+  it("saves with an offer unanswered as Keep mine, and closes the offers", async () => {
+    getCareerProfile.mockResolvedValue({
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com" },
+    });
+    (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
+    });
+    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+      content: { contact: { name: "Jane Smith" }, skills: [], education: [] },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
+    }) as unknown as typeof fetch;
+
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
+    const offers = await screen.findByRole("region", { name: "Details from the uploaded résumé" });
+    expect(offers).toHaveTextContent("Saving keeps the profile's details unless one is chosen here.");
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].contact.name).toBe("Jane");
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull());
+  });
+
   it("prompts before leaving once the form has unsaved edits", async () => {
     renderPage();
     const nameInput = await screen.findByPlaceholderText("Jane Smith");

@@ -356,6 +356,8 @@ export default function ProfilePage() {
       // the unsaved-changes guards stand down.
       savedSnapshotRef.current = formSnapshot;
       rememberSavedLinks(contact);
+      // An offer left unanswered was kept as the profile's own.
+      setContactOffers([]);
       // Deliberately NOT syncing this back into the resume's stored content:
       // profileToResumeContent reconstructs bullets from the profile form's
       // split Responsibilities/Achievements/Projects/Impact fields, which

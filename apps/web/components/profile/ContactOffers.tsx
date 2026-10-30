@@ -13,7 +13,8 @@ const LABEL: Record<FillableContactField, string> = {
  * Contact details an uploaded résumé prints differently from the profile
  * (lib/contact-lock contactDifferences), each beside the profile's own, to
  * take one at a time or all at once. Nothing changes unless one is chosen;
- * like every other edit here, a choice is saved with Save Profile.
+ * like every other edit here, a choice is saved with Save Profile. Saving
+ * without a choice is "Keep mine" (the page then closes the panel).
  */
 export function ContactOffers({ offers, contact, onUse, onDismiss }: {
   offers: ContactDifference[];
@@ -30,7 +31,7 @@ export function ContactOffers({ offers, contact, onUse, onDismiss }: {
         <FileArrowUp size={18} className="mt-[2px] shrink-0 text-primary" />
         <div className="min-w-0">
           <p className="text-label-md font-semibold text-on-surface">Different on the uploaded résumé</p>
-          <p className="text-caption text-on-surface-variant">Your profile keeps its own details unless you choose one.</p>
+          <p className="text-caption text-on-surface-variant">Saving keeps the profile's details unless one is chosen here.</p>
         </div>
       </div>
       <ul className="divide-y divide-outline-variant/30">
