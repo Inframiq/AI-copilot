@@ -34,7 +34,7 @@ import { FOCUS_RING } from "@/lib/focus";
 import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { useTailoringStore } from "@/stores/tailoring-store";
 import { useResumeStore } from "@/stores/resume-store";
-import type { CareerProfile } from "@/lib/career-profile-client";
+import { fileUnplacedPoints, type CareerProfile } from "@/lib/career-profile-client";
 import { careerProfileQuery, settled, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -288,6 +288,11 @@ export default function JDIndexPage() {
       const resume = await apiClient.parseResumeFile(overrideFile, "ats_clean");
       // Reading the PDF is a model call: it costs a credit.
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      // Points the résumé printed under no job wait in the profile's
+      // Miscellaneous, under their heading, for a later review to place.
+      fileUnplacedPoints(resume.unplaced)
+        .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
+        .catch(console.error);
       await queryClient.invalidateQueries({ queryKey: ["resumes"] });
       setOverrideResumeId(resume.id);
       setOverrideMode("none");

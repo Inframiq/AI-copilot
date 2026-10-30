@@ -95,6 +95,14 @@ export interface ResumeContent {
   section_order?: string[];
 }
 
+/** Points an uploaded résumé printed under no job ("Key Responsibilities"
+ *  after all the jobs), under the heading they're filed by. Not saved on the
+ *  résumé; they go to the profile's Miscellaneous. */
+export interface UnplacedSection {
+  heading: string;
+  points: string[];
+}
+
 export interface Resume {
   id: string;
   user_id: string;

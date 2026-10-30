@@ -273,12 +273,17 @@ _SKILL_PROSE_MARKERS = re.compile(
 )
 
 
+_SKILL_JOINERS = {"&", "and", "/", "+"}
+
+
 def _looks_like_a_skill(s: str) -> bool:
     """Reject prose that slipped past the LLM's own formatting rules — a
     process/responsibility description mistaken for a skill name, not a
     skill itself. Real skill names are short noun phrases; sentences and
     bullet fragments are not."""
-    words = s.split()
+    # A joiner ("&", "and", "/") isn't one of the words: "SIEM Monitoring &
+    # Log Analysis" names four things' worth, the same as without the "&".
+    words = [w for w in s.split() if w.lower() not in _SKILL_JOINERS]
     # Four, not six: the parse prompt has always told the model "1 to 4 words",
     # and the extra two let JD phrases through as skill chips reading like
     # sentences. "Google Cloud Platform" and "Stakeholder Management" fit.

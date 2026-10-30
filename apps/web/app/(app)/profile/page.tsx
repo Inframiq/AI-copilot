@@ -45,6 +45,7 @@ import {
   blankExperienceEntry,
   insertRoleAfter,
   moveExperience,
+  fileUnplacedPoints,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -370,6 +371,12 @@ export default function ProfilePage() {
       const resume = await apiClient.parseResumeFile(file, templateId, masterResumeId ?? undefined);
       // Reading the PDF is a model call: it costs a credit.
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      // Points the résumé printed under no job wait in the profile's
+      // Miscellaneous, under their heading, for a later review to place.
+      // Saved at once, like every Miscellaneous edit — not with the form.
+      fileUnplacedPoints(resume.unplaced)
+        .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
+        .catch(console.error);
       // Fully replace the form with the newly parsed resume — a "Replace"
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.

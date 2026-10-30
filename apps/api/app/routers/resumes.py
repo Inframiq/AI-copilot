@@ -11,7 +11,10 @@ from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
-from app.schemas.resume import ResumeCreate, ResumeUpdate, ResumeOut, PdfGenerateRequest, OriginalFileOut
+from app.schemas.resume import (
+    ResumeCreate, ResumeUpdate, ResumeOut, UploadedResumeOut, UnplacedSection, PdfGenerateRequest,
+    OriginalFileOut,
+)
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
@@ -682,7 +685,13 @@ async def generate_resume_endpoint(
         raise
 
 
-@router.post("/parse-upload", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
+def _uploaded(resume: Resume, unplaced: list[dict]) -> UploadedResumeOut:
+    out = UploadedResumeOut.model_validate(resume)
+    out.unplaced = [UnplacedSection(**g) for g in unplaced]
+    return out
+
+
+@router.post("/parse-upload", response_model=UploadedResumeOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 @ai_global_limit
 async def parse_and_create_resume(
@@ -802,6 +811,9 @@ async def parse_and_create_resume(
                 status_code=502,
                 detail="We couldn't read your résumé this time. Your credit was refunded — please try again.",
             )
+        # Points printed under no job go back to the page for the profile's
+        # Miscellaneous; the résumé keeps only what it printed in place.
+        unplaced = parsed.pop("unplaced", [])
 
         # Derive a sensible title from the candidate's name
         name = parsed.get("contact", {}).get("name", "").strip()
@@ -820,7 +832,7 @@ async def parse_and_create_resume(
                 _remove_stored_file(previous_path)
             await db.refresh(existing_resume)
             response.status_code = status.HTTP_200_OK
-            return existing_resume
+            return _uploaded(existing_resume, unplaced)
 
         await _claim_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
         title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
@@ -837,7 +849,7 @@ async def parse_and_create_resume(
         await db.commit()
         saved = True
         await db.refresh(resume)
-        return resume
+        return _uploaded(resume, unplaced)
     except Exception:
         if saved:
             raise

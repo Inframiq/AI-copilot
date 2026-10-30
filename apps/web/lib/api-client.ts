@@ -5,6 +5,7 @@ import { reportCreditRefusal } from "@/stores/credits-store";
 import { reportPolicyRefusal } from "@/stores/policy-store";
 import type {
   Resume,
+  UnplacedSection,
   JobDescription,
   JDStatus,
   AnalyzeOut,
@@ -277,7 +278,7 @@ export const apiClient = {
      * creating a new, orphaned one — used by the Profile page's "Replace"
      * flow so re-uploading doesn't leave the old resume dangling around. */
     resumeId?: string
-  ): Promise<Resume> =>
+  ): Promise<Resume & { unplaced?: UnplacedSection[] }> =>
     // A new résumé (no resumeId) can hit the limit — same ask-and-retry as
     // createResume. Replacing one in place never does.
     withResumeRoom(async () => {
@@ -297,7 +298,7 @@ export const apiClient = {
         if (res.status === 403) reportPolicyRefusal(err.detail);
         throw new ApiError(res.status, detailMessage(err.detail, "Upload failed"), err.detail);
       }
-      return res.json() as Promise<Resume>;
+      return res.json() as Promise<Resume & { unplaced?: UnplacedSection[] }>;
     }).then(
       // Every upload asks the person to check the headline the parser
       // read, so each caller gets the résumé back with it confirmed.

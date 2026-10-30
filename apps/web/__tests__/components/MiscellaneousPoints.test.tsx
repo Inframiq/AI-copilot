@@ -65,6 +65,22 @@ describe("MiscellaneousPoints", () => {
     await waitFor(() => expect(setMiscPoints).toHaveBeenLastCalledWith([{ ...b, section: "achievements" }]));
   });
 
+  it("lists an upload's loose points under the heading they were printed under", async () => {
+    const duty = { id: "d", text: "Monitored SOC alerts", section: "miscellaneous", heading: "Roles and Responsibilities", created_at: "" };
+    const note = { id: "n", text: "Mentors juniors", section: "miscellaneous", created_at: "" };
+    getCareerProfile.mockResolvedValue({ miscellaneous: [a, duty, note] });
+    renderList();
+    expect(await screen.findByRole("heading", { name: "Roles and Responsibilities" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Miscellaneous" })).toBeTruthy();
+
+    // Filed under a section, it's that section's now — the heading goes.
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByRole("combobox", { name: /Monitored SOC alerts/ }), "experience");
+    await waitFor(() => expect(setMiscPoints).toHaveBeenLastCalledWith([
+      a, { id: "d", text: "Monitored SOC alerts", section: "experience", created_at: "" }, note,
+    ]));
+  });
+
   it("explains an empty list", async () => {
     getCareerProfile.mockResolvedValue({ miscellaneous: [] });
     renderList();

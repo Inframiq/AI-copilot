@@ -379,6 +379,7 @@ async def test_parse_upload_creates_resume(ledger):
                     "experience": [],
                     "education": [],
                     "skills": [],
+                    "unplaced": [{"heading": "Roles and Responsibilities", "points": ["Monitored SOC alerts."]}],
                 }
             ),
         ), patch(
@@ -394,6 +395,11 @@ async def test_parse_upload_creates_resume(ledger):
         assert r.status_code == 201
         body = r.json()
         assert body["title"] == "Test Candidate's Resume"
+        # Points printed under no job come back for the profile's
+        # Miscellaneous, and are never saved on the résumé.
+        assert body["unplaced"] == [{"heading": "Roles and Responsibilities", "points": ["Monitored SOC alerts."]}]
+        saved = mock_session.add.call_args.args[0]
+        assert "unplaced" not in saved.content and "unplaced" not in body["content"]
         # The original PDF bytes are stored untouched, before AI parsing runs.
         mock_sb.storage.from_.assert_called_with("resumes")
         upload_call = mock_sb.storage.from_.return_value.upload.call_args

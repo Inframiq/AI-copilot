@@ -1,6 +1,6 @@
 "use client";
 import { createBrowserClient } from "@/lib/supabase";
-import type { ResumeContent, WorkProject } from "@career-copilot/types";
+import type { ResumeContent, UnplacedSection, WorkProject } from "@career-copilot/types";
 import { MAX_MISC_POINTS, type MiscPoint } from "@/lib/misc-points";
 import {
   EXTRA_SECTIONS,
@@ -244,6 +244,32 @@ export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfi
     );
   }
   return setMiscPoints(next);
+}
+
+/** Files an upload's loose points — printed under no job, like a "Key
+ * Responsibilities" section after all the jobs — in Miscellaneous under
+ * their heading, for the user to place in a later review. A point already
+ * there isn't added twice, and past the cap the rest aren't added. With no
+ * profile (or no Miscellaneous column) there's nowhere to keep them; the
+ * résumé is the same either way. Returns the saved profile, or null when
+ * nothing was added. */
+export async function fileUnplacedPoints(sections: UnplacedSection[] | undefined): Promise<CareerProfile | null> {
+  if (!sections?.length) return null;
+  const current = await getCareerProfile();
+  if (!current || !Array.isArray(current.miscellaneous)) return null;
+  const have = new Set(current.miscellaneous.map((p) => p.text.trim().toLowerCase()));
+  const now = new Date().toISOString();
+  const fresh: MiscPoint[] = [];
+  for (const { heading, points } of sections) {
+    for (const raw of points) {
+      const text = raw.trim();
+      if (!text || have.has(text.toLowerCase())) continue;
+      have.add(text.toLowerCase());
+      fresh.push({ id: crypto.randomUUID(), text, section: "miscellaneous", heading, created_at: now });
+    }
+  }
+  const add = fresh.slice(0, Math.max(0, MAX_MISC_POINTS - current.miscellaneous.length));
+  return add.length ? setMiscPoints([...current.miscellaneous, ...add]) : null;
 }
 
 export async function setProfileMasterResume(resumeId: string): Promise<void> {

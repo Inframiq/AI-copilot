@@ -9,7 +9,7 @@ import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { RESUME_TEMPLATES } from "@/lib/resume-templates";
 import { TemplatePreviewSheet } from "@/components/studio/TemplatePreviewSheet";
-import { getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
+import { fileUnplacedPoints, getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import { usePageReady } from "@/lib/reveal";
 import type { Resume } from "@career-copilot/types";
 
@@ -114,9 +114,15 @@ export default function StudioIndexPage() {
     try {
       let resume: Resume;
       if (mode === "upload" && file) {
-        resume = await apiClient.parseResumeFile(file, selected);
+        const uploaded = await apiClient.parseResumeFile(file, selected);
+        resume = uploaded;
         // Reading the PDF is a model call: it costs a credit.
         queryClient.invalidateQueries({ queryKey: ["subscription"] });
+        // Points the résumé printed under no job wait in the profile's
+        // Miscellaneous, under their heading, for a later review to place.
+        fileUnplacedPoints(uploaded.unplaced)
+          .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
+          .catch(console.error);
       } else {
         // Pre-fill from the career profile (Profile page) so a new resume
         // starts with what's already known about the user instead of a

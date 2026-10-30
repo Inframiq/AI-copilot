@@ -1,7 +1,7 @@
 "use client";
 import type { ResumeContent } from "@career-copilot/types";
 import {
-  defaultDestination, destinationOptions, MISC_SECTION_LABEL,
+  defaultDestination, destinationOptions, miscGroupLabel,
   type MiscDestination, type MiscPoint,
 } from "@/lib/misc-points";
 import { FOCUS_RING } from "@/lib/focus";
@@ -43,7 +43,7 @@ export function ProfilePoints({
         const on = decisions[`misc:${point.id}`] === "accept" && dest !== "";
         return (
           <Card key={point.id} on={on} provenance="profile">
-            <CardHeader provenance="profile" where={`Saved under ${MISC_SECTION_LABEL[point.section]}`}>
+            <CardHeader provenance="profile" where={`Saved under ${miscGroupLabel(point)}`}>
               <Switch
                 on={on}
                 disabled={dest === ""}

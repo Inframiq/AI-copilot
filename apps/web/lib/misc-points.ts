@@ -27,7 +27,16 @@ export interface MiscPoint {
   /** The tidied point, as it would print. */
   text: string;
   section: MiscSection;
+  /** The heading an uploaded résumé printed it under, when the upload
+   *  couldn't tell where it belongs ("Roles and Responsibilities"). Shown
+   *  in place of the section's name. */
+  heading?: string;
   created_at: string;
+}
+
+/** The name a point is shown under: its upload's heading, else its section. */
+export function miscGroupLabel(point: Pick<MiscPoint, "section" | "heading">): string {
+  return point.heading?.trim() || MISC_SECTION_LABEL[point.section];
 }
 
 export const MAX_MISC_POINTS = 50;

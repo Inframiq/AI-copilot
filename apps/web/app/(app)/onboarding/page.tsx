@@ -10,6 +10,7 @@ import {
   upsertCareerProfile,
   setProfileMasterResume,
   resumeContentToCareerProfileInput,
+  fileUnplacedPoints,
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { PlansComparison } from "@/components/plans/PlansComparison";
@@ -118,6 +119,9 @@ export default function OnboardingPage() {
         contact: tidyContactLinks(mergeParsedContact({ name, email, phone }, parsed.contact, email), { dropBad: true }),
         role_status: roleStatus || null,
       });
+      // Points the résumé printed under no job wait in the profile's
+      // Miscellaneous, under their heading, for a later review to place.
+      await fileUnplacedPoints(resume.unplaced).catch(console.error);
       await setProfileMasterResume(resume.id);
       setStep("plan");
     } catch (err) {

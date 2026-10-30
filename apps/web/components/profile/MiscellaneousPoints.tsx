@@ -3,12 +3,14 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash, WarningCircle } from "@phosphor-icons/react";
 import { getCareerProfile, setMiscPoints, type CareerProfile } from "@/lib/career-profile-client";
-import { MISC_SECTION_LABEL, MISC_SECTIONS, type MiscPoint, type MiscSection } from "@/lib/misc-points";
+import { miscGroupLabel, MISC_SECTION_LABEL, MISC_SECTIONS, type MiscPoint, type MiscSection } from "@/lib/misc-points";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
 /**
  * The body of the profile's Miscellaneous section: the points saved from the
- * notes canvas, grouped by the section each was filed under. Editing is free
+ * notes canvas, grouped by the section each was filed under — or, for an
+ * uploaded résumé's points it couldn't place, by the heading they were
+ * printed under ("Roles and Responsibilities"). Editing is free
  * (no AI) and saves at once — not through "Save Profile", which never writes
  * this column (see CareerProfileInput).
  */
@@ -64,16 +66,19 @@ export function MiscellaneousPoints() {
     setDrafts(({ [point.id]: _done, ...rest }) => rest);
   }
 
-  const groups = MISC_SECTIONS.map((section) => ({
-    section,
-    items: points.filter((p) => p.section === section),
-  })).filter((g) => g.items.length > 0);
+  const groups = MISC_SECTIONS.flatMap((section) => {
+    const filed = points.filter((p) => p.section === section);
+    return [...new Set(filed.map(miscGroupLabel))].map((label) => ({
+      label,
+      items: filed.filter((p) => miscGroupLabel(p) === label),
+    }));
+  });
 
   return (
     <div className="flex flex-col gap-lg">
-      {groups.map(({ section, items }) => (
-        <div key={section} className="flex flex-col gap-sm">
-          <h3 className="text-label-md font-semibold text-on-surface-variant">{MISC_SECTION_LABEL[section]}</h3>
+      {groups.map(({ label, items }) => (
+        <div key={label} className="flex flex-col gap-sm">
+          <h3 className="text-label-md font-semibold text-on-surface-variant">{label}</h3>
           <ul className="flex flex-col gap-sm">
             {items.map((point) => (
               <li key={point.id} className="flex flex-col gap-xs rounded-xl border border-outline-variant/30 p-sm sm:flex-row sm:items-start">
@@ -92,7 +97,12 @@ export function MiscellaneousPoints() {
                     value={point.section}
                     disabled={saving}
                     onChange={(e) =>
-                      save(points.map((p) => (p.id === point.id ? { ...p, section: e.target.value as MiscSection } : p)))
+                      save(points.map((p) => {
+                        if (p.id !== point.id) return p;
+                        // Filed somewhere now: the upload's heading no longer describes it.
+                        const { heading: _heading, ...rest } = p;
+                        return { ...rest, section: e.target.value as MiscSection };
+                      }))
                     }
                     className={`rounded-lg border border-outline-variant/50 bg-surface px-sm py-xs text-caption text-on-surface ${FOCUS_RING}`}
                   >

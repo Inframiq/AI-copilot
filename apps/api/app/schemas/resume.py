@@ -144,6 +144,19 @@ class ResumeOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UnplacedSection(BaseModel):
+    heading: str
+    points: list[str]
+
+
+class UploadedResumeOut(ResumeOut):
+    """An upload's résumé, and the points it printed under no job ("Key
+    Responsibilities" after all the jobs). Those aren't saved on the résumé
+    — it keeps only what it printed where it printed it — and go to the
+    profile's Miscellaneous instead (apps/web lib/career-profile-client)."""
+    unplaced: list[UnplacedSection] = []
+
+
 class OriginalFileOut(BaseModel):
     signed_url: str
     file_name: str | None

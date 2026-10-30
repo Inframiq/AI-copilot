@@ -33,6 +33,14 @@ def test_the_word_ceiling_matches_the_rule_we_state():
     assert not _looks_like_a_skill("One Two Three Four Five")
 
 
+@pytest.mark.parametrize("name", ["SIEM Monitoring & Log Analysis", "Incident Triage & Ticket Management",
+                                  "Application Security and Cloud Monitoring"])
+def test_a_joiner_is_not_counted_as_a_word(name):
+    # A skills section written as "Area & Area" lines lost every such line.
+    assert _looks_like_a_skill(name)
+    assert not _looks_like_a_skill("One & Two Three Four Five")
+
+
 class TestSkillCandidates:
     def test_drops_prose_from_the_missing_list(self):
         out = skill_candidates(

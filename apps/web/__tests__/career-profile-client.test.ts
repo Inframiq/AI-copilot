@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MiscPoint } from "@/lib/misc-points";
 
 // Chainable Supabase query double: .select()/.eq()/.upsert() return `this`,
 // .maybeSingle()/.single() resolve the configured result, and the object
@@ -41,6 +42,7 @@ import {
   getCareerProfile,
   upsertCareerProfile,
   appendMiscPoints,
+  fileUnplacedPoints,
   setMiscPoints,
   NoProfileError,
   MiscUnavailableError,
@@ -234,6 +236,37 @@ describe("career-profile-client", () => {
       queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: full }, error: null };
       await expect(appendMiscPoints([point("x")])).rejects.toThrow(/at most 50/);
       expect(updateCalls).toEqual([]);
+    });
+
+    describe("an upload's loose points", () => {
+      const duties = [{ heading: "Roles and Responsibilities", points: ["Monitored SOC alerts.", "Point a", " "] }];
+
+      it("files them under their heading, skipping any already there", async () => {
+        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: [point("a")] }, error: null };
+        await fileUnplacedPoints(duties);
+        expect(updateCalls).toHaveLength(1);
+        const [kept, added] = (updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous;
+        expect(kept).toEqual(point("a"));
+        expect(added).toMatchObject({ text: "Monitored SOC alerts.", section: "miscellaneous", heading: "Roles and Responsibilities" });
+        expect((updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous).toHaveLength(2);
+      });
+
+      it("adds what fits under the 50 cap", async () => {
+        const most = Array.from({ length: 49 }, (_, i) => point(String(i)));
+        queryResult = { data: { ...SAMPLE_PROFILE, miscellaneous: most }, error: null };
+        await fileUnplacedPoints([{ heading: "Roles and Responsibilities", points: ["One.", "Two."] }]);
+        expect((updateCalls[0] as { miscellaneous: MiscPoint[] }).miscellaneous).toHaveLength(50);
+      });
+
+      it("does nothing with no points, no profile, or no Miscellaneous column", async () => {
+        expect(await fileUnplacedPoints(undefined)).toBeNull();
+        expect(await fileUnplacedPoints([])).toBeNull();
+        queryResult = { data: null, error: null };
+        expect(await fileUnplacedPoints(duties)).toBeNull();
+        queryResult = { data: SAMPLE_PROFILE, error: null };
+        expect(await fileUnplacedPoints(duties)).toBeNull();
+        expect(updateCalls).toEqual([]);
+      });
     });
   });
 
