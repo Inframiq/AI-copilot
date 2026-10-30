@@ -62,12 +62,14 @@ export const SECTION_INFO: Record<ExtraSection, { label: string; hint: string; p
   },
 };
 
-/** What the database accepts (migration 053) — the forms keep inside it. */
+/** What the database accepts (migrations 053 and 055) — the forms keep
+ * inside it. The word counts are what a form lets a person type up to; the
+ * character limits hold an uploaded résumé's longer text whole. */
 export const PROFILE_LIMITS = {
   summaryWords: 80,
-  summaryChars: 1000,
+  summaryChars: 4000,
   objectiveWords: 50,
-  objectiveChars: 600,
+  objectiveChars: 2000,
   languages: 15,
   languageChars: 100,
   items: 20,
@@ -104,6 +106,16 @@ const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 export function capWords(value: string, max: number): string {
   const words = value.trim().split(/\s+/).filter(Boolean);
   return words.length <= max ? value : words.slice(0, max).join(" ");
+}
+
+/** What a word-capped box keeps when its text changes from `previous` to
+ * `next`: up to `max` words as usual, and past that never more words than
+ * were already there. Text that arrived longer (an uploaded résumé's
+ * summary) is never cut by a keystroke — the person trims it themselves,
+ * and every edit that shortens it goes through. */
+export function capEdit(previous: string, next: string, max: number): string {
+  const had = previous.trim().split(/\s+/).filter(Boolean).length;
+  return capWords(next, Math.max(max, had));
 }
 
 /**

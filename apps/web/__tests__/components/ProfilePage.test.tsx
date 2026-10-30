@@ -150,6 +150,40 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(screen.getByPlaceholderText(/Magna Cum Laude/)).toHaveValue("Dean's List");
   });
 
+  it("offers the résumé's different contact details instead of applying them, never the email", async () => {
+    getCareerProfile.mockResolvedValue({
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210" },
+    });
+    (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
+    });
+    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+      content: {
+        // Same phone written another way; a different name; an old email.
+        contact: { name: "Jane Smith", email: "old@work.com", phone: "9876543210", location: "Pune" },
+        skills: [], education: [],
+      },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
+    }) as unknown as typeof fetch;
+
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
+    const offers = await screen.findByRole("region", { name: "Details from the uploaded résumé" });
+    // The name differs, so it's offered; the phone is the same number; the
+    // empty location just fills; the email is never offered.
+    expect(offers).toHaveTextContent("Full name: Jane Smith");
+    expect(offers).not.toHaveTextContent("9876543210");
+    expect(offers).not.toHaveTextContent("old@work.com");
+    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane");
+
+    await userEvent.click(screen.getByRole("button", { name: "Use Jane Smith as Full name" }));
+    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane Smith");
+    expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
+  });
+
   it("prompts before leaving once the form has unsaved edits", async () => {
     renderPage();
     const nameInput = await screen.findByPlaceholderText("Jane Smith");

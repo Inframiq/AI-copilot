@@ -27,6 +27,7 @@ import {
   LINE_SECTIONS,
   PROFILE_LIMITS,
   SECTION_INFO,
+  capEdit,
   emptyProfileSections,
   fitProfileSections,
   profileSectionsToResume,
@@ -130,20 +131,38 @@ describe("the limits", () => {
     expect(num("MAX_ITEM_CHARS")).toBe(PROFILE_LIMITS.itemChars);
     expect(num("MAX_LANGUAGES")).toBe(PROFILE_LIMITS.languages);
     expect(num("MAX_LANGUAGE_CHARS")).toBe(PROFILE_LIMITS.languageChars);
-    expect(num("MAX_SUMMARY_CHARS")).toBe(PROFILE_LIMITS.summaryChars);
-    expect(num("MAX_OBJECTIVE_CHARS")).toBe(PROFILE_LIMITS.objectiveChars);
     for (const key of LINE_SECTIONS) expect(mig, key).toContain(`"${key}"`);
+    // Raised by 055 so an uploaded résumé's long summary fits whole.
+    const raised = readFileSync(join(API, "alembic/versions/055_long_uploaded_summary_fits.py"), "utf8");
+    const now = (name: string) => Number(new RegExp(`^${name} = (\\d+)`, "m").exec(raised)?.[1]);
+    expect(now("MAX_SUMMARY_CHARS")).toBe(PROFILE_LIMITS.summaryChars);
+    expect(now("MAX_OBJECTIVE_CHARS")).toBe(PROFILE_LIMITS.objectiveChars);
+  });
+
+  it("never cut a text that arrived longer than the word cap", () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
+    // Typing past the cap stops at it.
+    expect(capEdit(words(80), words(81), 80)).toBe(words(80));
+    expect(capEdit("", words(90), 80)).toBe(words(80));
+    // An uploaded 330-word summary: a fix inside it stays whole, trimming
+    // always goes through, and it can't grow.
+    const upload = words(330);
+    const fixed = upload.replace("w5 ", "w5, ");
+    expect(capEdit(upload, fixed, 80)).toBe(fixed);
+    expect(capEdit(upload, words(200), 80)).toBe(words(200));
+    expect(capEdit(upload, `${upload} more`, 80)).toBe(upload);
   });
 
   it("are kept on the way in, so an uploaded résumé can always be saved", () => {
     const fit = fitProfileSections({
       summary: "s".repeat(1500),
+      // Past 055's 4,000 characters is cut; 1,500 fits whole.
       objective: "  ",
       languages: Array.from({ length: 20 }, (_, i) => ({ name: `L${i}`, level: "x".repeat(200) })),
       awards: [...Array.from({ length: 25 }, (_, i) => `A${i}`), "  "],
       interests: ["  Chess ", "", "c".repeat(400)],
     });
-    expect(fit.summary).toHaveLength(1000);
+    expect(fit.summary).toHaveLength(1500);
     expect(fit.objective).toBeNull();
     expect(fit.languages).toHaveLength(15);
     expect(fit.languages[0].level).toHaveLength(100);

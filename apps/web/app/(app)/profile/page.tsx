@@ -76,7 +76,7 @@ import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
-import { lockedEmail, mergeParsedContact } from "@/lib/contact-lock";
+import { contactDifferences, lockedEmail, mergeParsedContact, type ContactDifference, type FillableContactField } from "@/lib/contact-lock";
 import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
@@ -108,6 +108,11 @@ const emptyProject = (): ProjectEntry => ({
 });
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+const CONTACT_FIELD_LABEL: Record<FillableContactField, string> = {
+  name: "Full name", phone: "Phone", location: "Location",
+  linkedin: "LinkedIn", github: "GitHub", website: "Website",
+};
+
 export default function ProfilePage() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -124,6 +129,10 @@ export default function ProfilePage() {
 
   // ── form state ─────────────────────────────────────────────────────────────
   const [contact, setContact] = useState<ContactInfo>(emptyContact());
+  const contactRef = useRef(contact);
+  contactRef.current = contact;
+  // Details the last upload printed differently, offered one by one.
+  const [contactOffers, setContactOffers] = useState<ContactDifference[]>([]);
   // The email is the sign-in email: shown and saved as that, never edited.
   const authUser = useQuery(authUserQuery);
   const accountEmail = authUser.data?.email ?? null;
@@ -430,6 +439,9 @@ export default function ProfilePage() {
         ...emptyContact(),
         ...mergeParsedContact(prev, parsedContact, accountEmailRef.current),
       }));
+      // A detail the profile already has stays; one the résumé prints
+      // differently is offered beside the form, never applied for them.
+      setContactOffers(contactDifferences(contactRef.current, parsedContact));
       setHeadline(newHeadline);
       setSkills(newSkills);
       setExperiences(newExperiences);
@@ -741,6 +753,37 @@ export default function ProfilePage() {
       {/* ── Contact information ───────────────────────────────────────────── */}
       <section className={cardCls}>
         <SectionHeader title="Contact Information" />
+        {contactOffers.length > 0 && (
+          <div role="region" aria-label="Details from the uploaded résumé"
+            className="flex flex-col gap-xs rounded-xl border border-primary/25 bg-primary/5 p-sm">
+            <div className="flex items-center justify-between gap-sm">
+              <p className="text-body-sm text-on-surface">The uploaded résumé shows different details.</p>
+              <button type="button" onClick={() => setContactOffers([])}
+                className="shrink-0 text-label-sm font-semibold text-on-surface-variant hover:text-on-surface">
+                Keep mine
+              </button>
+            </div>
+            <ul className="flex flex-col gap-xs">
+              {contactOffers.map(({ field, value }) => (
+                <li key={field} className="flex items-center justify-between gap-sm min-w-0">
+                  <span className="min-w-0 text-body-sm">
+                    <span className="text-on-surface-variant">{CONTACT_FIELD_LABEL[field]}: </span>
+                    <span className="break-all text-on-surface">{value}</span>
+                  </span>
+                  <button type="button" aria-label={`Use ${value} as ${CONTACT_FIELD_LABEL[field]}`}
+                    onClick={() => {
+                      const tidy = field === "linkedin" || field === "github" ? tidySocialLink(field, value) : null;
+                      setContact(p => ({ ...p, [field]: tidy || value }));
+                      setContactOffers(o => o.filter(d => d.field !== field));
+                    }}
+                    className="shrink-0 rounded-full bg-primary/10 px-sm py-xs text-label-sm font-semibold text-primary hover:bg-primary/15">
+                    Use this
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-x-sm sm:gap-x-lg gap-y-sm sm:gap-y-md">
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>

@@ -1,7 +1,7 @@
 "use client";
 import { useResumeStore } from "@/stores/resume-store";
 import { wordCount } from "@/lib/misc-points";
-import { PROFILE_LIMITS, SECTION_INFO, capWords } from "@/lib/profile-sections";
+import { PROFILE_LIMITS, SECTION_INFO, capEdit } from "@/lib/profile-sections";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
@@ -16,16 +16,9 @@ export function SummarySection() {
   const count = words.length;
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value;
-    const next = value.trim().split(/\s+/).filter(Boolean);
-    // Trim from the end so text already typed at the front is never
-    // silently rewritten.
-    updateContent({
-      summary:
-        next.length <= SUMMARY_MAX_WORDS
-          ? value
-          : next.slice(0, SUMMARY_MAX_WORDS).join(" "),
-    });
+    // Trimmed from the end so text typed at the front is never rewritten,
+    // and an uploaded summary already past the cap is never cut (capEdit).
+    updateContent({ summary: capEdit(content!.summary ?? "", e.target.value, SUMMARY_MAX_WORDS) });
   }
 
   return (
@@ -49,8 +42,9 @@ export function SummarySection() {
       />
       {count >= SUMMARY_MAX_WORDS && (
         <p className="text-caption text-error">
-          A tight, {SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long
-          one — trim before adding more.
+          {count > SUMMARY_MAX_WORDS
+            ? `Longer than ${SUMMARY_MAX_WORDS} words. Trim it to keep it quick to read.`
+            : `A tight, ${SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long one — trim before adding more.`}
         </p>
       )}
 
@@ -67,7 +61,7 @@ export function SummarySection() {
       <textarea
         id="builder-objective"
         value={content.objective ?? ""}
-        onChange={(e) => updateContent({ objective: capWords(e.target.value, PROFILE_LIMITS.objectiveWords) })}
+        onChange={(e) => updateContent({ objective: capEdit(content.objective ?? "", e.target.value, PROFILE_LIMITS.objectiveWords) })}
         rows={3}
         placeholder={SECTION_INFO.objective.placeholder}
         className="w-full px-md py-md rounded-xl border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"

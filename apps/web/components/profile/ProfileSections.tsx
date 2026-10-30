@@ -9,7 +9,7 @@ import {
   EXTRA_SECTIONS,
   PROFILE_LIMITS as L,
   SECTION_INFO,
-  capWords,
+  capEdit,
   type ExtraSection,
   type LanguageEntry,
   type LineSection,
@@ -23,7 +23,8 @@ const addRowCls =
   "self-start flex items-center gap-xs px-md py-xs rounded-full text-label-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 
 /** A paragraph capped at `maxWords` (and the database's `maxChars`), with a
- * running count. Text over the cap from an upload stays until it's edited. */
+ * running count. Text over the cap from an upload stays whole, flagged,
+ * until the person trims it (capEdit). */
 function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder }: {
   id: string; value: string; onChange: (v: string) => void;
   maxWords: number; maxChars: number; rows: number; placeholder: string;
@@ -34,7 +35,7 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
       <textarea
         id={id}
         value={value}
-        onChange={(e) => onChange(capWords(e.target.value, maxWords))}
+        onChange={(e) => onChange(capEdit(value, e.target.value, maxWords))}
         maxLength={maxChars}
         rows={rows}
         placeholder={placeholder}
@@ -43,6 +44,9 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
       <span className={`self-end tabular-nums text-caption ${count > maxWords ? "text-error font-semibold" : "text-on-surface-variant"}`}>
         {count} / {maxWords} words
       </span>
+      {count > maxWords && (
+        <p className="text-caption text-error">Longer than {maxWords} words. Trim it to keep it quick to read.</p>
+      )}
     </div>
   );
 }
