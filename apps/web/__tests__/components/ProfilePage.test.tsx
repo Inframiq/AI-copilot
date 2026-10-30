@@ -212,7 +212,7 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(upsertCareerProfile.mock.calls[0][0].master_resume_id).toBe("new1");
   });
 
-  it("keeps the previous résumé's Miscellaneous points unless marked, and shows the new ones", async () => {
+  it("removes the previous résumé's Miscellaneous points on save unless kept; notes stay", async () => {
     fileUnplacedPoints.mockResolvedValue(null);
     getCareerProfile.mockResolvedValue({
       ...withMasterResume,
@@ -236,24 +236,25 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     );
 
     const notice = await screen.findByRole("region", { name: "Points from the new résumé" });
-    expect(notice).toHaveTextContent("The previous résumé's points stay unless marked to remove.");
+    expect(notice).toHaveTextContent("The previous résumé's points are removed then, unless kept. Your own notes stay.");
     expect(notice).toHaveTextContent("Added on saveNew duty. · Roles and Responsibilities");
-    // Only the previous résumé's points can be marked; a typed note can't.
-    expect(screen.getByRole("button", { name: "Remove on save: Old duty one." })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove on save: My own note." })).toBeNull();
+    // The previous résumé's points are marked to go; a typed note isn't marked at all.
+    expect(screen.getAllByText("Removed on save")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Keep: My own note." })).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove on save: Old duty one." }));
-    expect(screen.getByText("Removed on save")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Keep: Old duty one." })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Keep: Old duty two." }));
+    expect(screen.getAllByText("Removed on save")).toHaveLength(1);
+    expect(screen.getByText("Previous résumé · kept")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove on save: Old duty two." })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     await waitFor(() => expect(fileUnplacedPoints).toHaveBeenCalled());
     expect(fileUnplacedPoints).toHaveBeenCalledWith(
-      [{ heading: "Roles and Responsibilities", points: ["New duty."] }], { drop: ["old1"] },
+      [{ heading: "Roles and Responsibilities", points: ["New duty."] }], { replace: true, keep: ["old2"] },
     );
   });
 
-  it("removes all of the previous résumé's points only when asked", async () => {
+  it("keeps all of the previous résumé's points with one button", async () => {
     fileUnplacedPoints.mockResolvedValue(null);
     getCareerProfile.mockResolvedValue({
       ...withMasterResume,
@@ -271,14 +272,15 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
       document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!,
       new File(["%PDF"], "new.pdf", { type: "application/pdf" }),
     );
-    await userEvent.click(await screen.findByRole("button", { name: "Remove all from the previous résumé on save" }));
-    expect(screen.getAllByText("Removed on save")).toHaveLength(2);
-    await userEvent.click(screen.getByRole("button", { name: "Keep all from the previous résumé" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep all from the previous résumé" }));
     expect(screen.queryByText("Removed on save")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Remove all from the previous résumé on save" }));
+    expect(screen.getAllByText("Removed on save")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Keep all from the previous résumé" }));
 
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
-    await waitFor(() => expect(fileUnplacedPoints).toHaveBeenCalledWith([], { drop: ["old1", "old2"] }));
+    await waitFor(() =>
+      expect(fileUnplacedPoints).toHaveBeenCalledWith([], { replace: true, keep: ["old1", "old2"] }));
   });
 
   it("doesn't save the profile when the résumé couldn't be saved", async () => {

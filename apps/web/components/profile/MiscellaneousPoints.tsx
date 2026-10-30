@@ -17,14 +17,15 @@ import { FOCUS_RING, PRESS } from "@/lib/focus";
  *
  * `replacing`: a new résumé read on the Profile and not saved yet. Its
  * points are shown as added on save. The previous résumé's points (those
- * still under an upload's heading) stay unless the user marks them to go;
- * marked ones are removed with Save Profile, never before.
+ * still under an upload's heading) are removed with Save Profile, never
+ * before, unless the user keeps them. Notes typed in, and points already
+ * filed, have no heading: never marked, kept until deleted.
  */
 export function MiscellaneousPoints({ replacing }: {
   replacing?: {
     incoming: UnplacedSection[];
-    dropping: string[];
-    onDrop: (ids: string[], drop: boolean) => void;
+    keeping: string[];
+    onKeep: (ids: string[], keep: boolean) => void;
   };
 } = {}) {
   const queryClient = useQueryClient();
@@ -40,7 +41,7 @@ export function MiscellaneousPoints({ replacing }: {
   const previous = replacing && Array.isArray(points) ? points.filter((p) => typeof p.heading === "string") : [];
   const incoming = (replacing?.incoming ?? []).flatMap(({ heading, points: texts }) =>
     texts.map((text) => text.trim()).filter(Boolean).map((text) => ({ heading, text })));
-  const allDropping = previous.length > 0 && previous.every((p) => replacing!.dropping.includes(p.id));
+  const allKept = previous.length > 0 && previous.every((p) => replacing!.keeping.includes(p.id));
   const notice = replacing && (previous.length > 0 || incoming.length > 0) && (
     <div role="region" aria-label="Points from the new résumé"
       className="flex flex-col gap-sm rounded-xl border border-primary/20 bg-primary/[0.03] p-md">
@@ -48,14 +49,14 @@ export function MiscellaneousPoints({ replacing }: {
         <FileArrowUp size={18} className="mt-[2px] shrink-0 text-primary" />
         <p className="text-caption text-on-surface-variant">
           New résumé not saved yet. Its points are added with Save Profile.
-          {previous.length > 0 && " The previous résumé's points stay unless marked to remove."}
+          {previous.length > 0 && " The previous résumé's points are removed then, unless kept. Your own notes stay."}
         </p>
       </div>
       {previous.length > 0 && (
         <button type="button"
-          onClick={() => replacing!.onDrop(previous.map((p) => p.id), !allDropping)}
+          onClick={() => replacing!.onKeep(previous.map((p) => p.id), !allKept)}
           className={`self-start rounded-lg border border-outline-variant/50 px-sm py-xs text-label-sm font-semibold text-on-surface hover:bg-on-surface/5 ${PRESS} ${FOCUS_RING}`}>
-          {allDropping ? "Keep all from the previous résumé" : "Remove all from the previous résumé on save"}
+          {allKept ? "Remove all from the previous résumé on save" : "Keep all from the previous résumé"}
         </button>
       )}
       {incoming.length > 0 && (
@@ -132,18 +133,18 @@ export function MiscellaneousPoints({ replacing }: {
           <ul className="flex flex-col gap-sm">
             {items.map((point) => {
               const fromPrevious = previous.includes(point);
-              const dropping = fromPrevious && replacing!.dropping.includes(point.id);
+              const dropping = fromPrevious && !replacing!.keeping.includes(point.id);
               return (
               <li key={point.id} className={`flex flex-col gap-xs rounded-xl border p-sm sm:flex-row sm:items-start ${
                 dropping ? "border-error/30 bg-error/[0.03]" : "border-outline-variant/30"}`}>
                 {fromPrevious && (
                   <div className="flex items-center gap-xs sm:order-last">
                     <span className={`text-caption ${dropping ? "text-error font-semibold" : "text-on-surface-variant"}`}>
-                      {dropping ? "Removed on save" : "Previous résumé"}
+                      {dropping ? "Removed on save" : "Previous résumé · kept"}
                     </span>
                     <button type="button"
                       aria-label={dropping ? `Keep: ${point.text}` : `Remove on save: ${point.text}`}
-                      onClick={() => replacing!.onDrop([point.id], !dropping)}
+                      onClick={() => replacing!.onKeep([point.id], dropping)}
                       className={`rounded-lg border border-outline-variant/50 px-sm py-xs text-label-sm font-semibold text-on-surface hover:bg-on-surface/5 ${PRESS} ${FOCUS_RING}`}>
                       {dropping ? "Keep" : "Remove on save"}
                     </button>

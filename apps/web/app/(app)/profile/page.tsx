@@ -178,9 +178,9 @@ export default function ProfilePage() {
   const [pendingUpload, setPendingUpload] = useState<{
     file: File; title: string; content: ResumeContent; templateId: string; unplaced: UnplacedSection[];
   } | null>(null);
-  // Miscellaneous points the user marked to remove with that upload's save
-  // (the previous résumé's; none goes unless chosen).
-  const [miscToDrop, setMiscToDrop] = useState<string[]>([]);
+  // The previous résumé's Miscellaneous points the user keeps through that
+  // upload's save; the rest of them go with it.
+  const [miscToKeep, setMiscToKeep] = useState<string[]>([]);
   // True when master_resume_id points at a resume that's since been deleted
   // (e.g. via the Resume Builder's delete button) — distinct from simply
   // never having uploaded one, so the UI can say what actually happened
@@ -360,7 +360,7 @@ export default function ProfilePage() {
         setMasterResumeTemplateId(saved.template_id);
         setMasterResumeDeleted(false);
         setPendingUpload(null);
-        setMiscToDrop([]);
+        setMiscToKeep([]);
         await queryClient.invalidateQueries({ queryKey: ["resume", saved.id] });
       }
       const profileInput: CareerProfileInput = {
@@ -378,10 +378,10 @@ export default function ProfilePage() {
         ...sections,
       };
       await upsertCareerProfile(profileInput);
-      // The new résumé's loose points go to Miscellaneous, and the old
-      // points the user marked go. Once the profile row exists.
+      // The new résumé's loose points go to Miscellaneous, in place of the
+      // previous résumé's (bar those kept). Once the profile row exists.
       if (pendingUpload) {
-        await fileUnplacedPoints(pendingUpload.unplaced, { drop: miscToDrop })
+        await fileUnplacedPoints(pendingUpload.unplaced, { replace: true, keep: miscToKeep })
           .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
           .catch(console.error);
       }
@@ -443,7 +443,7 @@ export default function ProfilePage() {
       // Points the résumé printed under no job go to Miscellaneous with
       // the save, under their heading, for a later review to place.
       setPendingUpload({ file, title: read.title, content: read.content, templateId, unplaced: read.unplaced });
-      setMiscToDrop([]);
+      setMiscToKeep([]);
       // Fully replace the form with the newly parsed resume — a "Replace"
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.
@@ -1463,9 +1463,9 @@ export default function ProfilePage() {
         />
         <MiscellaneousPoints replacing={pendingUpload ? {
           incoming: pendingUpload.unplaced,
-          dropping: miscToDrop,
-          onDrop: (ids, drop) => setMiscToDrop((prev) =>
-            drop ? [...new Set([...prev, ...ids])] : prev.filter((id) => !ids.includes(id))),
+          keeping: miscToKeep,
+          onKeep: (ids, keep) => setMiscToKeep((prev) =>
+            keep ? [...new Set([...prev, ...ids])] : prev.filter((id) => !ids.includes(id))),
         } : undefined} />
       </section>
 
