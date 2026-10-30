@@ -355,6 +355,27 @@ describe("My Profile — every résumé section", () => {
     expect(upsertCareerProfile).not.toHaveBeenCalled();
   });
 
+  it("scrolls up to a save error at the top, each time it's shown", async () => {
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+    try {
+      getCareerProfile.mockResolvedValue(profile({ summary: Array.from({ length: 90 }, (_, i) => `w${i}`).join(" ") }));
+      renderPage();
+      await screen.findByRole("heading", { name: "Summary" });
+      await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Trim it to 80 or fewer to save.");
+      await waitFor(() => expect(scrolled).toEqual([alert]));
+      // The same message again still brings it back into view.
+      await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+      await waitFor(() => expect(scrolled).toHaveLength(2));
+      expect(scrolled[1]).toHaveTextContent("Trim it to 80 or fewer to save.");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("caps the summary at 80 words", async () => {
     getCareerProfile.mockResolvedValue(profile());
     renderPage();

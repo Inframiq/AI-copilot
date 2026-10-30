@@ -122,7 +122,18 @@ export default function ProfilePage() {
   const [downloading, setDownloading] = useState(false);
   const [reparsing, setReparsing] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorText] = useState<string | null>(null);
+  // The message sits at the top of the page; each one shown (the same one
+  // again too, after a second Save) scrolls up to it.
+  const [errorShown, setErrorShown] = useState(0);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const setError = (message: string | null) => {
+    setErrorText(message);
+    if (message) setErrorShown(n => n + 1);
+  };
+  useEffect(() => {
+    if (errorShown) errorRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [errorShown]);
   const [dragging, setDragging] = useState(false);
 
   // ── form state ─────────────────────────────────────────────────────────────
@@ -650,7 +661,7 @@ export default function ProfilePage() {
       </div>
 
       {error && (
-        <div className="bg-error-container/30 border border-error/30 rounded-xl px-lg py-md text-body-sm text-error">
+        <div ref={errorRef} role="alert" className="bg-error-container/30 border border-error/30 rounded-xl px-lg py-md text-body-sm text-error">
           {error}
         </div>
       )}
