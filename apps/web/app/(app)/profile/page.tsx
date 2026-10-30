@@ -57,7 +57,7 @@ import {
   type RoleStatus,
 } from "@/lib/career-profile-client";
 import { apiClient, ApiError } from "@/lib/api-client";
-import type { WorkProject } from "@career-copilot/types";
+import type { ResumeContent, UnplacedSection, WorkProject } from "@career-copilot/types";
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
@@ -172,6 +172,12 @@ export default function ProfilePage() {
   const savedLinks = useRef({ linkedin: "", github: "" });
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
+  // An upload read into the form and not saved yet: the résumé is written
+  // (replacing the master in place, or a new one) only with Save Profile,
+  // so leaving without saving leaves the old résumé as it was.
+  const [pendingUpload, setPendingUpload] = useState<{
+    file: File; title: string; content: ResumeContent; templateId: string; unplaced: UnplacedSection[];
+  } | null>(null);
   // True when master_resume_id points at a resume that's since been deleted
   // (e.g. via the Resume Builder's delete button) — distinct from simply
   // never having uploaded one, so the UI can say what actually happened
@@ -194,14 +200,16 @@ export default function ProfilePage() {
   // and after each successful save); the form is "dirty" whenever the live
   // snapshot has drifted from it. Drives both the beforeunload prompt and the
   // in-app navigation confirm below.
-  const formSnapshot = useMemo(
-    () => JSON.stringify({
+  const formFields = useMemo(
+    () => ({
       contact, roleStatus, headline, skills,
       experiences, projects, education, certifications,
       masterResumeId, photoUrl, photoPath, sections,
+      upload: pendingUpload ? pendingUpload.file.name : null,
     }),
-    [contact, roleStatus, headline, skills, experiences, projects, education, certifications, masterResumeId, photoUrl, photoPath, sections],
+    [contact, roleStatus, headline, skills, experiences, projects, education, certifications, masterResumeId, photoUrl, photoPath, sections, pendingUpload],
   );
+  const formSnapshot = useMemo(() => JSON.stringify(formFields), [formFields]);
   const savedSnapshotRef = useRef<string | null>(null);
   const isDirty = savedSnapshotRef.current !== null && savedSnapshotRef.current !== formSnapshot;
 
@@ -337,8 +345,22 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
+      // A new upload is saved first, so the profile points at it.
+      let resumeId = masterResumeId;
+      if (pendingUpload) {
+        const saved = await apiClient.saveUploadedResume(
+          pendingUpload.file, pendingUpload.content, pendingUpload.templateId, liveMasterId() ?? undefined,
+        );
+        resumeId = saved.id;
+        setMasterResumeId(saved.id);
+        setMasterResumeTitle(saved.title);
+        setMasterResumeTemplateId(saved.template_id);
+        setMasterResumeDeleted(false);
+        setPendingUpload(null);
+        await queryClient.invalidateQueries({ queryKey: ["resume", saved.id] });
+      }
       const profileInput: CareerProfileInput = {
-        master_resume_id: masterResumeId,
+        master_resume_id: resumeId,
         contact: { ...contact, email: lockedEmail(contact.email, accountEmail) },
         headline: headline || null,
         experience: experiences,
@@ -352,9 +374,16 @@ export default function ProfilePage() {
         ...sections,
       };
       await upsertCareerProfile(profileInput);
+      // The new résumé's loose points go to Miscellaneous, in place of the
+      // last upload's still waiting there. Once the profile row exists.
+      if (pendingUpload) {
+        await fileUnplacedPoints(pendingUpload.unplaced, { replace: true })
+          .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
+          .catch(console.error);
+      }
       // Everything in the form now matches the DB — clear the dirty flag so
       // the unsaved-changes guards stand down.
-      savedSnapshotRef.current = formSnapshot;
+      savedSnapshotRef.current = JSON.stringify({ ...formFields, masterResumeId: resumeId, upload: null });
       rememberSavedLinks(contact);
       // An offer left unanswered was kept as the profile's own.
       setContactOffers([]);
@@ -382,6 +411,13 @@ export default function ProfilePage() {
   }
 
   // ── resume upload ──────────────────────────────────────────────────────────
+  /** The résumé an upload replaces: the master, unless it's been deleted.
+   * Read through a ref: the file picker's handler (acceptFile) is made once,
+   * and its closure saw no master at all, so Replace made a new résumé. */
+  const masterRef = useRef({ id: masterResumeId, deleted: masterResumeDeleted });
+  masterRef.current = { id: masterResumeId, deleted: masterResumeDeleted };
+  const liveMasterId = () => (masterRef.current.deleted ? null : masterRef.current.id);
+
   const acceptFile = useCallback((f: File) => {
     if (!f.name.match(/\.pdf$/i)) {
       setError("Only PDF files are supported. Convert your resume to PDF and re-upload."); return;
@@ -393,22 +429,20 @@ export default function ProfilePage() {
   async function handleUpload(file: File, templateId: string = "ats_clean") {
     setUploading(true); setError(null);
     try {
-      // Replacing an existing resume overwrites that same row in place
-      // (instead of creating a new, orphaned one the rest of the app might
-      // still be pointing at).
-      const resume = await apiClient.parseResumeFile(file, templateId, masterResumeId ?? undefined);
+      // Read only: nothing is stored until Save Profile (pendingUpload).
+      // The save then overwrites the master résumé in place (instead of
+      // creating a new, orphaned one the rest of the app might still be
+      // pointing at).
+      const read = await apiClient.readResumeFile(file, liveMasterId() ?? undefined);
       // Reading the PDF is a model call: it costs a credit.
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
-      // Points the résumé printed under no job wait in the profile's
-      // Miscellaneous, under their heading, for a later review to place.
-      // Saved at once, like every Miscellaneous edit — not with the form.
-      fileUnplacedPoints(resume.unplaced)
-        .then((p) => p && queryClient.setQueryData(["careerProfile"], p))
-        .catch(console.error);
+      // Points the résumé printed under no job go to Miscellaneous with
+      // the save, under their heading, for a later review to place.
+      setPendingUpload({ file, title: read.title, content: read.content, templateId, unplaced: read.unplaced });
       // Fully replace the form with the newly parsed resume — a "Replace"
       // that only fills in fields the new file happens to have, and leaves
       // old values sitting in everything else, isn't a replace.
-      const c = resume.content;
+      const c = read.content;
       // Contact details are the user's own, not the résumé's: a parsed value
       // only fills a field that is still empty, and the email stays the
       // sign-in email (lib/contact-lock.ts). Everything else is replaced.
@@ -467,15 +501,9 @@ export default function ProfilePage() {
       setProjects(newProjects);
       setEducation(newEducation);
       setCertifications(newCertifications);
-      setMasterResumeId(resume.id);
-      setMasterResumeTitle(resume.title);
-      setMasterResumeTemplateId(resume.template_id);
       // Summary, Objective, Languages, Awards… fill their own sections,
       // replaced like everything else here.
       showSections(resumeSectionsToProfile(c));
-
-      await queryClient.invalidateQueries({ queryKey: ["resumes"] });
-      await queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
     } catch (e) {
       if (!isResumeLimitCancelled(e)) setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -690,18 +718,26 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {masterResumeId && masterResumeTitle ? (
+        {pendingUpload || (masterResumeId && masterResumeTitle) ? (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-sm sm:gap-md p-sm sm:p-md rounded-xl bg-surface-container-lowest/60 border border-outline-variant/40 mb-md transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
             <div className="flex items-start gap-md min-w-0 md:flex-1">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-error-container to-error-container/60 text-error flex items-center justify-center shrink-0 border border-error-container/50">
                 <FilePdf size={22} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-label-md text-on-surface font-semibold truncate">{masterResumeTitle}</p>
-                <p className="text-caption text-on-surface-variant mt-xs"><span className="sm:hidden">Active resume</span><span className="hidden sm:inline">Active resume · fields auto-populated from this file</span></p>
+                <p className="text-label-md text-on-surface font-semibold truncate">{pendingUpload?.title ?? masterResumeTitle}</p>
+                {pendingUpload ? (
+                  <p className="text-caption text-primary mt-xs font-semibold">Not saved · saved with Save Profile</p>
+                ) : (
+                  <p className="text-caption text-on-surface-variant mt-xs"><span className="sm:hidden">Active resume</span><span className="hidden sm:inline">Active resume · fields auto-populated from this file</span></p>
+                )}
               </div>
             </div>
-            <div className="grid grid-cols-5 gap-xs sm:flex sm:items-center sm:gap-sm sm:flex-wrap md:justify-end">
+            <div className={pendingUpload
+              ? "flex justify-end"
+              : "grid grid-cols-5 gap-xs sm:flex sm:items-center sm:gap-sm sm:flex-wrap md:justify-end"}>
+              {/* The saved résumé's actions; an unsaved upload has only Replace. */}
+              {!pendingUpload && <>
               <button
                 onClick={() => setShowPreview(true)}
                 className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-xs text-[11px] sm:text-label-sm font-semibold text-on-surface bg-surface-container-lowest border border-outline-variant/40 rounded-lg px-xs sm:px-md py-sm hover:border-primary/50 hover:text-primary transition-all">
@@ -726,6 +762,7 @@ export default function ProfilePage() {
                 <ArrowsClockwise size={14} className={reparsing ? "animate-spin" : ""} />
                 {reparsing ? "Parsing…" : "Re-parse"}
               </button>
+              </>}
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || reparsing}

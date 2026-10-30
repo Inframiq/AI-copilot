@@ -157,6 +157,15 @@ class UploadedResumeOut(ResumeOut):
     unplaced: list[UnplacedSection] = []
 
 
+class ReadUploadOut(BaseModel):
+    """An upload as read, stored nowhere (POST /resumes/read-upload): the
+    Profile fills its form from this and saves the résumé with the profile
+    (POST /resumes/save-upload)."""
+    title: str
+    content: dict
+    unplaced: list[UnplacedSection] = []
+
+
 class OriginalFileOut(BaseModel):
     signed_url: str
     file_name: str | None

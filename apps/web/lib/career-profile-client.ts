@@ -256,15 +256,24 @@ export async function appendMiscPoints(points: MiscPoint[]): Promise<CareerProfi
  * there isn't added twice, and past the cap the rest aren't added. With no
  * profile (or no Miscellaneous column) there's nowhere to keep them; the
  * résumé is the same either way. Returns the saved profile, or null when
- * nothing was added. */
-export async function fileUnplacedPoints(sections: UnplacedSection[] | undefined): Promise<CareerProfile | null> {
-  if (!sections?.length) return null;
+ * nothing changed.
+ *
+ * `replace`: this upload replaces the profile's résumé (the Profile's
+ * Replace and Re-parse), so the last upload's points still waiting under
+ * their heading go first. Points typed in, or already filed by the user (a
+ * filed point loses its heading), stay. */
+export async function fileUnplacedPoints(
+  sections: UnplacedSection[] | undefined,
+  { replace = false }: { replace?: boolean } = {},
+): Promise<CareerProfile | null> {
+  if (!sections?.length && !replace) return null;
   const current = await getCareerProfile();
   if (!current || !Array.isArray(current.miscellaneous)) return null;
-  const have = new Set(current.miscellaneous.map((p) => p.text.trim().toLowerCase()));
+  const kept = replace ? current.miscellaneous.filter((p) => typeof p.heading !== "string") : current.miscellaneous;
+  const have = new Set(kept.map((p) => p.text.trim().toLowerCase()));
   const now = new Date().toISOString();
   const fresh: MiscPoint[] = [];
-  for (const { heading, points } of sections) {
+  for (const { heading, points } of sections ?? []) {
     for (const raw of points) {
       const text = raw.trim();
       if (!text || have.has(text.toLowerCase())) continue;
@@ -272,8 +281,9 @@ export async function fileUnplacedPoints(sections: UnplacedSection[] | undefined
       fresh.push({ id: crypto.randomUUID(), text, section: "miscellaneous", heading, created_at: now });
     }
   }
-  const add = fresh.slice(0, Math.max(0, MAX_MISC_POINTS - current.miscellaneous.length));
-  return add.length ? setMiscPoints([...current.miscellaneous, ...add]) : null;
+  const add = fresh.slice(0, Math.max(0, MAX_MISC_POINTS - kept.length));
+  if (!add.length && kept.length === current.miscellaneous.length) return null;
+  return setMiscPoints([...kept, ...add]);
 }
 
 export async function setProfileMasterResume(resumeId: string): Promise<void> {

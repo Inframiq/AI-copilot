@@ -24,7 +24,8 @@ vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto, uploadResumePhoto: vi
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     getResume: vi.fn(),
-    parseResumeFile: vi.fn(),
+    readResumeFile: vi.fn(),
+    saveUploadedResume: vi.fn(),
     getOriginalResumeFile: vi.fn(),
   },
   ApiError: class ApiError extends Error { status = 0; },
@@ -118,14 +119,17 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.getResume as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "r1", title: "Jane's Resume", template_id: "ats_modern", content: {},
     });
+    (apiClient.saveUploadedResume as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "r1", title: "Jane Parsed's Resume", template_id: "ats_modern", content: {},
+    });
   });
 
   it("Re-parse re-runs extraction on the stored file, in place, without a re-upload", async () => {
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
-    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", unplaced: [],
       content: {
         contact: { name: "Jane Parsed" }, skills: ["Python"], awards: ["Spot Award"],
         education: [{ institution: "GITAM", degree: "B.Tech", year: "2019", gpa: "8.6/10", honors: "Dean's List" }],
@@ -139,8 +143,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
 
     await waitFor(() =>
-      // stored template preserved, same row overwritten (resume_id passed)
-      expect(apiClient.parseResumeFile).toHaveBeenCalledWith(expect.any(File), "ats_modern", "r1"),
+      // read for the same row (resume_id passed); stored only with Save
+      expect(apiClient.readResumeFile).toHaveBeenCalledWith(expect.any(File), "r1"),
     );
     expect(apiClient.getOriginalResumeFile).toHaveBeenCalledWith("r1");
     // Awards fill the profile's own Awards section — no longer Miscellaneous.
@@ -150,6 +154,80 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     expect(screen.getByPlaceholderText(/Magna Cum Laude/)).toHaveValue("Dean's List");
   });
 
+  it("stores a Replace only with Save Profile; leaving unsaved keeps the old résumé", async () => {
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane Parsed's Resume",
+      content: { contact: { name: "Jane" }, skills: ["Python"], education: [] },
+      unplaced: [],
+    });
+    renderPage();
+    await screen.findByText("Jane's Resume");
+    const file = new File(["%PDF"], "new.pdf", { type: "application/pdf" });
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!, file);
+
+    // Read into the form and shown as not saved; nothing stored.
+    expect(await screen.findByText("Not saved · saved with Save Profile")).toBeInTheDocument();
+    expect(screen.getByText("Jane Parsed's Resume")).toBeInTheDocument();
+    expect(apiClient.readResumeFile).toHaveBeenCalledWith(file, "r1");
+    expect(apiClient.saveUploadedResume).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /re-parse/i })).toBeNull();
+    // Leaving now asks first.
+    const leave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(apiClient.saveUploadedResume).toHaveBeenCalledWith(
+      file, expect.objectContaining({ skills: ["Python"] }), "ats_clean", "r1",
+    );
+    expect(upsertCareerProfile.mock.calls[0][0].master_resume_id).toBe("r1");
+    expect(await screen.findByText("Jane Parsed's Resume")).toBeInTheDocument();
+    expect(screen.queryByText("Not saved · saved with Save Profile")).toBeNull();
+    const after = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it("saves a first upload as a new résumé, and the profile points at it", async () => {
+    getCareerProfile.mockResolvedValue({ ...withMasterResume, master_resume_id: null });
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", content: { contact: { name: "Jane" }, skills: [], education: [] }, unplaced: [],
+    });
+    (apiClient.saveUploadedResume as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "new1", title: "Jane's Resume", template_id: "ats_clean", content: {},
+    });
+    renderPage();
+    await screen.findByText(/drag & drop your new resume here/i);
+    const file = new File(["%PDF"], "cv.pdf", { type: "application/pdf" });
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!, file);
+    await screen.findByText("Not saved · saved with Save Profile");
+    expect(apiClient.readResumeFile).toHaveBeenCalledWith(file, undefined);
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(apiClient.saveUploadedResume).toHaveBeenCalledWith(file, expect.any(Object), "ats_clean", undefined);
+    expect(upsertCareerProfile.mock.calls[0][0].master_resume_id).toBe("new1");
+  });
+
+  it("doesn't save the profile when the résumé couldn't be saved", async () => {
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", content: { contact: { name: "Jane" }, skills: [], education: [] }, unplaced: [],
+    });
+    (apiClient.saveUploadedResume as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Couldn't save the résumé"));
+    renderPage();
+    await screen.findByText("Jane's Resume");
+    await userEvent.upload(
+      document.querySelector<HTMLInputElement>('input[type="file"][accept=".pdf"]')!,
+      new File(["%PDF"], "new.pdf", { type: "application/pdf" }),
+    );
+    await screen.findByText("Not saved · saved with Save Profile");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the résumé");
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+    expect(screen.getByText("Not saved · saved with Save Profile")).toBeInTheDocument();
+  });
+
   it("offers the résumé's different contact details instead of applying them, never the email", async () => {
     getCareerProfile.mockResolvedValue({
       ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210" },
@@ -157,8 +235,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
-    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", unplaced: [],
       content: {
         // Same phone written another way; a different name; an old email.
         contact: { name: "Jane Smith", email: "old@work.com", phone: "9876543210", location: "Pune" },
@@ -192,8 +270,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
-    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", unplaced: [],
       content: { contact: { name: "Jane Smith", phone: "(+91)-9123456780" }, skills: [], education: [] },
     });
     global.fetch = vi.fn().mockResolvedValue({
@@ -215,8 +293,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
-    (apiClient.parseResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "r1", title: "Jane's Resume", template_id: "ats_modern",
+    (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Jane's Resume", unplaced: [],
       content: { contact: { name: "Jane Smith" }, skills: [], education: [] },
     });
     global.fetch = vi.fn().mockResolvedValue({

@@ -9,6 +9,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import { apiClient, ApiError } from "../lib/api-client";
+import type { ResumeContent } from "@career-copilot/types";
 
 function jsonResponse(body: unknown, init: Partial<Response> = {}) {
   return {
@@ -156,6 +157,41 @@ describe("apiClient", () => {
       );
       const file = new File(["fake"], "resume.pdf", { type: "application/pdf" });
       await expect(apiClient.parseResumeFile(file, "ats_clean")).rejects.toThrow("File too large");
+    });
+  });
+
+  describe("the Profile's upload: read now, saved with the profile", () => {
+    it("reads with the résumé it would replace, and stores nothing", async () => {
+      const read = { title: "Ada's Resume", content: { headline: "Analyst" }, unplaced: [] };
+      vi.mocked(fetch).mockResolvedValue(jsonResponse(read));
+      const file = new File(["fake"], "resume.pdf", { type: "application/pdf" });
+
+      expect(await apiClient.readResumeFile(file, "r1")).toEqual(read);
+      const [url, init] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain("/resumes/read-upload");
+      const form = init?.body as FormData;
+      expect(form.get("file")).toBe(file);
+      expect(form.get("resume_id")).toBe("r1");
+    });
+
+    it("saves the file and the content as read, replacing the résumé named", async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ id: "r1" }));
+      const file = new File(["fake"], "resume.pdf", { type: "application/pdf" });
+
+      await apiClient.saveUploadedResume(file, { headline: "Analyst" } as ResumeContent, "ats_modern", "r1");
+      const [url, init] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain("/resumes/save-upload");
+      const form = init?.body as FormData;
+      expect(form.get("file")).toBe(file);
+      expect(JSON.parse(form.get("content") as string)).toEqual({ headline: "Analyst" });
+      expect(form.get("template_id")).toBe("ats_modern");
+      expect(form.get("resume_id")).toBe("r1");
+    });
+
+    it("a first upload names no résumé, so the save makes a new one", async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ id: "new" }));
+      await apiClient.saveUploadedResume(new File(["x"], "a.pdf"), {} as ResumeContent, "ats_clean");
+      expect((vi.mocked(fetch).mock.calls[0][1]?.body as FormData).has("resume_id")).toBe(false);
     });
   });
 

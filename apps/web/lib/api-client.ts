@@ -116,6 +116,30 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+/** `request` for a form with a file in it. */
+async function postForm<T>(path: string, form: FormData, fallback: string): Promise<T> {
+  const token = await getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    if (res.status === 402) reportCreditRefusal(err.detail);
+    if (res.status === 403) reportPolicyRefusal(err.detail);
+    throw new ApiError(res.status, detailMessage(err.detail, fallback), err.detail);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** An upload as read, stored nowhere (readResumeFile). */
+export interface ReadUpload {
+  title: string;
+  content: ResumeContent;
+  unplaced: UnplacedSection[];
+}
+
 export interface PolicyAcceptance {
   terms_version: string | null;
   privacy_version: string | null;
@@ -281,29 +305,47 @@ export const apiClient = {
   ): Promise<Resume & { unplaced?: UnplacedSection[] }> =>
     // A new résumé (no resumeId) can hit the limit — same ask-and-retry as
     // createResume. Replacing one in place never does.
-    withResumeRoom(async () => {
-      const token = await getToken();
+    withResumeRoom(() => {
       const form = new FormData();
       form.append("file", file);
       form.append("template_id", templateId);
       if (resumeId) form.append("resume_id", resumeId);
-      const res = await fetch(`${BASE}/resumes/parse-upload`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        if (res.status === 402) reportCreditRefusal(err.detail);
-        if (res.status === 403) reportPolicyRefusal(err.detail);
-        throw new ApiError(res.status, detailMessage(err.detail, "Upload failed"), err.detail);
-      }
-      return res.json() as Promise<Resume & { unplaced?: UnplacedSection[] }>;
+      return postForm<Resume & { unplaced?: UnplacedSection[] }>("/resumes/parse-upload", form, "Upload failed");
     }).then(
       // Every upload asks the person to check the headline the parser
       // read, so each caller gets the résumé back with it confirmed.
       confirmHeadline
     ),
+
+  /** Reads a PDF with the model (charged) and stores nothing: the Profile
+   * fills its form from it and saves the résumé with saveUploadedResume
+   * when the profile is saved. `resumeId` is the résumé a save would
+   * replace; without it a new one would need room. The headline is asked
+   * about as after any upload, kept with the read until the save. */
+  readResumeFile: (file: File, resumeId?: string): Promise<ReadUpload> =>
+    withResumeRoom(() => {
+      const form = new FormData();
+      form.append("file", file);
+      if (resumeId) form.append("resume_id", resumeId);
+      return postForm<ReadUpload>("/resumes/read-upload", form, "Upload failed");
+    }).then(async (read) => ({
+      ...read,
+      content: (await confirmHeadline({ id: "", content: read.content })).content,
+    })),
+
+  /** Stores a read upload: the file as the résumé's original, the content
+   * as its fields — replacing `resumeId` in place, or a new résumé. */
+  saveUploadedResume: (
+    file: File, content: ResumeContent, templateId: string, resumeId?: string,
+  ): Promise<Resume> =>
+    withResumeRoom(() => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("content", JSON.stringify(content));
+      form.append("template_id", templateId);
+      if (resumeId) form.append("resume_id", resumeId);
+      return postForm<Resume>("/resumes/save-upload", form, "Couldn't save the résumé");
+    }),
 
   // ── Job Descriptions ──────────────────────────────────────────────────────
   getJds: (): Promise<JobDescription[]> =>

@@ -25,7 +25,7 @@ vi.mock("@/lib/career-profile-client", async (importOriginal) => {
 });
 vi.mock("@/lib/photo-upload", () => ({ uploadProfilePhoto: vi.fn(), uploadResumePhoto: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({
-  apiClient: { getResume: vi.fn(), parseResumeFile: vi.fn(), getOriginalResumeFile: vi.fn() },
+  apiClient: { getResume: vi.fn(), readResumeFile: vi.fn(), getOriginalResumeFile: vi.fn() },
   ApiError: class ApiError extends Error { status = 0; },
 }));
 
@@ -64,8 +64,8 @@ describe("My Profile — contact information is fixed against résumé uploads",
   });
 
   it("keeps the user's contact details when a résumé is uploaded, filling only empty fields", async () => {
-    vi.mocked(apiClient.parseResumeFile).mockResolvedValue({
-      id: "r1", title: "Résumé", template_id: "ats_clean",
+    vi.mocked(apiClient.readResumeFile).mockResolvedValue({
+      title: "Résumé", unplaced: [],
       content: {
         contact: { name: "J. Smith", email: "old@work.com", phone: "555-0100", linkedin: "linkedin.com/in/jane" },
         experience: [], education: [], skills: [],
@@ -76,7 +76,7 @@ describe("My Profile — contact information is fixed against résumé uploads",
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(["%PDF"], "resume.pdf", { type: "application/pdf" }));
 
-    await waitFor(() => expect(apiClient.parseResumeFile).toHaveBeenCalled());
+    await waitFor(() => expect(apiClient.readResumeFile).toHaveBeenCalled());
     expect(await screen.findByDisplayValue("linkedin.com/in/jane")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Jane Smith")).toBeInTheDocument();
     expect(screen.getByDisplayValue("+91 98765 43210")).toBeInTheDocument();

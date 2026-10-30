@@ -1,9 +1,11 @@
 import asyncio
 import base64
+import json
 import logging
 import uuid
 from datetime import timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status, UploadFile, File, Form
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, update
 from app.db.session import get_db, AsyncSessionLocal
@@ -11,9 +13,10 @@ from app.db.models import Resume, JobDescription, ResumeDeletionLog
 from app.core.security import get_current_user
 from app.core.rate_limit import ai_global_limit, limiter
 from app.core.credits import spend_credits, refund_credits
+from app.core.nul_chars import _without_nul
 from app.schemas.resume import (
     ResumeCreate, ResumeUpdate, ResumeOut, UploadedResumeOut, UnplacedSection, PdfGenerateRequest,
-    OriginalFileOut,
+    OriginalFileOut, ReadUploadOut,
 )
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
@@ -691,35 +694,8 @@ def _uploaded(resume: Resume, unplaced: list[dict]) -> UploadedResumeOut:
     return out
 
 
-@router.post("/parse-upload", response_model=UploadedResumeOut, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
-@ai_global_limit
-async def parse_and_create_resume(
-    request: Request,
-    response: Response,
-    file: UploadFile = File(...),
-    template_id: str = Form("ats_clean"),
-    # When set (the Profile page's "Replace" flow), the parsed content
-    # overwrites this existing resume in place instead of creating a new,
-    # orphaned row — otherwise every re-upload left the old resume dangling
-    # and callers that pick "the" resume by id could keep resolving to it.
-    resume_id: uuid.UUID | None = Form(None),
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Upload a PDF or DOCX resume, parse it with AI, and create (or replace) a Resume row."""
-    if template_id not in _VALID_TEMPLATES:
-        raise HTTPException(status_code=400, detail="Invalid template_id.")
-
-    existing_resume: Resume | None = None
-    if resume_id is not None:
-        result = await db.execute(
-            select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
-        )
-        existing_resume = result.scalar_one_or_none()
-        if existing_resume is None:
-            raise HTTPException(status_code=404, detail="Resume not found")
-
+async def _vetted_upload(file: UploadFile) -> tuple[bytes, str | None]:
+    """The upload's bytes and file name, once it's a PDF of at most 10 MB."""
     # Kept as the résumé's file name (and its title when the parse finds no
     # name): no NUL, which the database can't store, and no longer than the
     # column. Either one used to fail the save after the parse (test ATK-029).
@@ -741,6 +717,106 @@ async def parse_and_create_resume(
         _check_magic_bytes(raw_bytes)
     except ValueError:
         raise HTTPException(status_code=400, detail="Only PDF files are supported. Convert your resume to PDF and re-upload.")
+    return raw_bytes, file_name
+
+
+async def _pdf_text(raw_bytes: bytes) -> str:
+    """The PDF's text, read in the sandbox; refuses a file it won't open."""
+    try:
+        # Opened only in the sandbox (app/services/sandbox.py): a separate
+        # process with none of the API's secrets, locked down and killed
+        # outright on timeout — a thread could only be stopped waiting
+        # for (security review M5). It also refuses a PDF carrying
+        # scripts, launch actions or embedded files.
+        raw_text = await asyncio.to_thread(sandbox.extract_pdf_text, raw_bytes)
+    except sandbox.SandboxRejected as exc:
+        # Too long, password-protected, or active content: the reason.
+        raise HTTPException(status_code=422, detail=str(exc))
+    except sandbox.SandboxTimeout:
+        raise HTTPException(status_code=422, detail="File took too long to process.")
+    except sandbox.SandboxBusy:
+        raise HTTPException(status_code=503, detail="Too many uploads right now. Try again in a minute.")
+    except Exception:
+        logger.warning("upload text extraction failed", exc_info=True)
+        raise HTTPException(status_code=422, detail="Could not extract text from the file.")
+
+    if not raw_text.strip():
+        raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+    return raw_text
+
+
+async def _read_with_model(raw_text: str) -> dict:
+    provider = get_ai_provider()
+    try:
+        return await parse_resume_text(raw_text, provider)
+    except ResumeUnreadable:
+        logger.warning("upload parse returned unreadable output")
+        raise HTTPException(
+            status_code=502,
+            detail="We couldn't read your résumé this time. Your credit was refunded — please try again.",
+        )
+
+
+def _upload_title(content: dict, file_name: str | None) -> str:
+    """From the candidate's name, else the file's."""
+    contact = content.get("contact")
+    name = contact.get("name") if isinstance(contact, dict) else None
+    name = name.strip() if isinstance(name, str) else ""
+    return (f"{name}'s Resume" if name else (file_name or "Uploaded Resume"))[:255]
+
+
+def _store_original(user_id: str, resume_id: uuid.UUID, raw_bytes: bytes) -> str:
+    """Stores the user's master copy, shown verbatim in Preview. Synchronous
+    and required (unlike the best-effort background upload used for
+    generated preview PDFs): if this fails, the whole upload fails rather
+    than leaving a Resume row with no master file. A name of its own per
+    upload: replacing a résumé used to overwrite its original.pdf before
+    parsing, so a failed parse left the old résumé showing the new file. The
+    old file goes once the row points at the new one."""
+    path = f"resumes/{user_id}/{resume_id}/original-{uuid.uuid4().hex}.pdf"
+    try:
+        _supabase().storage.from_("resumes").upload(
+            path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
+    return path
+
+
+async def _owned_resume(db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID, lock: bool = False) -> Resume:
+    query = select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    resume = (await db.execute(query.with_for_update() if lock else query)).scalar_one_or_none()
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return resume
+
+
+@router.post("/parse-upload", response_model=UploadedResumeOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+@ai_global_limit
+async def parse_and_create_resume(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+    template_id: str = Form("ats_clean"),
+    # When set, the parsed content overwrites this existing resume in place
+    # instead of creating a new, orphaned row — otherwise every re-upload
+    # left the old resume dangling and callers that pick "the" resume by id
+    # could keep resolving to it. (The Profile reads with read-upload and
+    # saves with save-upload instead, so leaving it unsaved changes nothing.)
+    resume_id: uuid.UUID | None = Form(None),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a PDF or DOCX resume, parse it with AI, and create (or replace) a Resume row."""
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+
+    existing_resume: Resume | None = None
+    if resume_id is not None:
+        existing_resume = await _owned_resume(db, uuid.UUID(user["sub"]), resume_id)
+
+    raw_bytes, file_name = await _vetted_upload(file)
 
     if existing_resume is None:
         await _ensure_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
@@ -762,66 +838,23 @@ async def parse_and_create_resume(
         # can be uploaded to its final storage path before the Resume row exists.
         resume_id = existing_resume.id if existing_resume is not None else uuid.uuid4()
 
-        try:
-            # Opened only in the sandbox (app/services/sandbox.py): a separate
-            # process with none of the API's secrets, locked down and killed
-            # outright on timeout — a thread could only be stopped waiting
-            # for (security review M5). It also refuses a PDF carrying
-            # scripts, launch actions or embedded files.
-            raw_text = await asyncio.to_thread(sandbox.extract_pdf_text, raw_bytes)
-        except sandbox.SandboxRejected as exc:
-            # Too long, password-protected, or active content: the reason.
-            raise HTTPException(status_code=422, detail=str(exc))
-        except sandbox.SandboxTimeout:
-            raise HTTPException(status_code=422, detail="File took too long to process.")
-        except sandbox.SandboxBusy:
-            raise HTTPException(status_code=503, detail="Too many uploads right now. Try again in a minute.")
-        except Exception:
-            logger.warning("upload text extraction failed", exc_info=True)
-            raise HTTPException(status_code=422, detail="Could not extract text from the file.")
-
-        if not raw_text.strip():
-            raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+        raw_text = await _pdf_text(raw_bytes)
 
         # Stored only now, once the sandbox has read it and found nothing
-        # active in it — a refused file never reaches storage. This is the
-        # user's master copy, shown verbatim in Preview. Synchronous and
-        # required (unlike the best-effort background upload used for
-        # generated preview PDFs): if this fails, the whole upload fails
-        # rather than leaving a Resume row with no master file.
-        # A name of its own per upload: replacing a résumé used to overwrite
-        # its original.pdf before parsing, so a failed parse left the old
-        # résumé showing the new file. The old file goes once the row points
-        # at the new one.
-        original_path = f"resumes/{user['sub']}/{resume_id}/original-{uuid.uuid4().hex}.pdf"
-        try:
-            _supabase().storage.from_("resumes").upload(
-                original_path, raw_bytes, {"content-type": "application/pdf", "upsert": "true"}
-            )
-        except Exception:
-            raise HTTPException(status_code=502, detail="Could not store the uploaded file. Please try again.")
+        # active in it — a refused file never reaches storage.
+        original_path = _store_original(user["sub"], resume_id, raw_bytes)
         stored_path = original_path
 
-        provider = get_ai_provider()
-        try:
-            parsed = await parse_resume_text(raw_text, provider)
-        except ResumeUnreadable:
-            logger.warning("upload parse returned unreadable output")
-            raise HTTPException(
-                status_code=502,
-                detail="We couldn't read your résumé this time. Your credit was refunded — please try again.",
-            )
+        parsed = await _read_with_model(raw_text)
         # Points printed under no job go back to the page for the profile's
         # Miscellaneous; the résumé keeps only what it printed in place.
         unplaced = parsed.pop("unplaced", [])
 
-        # Derive a sensible title from the candidate's name
-        name = parsed.get("contact", {}).get("name", "").strip()
-        title = f"{name}'s Resume" if name else (file_name or "Uploaded Resume")
+        title = _upload_title(parsed, file_name)
 
         if existing_resume is not None:
             previous_path = existing_resume.original_file_path
-            existing_resume.title = title[:255]
+            existing_resume.title = title
             existing_resume.template_id = template_id
             existing_resume.content = parsed
             existing_resume.original_file_path = original_path
@@ -835,7 +868,7 @@ async def parse_and_create_resume(
             return _uploaded(existing_resume, unplaced)
 
         await _claim_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
-        title = await _dedupe_title(db, uuid.UUID(user["sub"]), title[:255])
+        title = await _dedupe_title(db, uuid.UUID(user["sub"]), title)
         resume = Resume(
             id=resume_id,
             user_id=uuid.UUID(user["sub"]),
@@ -861,3 +894,118 @@ async def parse_and_create_resume(
         await refund_credits(db, uuid.UUID(user["sub"]), "parse_resume", email=user.get("email"))
         await db.commit()
         raise
+
+
+@router.post("/read-upload", response_model=ReadUploadOut)
+@limiter.limit("5/minute")
+@ai_global_limit
+async def read_uploaded_resume(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+    # The résumé a save would replace; without it, the save makes a new one.
+    resume_id: uuid.UUID | None = Form(None),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read a PDF résumé with the model and return what it holds. Nothing is
+    stored: the Profile fills its form from this, and the résumé is written
+    by save-upload when the profile is saved. Leaving unsaved changes
+    nothing but the credit the read cost."""
+    user_id = uuid.UUID(user["sub"])
+    if resume_id is not None:
+        await _owned_resume(db, user_id, resume_id)
+    raw_bytes, file_name = await _vetted_upload(file)
+    if resume_id is None:
+        # No charge for a read that could never be saved.
+        await _ensure_room_for_a_new_resume(db, user_id)
+
+    await spend_credits(db, user_id, "parse_resume", email=user.get("email"))
+    await db.commit()
+    try:
+        parsed = await _read_with_model(await _pdf_text(raw_bytes))
+    except Exception:
+        # Nothing was delivered: the credit goes back.
+        await db.rollback()
+        await refund_credits(db, user_id, "parse_resume", email=user.get("email"))
+        await db.commit()
+        raise
+    unplaced = parsed.pop("unplaced", [])
+    return ReadUploadOut(
+        title=_upload_title(parsed, file_name),
+        content=parsed,
+        unplaced=[UnplacedSection(**g) for g in unplaced],
+    )
+
+
+@router.post("/save-upload", response_model=ResumeOut)
+@limiter.limit("10/minute")
+async def save_uploaded_resume(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+    # The résumé as read-upload returned it (headline confirmed), as JSON.
+    content: str = Form(...),
+    template_id: str = Form("ats_clean"),
+    # Replaced in place when set; a new résumé otherwise.
+    resume_id: uuid.UUID | None = Form(None),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store a résumé read by read-upload: the file as its original, the
+    content as its fields. No model runs, so nothing is charged. The file is
+    checked again, sandbox included, since this is where it's stored."""
+    user_id = uuid.UUID(user["sub"])
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+    # Checked like any résumé content saved (PATCH /resumes): the size cap
+    # and keyboard text. A NUL can't be stored and means nothing: dropped.
+    try:
+        decoded = _without_nul(json.loads(content))
+        if not isinstance(decoded, dict):
+            raise ValueError("not an object")
+        fields = ResumeUpdate(content=decoded).content
+    except (ValueError, ValidationError):
+        raise HTTPException(status_code=422, detail="The résumé's content couldn't be read. Upload it again.")
+    if resume_id is not None:
+        await _owned_resume(db, user_id, resume_id)
+    raw_bytes, file_name = await _vetted_upload(file)
+    await _pdf_text(raw_bytes)
+    if resume_id is None:
+        await _ensure_room_for_a_new_resume(db, user_id)
+
+    new_id = resume_id or uuid.uuid4()
+    stored_path = _store_original(user["sub"], new_id, raw_bytes)
+    title = _upload_title(fields, file_name)
+    previous_path: str | None = None
+    try:
+        if resume_id is not None:
+            # Locked, like every save of a résumé: one replace at a time.
+            resume = await _owned_resume(db, user_id, resume_id, lock=True)
+            previous_path = resume.original_file_path
+            resume.title = title
+            resume.template_id = template_id
+            resume.content = fields
+            resume.original_file_path = stored_path
+            resume.original_file_name = file_name
+        else:
+            await _claim_room_for_a_new_resume(db, user_id)
+            resume = Resume(
+                id=new_id, user_id=user_id,
+                title=await _dedupe_title(db, user_id, title),
+                template_id=template_id, content=fields,
+                original_file_path=stored_path, original_file_name=file_name,
+            )
+            db.add(resume)
+        await db.commit()
+    except Exception:
+        # Nothing saved: the file stored for it goes too.
+        await db.rollback()
+        _remove_stored_file(stored_path)
+        raise
+    if previous_path and previous_path != stored_path:
+        _remove_stored_file(previous_path)
+    await db.refresh(resume)
+    if resume_id is None:
+        response.status_code = status.HTTP_201_CREATED
+    return resume

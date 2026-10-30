@@ -386,3 +386,33 @@ async def test_uploads_sent_together_stop_at_five_and_clean_up_the_refused(Sessi
     stored = [c.args[0] for c in bucket.upload.call_args_list]
     removed = [p for c in bucket.remove.call_args_list for p in c.args[0]]
     assert len(stored) == 2 and len(removed) == 1 and removed[0] in stored  # the refused one's file
+
+
+async def test_profile_upload_saves_sent_together_stop_at_five_and_clean_up_the_refused(Session):
+    """The Profile's upload is saved with the profile (save-upload): two
+    saves of a new résumé at four make one, and the refused one's file goes."""
+    import io
+    import json
+    from tests.test_resumes_more import _FAKE_PDF_BYTES
+
+    await _resumes(Session, 4)
+    storage = MagicMock()
+
+    async def save(c):
+        return await c.post(
+            "/resumes/save-upload", headers=auth(),
+            data={"template_id": "ats_clean", "content": json.dumps({"contact": {"name": "Ada"}})},
+            files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
+        )
+
+    with held_until_all_arrive(resumes_router, "_ensure_room_for_a_new_resume", 2), \
+         patch.object(resumes_router, "_supabase", return_value=storage), \
+         patch.object(resumes_router.sandbox, "extract_pdf_text", return_value="Ada"):
+        async with _client() as c:
+            replies = await asyncio.gather(save(c), save(c))
+    assert sorted(r.status_code for r in replies) == [201, 409], [r.text for r in replies]
+    assert await _resume_count(Session) == 5
+    bucket = storage.storage.from_.return_value
+    stored = [c.args[0] for c in bucket.upload.call_args_list]
+    removed = [p for c in bucket.remove.call_args_list for p in c.args[0]]
+    assert len(stored) == 2 and len(removed) == 1 and removed[0] in stored  # the refused one's file

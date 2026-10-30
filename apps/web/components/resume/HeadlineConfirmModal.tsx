@@ -1,11 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CircleNotch } from "@phosphor-icons/react";
-import type { Resume } from "@career-copilot/types";
 import { apiClient } from "@/lib/api-client";
 import { FOCUS_RING } from "@/lib/focus";
 import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
-import { useHeadlineConfirmStore } from "@/stores/headline-confirm-store";
+import { useHeadlineConfirmStore, type HeadlineSubject } from "@/stores/headline-confirm-store";
 
 const MAX_LENGTH = 120;
 
@@ -28,7 +27,7 @@ export function HeadlineConfirmModal() {
   return <HeadlineDialog key={resume.id} resume={resume} resolve={resolve} />;
 }
 
-function HeadlineDialog({ resume, resolve }: { resume: Resume; resolve: (resume: Resume) => void }) {
+function HeadlineDialog({ resume, resolve }: { resume: HeadlineSubject; resolve: (resume: HeadlineSubject) => void }) {
   const read = (resume.content.headline ?? "").trim();
   const [value, setValue] = useState(read);
   const [saving, setSaving] = useState(false);
@@ -36,6 +35,8 @@ function HeadlineDialog({ resume, resolve }: { resume: Resume; resolve: (resume:
   const inputRef = useRef<HTMLInputElement>(null);
   const found = read.length > 0;
   const next = value.trim();
+  // An upload not saved yet: the headline goes back with it, saved later.
+  const draft = !resume.id;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -43,6 +44,7 @@ function HeadlineDialog({ resume, resolve }: { resume: Resume; resolve: (resume:
 
   async function confirm() {
     if (next === read) return resolve(resume);
+    if (draft) return resolve({ ...resume, content: { ...resume.content, headline: next || undefined } });
     setSaving(true);
     setError(null);
     try {
@@ -109,7 +111,7 @@ function HeadlineDialog({ resume, resolve }: { resume: Resume; resolve: (resume:
               className={`flex-[1.4] inline-flex items-center justify-center gap-xs py-sm rounded-lg bg-primary text-on-primary text-label-md font-semibold hover:bg-primary-container disabled:opacity-50 ${FOCUS_RING}`}
             >
               {saving && <CircleNotch size={16} className="animate-spin motion-reduce:animate-none" />}
-              {saving ? "Saving…" : next === read ? "Looks right" : "Save headline"}
+              {saving ? "Saving…" : next === read ? "Looks right" : draft ? "Use headline" : "Save headline"}
             </button>
           </div>
         </SheetBody>
