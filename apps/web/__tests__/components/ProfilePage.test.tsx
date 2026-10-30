@@ -226,7 +226,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
     const offers = await screen.findByRole("region", { name: "Details from the uploaded résumé" });
-    expect(offers).toHaveTextContent("Saving keeps the profile's details unless one is chosen here.");
+    expect(offers).toHaveTextContent("Default: Keep mine. Saving without a choice keeps the profile's details.");
+    expect(screen.getByRole("button", { name: "Keep mine (default)" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());

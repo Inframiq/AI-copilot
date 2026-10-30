@@ -31,7 +31,7 @@ export function ContactOffers({ offers, contact, onUse, onDismiss }: {
         <FileArrowUp size={18} className="mt-[2px] shrink-0 text-primary" />
         <div className="min-w-0">
           <p className="text-label-md font-semibold text-on-surface">Different on the uploaded résumé</p>
-          <p className="text-caption text-on-surface-variant">Saving keeps the profile's details unless one is chosen here.</p>
+          <p className="text-caption text-on-surface-variant">Default: Keep mine. Saving without a choice keeps the profile's details.</p>
         </div>
       </div>
       <ul className="divide-y divide-outline-variant/30">
@@ -59,7 +59,7 @@ export function ContactOffers({ offers, contact, onUse, onDismiss }: {
       <div className="flex justify-end gap-sm border-t border-outline-variant/30 bg-surface-container-lowest/60 px-md py-sm">
         <button type="button" onClick={onDismiss}
           className={`${btn} text-on-surface-variant hover:bg-on-surface/5 hover:text-on-surface`}>
-          Keep mine
+          Keep mine <span className="font-normal opacity-70">(default)</span>
         </button>
         {offers.length > 1 && (
           <button type="button" onClick={() => onUse(offers)}
