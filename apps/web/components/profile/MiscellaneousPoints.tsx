@@ -135,10 +135,12 @@ export function MiscellaneousPoints({ replacing }: {
               const fromPrevious = previous.includes(point);
               const dropping = fromPrevious && !replacing!.keeping.includes(point.id);
               return (
-              <li key={point.id} className={`flex flex-col gap-xs rounded-xl border p-sm sm:flex-row sm:items-start ${
+              <li key={point.id} className={`flex flex-col gap-xs rounded-xl border p-sm ${
                 dropping ? "border-error/30 bg-error/[0.03]" : "border-outline-variant/30"}`}>
+                {/* Above the point at every width: beside it, the mark's
+                    changing label moved and squeezed the text box. */}
                 {fromPrevious && (
-                  <div className="flex items-center gap-xs sm:order-last">
+                  <div className="flex items-center gap-xs">
                     <span className={`text-caption ${dropping ? "text-error font-semibold" : "text-on-surface-variant"}`}>
                       {dropping ? "Removed on save" : "Previous résumé · kept"}
                     </span>
@@ -150,6 +152,7 @@ export function MiscellaneousPoints({ replacing }: {
                     </button>
                   </div>
                 )}
+                <div className="flex flex-col gap-xs sm:flex-row sm:items-start">
                 <textarea
                   aria-label="Saved point"
                   value={drafts[point.id] ?? point.text}
@@ -189,6 +192,7 @@ export function MiscellaneousPoints({ replacing }: {
                   >
                     <Trash size={16} />
                   </button>
+                </div>
                 </div>
               </li>
               );
