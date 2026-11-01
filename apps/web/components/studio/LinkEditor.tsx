@@ -8,9 +8,9 @@ const WIDTH = 320;
 const GUTTER = 16;
 
 /**
- * Edits a link's two halves: the text the résumé shows and the address it
- * opens. Blank display text shows the URL itself, which is what every link
- * did before display text existed.
+ * Edits a link's address. The résumé prints the address itself, never a
+ * label over it: most parsers keep the visible text and drop the link
+ * underneath, so a link shown as "LinkedIn" reached the ATS as that word.
  *
  * Anchored under the link, in the page rather than the canvas's shadow root,
  * so it is styled by the app and never part of the document that exports.
@@ -23,16 +23,14 @@ export function LinkEditor({
   onClose,
 }: {
   link: LinkTarget;
-  onSave: (url: string, text: string) => void;
+  onSave: (url: string) => void;
   /** Takes the link off the résumé. Offered only for a link that exists. */
   onRemove?: () => void;
   onClose: () => void;
 }) {
   const adding = !link.url;
-  const [text, setText] = useState(link.text);
   const [url, setUrl] = useState(link.url);
   const panelRef = useRef<HTMLFormElement>(null);
-  const textId = useId();
   const urlId = useId();
 
   useEffect(() => {
@@ -72,27 +70,17 @@ export function LinkEditor({
       onSubmit={(event) => {
         event.preventDefault();
         if (!trimmedUrl || !tidyUrl) return;
-        onSave(tidyUrl, text.trim());
+        onSave(tidyUrl);
       }}
       style={{ top: link.rect.bottom + 8, left, width: `min(${WIDTH}px, calc(100vw - ${GUTTER * 2}px))` }}
       className="fixed z-50 flex flex-col gap-sm rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-md shadow-xl"
     >
-      <label htmlFor={textId} className="text-label-sm font-semibold text-on-surface">
-        Display text
-      </label>
-      <input
-        id={textId}
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={trimmedUrl || "Shown on the résumé"}
-        className={`rounded-lg border border-outline-variant/50 bg-surface px-sm py-xs text-body-sm text-on-surface ${FOCUS_RING}`}
-      />
       <label htmlFor={urlId} className="text-label-sm font-semibold text-on-surface">
         Link URL
       </label>
       <input
         id={urlId}
+        autoFocus
         type="text"
         inputMode="url"
         value={url}
@@ -108,7 +96,7 @@ export function LinkEditor({
         <p id={urlHintId} className="text-caption text-error">{SOCIAL_HINT[social]}</p>
       )}
       <p className="text-caption text-on-surface-variant">
-        Leave the display text blank to show the URL itself.
+        Printed as the address itself, so an ATS can read it.
       </p>
       <div className="flex justify-end gap-sm">
         {!adding && onRemove && (

@@ -279,9 +279,26 @@ def test_accent_color_override_appears_instead_of_default(template_id, avatar_st
     resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
     default_html = _render_html(resume, template_id)
     default_count = default_html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id])
-    html = _render_html(resume, template_id, accent_color="#00aa55")
-    assert "#00aa55" in html
+    html = _render_html(resume, template_id, accent_color="#0b6e3a")
+    assert "#0b6e3a" in html
     assert html.lower().count(TEMPLATE_DEFAULT_ACCENT_LOWER[template_id]) < default_count
+
+
+@pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
+def test_an_accent_too_light_to_read_falls_back_to_the_templates_own(template_id, avatar_store, trusted_settings):
+    """Near-white headings are hidden text to a recruiter's parsed view — the
+    ATS reference has the builder block them. A light accent renders as the
+    template's default instead."""
+    resume = _resume_for_template(template_id, SAMPLE_RESUME, avatar_store)
+    default_html = _render_html(resume, template_id)
+    for light in ("#ffffff", "#f5f5f5", "#ffee88", "#00aa55"):
+        assert _render_html(resume, template_id, accent_color=light) == default_html, light
+
+
+def test_every_template_default_accent_reads_on_white():
+    from app.services.pdf import MIN_ACCENT_CONTRAST, TEMPLATE_DEFAULT_ACCENT, contrast_on_white
+    for template_id, accent in TEMPLATE_DEFAULT_ACCENT.items():
+        assert contrast_on_white(accent) >= MIN_ACCENT_CONTRAST, template_id
 
 
 def test_unknown_font_choice_falls_back_to_sans():
@@ -823,8 +840,8 @@ def test_the_web_gallery_lists_exactly_the_templates_the_api_renders():
 def test_every_template_marks_its_links_for_the_studio_editor(
     template_id, avatar_store, trusted_settings
 ):
-    """A link is two values — the address and the text shown for it — so the
-    Studio edits it through its own panel rather than in place. It finds them
+    """A link is edited through the Studio's own panel rather than in place
+    (its address is not just the text typed over it). The Studio finds them
     by the data-link attributes the url_link filter emits, and only when the
     template passes the field's path to that filter. Forget the path and the
     link silently becomes uneditable: it still renders, so nothing looks
@@ -850,9 +867,10 @@ def test_every_template_marks_its_links_for_the_studio_editor(
     assert "contact.github" in found
     assert "contact.website" in found
     assert "projects.0.link" in found
-    # The display text round-trips too — it is the half of the pair that has
-    # no other home, so a dropped label is a silently lost edit.
-    assert 'data-link-text="My LinkedIn"' in html
+    # The address prints, never the old label: a parser keeps the visible
+    # text, so "My LinkedIn" would be all it stored.
+    assert "My LinkedIn" not in html
+    assert ">linkedin.com/in/jane</a>" in html
 
 
 def test_every_template_has_a_gallery_thumbnail():
@@ -913,8 +931,10 @@ def test_url_link_prepends_https_to_a_bare_domain():
 
 
 def test_url_link_preserves_an_already_full_url():
-    html = _url_link("https://github.com/janedoe")
-    assert html == '<a href="https://github.com/janedoe">https://github.com/janedoe</a>'
+    """The href keeps the address as given; the printed form drops the
+    scheme, a leading www. and a trailing slash."""
+    html = _url_link("https://www.github.com/janedoe/")
+    assert html == '<a href="https://www.github.com/janedoe/">github.com/janedoe</a>'
 
 
 def test_url_link_rejects_unsafe_schemes_and_falls_back_to_plain_text():
@@ -1001,10 +1021,14 @@ def test_each_render_gets_its_own_fetcher():
     assert _blocked_url_fetcher() is not _blocked_url_fetcher()
 
 
-def test_url_link_shows_its_display_text_but_opens_the_url():
+def test_url_link_prints_the_address_even_when_a_label_was_saved():
+    """Most parsers keep the text you can see, not the link underneath, so a
+    link shown as "LinkedIn" reached the ATS as that one word. A label saved
+    before this is ignored."""
     html = _url_link("linkedin.com/in/janedoe", "LinkedIn")
     assert 'href="https://linkedin.com/in/janedoe"' in html
-    assert ">LinkedIn</a>" in html
+    assert ">linkedin.com/in/janedoe</a>" in html
+    assert "LinkedIn<" not in html
 
 
 def test_url_link_blank_display_text_shows_the_url():
@@ -1012,12 +1036,12 @@ def test_url_link_blank_display_text_shows_the_url():
 
 
 def test_url_link_with_a_path_is_marked_for_the_studio_editor():
-    html = _url_link("github.com/jane", "My <GitHub>", "contact.github")
+    html = _url_link("github.com/jane?x=<b>", "My <GitHub>", "contact.github")
     assert 'data-link="contact.github"' in html
-    assert 'data-link-url="github.com/jane"' in html
-    # Display text is escaped in both the attribute and the visible text.
-    assert 'data-link-text="My &lt;GitHub&gt;"' in html
-    assert ">My &lt;GitHub&gt;</a>" in html
+    # The address is escaped in both the attribute and the visible text.
+    assert 'data-link-url="github.com/jane?x=&lt;b&gt;"' in html
+    assert ">github.com/jane?x=&lt;b&gt;</a>" in html
+    assert "GitHub" not in html
 
 
 def test_url_link_marks_an_invalid_url_so_it_can_still_be_fixed():
@@ -1029,7 +1053,7 @@ def test_url_link_marks_an_invalid_url_so_it_can_still_be_fixed():
 @pytest.mark.parametrize(
     "template", ["ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal"]
 )
-def test_templates_render_link_display_text_with_the_real_href(template, avatar_store, trusted_settings):
+def test_templates_print_each_links_address_with_the_real_href(template, avatar_store, trusted_settings):
     from app.services.pdf import render_resume_html
 
     content = {
@@ -1043,7 +1067,9 @@ def test_templates_render_link_display_text_with_the_real_href(template, avatar_
     }
     html = render_resume_html(_resume_for_template(template, content, avatar_store), template)
     assert 'href="https://linkedin.com/in/jane"' in html
-    assert ">LinkedIn</a>" in html
-    assert ">Portfolio</a>" in html
-    assert ">Source</a>" in html
+    assert ">linkedin.com/in/jane</a>" in html
+    assert ">jane.dev</a>" in html
+    assert ">github.com/jane/p</a>" in html
+    for label in (">LinkedIn<", ">Portfolio<", ">Source<"):
+        assert label not in html
     assert 'data-link="projects.0.link"' in html

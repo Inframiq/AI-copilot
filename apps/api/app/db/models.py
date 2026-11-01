@@ -20,9 +20,13 @@ class Resume(Base):
     template_id: Mapped[str] = mapped_column(String(50), nullable=False, default="ats_clean")
     # PDF rendering preferences — see services/pdf.py generate_pdf. Same
     # persist-on-change pattern as template_id (set via POST /{id}/pdf).
-    line_spacing: Mapped[float] = mapped_column(Float, nullable=False, default=1.25)
+    line_spacing: Mapped[float] = mapped_column(Float, nullable=False, default=1.15)
     paragraph_spacing: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
     font_choice: Mapped[str] = mapped_column(String(20), nullable=False, default="sans")
+    # "A4" or "Letter" — the paper the PDF renders on (migration 056).
+    page_size: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="A4", server_default="A4"
+    )
     # Points added to the sizes the template declares, headings and body text
     # independently. 0 is "standard" — the template's own numbers.
     heading_size_delta: Mapped[int] = mapped_column(

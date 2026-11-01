@@ -2,12 +2,15 @@ import { create } from "zustand";
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { apiClient, isResumeChanged } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
-import type { Resume, ResumeContent } from "@career-copilot/types";
+import type { PageSize, Resume, ResumeContent } from "@career-copilot/types";
 import { wordCapError } from "@/lib/profile-sections";
 
-const DEFAULT_LINE_SPACING = 1.25;
+// 1.15: the top of the 1.0-1.15 band the ATS reference gives. Résumés saved
+// before keep their own value; this is only what a new one starts at.
+const DEFAULT_LINE_SPACING = 1.15;
 const DEFAULT_PARAGRAPH_SPACING = 12;
 const DEFAULT_FONT_CHOICE = "sans";
+const DEFAULT_PAGE_SIZE: PageSize = "A4";
 
 /**
  * Skills as the Studio needs them: a flat list of strings.
@@ -36,6 +39,7 @@ interface DraftBase {
   accentColor: string | null;
   headingSizeDelta: number;
   bodySizeDelta: number;
+  pageSize: PageSize;
 }
 
 interface ResumeState {
@@ -50,6 +54,8 @@ interface ResumeState {
   fontChoice: string;
   headingSizeDelta: number;
   bodySizeDelta: number;
+  /** The paper the PDF renders on: A4 (India, Europe) or Letter (US). */
+  pageSize: PageSize;
   /** "#RRGGBB", or null to use the template's own default accent color. */
   accentColor: string | null;
   isDirty: boolean;
@@ -112,6 +118,7 @@ interface ResumeState {
     headingSizeDelta?: number,
     bodySizeDelta?: number,
     updatedAt?: string | null,
+    pageSize?: PageSize,
   ) => void;
   updateContent: (partial: Partial<ResumeContent>) => void;
   /** Load a tailored résumé as an unsaved draft for this JD. The résumé it
@@ -131,6 +138,7 @@ interface ResumeState {
    *  which are what a résumé is generated at. */
   setTextSize: (which: "heading" | "body", delta: number) => void;
   setAccentColor: (accentColor: string | null) => void;
+  setPageSize: (pageSize: PageSize) => void;
   setPdfSignedUrl: (url: string | null) => void;
   setPreviewUnderfilled: (underfilled: boolean) => void;
   setPreviewOpen: (open: boolean) => void;
@@ -175,6 +183,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   fontChoice: DEFAULT_FONT_CHOICE,
   headingSizeDelta: 0,
   bodySizeDelta: 0,
+  pageSize: DEFAULT_PAGE_SIZE,
   accentColor: null,
   isDirty: false,
   isSaving: false,
@@ -192,7 +201,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
 
   setResume: (
     id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor,
-    headingSizeDelta, bodySizeDelta, updatedAt,
+    headingSizeDelta, bodySizeDelta, updatedAt, pageSize,
   ) =>
     set({
       draftJdId: null,
@@ -208,6 +217,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       accentColor: accentColor ?? null,
       headingSizeDelta: headingSizeDelta ?? 0,
       bodySizeDelta: bodySizeDelta ?? 0,
+      pageSize: pageSize ?? DEFAULT_PAGE_SIZE,
       isDirty: false,
       isSaving: false,
       saveError: null,
@@ -246,6 +256,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
             accentColor: s.accentColor,
             headingSizeDelta: s.headingSizeDelta,
             bodySizeDelta: s.bodySizeDelta,
+            pageSize: s.pageSize,
           },
       isDirty: false,
       saveError: null,
@@ -262,7 +273,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   saveDraftToJd: async (title) => {
     const {
       draftJdId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-      accentColor, headingSizeDelta, bodySizeDelta,
+      accentColor, headingSizeDelta, bodySizeDelta, pageSize,
     } = get();
     if (!draftJdId || !content) throw new Error("There is no tailored draft to save.");
     set({ isSaving: true, saveError: null });
@@ -280,11 +291,12 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
         accent_color: accentColor,
         heading_size_delta: headingSizeDelta,
         body_size_delta: bodySizeDelta,
+        page_size: pageSize,
         jd_id: draftJdId,
       });
       get().setResume(
         saved.id, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-        accentColor, headingSizeDelta, bodySizeDelta, saved.updated_at,
+        accentColor, headingSizeDelta, bodySizeDelta, saved.updated_at, pageSize,
       );
       cacheSaved(saved);
       return saved.id;
@@ -323,6 +335,11 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     get()._triggerAutoSave();
   },
 
+  setPageSize: (pageSize) => {
+    set({ pageSize, isDirty: true, saveError: null });
+    get()._triggerAutoSave();
+  },
+
   setPdfSignedUrl: (url) => set({ pdfSignedUrl: url }),
 
   setPreviewUnderfilled: (underfilled) => set({ previewUnderfilled: underfilled }),
@@ -342,8 +359,9 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       lineSpacing: DEFAULT_LINE_SPACING,
       paragraphSpacing: DEFAULT_PARAGRAPH_SPACING,
       fontChoice: DEFAULT_FONT_CHOICE,
-  headingSizeDelta: 0,
-  bodySizeDelta: 0,
+      headingSizeDelta: 0,
+      bodySizeDelta: 0,
+      pageSize: DEFAULT_PAGE_SIZE,
       accentColor: null,
       isDirty: false,
       isSaving: false,
@@ -389,7 +407,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     const run = async () => {
       const {
         resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
-        accentColor, headingSizeDelta, bodySizeDelta, draftJdId, updatedAt, conflictUpdatedAt,
+        accentColor, headingSizeDelta, bodySizeDelta, pageSize, draftJdId, updatedAt, conflictUpdatedAt,
       } = get();
       // resumeId is the draft's source (usually the master) — never write it.
       if (!resumeId || !content || draftJdId) return;
@@ -414,6 +432,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
           accent_color: accentColor,
           heading_size_delta: headingSizeDelta,
           body_size_delta: bodySizeDelta,
+          page_size: pageSize,
           expected_updated_at: updatedAt,
         });
         // The user may have switched résumés while this was in flight.
@@ -467,7 +486,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
     set({ _saveTimer: null });
     get().setResume(
       r.id, r.content, r.template_id, r.line_spacing, r.paragraph_spacing, r.font_choice,
-      r.accent_color, r.heading_size_delta, r.body_size_delta, r.updated_at,
+      r.accent_color, r.heading_size_delta, r.body_size_delta, r.updated_at, r.page_size,
     );
     cacheSaved(r);
   },

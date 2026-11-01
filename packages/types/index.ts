@@ -103,6 +103,26 @@ export interface UnplacedSection {
   points: string[];
 }
 
+/** The paper a résumé's PDF renders on. A4 is the default. */
+export type PageSize = "A4" | "Letter";
+
+/** One thing the ATS check found in the exported PDF's text. "error": an ATS
+ *  would lose or misread information. "warning": a writing or format point
+ *  that costs nothing to fix. field: the résumé path it is about, if any. */
+export interface AtsFinding {
+  id: string;
+  level: "error" | "warning";
+  message: string;
+  field?: string;
+}
+
+/** POST /resumes/{id}/ats-check */
+export interface AtsCheckOut {
+  text: string;
+  findings: AtsFinding[];
+  page_count: number;
+}
+
 export interface Resume {
   id: string;
   user_id: string;
@@ -115,6 +135,8 @@ export interface Resume {
   paragraph_spacing: number;
   /** Key into the backend's FONT_STACKS map (see services/pdf.py). */
   font_choice: string;
+  /** The paper the PDF renders on: A4 (India, Europe) or Letter (US). */
+  page_size?: PageSize;
   /** "#RRGGBB", or null to use the template's own default accent color. */
   accent_color: string | null;
   /** Points added to the sizes the template declares, headings and body

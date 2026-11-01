@@ -57,6 +57,7 @@ export function useHydratedResume(
         resume.heading_size_delta,
         resume.body_size_delta,
         resume.updated_at,
+        resume.page_size,
       );
     }
   }, [resume, resumeId, loaded, setResume]);

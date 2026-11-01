@@ -13,6 +13,9 @@ ValidTemplateId = Literal[
 
 FontChoice = Literal["sans", "modern_sans", "serif", "classic_serif"]
 
+# The paper the PDF renders on: A4 for India and Europe, Letter for the US.
+PageSize = Literal["A4", "Letter"]
+
 # #RRGGBB only — matches the native <input type="color"> the frontend uses.
 _HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
 
@@ -46,9 +49,11 @@ class ResumeCreate(BaseModel):
     # PDF rendering preferences — see services/pdf.py generate_pdf docstring
     # for what each controls. 1.0-1.6 / 0-24px comfortably spans "compact"
     # to "very airy" without breaking a template's layout.
-    line_spacing: float = Field(default=1.25, ge=1.0, le=1.6)
+    # 1.15 for a new résumé: the top of the ATS reference's 1.0-1.15 band.
+    line_spacing: float = Field(default=1.15, ge=1.0, le=1.6)
     paragraph_spacing: int = Field(default=12, ge=0, le=24)
     font_choice: FontChoice = "sans"
+    page_size: PageSize = "A4"
     # None = template's own default accent color (see services/pdf.py
     # TEMPLATE_DEFAULT_ACCENT).
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
@@ -73,6 +78,7 @@ class ResumeUpdate(BaseModel):
     line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
     font_choice: FontChoice | None = None
+    page_size: PageSize | None = None
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
     heading_size_delta: int | None = Field(default=None, ge=-1, le=1)
     body_size_delta: int | None = Field(default=None, ge=-1, le=1)
@@ -98,6 +104,7 @@ class PdfGenerateRequest(BaseModel):
     line_spacing: float | None = Field(default=None, ge=1.0, le=1.6)
     paragraph_spacing: int | None = Field(default=None, ge=0, le=24)
     font_choice: FontChoice | None = None
+    page_size: PageSize | None = None
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR_PATTERN)
     # A point either side of the template's own sizes, headings and body
     # independently. Declared here as well as on ResumeUpdate: this is the
@@ -124,6 +131,12 @@ class ResumeOut(BaseModel):
     line_spacing: float
     paragraph_spacing: int
     font_choice: str
+    # A row made before migration 056 reaches here as A4 (the column's server
+    # default); an object not yet flushed carries None, which means the same.
+    page_size: str = "A4"
+    _page_size_default = field_validator("page_size", mode="before")(
+        lambda v: "A4" if v is None else v
+    )
     accent_color: str | None
     heading_size_delta: int = 0
     body_size_delta: int = 0

@@ -1,6 +1,7 @@
 """PDF generation service using WeasyPrint and Jinja2 templates."""
 
 import re
+import threading
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -8,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
 from app.services.phone import tidy_phone
+from app.services.resume_dates import tidy_resume_dates
 from app.services.rich_text import sanitize_inline
 from app.services.plain_text import plain_deep, plain_text
 from app.services import sandbox
@@ -172,27 +174,33 @@ def _phone_link(phone: str) -> Markup:
     return Markup(f'<a href="tel:{escape(digits)}">{escape(phone)}</a>')
 
 
+def display_url(value: str) -> str:
+    """A link as printed: "linkedin.com/in/name", without the scheme, a
+    leading "www." or a trailing slash — the form the ATS reference shows."""
+    shown = re.sub(r"^https?://", "", (value or "").strip(), flags=re.I)
+    shown = re.sub(r"^www\.", "", shown, flags=re.I)
+    return shown.rstrip("/")
+
+
 def _url_link(value: str, label: str | None = None, path: str | None = None) -> Markup:
     """https:// link for LinkedIn/GitHub/website/project-link fields —
-    accepts a bare domain or a full URL. Shows *label* when one is set (the
-    field's "<path>_label" sibling), otherwise the original text. Falls back
-    to plain (escaped) text when the value isn't a safe http(s) URL, so a
-    malformed field degrades to unlinked text, not a broken link or an
-    unsafe href.
+    accepts a bare domain or a full URL. Falls back to plain (escaped) text
+    when the value isn't a safe http(s) URL, so a malformed field degrades
+    to unlinked text, not a broken link or an unsafe href.
+
+    The address itself is always what prints, never a label: most parsers
+    keep the visible text and drop the link underneath, so a link shown as
+    "LinkedIn" reached the ATS as the word "LinkedIn". *label* (the field's
+    "<path>_label" sibling, from before) is accepted and ignored.
 
     *path* is the field's dot path. With it the element carries data-link,
-    which is how the Studio finds a link to offer its URL-and-text editor;
-    without it the output is exactly the plain link it always was."""
+    which is how the Studio finds a link to offer its URL editor; without it
+    the output is exactly the plain link it always was."""
     if not value:
         return Markup("")
-    shown = label.strip() if isinstance(label, str) and label.strip() else value
+    shown = display_url(value) or value
     href = _as_http_url(value)
-    marker = (
-        f' data-link="{escape(path)}" data-link-url="{escape(value)}"'
-        f' data-link-text="{escape(label.strip() if isinstance(label, str) else "")}"'
-        if path
-        else ""
-    )
+    marker = f' data-link="{escape(path)}" data-link-url="{escape(value)}"' if path else ""
     if not href:
         # Still marked, so a value that is not yet a valid URL can be fixed.
         return Markup(f"<span{marker}>{escape(shown)}</span>") if path else Markup(escape(shown))
@@ -350,18 +358,103 @@ def _as_data_uri(image: bytes | None) -> str | None:
     return f"data:{clean_type};base64,{base64.b64encode(clean_bytes).decode('ascii')}"
 
 
-# Every stack ends in a bare generic (sans-serif/serif) deliberately — the
-# render host (see Dockerfile/nixpacks.toml) installs no font packages at
-# all, so "Arial"/"Georgia" never actually resolve there. What renders today
-# is whatever fontconfig's default falls back to for the trailing generic
-# keyword. A font choice that didn't end in one of these two generics could
-# silently fail to find any face on some hosts.
+# Each choice leads with a font bundled in apps/api/fonts (see build.py
+# there). The render host installs no font packages, so before these were
+# bundled "Arial"/"Georgia" never resolved and the PDF embedded whatever
+# fallback fontconfig had: the text an ATS pulls out of a PDF depends on
+# the font actually embedded, so that has to be known. The bundled faces are
+# metric-compatible with the names after them (Liberation Sans ~ Arial,
+# Liberation Serif ~ Times New Roman, Gelasio ~ Georgia), so layouts and page
+# counts stay as they were; Lato is the one the ATS reference recommends.
+# The trailing generic catches a character outside the bundled Latin subset.
+#
+# apps/web/lib/resume-fonts.ts registers the same faces under the same
+# family names for the Studio; test_resume_fonts.py keeps the two in step.
 FONT_STACKS = {
-    "sans": "Arial, Helvetica, sans-serif",
-    "modern_sans": '"Helvetica Neue", Arial, sans-serif',
-    "serif": 'Georgia, "Times New Roman", serif',
-    "classic_serif": '"Times New Roman", Times, serif',
+    "sans": '"Resume Sans", Arial, Helvetica, sans-serif',
+    "modern_sans": '"Resume Lato", Lato, Arial, sans-serif',
+    "serif": '"Resume Georgia", Georgia, "Times New Roman", serif',
+    "classic_serif": '"Resume Times", "Times New Roman", Times, serif',
 }
+
+FONTS_DIR = Path(__file__).parent.parent.parent / "fonts"
+
+# family → file prefix in FONTS_DIR. Each has Regular, Bold, Italic and
+# BoldItalic: the Studio's rich text can put any of the four on the page.
+BUNDLED_FONTS = {
+    "Resume Sans": "LiberationSans",
+    "Resume Lato": "Lato",
+    "Resume Georgia": "Gelasio",
+    "Resume Times": "LiberationSerif",
+}
+_FONT_FACES = (("Regular", 400, "normal"), ("Bold", 700, "normal"),
+               ("Italic", 400, "italic"), ("BoldItalic", 700, "italic"))
+
+_font_face_css_cache: dict[str, str] = {}
+
+
+def _font_face_css(font_choice: str) -> str:
+    """@font-face rules for *font_choice*'s bundled family, fonts inlined as
+    data: URIs — the PDF fetcher allows nothing else, and that stays so.
+
+    Ligatures are switched off here as well as removed from the font files:
+    a character outside the bundled subset falls through to a system font,
+    and that one may still have them. A ligature glyph is how "financial"
+    becomes "nancial" in some parsers.
+    """
+    if font_choice in _font_face_css_cache:
+        return _font_face_css_cache[font_choice]
+    import base64
+
+    stack = FONT_STACKS.get(font_choice, FONT_STACKS["sans"])
+    family = next(f for f in BUNDLED_FONTS if stack.startswith(f'"{f}"'))
+    rules = []
+    for suffix, weight, style in _FONT_FACES:
+        data = (FONTS_DIR / f"{BUNDLED_FONTS[family]}-{suffix}.ttf").read_bytes()
+        rules.append(
+            f'@font-face {{ font-family: "{family}"; font-weight: {weight}; font-style: {style}; '
+            f"src: url(data:font/ttf;base64,{base64.b64encode(data).decode('ascii')}); }}"
+        )
+    rules.append(
+        "* { font-variant-ligatures: none; "
+        'font-feature-settings: "liga" 0, "clig" 0, "dlig" 0; }'
+    )
+    css = "\n".join(rules)
+    _font_face_css_cache[font_choice] = css
+    return css
+
+
+_print_fonts_local = threading.local()
+
+
+def _print_fonts(font_choice: str):
+    """(FontConfiguration, CSS) declaring *font_choice*'s bundled faces, for
+    WeasyPrint only.
+
+    Kept out of the template so the Studio's HTML stays small: it is fetched
+    on every edit, and the browser loads these same files from the web app.
+
+    Built once per worker thread and reused. Declaring the faces makes
+    WeasyPrint write each font out and register it with fontconfig, which
+    cost 0.3-0.7s on every render when it was redone per document; a
+    FontConfiguration is not shared across threads, since renders run
+    concurrently on the to_thread pool.
+    """
+    from weasyprint import CSS
+    from weasyprint.text.fonts import FontConfiguration
+
+    cache = getattr(_print_fonts_local, "fonts", None)
+    if cache is None:
+        cache = _print_fonts_local.fonts = {}
+    key = font_choice if font_choice in FONT_STACKS else "sans"
+    if key not in cache:
+        font_config = FontConfiguration()
+        css = CSS(
+            string=_font_face_css(key), font_config=font_config,
+            url_fetcher=_blocked_url_fetcher(),
+        )
+        cache[key] = (font_config, css)
+    return cache[key]
 
 # Each template's current hardcoded accent hex, preserved as the default so
 # an unset accent_color (None) renders identically to before this existed.
@@ -377,6 +470,42 @@ TEMPLATE_DEFAULT_ACCENT = {
     "ats_portrait": "#6d4c41",
     "ats_technical": "#00695c",
 }
+
+
+# Résumé page sizes → the CSS @page size each one renders at. A4 is the
+# default (India, Europe); Letter is for US applications.
+PAGE_SIZES = {"A4": "A4", "Letter": "letter"}
+
+# Headings and rules in the accent colour must read as text, never vanish:
+# near-white text is hidden text to a recruiter's parsed view, and the ATS
+# reference has the builder block it. 4.5:1 against the white page is the
+# WCAG body-text bar; every template default clears it.
+MIN_ACCENT_CONTRAST = 4.5
+
+
+def _luminance(hex_color: str) -> float:
+    def channel(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def contrast_on_white(hex_color: str) -> float:
+    return 1.05 / (_luminance(hex_color) + 0.05)
+
+
+def resolve_accent(accent_color: str | None, template_id: str) -> str:
+    """The accent the template renders with: the user's, when it is a
+    #RRGGBB colour dark enough to read on white, else the template's own."""
+    if (
+        accent_color
+        and re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color)
+        and contrast_on_white(accent_color) >= MIN_ACCENT_CONTRAST
+    ):
+        return accent_color
+    return TEMPLATE_DEFAULT_ACCENT[template_id]
 
 
 def _derived_spacing(line_spacing: float, paragraph_spacing: int) -> dict:
@@ -404,38 +533,22 @@ def _derived_spacing(line_spacing: float, paragraph_spacing: int) -> dict:
     return {"bullet_gap": bullet_gap, "section_gap": section_gap}
 
 
-def _group_experience_by_company(experience: list) -> list[dict]:
-    """Group consecutive experience entries that share a company (a
-    promotion or internal transfer produces one entry per role, same
-    company repeated) so templates can render one company header with each
-    role nested under it, instead of repeating the full company/dates line
-    for every role.
+def _experience_entries(experience: list) -> list[dict]:
+    """Each role as its own entry, carrying its position in the list.
 
-    Only ADJACENT entries are grouped — matching by company name anywhere
-    in the list, regardless of position, would silently reorder a
-    candidate's actual employment history for the rare case of a boomerang
-    return to a former employer with an unrelated job in between.
-    Comparison is case-insensitive/trimmed so "Acme Corp" and "acme corp "
-    still group, but distinct employers never do.
+    Every role prints its full title, company, location and dates line,
+    including a second role at the same company. Until 2026-11-01 adjacent
+    roles at one employer were grouped under a single company header; the
+    ATS reference wants each job as one line of text with its title,
+    company and dates within two lines of each other, and the grouped form
+    left a promotion's earlier role several lines away from its company in
+    the extracted text (ats_check.py's entry-split finding).
 
-    Returns a list of {"company": str, "roles": [entry, ...]} — a group of
-    one role is the normal case and renders identically to before this
-    existed; a group of 2+ is what triggers the nested rendering.
+    _index is copied on rather than stamped in place: these are
+    resume_content's own dicts, and a render detail must not leak into
+    stored résumé data. The Studio addresses bullets by that index.
     """
-    groups: list[dict] = []
-    for index, entry in enumerate(experience or []):
-        # Carry the original position. Templates iterate groups, so a role's
-        # position inside one says nothing about its index in resume_content —
-        # and the Studio addresses bullets by that index. Copied rather than
-        # stamped in place: these are resume_content's own dicts, and a render
-        # detail must not leak into stored résumé data.
-        role = {**entry, "_index": index}
-        company = (entry.get("company") or "").strip()
-        if groups and company and groups[-1]["company"].strip().lower() == company.lower():
-            groups[-1]["roles"].append(role)
-        else:
-            groups.append({"company": entry.get("company", ""), "roles": [role]})
-    return groups
+    return [{**entry, "_index": index} for index, entry in enumerate(experience or [])]
 
 
 # One point either side of each template's own sizes. Those sizes already sit
@@ -462,9 +575,11 @@ def _size_stepper(delta: int | None):
     """
     step = _clamp_size_delta(delta)
 
-    def size(base: float) -> str:
+    def size(base: float, floor: float = MIN_FONT_PT) -> str:
         # :g drops a trailing .0, so 10 renders as "10" and 9.5 as "9.5".
-        return f"{max(MIN_FONT_PT, base + step):g}"
+        # *floor* lets one rule hold a higher minimum: the name keeps the
+        # ATS reference's 18pt whatever the heading step.
+        return f"{max(MIN_FONT_PT, floor, base + step):g}"
 
     return size
 
@@ -485,6 +600,7 @@ def _render_html_meta(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> tuple[str, dict]:
     """Validate template_id and render resume_content to an HTML string.
 
@@ -522,13 +638,18 @@ def _render_html_meta(
                 "contact": {**contact, "photo_url": _PLACEHOLDER_AVATAR},
             }
             used_placeholder = True
+    # One date style everywhere, "Present" for a role still held: an ATS
+    # sums the spans to get total experience (services/resume_dates.py).
+    resume_content = tidy_resume_dates(resume_content)
     template = _jinja_env.get_template(f"{template_id}.html")
-    if accent_color and re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color):
-        resolved_accent = accent_color
-    else:
-        resolved_accent = TEMPLATE_DEFAULT_ACCENT[template_id]
+    resolved_accent = resolve_accent(accent_color, template_id)
+    contact = resume_content.get("contact") if isinstance(resume_content.get("contact"), dict) else {}
     html = template.render(
         **resume_content,
+        # The PDF's Title: "Firstname Lastname - Resume", as the ATS
+        # reference asks. WeasyPrint takes it from <title>.
+        document_title=f"{(contact.get('name') or '').strip()} - Resume".lstrip(" -") or "Resume",
+        page_size=Markup(PAGE_SIZES.get(page_size, PAGE_SIZES["A4"])),
         line_spacing=line_spacing,
         paragraph_spacing=paragraph_spacing,
         # Markup: these two are fixed, server-controlled CSS fragments (a
@@ -537,7 +658,7 @@ def _render_html_meta(
         # stack's quotes inside the <style> block and corrupt the CSS.
         font_family=Markup(FONT_STACKS.get(font_choice, FONT_STACKS["sans"])),
         accent_color=Markup(resolved_accent),
-        experience_groups=_group_experience_by_company(resume_content.get("experience") or []),
+        experience_entries=_experience_entries(resume_content.get("experience") or []),
         # Applied per declaration by the templates, so the step and its floor
         # are decided in one place. Clamped rather than trusted.
         heading_size=_size_stepper(heading_size_delta),
@@ -556,11 +677,12 @@ def _render_html(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> str:
     """_render_html_meta for the callers that only want the document."""
     return _render_html_meta(
         resume_content, template_id, line_spacing, paragraph_spacing, font_choice,
-        accent_color, heading_size_delta, body_size_delta,
+        accent_color, heading_size_delta, body_size_delta, page_size,
     )[0]
 
 
@@ -581,6 +703,7 @@ def render_resume_html(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> str:
     """The exact HTML generate_pdf hands to WeasyPrint.
 
@@ -598,6 +721,7 @@ def render_resume_html(
         accent_color,
         heading_size_delta,
         body_size_delta,
+        page_size,
     )
 
 
@@ -610,6 +734,7 @@ def render_resume_html_with_meta(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> tuple[str, dict]:
     """render_resume_html plus {"photo_placeholder": bool} for the Studio,
     which has to tell the user when the portrait on screen is a stand-in."""
@@ -622,6 +747,7 @@ def render_resume_html_with_meta(
         accent_color,
         heading_size_delta,
         body_size_delta,
+        page_size,
     )
 
 
@@ -634,6 +760,7 @@ def _render_document(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ):
     """Lay out resume_content with the named template and return a WeasyPrint
     Document. Shared by generate_pdf (→ .write_pdf()), count_pdf_pages, and
@@ -643,9 +770,12 @@ def _render_document(
 
     html = _render_html(
         resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
-        heading_size_delta, body_size_delta,
+        heading_size_delta, body_size_delta, page_size,
     )
-    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).render()
+    font_config, font_css = _print_fonts(font_choice)
+    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).render(
+        stylesheets=[font_css], font_config=font_config,
+    )
 
 
 def _last_page_fill_fraction(page) -> float:
@@ -705,6 +835,7 @@ def generate_pdf(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> bytes:
     """Render resume_content with the named template and return PDF bytes.
 
@@ -728,7 +859,7 @@ def generate_pdf(
     """
     document = _render_document(
         resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
-        heading_size_delta, body_size_delta,
+        heading_size_delta, body_size_delta, page_size,
     )
     return document.write_pdf()
 
@@ -742,6 +873,7 @@ def generate_pdf_with_meta(
     accent_color: str | None = None,
     heading_size_delta: int = 0,
     body_size_delta: int = 0,
+    page_size: str = "A4",
 ) -> tuple[bytes, dict]:
     """Like generate_pdf but renders once and also returns _page_meta() —
     used by the preview endpoint so the "resume is shorter than a page"
@@ -749,7 +881,7 @@ def generate_pdf_with_meta(
     """
     document = _render_document(
         resume_content, template_id, line_spacing, paragraph_spacing, font_choice, accent_color,
-        heading_size_delta, body_size_delta,
+        heading_size_delta, body_size_delta, page_size,
     )
     return document.write_pdf(), _page_meta(document)
 

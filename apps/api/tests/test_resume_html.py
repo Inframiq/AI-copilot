@@ -166,7 +166,7 @@ async def test_each_step_is_honoured_in_both_directions():
 async def test_headings_are_requested_separately_from_the_body():
     r = await _post({"heading_size_delta": 1, "body_size_delta": 0})
     html = r.json()["html"]
-    assert "font-size: 17pt" in html  # name 16 -> 17
+    assert "font-size: 19pt" in html  # name 18 -> 19
     assert _body_pt(html) == 11  # body untouched
 
 

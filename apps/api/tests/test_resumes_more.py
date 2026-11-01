@@ -85,6 +85,7 @@ def make_resume(**overrides):
         line_spacing=1.25,
         paragraph_spacing=12,
         font_choice="sans",
+        page_size="A4",
         accent_color=None,
         pdf_url=None,
         created_at=datetime.now(timezone.utc),
@@ -261,7 +262,7 @@ async def test_generate_pdf_persists_spacing_preferences_and_passes_them_to_gene
         assert resume.line_spacing == 1.5
         assert resume.paragraph_spacing == 20
         # And forwarded to the actual render call.
-        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20, "sans", None, 0, 0)
+        mock_gen.assert_called_once_with(resume.content, resume.template_id, 1.5, 20, "sans", None, 0, 0, "A4")
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -292,7 +293,7 @@ async def test_generate_pdf_content_override_preview_does_not_persist_spacing():
         assert resume.line_spacing == 1.25
         # ...but it renders with what it was sent: an unsaved tailored draft
         # exports with its own layout, not the source résumé's saved one.
-        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.5, 12, "sans", None, 0, 0)
+        mock_gen.assert_called_once_with({"contact": {"name": "Preview"}}, resume.template_id, 1.5, 12, "sans", None, 0, 0, "A4")
     finally:
         app.dependency_overrides.pop(get_db, None)
 

@@ -74,7 +74,7 @@ describe("StudioHeader", () => {
     const onMode = vi.fn();
     render(<StudioHeader {...props} onMode={onMode} />);
     fireEvent.keyDown(screen.getByRole("tab", { name: /edit/i }), { key: "ArrowLeft" });
-    expect(onMode).toHaveBeenCalledWith("preview");
+    expect(onMode).toHaveBeenCalledWith("ats");
   });
 
   it("ignores other keys", () => {

@@ -399,7 +399,7 @@ describe("useTailoringStore", () => {
       expect.objectContaining({
         experience: [expect.objectContaining({ bullets: ["Did stuff, tailored"] })],
       }),
-      1.25,
+      1.15,
       12,
       "sans",
       null

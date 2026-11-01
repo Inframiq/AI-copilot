@@ -4,16 +4,24 @@ import { FOCUS_RING } from "@/lib/focus";
 import { StudioControls } from "./StudioControls";
 import { BetaBadge } from "@/components/ui/BetaBadge";
 
-export type StudioMode = "edit" | "preview";
+export type StudioMode = "edit" | "preview" | "ats";
 
-const MODES = ["edit", "preview"] as const;
+const MODES = ["edit", "preview", "ats"] as const;
+
+/** Full name, and the short one a phone's header has room for. */
+const MODE_LABELS: Record<StudioMode, { full: string; short: string }> = {
+  edit: { full: "Edit", short: "Edit" },
+  preview: { full: "Preview", short: "Preview" },
+  ats: { full: "ATS view", short: "ATS" },
+};
 
 /**
- * Minimal chrome for the Studio: back, the two modes, export.
+ * Minimal chrome for the Studio: back, the modes, export.
  *
- * The document is the interface, so nothing here competes with it. Edit and
- * Preview are separate modes rather than one blended view because they are
- * different jobs — changing copy, and checking exactly what will export.
+ * The document is the interface, so nothing here competes with it. Edit,
+ * Preview and ATS view are separate modes because they are different jobs —
+ * changing copy, checking exactly what will export, and checking what a
+ * parser reads out of that export.
  */
 export function StudioHeader({
   title,
@@ -88,13 +96,15 @@ export function StudioHeader({
             tabIndex={mode === m ? 0 : -1}
             onClick={() => onMode(m)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`rounded-full px-sm sm:px-md py-xs text-label-sm capitalize transition-colors ${FOCUS_RING} ${
+            aria-label={MODE_LABELS[m].full}
+            className={`rounded-full px-sm sm:px-md py-xs text-label-sm transition-colors ${FOCUS_RING} ${
               mode === m
                 ? "bg-surface text-on-surface shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
-            {m}
+            <span className="sm:hidden">{MODE_LABELS[m].short}</span>
+            <span className="hidden sm:inline">{MODE_LABELS[m].full}</span>
           </button>
         ))}
       </div>

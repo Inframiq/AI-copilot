@@ -1,7 +1,14 @@
 "use client";
 import { useState } from "react";
 import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import type { PageSize } from "@career-copilot/types";
 import { useResumeStore } from "@/stores/resume-store";
+
+// A4 for India and Europe, Letter for the US — the ATS reference's rule.
+export const PAGE_SIZES: { value: PageSize; label: string; hint: string }[] = [
+  { value: "A4", label: "A4", hint: "India, Europe" },
+  { value: "Letter", label: "Letter", hint: "US" },
+];
 
 // Real resume-formatting guidance (Teal, WashU Career Engagement, Hireflow —
 // see the commit that introduced this) converges on: 1.0-1.15 line spacing
@@ -40,6 +47,8 @@ export function SpacingPanel() {
   const lineSpacing = useResumeStore((s) => s.lineSpacing);
   const paragraphSpacing = useResumeStore((s) => s.paragraphSpacing);
   const setSpacing = useResumeStore((s) => s.setSpacing);
+  const pageSize = useResumeStore((s) => s.pageSize);
+  const setPageSize = useResumeStore((s) => s.setPageSize);
   const [customOpen, setCustomOpen] = useState(false);
 
   const activePreset = SPACING_PRESETS.find(
@@ -116,6 +125,32 @@ export function SpacingPanel() {
         </label>
       </div>
     )}
+
+    <div className="my-xs h-px bg-outline-variant/40" />
+
+    <div role="radiogroup" aria-label="Paper size" className="flex flex-col gap-xs">
+      <span className="px-xs text-label-sm text-on-surface-variant">Paper</span>
+      <div className="grid grid-cols-2 gap-xs">
+        {PAGE_SIZES.map((p) => {
+          const selected = p.value === pageSize;
+          return (
+            <button
+              key={p.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setPageSize(p.value)}
+              className={`flex flex-col items-center rounded-xl border px-sm py-xs transition-colors ${
+                selected ? "border-primary bg-primary/10" : "border-outline-variant/40 hover:border-primary/40"
+              }`}
+            >
+              <span className={`text-label-sm ${selected ? "text-primary" : "text-on-surface"}`}>{p.label}</span>
+              <span className="text-caption text-on-surface-variant">{p.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
     </div>
   );
 }

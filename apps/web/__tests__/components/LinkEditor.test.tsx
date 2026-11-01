@@ -8,25 +8,25 @@ import type { ResumeContent } from "@career-copilot/types";
 
 const HTML = `<div class="contact"><span data-field="contact.email">a@b.com</span> |
 <span data-field="contact.linkedin"><a href="https://linkedin.com/in/jane" data-link="contact.linkedin"
- data-link-url="linkedin.com/in/jane" data-link-text="LinkedIn">LinkedIn</a></span></div>`;
+ data-link-url="linkedin.com/in/jane">linkedin.com/in/jane</a></span></div>`;
 
 function shadow(container: HTMLElement) {
   const host = container.querySelector("[data-canvas]") as HTMLElement;
   return host.shadowRoot ?? host;
 }
 
-const LINK = { path: "contact.linkedin", url: "linkedin.com/in/jane", text: "LinkedIn", rect: { top: 0, bottom: 20, left: 10 } };
+const LINK = { path: "contact.linkedin", url: "linkedin.com/in/jane", rect: { top: 0, bottom: 20, left: 10 } };
 
 // ── LinkedIn and GitHub take a profile link only ──────────────────────────────
 describe("the contact's LinkedIn and GitHub in the link editor", () => {
-  const GH = { ...LINK, path: "contact.github", url: "github.com/jane", text: "" };
+  const GH = { ...LINK, path: "contact.github", url: "github.com/jane" };
 
   it("saves a profile link in its standard form", () => {
     const onSave = vi.fn();
     render(<LinkEditor link={LINK} onSave={onSave} onClose={() => {}} />);
     fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "https://www.linkedin.com/in/jane-doe/" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith("linkedin.com/in/jane-doe", "LinkedIn");
+    expect(onSave).toHaveBeenCalledWith("linkedin.com/in/jane-doe");
   });
 
   it("won't save a link that isn't a profile, and says what one looks like", () => {
@@ -45,7 +45,7 @@ describe("the contact's LinkedIn and GitHub in the link editor", () => {
     render(<LinkEditor link={{ ...LINK, path: "contact.website", url: "" }} onSave={onSave} onClose={() => {}} />);
     fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "https://jane.dev/" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    expect(onSave).toHaveBeenCalledWith("https://jane.dev/", "LinkedIn");
+    expect(onSave).toHaveBeenCalledWith("https://jane.dev/");
   });
 });
 
@@ -62,7 +62,7 @@ describe("editing links in the Studio", () => {
 
     expect(click.defaultPrevented).toBe(true);
     expect(onEditLink).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "contact.linkedin", url: "linkedin.com/in/jane", text: "LinkedIn" }),
+      expect.objectContaining({ path: "contact.linkedin", url: "linkedin.com/in/jane" }),
     );
     // The field holding the link is not typed into in place.
     const wrapper = root.querySelector<HTMLElement>('[data-field="contact.linkedin"]')!;
@@ -91,13 +91,13 @@ describe("editing links in the Studio", () => {
     expect(onEditLink).not.toHaveBeenCalled();
   });
 
-  it("saves the display text and the URL separately", () => {
+  it("edits the address only — the résumé prints it, never a label", () => {
     const onSave = vi.fn();
     render(<LinkEditor link={LINK} onSave={onSave} onClose={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Display text"), { target: { value: "My LinkedIn" } });
+    expect(screen.queryByLabelText("Display text")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: " linkedin.com/in/jane-doe " } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith("linkedin.com/in/jane-doe", "My LinkedIn");
+    expect(onSave).toHaveBeenCalledWith("linkedin.com/in/jane-doe");
   });
 
   it("will not save a link with no URL", () => {
@@ -110,7 +110,7 @@ describe("editing links in the Studio", () => {
   it("offers to add each link a project is missing, above its line — never over the links it has", () => {
     const onEditLink = vi.fn();
     const html = `<div class="job-row"><span data-field="projects.0.name">OdTect</span> &middot;
-<span><a href="https://github.com/j/o" data-link="projects.0.link" data-link-url="github.com/j/o" data-link-text="GitHub">GitHub</a></span></div>
+<span><a href="https://github.com/j/o" data-link="projects.0.link" data-link-url="github.com/j/o">github.com/j/o</a></span></div>
 <div class="job-row"><span data-field="projects.1.name">Disk Monitor</span></div>
 <div><span data-field="experience.0.name">Not a project</span></div>`;
     const { container } = render(
@@ -135,7 +135,7 @@ describe("editing links in the Studio", () => {
     const add = anchor(0).querySelector("button")!;
     add.click();
     expect(onEditLink).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "projects.0.live_link", url: "", text: "" }),
+      expect.objectContaining({ path: "projects.0.live_link", url: "" }),
     );
   });
 
@@ -155,7 +155,7 @@ describe("editing links in the Studio", () => {
     unmount();
 
     render(
-      <LinkEditor link={{ ...LINK, url: "", text: "" }} onSave={() => {}} onRemove={onRemove} onClose={() => {}} />,
+      <LinkEditor link={{ ...LINK, url: "" }} onSave={() => {}} onRemove={onRemove} onClose={() => {}} />,
     );
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();

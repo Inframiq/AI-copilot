@@ -1,11 +1,12 @@
 "use client";
+import { useEffect } from "react";
 import { Check } from "@phosphor-icons/react";
 import { useResumeStore } from "@/stores/resume-store";
+import { RESUME_FONT_STACKS, ensureResumeFonts } from "@/lib/resume-fonts";
+import { accentReadsOnWhite } from "@/lib/accent-contrast";
 
-// Every stack ends in a bare generic (sans-serif/serif) deliberately — must
-// match FONT_STACKS in apps/api/app/services/pdf.py exactly, both in keys
-// and in which generic each ends with (the render host has no font packages
-// installed, so only the trailing generic keyword is guaranteed to resolve).
+// Keys must match FONT_STACKS in apps/api/app/services/pdf.py; each draws
+// with the font bundled for the PDF (lib/resume-fonts).
 export const FONT_CHOICES = [
   { value: "sans", label: "Sans" },
   { value: "modern_sans", label: "Modern Sans" },
@@ -22,17 +23,13 @@ export const TEMPLATE_DEFAULT_ACCENT: Record<string, string> = {
   ats_sidebar: "#4c6178",
   ats_professional: "#1f5fbf",
   ats_minimal: "#1a1a1a",
+  ats_executive: "#2f4858",
+  ats_compact: "#37474f",
+  ats_banner: "#1f3b73",
+  ats_portrait: "#6d4c41",
+  ats_technical: "#00695c",
 };
 
-// Browser-safe approximations of each PDF stack, for the specimen row only —
-// this map never leaves the browser and is never sent to the backend; the
-// stored fontChoice is always the FONT_CHOICES key above.
-const SPECIMEN_STACKS: Record<(typeof FONT_CHOICES)[number]["value"], string> = {
-  sans: "Arial, Helvetica, sans-serif",
-  modern_sans: "'Segoe UI', 'Helvetica Neue', sans-serif",
-  serif: "Georgia, 'Times New Roman', serif",
-  classic_serif: "'Times New Roman', Times, serif",
-};
 
 // Font and accent for the document on screen, read and written straight
 // through resume-store. The panel body only: StudioControls owns the trigger
@@ -43,6 +40,9 @@ export function TypePanel() {
   const accentColor = useResumeStore((s) => s.accentColor);
   const setFontChoice = useResumeStore((s) => s.setFontChoice);
   const setAccentColor = useResumeStore((s) => s.setAccentColor);
+  // The specimens draw in the résumé's own fonts.
+  useEffect(ensureResumeFonts, []);
+  const tooLight = accentColor !== null && !accentReadsOnWhite(accentColor);
 
   return (
     <div className="flex flex-col gap-xs">
@@ -60,7 +60,7 @@ export function TypePanel() {
                 selected ? "bg-primary/20 text-primary" : "text-on-surface-variant hover:bg-surface-container-low"
               }`}
             >
-              <span className="text-body-md" style={{ fontFamily: SPECIMEN_STACKS[f.value] }}>
+              <span className="text-body-md" style={{ fontFamily: RESUME_FONT_STACKS[f.value] }}>
                 {f.label}
               </span>
               {selected && <Check size={14} weight="bold" />}
@@ -82,6 +82,11 @@ export function TypePanel() {
         className="h-8 w-8 cursor-pointer rounded-md border border-outline-variant/40 bg-transparent p-0"
       />
     </label>
+    {tooLight && (
+      <p role="status" className="px-sm text-caption text-on-surface-variant">
+        Too light to read on white. The template&apos;s own colour is used in the PDF.
+      </p>
+    )}
     </div>
   );
 }

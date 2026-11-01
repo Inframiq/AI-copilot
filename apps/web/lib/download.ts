@@ -50,9 +50,14 @@ function dataUrlToBlob(url: string): Blob {
   return new Blob([decodeURIComponent(payload)], { type });
 }
 
-/** "Jane Doe - Resume.pdf", or "Resume.pdf" without a name. Characters a
- * file system rejects are dropped. */
+/** "Jane-Doe-Resume.pdf", or "Resume.pdf" without a name: the form the ATS
+ * reference asks for — the person's name, hyphens, no spaces or special
+ * characters (some portals mangle or refuse them). Letters with accents
+ * stay. */
 export function resumeFileName(name: string | null | undefined): string {
-  const clean = (name ?? "").replace(/[\\/:*?"<>|]+/g, "").trim();
-  return clean ? `${clean} - Resume.pdf` : "Resume.pdf";
+  const words = (name ?? "")
+    .replace(/[^\p{L}\p{N}\s-]+/gu, "")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+  return words.length ? `${words.join("-")}-Resume.pdf` : "Resume.pdf";
 }

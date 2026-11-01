@@ -23,6 +23,8 @@ from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
     render_resume_html_with_meta, PhotoRequiredError, photo_owned_by,
 )
+from app.services.ats_check import check_against_jd, check_pdf
+from app.services.tailoring import JDAnalysis
 from app.services.resume_parser import ResumeUnreadable, parse_resume_text
 from app.services import sandbox
 from app.services.resume_generator import generate_resume
@@ -487,6 +489,9 @@ async def generate_resume_pdf(
         if body and body.accent_color is not None and body.accent_color != resume.accent_color:
             resume.accent_color = body.accent_color
             changed = True
+        if body and body.page_size is not None and body.page_size != resume.page_size:
+            resume.page_size = body.page_size
+            changed = True
         if changed:
             await db.commit()
     # Only the user's own photo: the render reads the private bucket with the
@@ -509,6 +514,7 @@ async def generate_resume_pdf(
             _given(body, "accent_color", resume.accent_color),
             _given(body, "heading_size_delta", resume.heading_size_delta) or 0,
             _given(body, "body_size_delta", resume.body_size_delta) or 0,
+            _given(body, "page_size", resume.page_size),
         )
     except PhotoRequiredError as exc:
         # 409, matching the /html route. The Studio keys the "add a photo"
@@ -591,12 +597,95 @@ async def render_resume_html_endpoint(
             _given(body, "accent_color", resume.accent_color),
             _given(body, "heading_size_delta", resume.heading_size_delta),
             _given(body, "body_size_delta", resume.body_size_delta),
+            _given(body, "page_size", resume.page_size),
         )
     except PhotoRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     # photo_placeholder rides along so the Studio can say the portrait on
     # screen is a stand-in. Silence here is what would let it reach a PDF.
     return {"html": html, "photo_placeholder": meta["photo_placeholder"]}
+
+
+@router.post("/{resume_id}/ats-check")
+@limiter.limit("10/minute")
+async def ats_check_endpoint(
+    request: Request,
+    resume_id: uuid.UUID,
+    body: PdfGenerateRequest | None = None,
+    jd_id: uuid.UUID | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """What an ATS reads out of this résumé's PDF, and what it would miss.
+
+    With ?jd_id (a job the caller owns), also the tailoring checks against
+    that job's stored analysis — skills only listed, the job title nowhere,
+    a keyword repeated. Only an analysis already stored is used: a job never
+    analysed simply gets none of those, never a model call.
+
+    Renders exactly what the download would (same template, settings and
+    content override as the PDF route), pulls the text back out and runs
+    services/ats_check.py over it. Persists nothing and uploads nothing, and
+    no model runs — so it costs no credits. Rate-limited like the PDF route,
+    since it does the same render.
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == uuid.UUID(user["sub"]))
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    template_id = (body.template_id if body else None) or resume.template_id
+    if template_id not in _VALID_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Invalid template_id.")
+    content = photo_owned_by(
+        (body.content if body and body.content is not None else resume.content) or {}, user["sub"]
+    )
+    jd_analysis = None
+    if jd_id is not None:
+        jd_row = (await db.execute(
+            select(JobDescription).where(
+                JobDescription.id == jd_id, JobDescription.user_id == uuid.UUID(user["sub"])
+            )
+        )).scalar_one_or_none()
+        if not jd_row:
+            raise HTTPException(status_code=404, detail="JD not found")
+        raw = (jd_row.parsed or {}).get("agent1") if isinstance(jd_row.parsed, dict) else None
+        if raw:
+            try:
+                jd_analysis = JDAnalysis(**raw)
+            except Exception:
+                jd_analysis = None  # an unreadable cache is no analysis, not an error
+
+    def run():
+        pdf_bytes, page_meta = generate_pdf_with_meta(
+            content,
+            template_id,
+            _given(body, "line_spacing", resume.line_spacing),
+            _given(body, "paragraph_spacing", resume.paragraph_spacing),
+            _given(body, "font_choice", resume.font_choice),
+            _given(body, "accent_color", resume.accent_color),
+            _given(body, "heading_size_delta", resume.heading_size_delta) or 0,
+            _given(body, "body_size_delta", resume.body_size_delta) or 0,
+            _given(body, "page_size", resume.page_size),
+        )
+        text, findings = check_pdf(content, pdf_bytes, template_id)
+        if jd_analysis is not None:
+            findings += check_against_jd(content, jd_analysis)
+        return text, findings, page_meta
+
+    try:
+        text, findings, page_meta = await asyncio.to_thread(run)
+    except PhotoRequiredError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="This template requires a profile photo. Add one before previewing or downloading.",
+        ) from exc
+    return {
+        "text": text,
+        "findings": [f.to_dict() for f in findings],
+        "page_count": page_meta["page_count"],
+    }
 
 
 @router.post("/generate", response_model=GenerateResumeOut, status_code=status.HTTP_201_CREATED)

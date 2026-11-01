@@ -86,14 +86,14 @@ def test_a_role_without_projects_renders_as_before(template_id):
     assert "job-project" not in render_resume_html(plain, template_id)
 
 
-def test_projects_follow_their_role_when_roles_at_one_company_are_grouped():
+def test_projects_follow_their_role_when_two_roles_share_a_company():
     promoted = {**CONTENT, "experience": [
         {**ROLE, "title": "Technology Lead", "start": "Jan 2023", "projects": [PROJECTS[0]]},
         {**ROLE, "title": "Senior Systems Engineer", "start": "Jun 2019", "end": "Dec 2022", "projects": [PROJECTS[1]]},
     ]}
     markup = render_resume_html(promoted, "ats_clean")
     text = _text(markup)
-    assert text.count("Infosys") == 1  # one company header for both roles
+    assert text.count("Infosys") == 2  # each role prints its own company
     assert text.index("Technology Lead") < text.index("Barclays") < text.index("Senior Systems Engineer") < text.index("Order Tracker")
     assert 'data-field="experience.1.projects.0.name"' in markup
 

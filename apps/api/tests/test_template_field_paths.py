@@ -4,9 +4,8 @@ The Studio edits the rendered HTML in place, so each editable text node has to
 say which part of resume_content produced it. Attributes only — WeasyPrint
 ignores unknown ones, so the PDF must be unaffected.
 
-Experience paths use the role's original index, not its position inside a
-company group: templates iterate experience_groups, which merges adjacent
-roles at the same employer.
+Experience paths use the role's original index (services/pdf.py
+_experience_entries), including for two roles at the same employer.
 """
 import html as htmllib
 import re

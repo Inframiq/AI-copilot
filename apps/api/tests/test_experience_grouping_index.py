@@ -1,12 +1,15 @@
-"""Grouped roles remember where they came from in resume_content.
+"""Each role reaches the template as its own entry, remembering where it
+came from in resume_content.
 
-Templates iterate experience_groups, not experience, and grouping merges
-adjacent roles at the same company. So a role's position inside a group says
-nothing about its index in resume_content — and the Studio's data-field
-attributes address bullets by that index. Without the original index carried
-through, editing a bullet on the second company would write to the first.
+The Studio's data-field attributes address bullets by that index, so
+editing a bullet must write back to the role it was shown under.
+
+Roles at the same company are no longer grouped under one company header
+(2026-11-01): the ATS reference wants each job as one line — title,
+company, location, dates — and the grouped form put a promotion's earlier
+role several lines from its company in the extracted text.
 """
-from app.services.pdf import _group_experience_by_company
+from app.services.pdf import _experience_entries
 
 EXPERIENCE = [
     {"company": "Acme", "title": "Engineer", "bullets": ["a"]},
@@ -15,30 +18,25 @@ EXPERIENCE = [
 ]
 
 
-def test_each_role_carries_its_index_in_the_original_list():
-    groups = _group_experience_by_company(EXPERIENCE)
-    assert [r["_index"] for r in groups[0]["roles"]] == [0, 1]
-    assert [r["_index"] for r in groups[1]["roles"]] == [2]
+def test_each_role_is_its_own_entry_with_its_index():
+    entries = _experience_entries(EXPERIENCE)
+    assert [e["_index"] for e in entries] == [0, 1, 2]
+    assert [e["company"] for e in entries] == ["Acme", "Acme", "Globex"]
 
 
-def test_a_single_role_group_still_carries_its_index():
-    groups = _group_experience_by_company([{"company": "Solo", "bullets": []}])
-    assert groups[0]["roles"][0]["_index"] == 0
-
-
-def test_grouping_does_not_mutate_the_caller_s_entries():
+def test_entries_do_not_mutate_the_caller_s_dicts():
     # The entries are resume_content's own dicts; stamping an index onto them
     # in place would leak a render detail into stored resume data.
     source = [dict(e) for e in EXPERIENCE]
-    _group_experience_by_company(source)
+    _experience_entries(source)
     assert all("_index" not in e for e in source)
 
 
 def test_the_role_content_is_otherwise_unchanged():
-    groups = _group_experience_by_company(EXPERIENCE)
-    role = groups[1]["roles"][0]
+    role = _experience_entries(EXPERIENCE)[2]
     assert role["company"] == "Globex" and role["bullets"] == ["c"]
 
 
-def test_an_empty_list_groups_to_nothing():
-    assert _group_experience_by_company([]) == []
+def test_an_empty_list_is_no_entries():
+    assert _experience_entries([]) == []
+    assert _experience_entries(None) == []

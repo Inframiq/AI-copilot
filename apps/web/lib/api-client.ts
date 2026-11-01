@@ -4,6 +4,8 @@ import { confirmHeadline } from "@/stores/headline-confirm-store";
 import { reportCreditRefusal } from "@/stores/credits-store";
 import { reportPolicyRefusal } from "@/stores/policy-store";
 import type {
+  AtsCheckOut,
+  PageSize,
   Resume,
   UnplacedSection,
   JobDescription,
@@ -205,6 +207,7 @@ export const apiClient = {
     accent_color?: string | null;
     heading_size_delta?: number;
     body_size_delta?: number;
+    page_size?: PageSize;
     /** When set, saves this as "the tailored resume for this JD" — the
      * backend overwrites the JD's already-linked resume (if any) instead of
      * creating a new row, so re-tailoring + saving again doesn't pile up
@@ -222,6 +225,7 @@ export const apiClient = {
         Resume,
         | "title" | "template_id" | "content" | "line_spacing" | "paragraph_spacing"
         | "font_choice" | "accent_color" | "heading_size_delta" | "body_size_delta"
+        | "page_size"
       >
     > & {
       /** The résumé's updated_at as this device last saw it. If another
@@ -254,11 +258,40 @@ export const apiClient = {
       accent_color?: string | null;
       heading_size_delta?: number;
       body_size_delta?: number;
+      page_size?: PageSize;
     },
   ): Promise<{ html: string; photo_placeholder?: boolean }> =>
     request<{ html: string; photo_placeholder?: boolean }>(
       "POST",
       `/resumes/${resumeId}/html`,
+      opts ?? {},
+    ),
+
+  /** What an ATS reads out of this résumé's PDF: the text pulled back out of
+   * the exact export (same template, settings and content override as
+   * generatePdf), with what the deterministic check found in it. No model
+   * runs, so no credits; nothing persists. */
+  atsCheck: (
+    resumeId: string,
+    opts?: {
+      content?: ResumeContent;
+      template_id?: string;
+      line_spacing?: number;
+      paragraph_spacing?: number;
+      font_choice?: string;
+      accent_color?: string | null;
+      heading_size_delta?: number;
+      body_size_delta?: number;
+      page_size?: PageSize;
+    },
+    /** A job this résumé is for: adds the checks against that job's stored
+     *  analysis (skills only listed, the job title nowhere, a repeated
+     *  keyword). Still no model call. */
+    jdId?: string | null,
+  ): Promise<AtsCheckOut> =>
+    request<AtsCheckOut>(
+      "POST",
+      `/resumes/${resumeId}/ats-check${jdId ? `?jd_id=${encodeURIComponent(jdId)}` : ""}`,
       opts ?? {},
     ),
 
@@ -277,6 +310,7 @@ export const apiClient = {
     accentColor?: string | null,
     headingSizeDelta?: number,
     bodySizeDelta?: number,
+    pageSize?: PageSize,
     // page_count / page_fill / underfilled: "resume is shorter than a page"
     // advisory. underfilled is true only for a single-page resume that leaves
     // a visible empty band at the bottom.
@@ -293,6 +327,7 @@ export const apiClient = {
       ...(accentColor !== undefined ? { accent_color: accentColor } : {}),
       ...(headingSizeDelta !== undefined ? { heading_size_delta: headingSizeDelta } : {}),
       ...(bodySizeDelta !== undefined ? { body_size_delta: bodySizeDelta } : {}),
+      ...(pageSize !== undefined ? { page_size: pageSize } : {}),
     }),
 
   parseResumeFile: async (

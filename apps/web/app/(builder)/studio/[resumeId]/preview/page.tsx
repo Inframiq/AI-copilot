@@ -12,6 +12,7 @@ import { useTailoringStore } from "@/stores/tailoring-store";
 import { readField, writeField } from "@/lib/field-path";
 import { downloadFile, resumeFileName } from "@/lib/download";
 import { ResumeCanvas, type DateTarget, type LinkTarget } from "@/components/studio/ResumeCanvas";
+import { AtsView } from "@/components/studio/AtsView";
 import { MonthYearSheet } from "@/components/ui/MonthYearPicker";
 import { LinkEditor } from "@/components/studio/LinkEditor";
 import { FormatToolbar } from "@/components/studio/FormatToolbar";
@@ -57,6 +58,7 @@ export default function StudioPreviewPage({
   const accentColor = useResumeStore((s) => s.accentColor);
   const headingSizeDelta = useResumeStore((s) => s.headingSizeDelta);
   const bodySizeDelta = useResumeStore((s) => s.bodySizeDelta);
+  const pageSize = useResumeStore((s) => s.pageSize);
   const updateContent = useResumeStore((s) => s.updateContent);
   // The JD path reached the Studio through the review, not the Builder, so
   // "Back" must retrace that route. The Builder itself is not offered on this
@@ -156,7 +158,7 @@ export default function StudioPreviewPage({
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: [
       "resumeHtml", resumeId, templateId, lineSpacing, paragraphSpacing,
-      fontChoice, accentColor, headingSizeDelta, bodySizeDelta, content,
+      fontChoice, accentColor, headingSizeDelta, bodySizeDelta, pageSize, content,
     ],
     queryFn: () =>
       apiClient.renderResumeHtml(resumeId, {
@@ -168,8 +170,31 @@ export default function StudioPreviewPage({
         accent_color: accentColor,
         heading_size_delta: headingSizeDelta,
         body_size_delta: bodySizeDelta,
+        page_size: pageSize,
       }),
     enabled: !!content,
+  });
+
+  // The ATS view reads the same export, so it is keyed on the same things —
+  // and only fetched while that view is open: it is a full PDF render.
+  const ats = useQuery({
+    queryKey: [
+      "resumeAtsCheck", resumeId, templateId, lineSpacing, paragraphSpacing,
+      fontChoice, accentColor, headingSizeDelta, bodySizeDelta, pageSize, content, linkedJdId,
+    ],
+    queryFn: () =>
+      apiClient.atsCheck(resumeId, {
+        content: content ?? undefined,
+        template_id: templateId,
+        line_spacing: lineSpacing,
+        paragraph_spacing: paragraphSpacing,
+        font_choice: fontChoice,
+        accent_color: accentColor,
+        heading_size_delta: headingSizeDelta,
+        body_size_delta: bodySizeDelta,
+        page_size: pageSize,
+      }, linkedJdId),
+    enabled: !!content && mode === "ats",
   });
 
   const handleEdit = useCallback(
@@ -189,15 +214,14 @@ export default function StudioPreviewPage({
   const closeDatePicker = useCallback(() => setEditingDate(null), []);
   const closeLinkEditor = useCallback(() => setEditingLink(null), []);
 
-  function handleSaveLink(url: string, text: string) {
+  function handleSaveLink(url: string) {
     const current = useResumeStore.getState().content;
     if (editingLink && current) {
-      // Display text the same as the URL is no display text: stored blank,
-      // the link keeps following its URL when that is edited later.
-      const label = text === url ? "" : text;
       // createLeaf: a project that had no link yet has no key for it either.
       const withUrl = writeField(current, editingLink.path, url, { createLeaf: true });
-      updateContent(writeField(withUrl, `${editingLink.path}_label`, label, { createLeaf: true }));
+      // A label saved before the PDF stopped printing them is cleared on the
+      // way: it no longer shows anywhere.
+      updateContent(writeField(withUrl, `${editingLink.path}_label`, "", { createLeaf: true }));
     }
     setEditingLink(null);
   }
@@ -331,6 +355,11 @@ export default function StudioPreviewPage({
         />
       );
     }
+    if (mode === "ats") {
+      return (
+        <AtsView data={ats.data} isPending={ats.isPending} isError={ats.isError} onRetry={() => ats.refetch()} />
+      );
+    }
     return (
       <ResumeCanvas
         html={data?.html ?? ""}
@@ -368,8 +397,8 @@ export default function StudioPreviewPage({
         }}
         onExport={handleExport}
         isExporting={isExporting}
-        onRefresh={() => refetch()}
-        isRefreshing={isFetching}
+        onRefresh={() => (mode === "ats" ? ats.refetch() : refetch())}
+        isRefreshing={mode === "ats" ? ats.isFetching : isFetching}
         saveSlot={
           linkedJdId && (draftJdId || savedToJd) ? (
             <SaveToJd saved={savedToJd} isSaving={isSavingDraft} onSave={handleSaveToJd} />

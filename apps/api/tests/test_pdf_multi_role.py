@@ -1,8 +1,10 @@
-"""Regression tests for grouped rendering of multiple roles at the same
-company (promotion / internal transfer) — 2026-08-25. Before this, a
-candidate with two roles at one employer rendered as two fully separate
-entries, each repeating the full company name, rather than the
-conventional "one company header, roles nested underneath" resume format.
+"""Two roles at the same company (promotion / internal transfer).
+
+From 2026-08-25 these were grouped under one company header. Since
+2026-11-01 each role is its own entry again, with its own title, company and
+dates line: the ATS reference wants every job as one line of text, and the
+grouped form left the earlier role several lines from its company in the
+extracted text, so a parser could not tell where that role was held.
 
 Requires system-level WeasyPrint libraries; skipped gracefully if
 unavailable.
@@ -77,19 +79,21 @@ def test_both_roles_and_all_their_bullets_survive_rendering(template_id, avatar_
 
 
 @pytest.mark.parametrize("template_id", sorted(ALLOWED_TEMPLATES))
-def test_company_name_renders_once_not_once_per_role(template_id, avatar_store):
+def test_every_role_prints_its_own_company_beside_its_title(template_id, avatar_store):
     resume = _resume_for_template(template_id, RESUME_WITH_TWO_ROLES, avatar_store)
     with patch("app.services.pdf.settings") as mock_settings:
         mock_settings.supabase_url = TRUSTED_HOST
         pdf_bytes = generate_pdf(resume, template_id)
     from io import BytesIO
     pdfminer_high_level = pytest.importorskip("pdfminer.high_level")
-    # &nbsp; (U+00A0) is used as the date-separator spacer in several
-    # templates' markup — normalize to a plain space before substring checks.
-    text = pdfminer_high_level.extract_text(BytesIO(pdf_bytes)).replace("\xa0", " ")
+    text = pdfminer_high_level.extract_text(BytesIO(pdf_bytes)).replace(" ", " ")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
 
-    # "Acme Corp" has 2 roles grouped under one header — must appear once,
-    # not repeated for every role (the pre-fix behavior).
-    assert text.count("Acme Corp") == 1
-    # "Beta Industries" has only 1 role — always rendered once regardless.
+    # One "Acme Corp" per Acme role, each within two lines of that role's
+    # dates — found by its start date, which is unique to the role.
+    assert text.count("Acme Corp") == 2
+    for start in ("Jan 2023", "Jun 2020"):
+        at = next(i for i, line in enumerate(lines) if start in line)
+        window = lines[max(0, at - 2): at + 3]
+        assert any("Acme Corp" in line for line in window), (start, window)
     assert text.count("Beta Industries") == 1

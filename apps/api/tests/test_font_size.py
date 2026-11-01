@@ -62,14 +62,24 @@ def test_smaller_body_text_moves_it_down_a_point():
 
 def test_the_body_step_leaves_the_headings_where_they_are():
     html = render_resume_html(CONTENT, "ats_clean", body_size_delta=1)
-    assert "font-size: 16pt" in html  # the name, untouched
+    assert "font-size: 18pt" in html  # the name, untouched
     assert "font-size: 13pt" in html  # the section heading, untouched
 
 
 def test_the_heading_step_leaves_the_body_where_it_is():
     html = render_resume_html(CONTENT, "ats_clean", heading_size_delta=-1)
-    assert "font-size: 15pt" in html  # name 16 -> 15
+    assert "font-size: 12pt" in html  # section heading 13 -> 12
     assert "font-size: 11pt" in html  # body untouched
+
+
+@pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
+def test_the_name_never_drops_below_18pt(template):
+    """The ATS reference puts the name at 18-24pt. The small heading step
+    moves the section labels, never the name under that."""
+    import re
+    html = render_resume_html(CONTENT, template, heading_size_delta=-1)
+    rule = re.search(r"(?:h1|\.name) \{[^}]*?font-size: ([0-9.]+)pt", html)
+    assert rule and float(rule.group(1)) >= 18
 
 
 @pytest.mark.parametrize("template", sorted(ALLOWED_TEMPLATES))
@@ -152,7 +162,7 @@ def test_the_body_still_steps_down_where_there_is_room():
 
 def test_large_has_no_ceiling_to_trip_over():
     html = render_resume_html(CONTENT, "ats_clean", heading_size_delta=1, body_size_delta=1)
-    assert "font-size: 17pt" in html  # name 16 -> 17
+    assert "font-size: 19pt" in html  # name 18 -> 19
 
 
 # ── The researched standards, pinned ────────────────────────────────────────

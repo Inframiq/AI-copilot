@@ -39,6 +39,11 @@ export function TemplateGallery({
               />
             </span>
             <span className="text-caption text-on-surface truncate px-xs">{t.label}</span>
+            {"photo" in t && (
+              // A photo is fine for a direct send, but not what a job
+              // portal's parser wants (the ATS reference: no photos).
+              <span className="px-xs text-caption text-on-surface-variant">Photo · not for job portals</span>
+            )}
             {selected && (
               <span className="absolute top-1 right-1 rounded-full bg-primary text-on-primary p-0.5">
                 <Check size={11} weight="bold" />

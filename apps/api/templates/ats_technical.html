@@ -3,17 +3,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>{{ document_title }}</title>
 <style>
   /* @page margin applies uniformly to every page — body margin: 0 so
      page 2+ also gets proper whitespace, not just the first page. */
-  @page { margin: 0.5in; }
+  @page { size: {{ page_size }}; margin: 0.5in; }
   body { font-family: {{ font_family }}; font-size: {{ body_size(11) }}pt; line-height: {{ line_spacing }}; margin: 0; color: #12161a; }
 
   /* Name over a heavy accent underscore that stops at the text, not the
      column — a deliberate contrast with the full-width rules the other
      templates use. inline-block keeps it in normal flow. */
   .name-wrap { margin-bottom: 6px; }
-  h1 { display: inline-block; font-size: {{ heading_size(17) }}pt; font-weight: 800; margin: 0;
+  h1 { display: inline-block; font-size: {{ heading_size(18, 18) }}pt; font-weight: 800; margin: 0;
        line-height: 1.12; border-bottom: 3pt solid {{ accent_color }}; padding-bottom: 2px; }
   .headline { font-size: {{ body_size(10) }}pt; font-weight: 600; color: #3a4046; margin: 5px 0 3px; }
   .contact { font-size: {{ body_size(10) }}pt; color: #3d4349; margin-bottom: 9px; }
@@ -21,7 +22,7 @@
   /* Section labels hang off a short accent tick rather than sitting on a
      rule. Padding-left (not a margin on the text) keeps the label a single
      inline run, so it extracts in order. */
-  h2 { font-size: {{ heading_size(13) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.11em;
+  h2 { font-size: {{ heading_size(13) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
        color: #12161a; border-left: 3.5pt solid {{ accent_color }}; padding: 1px 0 1px 8px;
        margin: {{ section_gap }}px 0 5px;
        page-break-after: avoid; break-after: avoid; }
@@ -34,8 +35,6 @@
   .company { font-size: {{ body_size(10) }}pt; color: #434950; }
   /* The dates read as metadata: smaller, letterspaced, muted. */
   .dates { font-size: {{ body_size(10) }}pt; color: #606970; letter-spacing: 0.03em; }
-  .company-header { font-weight: 700; font-size: {{ body_size(11.5) }}pt; margin-top: 0; }
-  .role-row { margin: 2px 0 0 10px; }
   .edu-row { margin-top: {{ paragraph_spacing }}px; }
 
   /* The skills line gets a tinted rail of its own — on a technical résumé
@@ -55,6 +54,9 @@
   .kw { font-weight: 700; }
   p.summary { margin: 3px 0 {{ paragraph_spacing }}px; text-align: left; }
   ul.plain { margin: 3px 0 {{ paragraph_spacing }}px 18px; padding: 0; }
+  /* One contact item never breaks across lines: "github.com/" with "name"
+     on the next line reached a parser as two broken pieces. */
+  .contact-item { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -65,9 +67,10 @@
   ('contact.phone', contact.phone | phone_link),
   ('contact.location', contact.location),
   ('contact.linkedin', contact.linkedin | url_link(contact.linkedin_label, 'contact.linkedin')),
-  ('contact.github', contact.github | url_link(contact.github_label, 'contact.github'))
+  ('contact.github', contact.github | url_link(contact.github_label, 'contact.github')),
+  ('contact.website', contact.website | url_link(contact.website_label, 'contact.website'))
 ] %}
-<div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %} &nbsp;/&nbsp; {% endif %}<span data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
+<div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %} &nbsp;/&nbsp; {% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
 
 {% macro render_summary_or_objective() %}
   {% if summary %}
@@ -82,21 +85,10 @@
 {% macro render_experience() %}
   {% if experience %}
   <h2>Experience</h2>
-  {% for group in experience_groups %}
-    {% if group.roles | length > 1 %}
-    {# Multiple roles at this company (promotion/internal transfer) — one company header, each role nested under it. #}
-    <div class="company-header" data-field="experience.{{ group.roles[0]._index }}.company">{{ group.company }}</div>
-    {% for job in group.roles %}
-    <div class="role-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span>{% if job.location %} &middot; <span class="company" data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %} <span class="dates">&nbsp;|&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
-    <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
-    {{- job_projects(job) }}
-    {% endfor %}
-    {% else %}
-    {% set job = group.roles[0] %}
+  {% for job in experience_entries %}
     <div class="job-row"><span class="job-title" data-field="experience.{{ job._index }}.title">{{ job.title }}</span>, <b data-field="experience.{{ job._index }}.company">{{ job.company }}</b>{% if job.location %} &middot; <span class="company" data-field="experience.{{ job._index }}.location">{{ job.location }}</span>{% endif %} <span class="dates">&nbsp;|&nbsp; <span data-field="experience.{{ job._index }}.start">{{ job.start }}</span> – <span data-field="experience.{{ job._index }}.end">{{ job.end or "Present" }}</span></span></div>
     <table class="bullets">{% for b in job.bullets %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="experience.{{ job._index }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
     {{- job_projects(job) }}
-    {% endif %}
   {% endfor %}
   {% endif %}
 {% endmacro %}
@@ -170,7 +162,7 @@
 
 {% macro render_volunteer() %}
   {% if volunteer %}
-  <h2>Volunteer</h2>
+  <h2>Volunteer Experience</h2>
   <ul class="plain">{% for v in volunteer %}<li data-field="volunteer.{{ loop.index0 }}">{{ v }}</li>{% endfor %}</ul>
   {% endif %}
 {% endmacro %}
@@ -181,12 +173,6 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_links() %}
-  {% if contact.website %}
-  <h2>Links</h2>
-  <div class="skills" data-field="contact.website">{{ contact.website | url_link(contact.website_label, 'contact.website') }}</div>
-  {% endif %}
-{% endmacro %}
 
 {% set default_order = ["summary_or_objective", "skills", "experience", "projects", "education", "languages", "certifications", "awards", "achievements", "leadership", "links", "volunteer", "interests"] %}
 {% for section in (section_order or default_order) %}
@@ -202,7 +188,6 @@
   {% elif section == "leadership" %}{{ render_leadership() }}
   {% elif section == "volunteer" %}{{ render_volunteer() }}
   {% elif section == "interests" %}{{ render_interests() }}
-  {% elif section == "links" %}{{ render_links() }}
   {% endif %}
 {% endfor %}
 </body>

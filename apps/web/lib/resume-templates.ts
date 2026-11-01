@@ -13,7 +13,10 @@ export const RESUME_TEMPLATES = [
   { id: "ats_technical", label: "Technical", description: "Skills first, accent ticks, built for engineering roles." },
 ] as const;
 
-/** True when the given template id renders a profile photo. Single source of
+/** True when the given template id renders a profile photo. These are the
+ * templates the ATS reference would keep off job portals: the gallery labels
+ * them, and the ATS check (POST /resumes/{id}/ats-check) flags them.
+ * Single source of
  * truth for the Resume Builder's "this template needs a photo" prompt. The
  * PDF side already gates on `{% if contact.photo_url %}`, so this stays
  * web-only.

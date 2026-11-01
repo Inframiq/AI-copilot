@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { sanitizeInline } from "@/lib/rich-text";
 import { pageGeometry, pageCount } from "@/lib/page-geometry";
 import { scopeBodyToHost } from "@/lib/shadow-document";
+import { ensureResumeFonts } from "@/lib/resume-fonts";
 
 /**
  * Editing affordance, injected into the shadow root rather than written into
@@ -134,8 +135,6 @@ const PROJECT_LINKS = [
   { key: "live_link", label: "Live link" },
 ] as const;
 
-/** A link in the document the user asked to edit: its URL and display text
- *  live at `path` and `${path}_label` in the résumé. */
 /** A role's or project's start or end date in the document. */
 const DATE_FIELD = /^(experience|projects)\.\d+(\.projects\.\d+)?\.(start|end)$/;
 
@@ -146,11 +145,12 @@ export interface DateTarget {
   value: string;
 }
 
+/** A link in the document the user asked to edit; its URL lives at `path`
+ *  in the résumé. The PDF always prints the address itself (a parser keeps
+ *  the visible text, not the link under it), so there is no display text. */
 export interface LinkTarget {
   path: string;
   url: string;
-  /** The display text as stored — empty when the link shows its URL. */
-  text: string;
   /** Where the link is on screen, to anchor the editor to it. */
   rect: { top: number; bottom: number; left: number };
 }
@@ -219,6 +219,9 @@ export function ResumeCanvas({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    // The fonts the PDF embeds, declared on the document: a shadow root
+    // does not load @font-face rules of its own.
+    ensureResumeFonts();
     if (!rootRef.current) {
       rootRef.current = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     }
@@ -366,7 +369,6 @@ export function ResumeCanvas({
         onEditLink({
           path: link.dataset.link ?? "",
           url: link.dataset.linkUrl ?? "",
-          text: link.dataset.linkText ?? "",
           rect: { top: r.top, bottom: r.bottom, left: r.left },
         });
       };
@@ -409,7 +411,6 @@ export function ResumeCanvas({
             onEditLink({
               path: `projects.${index}.${key}`,
               url: "",
-              text: "",
               rect: { top: r.top, bottom: r.bottom, left: r.left },
             });
           });

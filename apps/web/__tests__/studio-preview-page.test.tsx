@@ -136,7 +136,7 @@ describe("Studio preview page", () => {
       fireEvent.click(screen.getByRole("button", { name: /export pdf/i }));
       await waitFor(() => expect(click).toHaveBeenCalled());
       expect(fetchMock).toHaveBeenCalledWith("u");
-      expect(downloads).toEqual(["Jane Doe - Resume.pdf"]);
+      expect(downloads).toEqual(["Jane-Doe-Resume.pdf"]);
       expect(revokeUrl).toHaveBeenCalledWith("blob:resume");
     } finally {
       click.mockRestore();
@@ -634,9 +634,11 @@ describe("downloadFile with the PDF inline", () => {
 });
 
 describe("resumeFileName", () => {
-  it("drops characters a file system rejects", async () => {
+  it("is Firstname-Lastname-Resume.pdf, with no special characters", async () => {
     const { resumeFileName } = await import("../lib/download");
-    expect(resumeFileName('Jane\\Doe/: "QA"')).toBe("JaneDoe QA - Resume.pdf");
+    expect(resumeFileName('Jane\\Doe/: "QA"')).toBe("JaneDoe-QA-Resume.pdf");
+    expect(resumeFileName("  José   García ")).toBe("José-García-Resume.pdf");
+    expect(resumeFileName("Mary-Jane O'Neil")).toBe("Mary-Jane-ONeil-Resume.pdf");
     expect(resumeFileName("  ")).toBe("Resume.pdf");
     expect(resumeFileName(undefined)).toBe("Resume.pdf");
   });
