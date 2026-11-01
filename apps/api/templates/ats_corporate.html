@@ -19,6 +19,8 @@
   h2 { font-size: {{ heading_size(13) }}pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
        color: {{ accent_color }}; border-top: 0.75pt solid #b0b6bc;
        margin: {{ section_gap }}px 0 5px; padding-top: 4px; }
+  /* The masthead's double rule already sets off the first section. */
+  .masthead-rule + h2 { border-top: none; padding-top: 0; margin-top: {{ [section_gap - 4, 2]|max }}px; }
   .job-title { font-weight: 700; font-size: {{ body_size(11.5) }}pt; }
   .company { font-style: italic; color: #333; }
   .dates { font-size: {{ body_size(10) }}pt; color: #5a6168; }
