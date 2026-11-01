@@ -242,6 +242,8 @@ TEMPLATE_DEFAULT_ACCENT_LOWER = {
 TEMPLATE_DEFAULT_ACCENT_LOWER.update({
     "student_clean": "#111111", "student_modern": "#5c6bc0",
     "student_minimal": "#1a1a1a", "student_technical": "#00695c",
+    "student_collegiate": "#1f2a44", "student_placement": "#0b5c8a",
+    "ats_corporate": "#1d3a5f", "ats_impact": "#8a2a3b",
 })
 
 

@@ -91,6 +91,33 @@ def test_every_template_reads_clean_in_stream_order(template_id, page_size):
     assert _errors(findings) == [], text
 
 
+# The settings a user can move. Line breaks and the gaps between lines shift
+# with each, and extraction depends on those gaps (a tight gap under the
+# name once ran it into the email), so each template is read at the edges.
+STYLE_EDGES = {
+    "small-tight": {"heading_size_delta": -1, "body_size_delta": -1, "line_spacing": 1.0, "paragraph_spacing": 0},
+    "large-airy": {"heading_size_delta": 1, "body_size_delta": 1, "line_spacing": 1.6, "paragraph_spacing": 24},
+    "serif-letter": {"font_choice": "classic_serif", "page_size": "Letter"},
+    "lato": {"font_choice": "modern_sans"},
+}
+
+
+@pytest.mark.parametrize("edge", sorted(STYLE_EDGES))
+@pytest.mark.parametrize("template_id", sorted(P.ALLOWED_TEMPLATES))
+def test_every_template_reads_clean_at_every_style_edge(template_id, edge):
+    pdf = _render(RICH, template_id, **STYLE_EDGES[edge])
+    text, findings = check_pdf(RICH, pdf, template_id)
+    assert _errors(findings) == [], text
+    layout = pdfminer_high_level.extract_text(io.BytesIO(pdf))
+    assert _errors(check_text(RICH, layout, template_id)) == [], layout
+
+
+def test_stray_list_bullets_are_caught():
+    text = "\n".join(["Asha Rao", "a@x.com | +91 98765 43210", "AWARDS", "Dean's List", "•", "•"])
+    content = {"contact": {"name": "Asha Rao", "email": "a@x.com", "phone": "+91 98765 43210"}, "awards": ["Dean's List"]}
+    assert "stray-bullets" in {f.id for f in check_text(content, text)}
+
+
 @pytest.mark.parametrize("template_id", sorted(P.ALLOWED_TEMPLATES))
 def test_every_template_reads_clean_by_layout_analysis(template_id):
     pdf = _render(RICH, template_id)
@@ -337,3 +364,80 @@ def test_coursework_counts_as_evidence_for_scoring():
     from app.services.ats import build_resume_text
     full, _ = build_resume_text({"coursework": ["Machine Learning"]})
     assert "Machine Learning" in full
+
+
+# ── Every template prints every section of its set (fix 8) ──────────────────
+# Student / fresher: Objective, Education with CGPA, Internships, Projects,
+# Skills, Coursework, Leadership, Awards. Working professional: Summary,
+# Experience with a role's client projects, Skills, Certifications,
+# Education. Read back by both extractors, with no ATS error.
+
+STUDENT_FULL = {
+    "contact": {"name": "Asha Rao", "email": "asha.rao@example.com", "phone": "+91 98765 43210",
+                "location": "Hyderabad, India", "linkedin": "linkedin.com/in/asharao", "github": "github.com/asharao"},
+    "objective": "Final-year Computer Science student seeking a backend engineering internship.",
+    "education": [{"degree": "Bachelor of Technology (B.Tech), Computer Science", "institution": "JNTU Hyderabad",
+                   "year": "Expected May 2027", "gpa": "8.7/10"}],
+    "experience": [{"title": "Software Engineering Intern", "company": "Acme Labs", "start": "May 2026", "end": "Jul 2026",
+                    "bullets": ["Built a caching layer that cut API response time by 35%."]}],
+    "projects": [{"name": "Campus Marketplace", "link": "github.com/asharao/market", "tech_stack": "React, FastAPI",
+                  "bullets": ["Listings app used by 400+ students."]}],
+    "skills": ["Python", "Java", "SQL"],
+    "coursework": ["Data Structures", "Operating Systems", "DBMS"],
+    "leadership": ["President, Coding Club"],
+    "awards": ["Smart India Hackathon 2025, finalist"],
+}
+STUDENT_HEADINGS = ["OBJECTIVE", "EDUCATION", "INTERNSHIPS", "PROJECTS", "SKILLS", "COURSEWORK", "LEADERSHIP", "AWARDS"]
+
+PRO_FULL = {
+    "contact": {"name": "Ravi Kumar", "email": "ravi.kumar@example.com", "phone": "+91 99887 76655",
+                "location": "Bengaluru, India", "linkedin": "linkedin.com/in/ravikumar"},
+    "summary": "Technology lead with twelve years delivering payment platforms for banks.",
+    "experience": [{"title": "Technology Lead", "company": "Infosys", "start": "Jan 2020", "end": None,
+                    "bullets": ["Led a team of 14 across two time zones."],
+                    "projects": [{"client": "Barclays", "domain": "Banking", "role": "Lead", "start": "Jan 2020",
+                                  "end": "Present", "bullets": ["Moved the ledger to a new core in 9 months."]}]}],
+    "skills": ["Java", "Kafka", "AWS"],
+    "certifications": ["AWS Certified Solutions Architect - Associate"],
+    "education": [{"degree": "Bachelor of Engineering (B.E.)", "institution": "VTU", "year": "2012"}],
+    "achievements": ["Cut payment failures by 40% across 3 markets"],
+}
+PRO_HEADINGS = ["SUMMARY", "EXPERIENCE", "SKILLS", "CERTIFICATIONS", "EDUCATION"]
+
+
+def _sets():
+    from app.services.pdf import TEMPLATE_SETS
+    return TEMPLATE_SETS
+
+
+@pytest.mark.parametrize("template_id", sorted(t for t, s in _sets().items() if s == "student"))
+def test_every_student_template_prints_every_student_section(template_id):
+    pdf = _render(STUDENT_FULL, template_id)
+    text, findings = check_pdf(STUDENT_FULL, pdf, template_id)
+    assert _errors(findings) == [], text
+    upper = text.upper()
+    for heading in STUDENT_HEADINGS:
+        assert heading in upper, (heading, text)
+    flat = " ".join(text.split())  # the CGPA label is joined by a no-break space
+    assert "CGPA 8.7/10" in flat and "Expected May 2027" in flat
+    layout = pdfminer_high_level.extract_text(io.BytesIO(pdf))
+    assert _errors(check_text(STUDENT_FULL, layout, template_id)) == [], layout
+
+
+@pytest.mark.parametrize("template_id", sorted(t for t, s in _sets().items() if s == "professional"))
+def test_every_professional_template_prints_every_professional_section(template_id):
+    pdf = _render(PRO_FULL, template_id)
+    text, findings = check_pdf(PRO_FULL, pdf, template_id)
+    assert _errors(findings) == [], text
+    upper = text.upper()
+    for heading in PRO_HEADINGS:
+        assert heading in upper, (heading, text)
+    # A role's client project prints under it.
+    assert "Barclays" in text and "Moved the ledger" in text
+    layout = pdfminer_high_level.extract_text(io.BytesIO(pdf))
+    assert _errors(check_text(PRO_FULL, layout, template_id)) == [], layout
+
+
+def test_impact_puts_the_strongest_evidence_before_the_work_history():
+    text = PdfReader(io.BytesIO(_render(PRO_FULL, "ats_impact"))).pages[0].extract_text().upper()
+    assert text.index("SUMMARY") < text.index("SKILLS") < text.index("ACHIEVEMENTS") < text.index("EXPERIENCE")

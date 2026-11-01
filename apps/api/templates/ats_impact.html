@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ document_title }}</title>
+{#
+  Impact — the hybrid résumé for a senior candidate: Summary, Skills and
+  Achievements up top so the strongest evidence is read first, then the
+  reverse-chronological work history. Still one column and plain text: the
+  hybrid is an order, not a layout. A short accent bar under the name is a
+  border, not an image.
+#}
+{% set page_margin = "0.55in" %}
+<style>
+{% include "_base_style.html" %}
+  h1 { font-size: {{ heading_size(20, 18) }}pt; font-weight: 800; margin: 0; line-height: 1.1; }
+  .name-bar { width: 48px; border-bottom: 3pt solid {{ accent_color }}; margin: 5px 0 6px; }
+  .contact { font-size: {{ body_size(10) }}pt; color: #333; margin-bottom: 4px; }
+  h2 { font-size: {{ heading_size(13) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+       color: {{ accent_color }}; border-bottom: 0.75pt solid #d5d9de;
+       margin: {{ section_gap }}px 0 5px; padding-bottom: 2px; }
+  .job-title { font-weight: 700; font-size: {{ body_size(11.5) }}pt; }
+  .company { color: #333; }
+  .dates { font-size: {{ body_size(10) }}pt; color: #555; }
+</style>
+</head>
+<body>
+{% import "_blocks.html" as blocks with context %}
+<h1 data-field="contact.name">{{ contact.name }}</h1>
+<div class="name-bar"></div>
+{{ blocks.contact_line(" | ") }}
+{{ blocks.sections({
+  "company": "b.company",
+  "order": ["summary_or_objective", "skills", "achievements", "experience", "projects", "education",
+            "certifications", "awards", "leadership", "languages", "volunteer", "coursework", "interests"],
+}) }}
+</body>
+</html>

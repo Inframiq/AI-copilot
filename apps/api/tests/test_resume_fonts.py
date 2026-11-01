@@ -51,9 +51,10 @@ def test_every_stack_leads_with_a_bundled_family_and_ends_generic():
         assert stack.endswith(("sans-serif", "serif")), key
 
 
-def test_the_bundled_fonts_carry_no_ligatures():
-    """build.py drops liga/clig/dlig: "fi" in "financial" stays two glyphs
-    whatever the CSS says."""
+def test_the_bundled_fonts_carry_no_ligatures_or_kerning():
+    """build.py drops liga/clig/dlig — "fi" in "financial" stays two glyphs
+    whatever the CSS says — and kern: Lato's bold "Te" pair was read by a
+    parser as a word break ("T echnology")."""
     from fontTools.ttLib import TTFont
 
     for path in FONTS_DIR.glob("*.ttf"):
@@ -62,3 +63,7 @@ def test_the_bundled_fonts_carry_no_ligatures():
             continue
         tags = {r.FeatureTag for r in font["GSUB"].table.FeatureList.FeatureRecord}
         assert not tags & {"liga", "clig", "dlig"}, (path.name, tags)
+        if "GPOS" in font:
+            pos = {r.FeatureTag for r in font["GPOS"].table.FeatureList.FeatureRecord}
+            assert "kern" not in pos, (path.name, pos)
+        assert "kern" not in font, path.name

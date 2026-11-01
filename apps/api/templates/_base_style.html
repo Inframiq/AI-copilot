@@ -1,0 +1,34 @@
+{#
+  The rules every template needs whatever it looks like, included inside a
+  template's <style> before its own. A template then writes only what makes
+  it different: its fonts' sizes, its header, its headings and colours.
+  (Templates made before this file carry their own copies of these rules.)
+
+  Why each rule is here, learnt the hard way by render-and-extract tests:
+  - Text is plain inline flow. Anything that visually right-aligns or
+    pushes text (float, flex justify-content, a right-aligned table cell)
+    makes WeasyPrint write it out of order, and dates landed at the end of
+    the extracted text.
+  - A bullet row never splits across a page break.
+  - List markers sit inside the list: drawn outside, WeasyPrint wrote
+    every bullet after the whole page.
+  - The name has room under it (h1 margin): with a tight gap under a large
+    name, a parser reading the content stream ran the name into the email.
+  - A contact item never wraps: "github.com/" and "name" on two lines reach
+    a parser as two broken pieces.
+#}
+  @page { size: {{ page_size }}; margin: {{ page_margin | default("0.6in") }}; }
+  body { font-family: {{ font_family }}; font-size: {{ body_size(11) }}pt; line-height: {{ line_spacing }}; margin: 0; color: #111; }
+  .job-row, .job-header { margin-top: 0; }
+  .edu-row { margin-top: {{ paragraph_spacing }}px; }
+  table.bullets { width: 100%; border-collapse: collapse; margin: 4px 0 {{ paragraph_spacing }}px 0; }
+  table.bullets tr { page-break-inside: avoid; break-inside: avoid; }
+  .bdot { width: 11px; padding: 0 5px {{ bullet_gap }}px 0; vertical-align: top; font-weight: bold; }
+  .btxt { padding: 0 0 {{ bullet_gap }}px 0; text-align: left; }
+  .kw { font-weight: 700; }
+  .skills { margin: 4px 0 6px; }
+  p.summary { margin: 4px 0 {{ paragraph_spacing }}px; }
+  ul.plain { margin: 4px 0 {{ paragraph_spacing }}px 2px; padding: 0; list-style-position: inside; }
+  h2 { page-break-after: avoid; break-after: avoid; }
+  .contact-item { white-space: nowrap; }
+  h1 { margin-bottom: 6px; }

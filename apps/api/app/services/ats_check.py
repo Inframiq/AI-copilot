@@ -255,6 +255,11 @@ def check_text(content: dict, text: str, template_id: str | None = None) -> list
                 section,
             ))
 
+    # A list bullet on a line of its own came out apart from its item —
+    # WeasyPrint wrote list markers drawn outside the list after the page.
+    if any(re.fullmatch(r"[•·\-–]", line) for line in lines):
+        findings.append(Finding("stray-bullets", "error", "List bullets came out apart from their items."))
+
     if _BROKEN_CHARS.search(text):
         findings.append(Finding("broken-characters", "error", "Some characters came out broken (ligatures, icon glyphs or unmapped characters)."))
 
@@ -311,8 +316,10 @@ def check_text(content: dict, text: str, template_id: str | None = None) -> list
         elif year and is_present(year):
             findings.append(Finding("date-unreadable", "warning", 'For a degree in progress, write "Expected" with the month and year.', f"education.{i}.year"))
 
-    # A job's title, company and dates must read as one entry.
-    cursor = 0
+    # A job's title, company and dates must read as one entry. Titles are
+    # looked for from the Experience heading on: a summary saying "technology
+    # lead with twelve years…" is not where the role is.
+    cursor = next((i for i, line in enumerate(lines_norm) if line in APPROVED_HEADINGS["experience"]), 0)
     for i, job in enumerate(content.get("experience") or []):
         if not isinstance(job, dict):
             continue

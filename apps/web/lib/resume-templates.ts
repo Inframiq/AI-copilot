@@ -16,6 +16,8 @@ export const RESUME_TEMPLATES = [
   { id: "student_modern", set: "student" as TemplateSet, label: "Campus Modern", description: "Education first, with subtle colour accents." },
   { id: "student_minimal", set: "student" as TemplateSet, label: "Campus Minimal", description: "Centred name, education first, understated." },
   { id: "student_technical", set: "student" as TemplateSet, label: "Campus Technical", description: "Education first, skills on an accent rail, for engineering roles." },
+  { id: "student_collegiate", set: "student" as TemplateSet, label: "Campus Collegiate", description: "The career-centre classic: small-caps headings over hairlines, set in serif.", font: "classic_serif" },
+  { id: "student_placement", set: "student" as TemplateSet, label: "Campus Placement", description: "Dense one page for campus drives: CGPA, internships, projects, coursework." },
   { id: "ats_clean", set: "professional" as TemplateSet, label: "ATS Clean", description: "Simple single-column layout, maximum ATS compatibility." },
   { id: "ats_modern", set: "professional" as TemplateSet, label: "ATS Modern", description: "Clean sans-serif with subtle color accents." },
   { id: "ats_sidebar", set: "professional" as TemplateSet, label: "Sidebar", description: "Banner header with photo and language bars.", photo: { shape: "square" as PhotoShape } },
@@ -26,7 +28,17 @@ export const RESUME_TEMPLATES = [
   { id: "ats_banner", set: "professional" as TemplateSet, label: "Banner", description: "Full-bleed color header with your name reversed out of it." },
   { id: "ats_portrait", set: "professional" as TemplateSet, label: "Portrait", description: "Centered circular photo above a formal masthead.", photo: { shape: "circle" as PhotoShape } },
   { id: "ats_technical", set: "professional" as TemplateSet, label: "Technical", description: "Skills first, accent ticks, built for engineering roles." },
+  { id: "ats_corporate", set: "professional" as TemplateSet, label: "Corporate", description: "Traditional chronological, set in serif, for an established career.", font: "serif" },
+  { id: "ats_impact", set: "professional" as TemplateSet, label: "Impact", description: "Hybrid: summary, skills and achievements first, then your work history." },
 ] as const;
+
+/** The font a résumé starts in when this template is chosen in the Builder:
+ * the serif the design was drawn for, else the app's default. Only a
+ * starting point — the Type panel changes it like any other résumé's. */
+export function startingFontFor(id: string): string | undefined {
+  const t = RESUME_TEMPLATES.find((x) => x.id === id);
+  return t && "font" in t ? t.font : undefined;
+}
 
 /** The templates in one gallery tab, in gallery order. */
 export function templatesInSet(set: TemplateSet) {

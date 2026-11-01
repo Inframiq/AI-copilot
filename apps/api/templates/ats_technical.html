@@ -56,6 +56,9 @@
   /* One contact item never breaks across lines: "github.com/" with "name"
      on the next line reached a parser as two broken pieces. */
   .contact-item { white-space: nowrap; }
+  /* Markers inside the list: drawn outside, WeasyPrint wrote every "•" after
+     the whole page, so the extracted text ended in a run of stray bullets. */
+  ul.plain, ul.additional { list-style-position: inside; margin-left: 2px; }
 </style>
 </head>
 <body>

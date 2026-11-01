@@ -7,7 +7,7 @@ import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash, Magnifying
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
-import { TEMPLATE_SET_LABELS, templatesInSet, type TemplateSet } from "@/lib/resume-templates";
+import { TEMPLATE_SET_LABELS, startingFontFor, templatesInSet, type TemplateSet } from "@/lib/resume-templates";
 import { TemplatePreviewSheet } from "@/components/studio/TemplatePreviewSheet";
 import { fileUnplacedPoints, getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import { usePageReady } from "@/lib/reveal";
@@ -158,10 +158,13 @@ export default function StudioIndexPage() {
         const content = profile
           ? profileToResumeContent(profile)
           : { contact: { name: "", email: "" }, experience: [], education: [], skills: [] };
+        const font = startingFontFor(selected);
         resume = await apiClient.createResume({
           title: "Untitled Resume",
           template_id: selected,
           content,
+          // A design drawn in serif starts in it; the Type panel can change it.
+          ...(font ? { font_choice: font } : {}),
         });
       }
       router.push(`/studio/${resume.id}`);

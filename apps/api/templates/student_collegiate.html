@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ document_title }}</title>
+{#
+  Campus Collegiate — the university career-centre résumé: chronological,
+  one column, Education first, the name over a single contact line and a
+  hairline.
+  Made to be read in a serif (the Builder starts it in Classic Serif; any
+  font choice still applies). Headings sit hard left in small capitals
+  over a hairline. Nothing is centred: a centred heading was read after its
+  own section, and a centred name over a contact line long enough to wrap
+  was read after the contact line, by layout-analysing parsers.
+#}
+{% set page_margin = "0.6in" %}
+<style>
+{% include "_base_style.html" %}
+  .masthead { margin-bottom: 4px; }
+  h1 { font-size: {{ heading_size(20, 18) }}pt; font-weight: 700; margin: 0 0 6px; line-height: 1.1; letter-spacing: 0.04em; }
+  .contact { font-size: {{ body_size(10) }}pt; color: #222; }
+  .masthead-rule { border-bottom: 0.75pt solid #111; margin: 6px 0 0; }
+  h2 { font-size: {{ heading_size(13) }}pt; font-weight: 700; font-variant: small-caps; letter-spacing: 0.05em;
+       color: {{ accent_color }}; border-bottom: 0.5pt solid #9aa0a6;
+       margin: {{ section_gap }}px 0 5px; padding-bottom: 1px; }
+  .job-title { font-weight: 700; font-size: {{ body_size(11) }}pt; }
+  .company { font-style: italic; color: #222; }
+  .dates { font-size: {{ body_size(10) }}pt; color: #444; }
+</style>
+</head>
+<body>
+{% import "_blocks.html" as blocks with context %}
+<div class="masthead">
+  <h1 data-field="contact.name">{{ contact.name }}</h1>
+  {{ blocks.contact_line(" &nbsp;|&nbsp; ") }}
+</div>
+<div class="masthead-rule"></div>
+{{ blocks.sections({"company": "span", "inst_cls": "company"}) }}
+</body>
+</html>

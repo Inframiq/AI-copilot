@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESUME_TEMPLATES, setOfTemplate, templateRequiresPhoto, templatesInSet } from "../lib/resume-templates";
+import { RESUME_TEMPLATES, setOfTemplate, startingFontFor, templateRequiresPhoto, templatesInSet } from "../lib/resume-templates";
 
 // Kept in step with pdf.py's TEMPLATES_REQUIRING_PHOTO — the API-side test
 // test_the_web_gallery_lists_exactly_the_templates_the_api_renders parses this
@@ -17,6 +17,10 @@ const TEXT_ONLY = [
   "student_modern",
   "student_minimal",
   "student_technical",
+  "student_collegiate",
+  "student_placement",
+  "ats_corporate",
+  "ats_impact",
 ];
 
 describe("templateRequiresPhoto", () => {
@@ -42,15 +46,23 @@ describe("templateRequiresPhoto", () => {
 
 describe("the gallery itself", () => {
   it("splits into the Student / fresher and Working professional tabs", () => {
-    expect(templatesInSet("student").map((t) => t.id)).toEqual(
-      ["student_clean", "student_modern", "student_minimal", "student_technical"],
-    );
-    expect(templatesInSet("professional")).toHaveLength(10);
+    expect(templatesInSet("student").map((t) => t.id)).toEqual([
+      "student_clean", "student_modern", "student_minimal", "student_technical",
+      "student_collegiate", "student_placement",
+    ]);
+    expect(templatesInSet("professional")).toHaveLength(12);
     // No photo template among the student ones: they are meant for portals.
     expect(templatesInSet("student").some((t) => "photo" in t)).toBe(false);
     expect(setOfTemplate("student_clean")).toBe("student");
     expect(setOfTemplate("ats_clean")).toBe("professional");
     expect(setOfTemplate("nope")).toBe("professional");
+  });
+
+  it("starts the serif designs in their serif, and the rest in the default", () => {
+    expect(startingFontFor("student_collegiate")).toBe("classic_serif");
+    expect(startingFontFor("ats_corporate")).toBe("serif");
+    expect(startingFontFor("ats_clean")).toBeUndefined();
+    expect(startingFontFor("nope")).toBeUndefined();
   });
 
   it("covers every template exactly once", () => {

@@ -34,6 +34,10 @@ TEMPLATE_SETS = {
     "ats_portrait": "professional", "ats_technical": "professional",
     "student_clean": "student", "student_modern": "student", "student_minimal": "student",
     "student_technical": "student",
+    # Designs of their own (2026-11-01 research round; see
+    # docs/resume-templates.md for why each, and how to add the next).
+    "student_collegiate": "student", "student_placement": "student",
+    "ats_corporate": "professional", "ats_impact": "professional",
 }
 TEMPLATE_FILES = {
     "student_clean": "ats_clean", "student_modern": "ats_modern",
@@ -493,6 +497,10 @@ TEMPLATE_DEFAULT_ACCENT = {
     "ats_banner": "#1f3b73",
     "ats_portrait": "#6d4c41",
     "ats_technical": "#00695c",
+    "student_collegiate": "#1f2a44",
+    "student_placement": "#0b5c8a",
+    "ats_corporate": "#1d3a5f",
+    "ats_impact": "#8a2a3b",
 }
 # A student template keeps its twin's colour.
 TEMPLATE_DEFAULT_ACCENT.update({tid: TEMPLATE_DEFAULT_ACCENT[f] for tid, f in TEMPLATE_FILES.items()})

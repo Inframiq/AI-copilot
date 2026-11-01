@@ -45,6 +45,9 @@ STUDENT = {
     "leadership": ["President, Coding Club - ran weekly sessions for 60 students"],
     "awards": ["Smart India Hackathon 2025, finalist"],
 }
+# Designs drawn for a serif are shown in the font the Builder starts them in
+# (startingFontFor in apps/web/lib/resume-templates.ts — keep in step).
+STARTING_FONT = {"student_collegiate": "classic_serif", "ats_corporate": "serif"}
 # A neutral grey square for the photo templates' portrait.
 # Encoded here rather than pasted as base64: the secrets scan reads a long
 # base64 literal as a possible key.
@@ -54,7 +57,7 @@ for tid in sorted(P.ALLOWED_TEMPLATES):
     base = STUDENT if P.TEMPLATE_SETS[tid] == "student" else SAMPLE
     content = {**base, "contact": {**base["contact"], "photo_url": PHOTO}} if tid in P.TEMPLATES_REQUIRING_PHOTO else base
     with patch.object(P, "_sanitize_resume_content", lambda c: (c, P.PHOTO_EMBEDDED if c["contact"].get("photo_url") else P.PHOTO_NONE)):
-        html = P.render_resume_html(content, tid)
+        html = P.render_resume_html(content, tid, font_choice=STARTING_FONT.get(tid, "sans"))
     faces = "\n".join(
         f'@font-face {{ font-family: "{fam}"; font-weight: {w}; font-style: {s}; src: url("{FONTS}/{pre}-{suf}.ttf"); }}'
         for fam, pre in P.BUNDLED_FONTS.items()

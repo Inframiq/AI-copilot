@@ -17,6 +17,7 @@ What is done to each face:
     instances, because a résumé needs exactly regular and bold.
   - Subset to Latin script plus the punctuation and symbols the templates and
     typed résumé text use. Anything outside falls through the CSS stack.
+  - Kerning is removed too: a large kern pair read as a word break.
   - Ligature substitutions (liga, clig, dlig) are removed, so "fi" in
     "financial" is always two glyphs. Some parsers can't map a ligature
     glyph back to its letters and lose the word. The templates also turn
@@ -69,7 +70,11 @@ FACES = [
 
 def build(src: Path) -> None:
     options = subset.Options()
-    options.layout_features = ["kern", "mark", "mkmk", "ccmp", "locl"]  # no liga/clig/dlig
+    # No liga/clig/dlig (see above) and no kern: Lato's bold pulls "Te" so
+    # tight that a parser reading the PDF took the adjustment for a space —
+    # "T echnology". Unkerned, every word comes out whole in every font.
+    options.layout_features = ["mark", "mkmk", "ccmp", "locl"]
+    options.legacy_kern = False
     options.name_IDs = ["*"]       # keep the licence and family names
     options.notdef_outline = True
     options.hinting = False     # print output; hinting only bloats the file

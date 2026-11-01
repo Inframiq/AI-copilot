@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ document_title }}</title>
+{#
+  Campus Placement — the dense one-page résumé campus drives ask for:
+  Education first with the CGPA and its scale, then internships, projects,
+  skills and coursework, on tight margins so a fresher's whole record fits
+  one page. Each heading is trailed by a rule to the right edge: drawn as
+  an empty ::after box beside the text, never by pushing the text itself,
+  so the extracted order stays the heading, then its section.
+#}
+{% set page_margin = "0.5in" %}
+<style>
+{% include "_base_style.html" %}
+  h1 { font-size: {{ heading_size(19, 18) }}pt; font-weight: 800; color: {{ accent_color }}; margin: 0 0 6px; line-height: 1.1; }
+  .contact { font-size: {{ body_size(10) }}pt; color: #333; margin-bottom: 4px; }
+  h2 { display: flex; align-items: center; gap: 6px;
+       font-size: {{ heading_size(13) }}pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+       color: {{ accent_color }}; margin: {{ section_gap }}px 0 3px; }
+  h2::after { content: ""; flex: 1; border-bottom: 1pt solid #c7ccd3; }
+  .job-title { font-weight: 700; font-size: {{ body_size(11) }}pt; }
+  .company { color: #333; }
+  .dates { font-size: {{ body_size(10) }}pt; color: #555; }
+  table.bullets { margin-top: 2px; }
+</style>
+</head>
+<body>
+{% import "_blocks.html" as blocks with context %}
+<h1 data-field="contact.name">{{ contact.name }}</h1>
+{{ blocks.contact_line(" | ") }}
+{{ blocks.sections({}) }}
+</body>
+</html>

@@ -107,6 +107,22 @@
   {%- endif -%}
 {%- endmacro %}
 
+{# ── Contact line ────────────────────────────────────────────────────────── #}
+{# Email, phone, location and every link as its address, in one line under
+   the name — where the parser reads contact details from. Each item stays
+   whole (contact-item: nowrap in the template's CSS). #}
+{% macro contact_line(sep=" | ", cls="contact") -%}
+{% set contact_parts = [
+  ('contact.email', contact.email | email_link),
+  ('contact.phone', contact.phone | phone_link),
+  ('contact.location', contact.location),
+  ('contact.linkedin', contact.linkedin | url_link(contact.linkedin_label, 'contact.linkedin')),
+  ('contact.github', contact.github | url_link(contact.github_label, 'contact.github')),
+  ('contact.website', contact.website | url_link(contact.website_label, 'contact.website'))
+] %}
+<div class="{{ cls }}">{% for path, value in contact_parts if value %}{% if not loop.first %}{{ sep | safe }}{% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
+{%- endmacro %}
+
 {# ── Summary / objective ─────────────────────────────────────────────────── #}
 {% macro summary_or_objective(S) %}
   {% if summary %}
