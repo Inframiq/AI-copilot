@@ -576,34 +576,57 @@ def _evidence_texts(content: dict) -> list[str]:
     return [strip_inline_tags(t) for t in texts]
 
 
+def skills_only_terms(content: dict, terms: list[str]) -> list[str]:
+    """The *terms* the résumé lists under Skills that no bullet (or the
+    summary) shows in use — the reference's rule 3, "each important skill in
+    two places". One test for both sides: the ATS check warns on these, and
+    tailoring hands them to Agent 2 to place in the bullet that shows them."""
+    from app.services.ats import _exact_pattern
+
+    content = _rendered_content(content)
+    skills = content.get("skills")
+    skill_items = [i for items in skills.values() for i in items] if isinstance(skills, dict) else list(skills or [])
+    skills_text = " | ".join(str(s) for s in skill_items)
+    evidence = " | ".join(_evidence_texts(content))
+    out: list[str] = []
+    for term in dict.fromkeys(t.strip() for t in terms if t and t.strip()):
+        pattern = _exact_pattern(term)
+        if pattern.search(skills_text) and not pattern.search(evidence):
+            out.append(term)
+    return out
+
+
+def jd_hard_terms(jd_analysis, important_only: bool = False) -> list[str]:
+    """The post's tools and methods, highest-rated first. *important_only*:
+    what the analysis rated high — or, for a JD analysed before ratings
+    existed, its exact tools."""
+    importance = getattr(jd_analysis, "importance", None) or {}
+    hard = list(dict.fromkeys(
+        list(jd_analysis.exact_technical_tools or []) + list(jd_analysis.methodologies_and_frameworks or [])
+    ))
+    if important_only:
+        important = [t for t in hard if importance.get(t.strip().lower()) == "high"] if importance else []
+        return important or list(jd_analysis.exact_technical_tools or [])
+    rank = {"high": 0, "medium": 1, "low": 2}
+    extra = [t for t in (jd_analysis.ats_filter_phrases or []) if t.strip().lower() not in {h.strip().lower() for h in hard}]
+    return sorted(hard + extra, key=lambda t: rank.get(importance.get(t.strip().lower(), "medium"), 1))
+
+
 def check_against_jd(content: dict, jd_analysis) -> list[Finding]:
     """Warnings for *content* against a parsed job post (a JDAnalysis)."""
     from app.services.ats import _exact_pattern, build_resume_text, title_match_verdict
 
     content = _rendered_content(content)
     findings: list[Finding] = []
-    importance = getattr(jd_analysis, "importance", None) or {}
     hard = list(dict.fromkeys(
         list(jd_analysis.exact_technical_tools or []) + list(jd_analysis.methodologies_and_frameworks or [])
     ))
-    # "Important" is what the analysis rated high; a JD analysed before
-    # ratings existed falls back to its exact tools.
-    important = [t for t in hard if importance.get(t.strip().lower()) == "high"] if importance else []
-    if not important:
-        important = list(jd_analysis.exact_technical_tools or [])
-
-    skills = content.get("skills")
-    skill_items = [i for items in skills.values() for i in items] if isinstance(skills, dict) else list(skills or [])
-    skills_text = " | ".join(str(s) for s in skill_items)
-    evidence = " | ".join(_evidence_texts(content))
-    for term in important:
-        pattern = _exact_pattern(term)
-        if pattern.search(skills_text) and not pattern.search(evidence):
-            findings.append(Finding(
-                "skill-not-shown", "warning",
-                f"{term} is in Skills but no bullet shows it in use. If it is true, add it to one.",
-                "skills",
-            ))
+    for term in skills_only_terms(content, jd_hard_terms(jd_analysis, important_only=True)):
+        findings.append(Finding(
+            "skill-not-shown", "warning",
+            f"{term} is in Skills but no bullet shows it in use. If it is true, add it to one.",
+            "skills",
+        ))
 
     titles = [t.strip() for t in (jd_analysis.target_job_titles or []) if t and t.strip()]
     if titles:

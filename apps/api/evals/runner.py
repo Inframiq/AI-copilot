@@ -60,6 +60,9 @@ class Fixture:
     description: str
     jd_text: str
     resume_content: dict
+    # Listed skills no bullet's work honestly used: tailoring must leave
+    # them out of the bullets (a negative control for skills_only_shown).
+    skills_not_evidenced: "list[str] | None" = None
 
 
 def load_fixtures(directory: "str | pathlib.Path" = FIXTURE_DIR) -> list[Fixture]:
@@ -75,6 +78,7 @@ def load_fixtures(directory: "str | pathlib.Path" = FIXTURE_DIR) -> list[Fixture
             description=data.get("description", ""),
             jd_text=data["jd_text"],
             resume_content=data["resume_content"],
+            skills_not_evidenced=data.get("skills_not_evidenced") or [],
         ))
     return out
 
@@ -229,13 +233,38 @@ async def evaluate_fixture(
         for o, t in zip(original_bullets, tailored_bullets)
     ]
     report["reverted"] = result.reverted_bullets
+    report.update(skills_only_metrics(fixture, result))
     return report
+
+
+def skills_only_metrics(fixture: Fixture, result) -> dict:
+    """The ATS reference's rule 3 — each important skill in Skills AND in a
+    bullet that shows it in use. skills_only_shown is the share of JD terms
+    the résumé listed only under Skills that a bullet shows after tailoring
+    (absent when there were none); forced_skills counts listed skills the
+    fixture says no bullet honestly evidences that still landed in one."""
+    from app.services.ats import _exact_pattern
+    from app.services.ats_check import jd_hard_terms, skills_only_terms
+
+    if result.jd_analysis is None:
+        return {}
+    terms = skills_only_terms(fixture.resume_content, jd_hard_terms(result.jd_analysis))
+    left = set(skills_only_terms(result.tailored_content, terms))
+    shown = [t for t in terms if t not in left]
+    out: dict = {"skills_only_terms": terms, "skills_only_shown_terms": shown}
+    if terms:
+        out["skills_only_shown"] = round(len(shown) / len(terms), 4)
+    bullets = " | ".join(_collect_all_bullets(result.tailored_content))
+    forced = [t for t in fixture.skills_not_evidenced or [] if _exact_pattern(t).search(bullets)]
+    out["forced_skills_terms"] = forced
+    out["forced_skills"] = len(forced)
+    return out
 
 
 # Keys that are per-fixture context, not metrics to average.
 _NON_METRIC_KEYS = {
     "name", "description", "bullets", "reverted", "error", "keyword_overuse", "token_calls",
-    "repeated_phrases", "questions",
+    "repeated_phrases", "questions", "skills_only_terms", "skills_only_shown_terms", "forced_skills_terms",
 }
 
 
@@ -291,6 +320,7 @@ def _cmd_run(args) -> int:
                 f"  spec {row['specificity_retention']:.2f}"
                 f"  verbs {row['verb_diversity']:.2f}"
                 f"  reverts {row['revert_rate']:.2f}"
+                f"  skills-only shown {row.get('skills_only_shown', '-')} forced {row.get('forced_skills', 0)}"
                 f"  tokens in/out {row.get('tokens_input', 0)}/{row.get('tokens_output', 0)}"
             )
     print("\naggregate:", json.dumps(out["aggregate"], indent=2))

@@ -5,3 +5,5 @@
 !rule7-tightened.json
 !prompt-cleanup.json
 !prep-baseline.json
+!skills-only-before.json
+!skills-only-after.json

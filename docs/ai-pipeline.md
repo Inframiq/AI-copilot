@@ -218,6 +218,13 @@ per resume bullet).
   scores better. INJECT also now carries a density cap (rule 4) — the same
   keyword can't be injected into more than 2-3 bullets unless the JD itself
   repeats it 3+ times, guarding against a term getting stuffed everywhere.
+- Agent 2 also receives `jd_terms_only_in_skills` (2026-11-01): JD terms the
+  résumé lists under Skills that no bullet shows in use — the same list the
+  ATS check warns on (`ats_check.skills_only_terms`). `MappingPlan` opens with
+  `listed_skill_placements` (term → bullet, with a ≤8-word quote of the work
+  the skill does, or `""`); `apply_listed_skill_placements` adds each placed
+  term to its bullet's keywords as spelled and strips any unplaced or
+  badly-quoted term from every bullet. Eval results: `apps/api/evals/README.md`.
 - Agent 3 (`_build_agent3_system`) rule 1 reframes keyword injection as a
   byproduct of demonstrating `jd_responsibility_addressed`, not the goal
   itself; rule 3, "PRESERVE SPECIFICS", is the last-line-of-defense version

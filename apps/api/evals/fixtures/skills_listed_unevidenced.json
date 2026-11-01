@@ -1,0 +1,37 @@
+{
+  "name": "skills_listed_unevidenced",
+  "description": "Negative control for rule 3: Blender (3D) is in Skills and in the JD, but no bullet is 3D work. Tailoring must not force it into a bullet; Figma and user research, which the bullets did use, should be shown.",
+  "skills_not_evidenced": ["Blender"],
+  "jd_text": "Product Designer\n\nJoin our product team designing a consumer finance app.\n\nWhat you'll do:\n- Design end-to-end flows in Figma, from wireframes to high-fidelity prototypes\n- Plan and run user research and usability testing\n- Grow and maintain our design system\n- Create 3D illustrations in Blender for marketing launches\n\nRequirements:\n- 3+ years of product design experience\n- Expert in Figma\n- Experience with user research and prototyping\n- Blender is a strong plus\n",
+  "resume_content": {
+    "contact": {"name": "Daniel Okafor", "email": "daniel@example.com"},
+    "headline": "Product Designer",
+    "summary": "Product designer with four years shaping mobile banking and payments experiences.",
+    "experience": [
+      {
+        "company": "Pennywise",
+        "title": "Product Designer",
+        "start": "2022",
+        "end": "Present",
+        "bullets": [
+          "Redesigned the onboarding flow for an app used by 40,000 people, raising completion from 61% to 78%",
+          "Ran 9 usability sessions with first-time investors before the portfolio screen launch",
+          "Built a component library of 120 parts shared by 3 product squads",
+          "Wrote the copy and layouts for 6 app store screenshots"
+        ]
+      },
+      {
+        "company": "Studio Ardent",
+        "title": "UI Designer",
+        "start": "2020",
+        "end": "2022",
+        "bullets": [
+          "Designed checkout screens for 5 retail clients' mobile sites",
+          "Turned stakeholder sketches into clickable prototypes for weekly client reviews"
+        ]
+      }
+    ],
+    "education": [{"degree": "B.Des. Communication Design", "institution": "NID Ahmedabad", "year": "2020"}],
+    "skills": ["Figma", "User Research", "Prototyping", "Blender", "Illustrator"]
+  }
+}

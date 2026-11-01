@@ -148,8 +148,8 @@ def test_results_from_before_per_rewrite_scoring_are_never_reused(monkeypatch):
     """Sessions saved before score_verdicts existed have no per-point values
     and a frozen live score; the version in the fingerprint retires them."""
     import app.services.tailoring as t
-    assert t.TAILOR_PIPELINE_VERSION == "3"
+    assert t.TAILOR_PIPELINE_VERSION == "4"
     now = _fp()
-    for older in ("1", "2"):
+    for older in ("1", "2", "3"):
         monkeypatch.setattr(t, "TAILOR_PIPELINE_VERSION", older)
         assert _fp() != now

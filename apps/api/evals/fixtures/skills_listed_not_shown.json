@@ -1,0 +1,36 @@
+{
+  "name": "skills_listed_not_shown",
+  "description": "The ATS reference's rule 3 case, common on real résumés: the JD's tools are all in Skills, and the bullets describe work that plainly used them without naming one. Tailoring should show each listed tool in the bullet whose work used it.",
+  "jd_text": "Data Analyst\n\nWe're looking for a Data Analyst to help our commercial teams make better decisions.\n\nWhat you'll do:\n- Write SQL to pull and join data across billing, CRM and product systems\n- Build and maintain Tableau dashboards for regional leadership\n- Design and analyse A/B tests on pricing and onboarding\n- Automate recurring reports with Python\n- Partner with finance on data reconciliation in Excel\n\nRequirements:\n- 3+ years in a data analyst role\n- Strong SQL, Tableau, Python and Excel\n- Experience with A/B testing\n- Clear communication with non-technical stakeholders\n",
+  "resume_content": {
+    "contact": {"name": "Priya Nair", "email": "priya@example.com"},
+    "headline": "Data Analyst",
+    "summary": "Analyst with four years turning billing and customer data into decisions for sales and finance teams.",
+    "experience": [
+      {
+        "company": "Brightline Telecom",
+        "title": "Data Analyst",
+        "start": "2022",
+        "end": "Present",
+        "bullets": [
+          "Built weekly churn dashboards for 12 regional sales teams, used in every Monday review",
+          "Wrote queries joining billing and CRM records to flag 2,400 at-risk accounts each quarter",
+          "Ran 14 pricing experiments on the upgrade page that lifted conversion by 3.1%",
+          "Automated the monthly revenue report, cutting preparation from 6 hours to 20 minutes"
+        ]
+      },
+      {
+        "company": "Kestrel Logistics",
+        "title": "Junior Analyst",
+        "start": "2020",
+        "end": "2022",
+        "bullets": [
+          "Reconciled three years of order and invoice data for the finance audit, closing 310 mismatches",
+          "Presented delivery-delay findings to operations managers every month"
+        ]
+      }
+    ],
+    "education": [{"degree": "B.Sc. Statistics", "institution": "University of Pune", "year": "2020"}],
+    "skills": ["SQL", "Tableau", "Python", "Excel", "A/B Testing", "Jira"]
+  }
+}

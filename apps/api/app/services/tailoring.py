@@ -168,10 +168,82 @@ class BulletMapping(BaseModel):
     strategic_instruction: str
 
 
+class ListedSkillPlacement(BaseModel):
+    """Agent 2's decision for one JD term the résumé lists only under Skills:
+    the bullet whose work used it, or "" for none. bullet_quote first — the
+    same reason-before-commit field order as BulletMapping: the words of that
+    bullet, copied exactly, that show the work the skill is for."""
+    bullet_quote: str = ""
+    term: str
+    bullet_id: str = ""
+
+
 class MappingPlan(BaseModel):
-    """Output of Agent 2."""
+    """Output of Agent 2. listed_skill_placements comes first so each listed
+    skill is decided before the per-bullet plan is written."""
+    listed_skill_placements: list[ListedSkillPlacement] = []
     mapping_plan: list[BulletMapping]
     plausible_skills_to_add: list[str]
+
+
+# A placement's quote names the activity the skill performs ("weekly churn
+# dashboards"), not the whole bullet: quoting it all is how the model
+# "evidences" a skill the work never used.
+MAX_PLACEMENT_QUOTE_WORDS = 8
+
+
+def _quote_in(quote: str, text: str) -> bool:
+    """*quote* — one to MAX_PLACEMENT_QUOTE_WORDS words — is in *text*,
+    ignoring case, spacing and the punctuation at its ends."""
+    norm = lambda t: re.sub(r"\s+", " ", t).strip().lower()  # noqa: E731
+    q = norm(quote).strip(" .,;:'\"")
+    return 1 <= len(q.split()) <= MAX_PLACEMENT_QUOTE_WORDS and q in norm(text)
+
+
+def apply_listed_skill_placements(plan: MappingPlan, terms: list[str]) -> MappingPlan:
+    """Enforce Agent 2's placements of the JD terms the résumé lists only
+    under Skills (rule 3, LISTED BUT NOT SHOWN).
+
+    A placement counts when it names a term that was sent, a bullet that
+    exists, and quotes words that really are in that bullet. Then the term
+    reaches the writer spelled as listed: Agent 2 tends to fold it into a
+    longer JD phrase ("design and analyse A/B tests"), and the writer never
+    prints the term itself ("A/B testing").
+
+    A term placed nowhere, or without a real quote, is taken out of every
+    bullet's keywords: asked to decide each skill, the model sometimes pins
+    one to unrelated work ("Blender" on a bullet about app-store copy). Only
+    the terms sent are touched, never other keywords."""
+    from app.services.ats import _exact_pattern
+
+    sent = {t.strip().lower(): t.strip() for t in terms if t and t.strip()}
+    by_id = {m.original_bullet_id: m for m in plan.mapping_plan}
+    placed: dict[str, str] = {}
+    for p in plan.listed_skill_placements:
+        term = sent.get(p.term.strip().lower())
+        entry = by_id.get(p.bullet_id.strip())
+        if not term or entry is None or term.lower() in placed:
+            continue
+        if not _quote_in(p.bullet_quote, entry.original_text):
+            continue
+        placed[term.lower()] = entry.original_bullet_id
+        if any(_exact_pattern(term).search(k) for k in entry.target_jd_keywords_to_inject):
+            continue
+        entry.target_jd_keywords_to_inject = [*entry.target_jd_keywords_to_inject, term]
+        if entry.transformation == "SKIP":
+            entry.transformation = "INJECT"
+        entry.strategic_instruction = (
+            f"{entry.strategic_instruction} Show {term} in use: say what was done with it.".strip()
+        )
+    for key, term in sent.items():
+        if key in placed:
+            continue
+        pattern = _exact_pattern(term)
+        for entry in plan.mapping_plan:
+            kept = [k for k in entry.target_jd_keywords_to_inject if not pattern.search(k)]
+            if len(kept) != len(entry.target_jd_keywords_to_inject):
+                entry.target_jd_keywords_to_inject = kept
+    return plan
 
 
 class RewrittenBullet(BaseModel):
@@ -1114,6 +1186,20 @@ prioritisation", not "prioritised the roadmap". Keyword count per bullet \
 follows keyword_intensity. Keywords are short JD phrases of 1-5 words (a \
 tool, method or ATS phrase) — never a whole responsibility sentence, which \
 belongs in jd_responsibility_addressed and is shown by the work, not quoted.
+   LISTED BUT NOT SHOWN: jd_terms_only_in_skills lists JD terms the résumé \
+already has in its Skills section that no bullet shows in use. ATS rankers \
+and recruiters weigh a skill far more when a bullet shows it at work. Give \
+every one of them a listed_skill_placements entry: the bullet_id of the \
+single bullet whose real work used it (rule 2(c)), with bullet_quote — at \
+most 8 words of that bullet, copied exactly, naming the activity this skill \
+performs ("weekly sales dashboard" for Power BI, "queries joining billing \
+data" for SQL). Work of a different kind is not evidence (a component \
+library is not 3D modelling), and neither is the Skills list. If no bullet \
+names such an activity, bullet_id is "" and the skill stays in Skills only: \
+a skill pinned to unrelated work is keyword stuffing, and code removes it. \
+Code adds each placed skill to its bullet's keywords exactly as listed (one \
+beyond keyword_intensity is fine: the résumé already claims it). Plan every \
+other JD phrase as rule 3 says — this changes nothing about them.
 4. RESPONSIBILITY-FIRST REASONING: decide which of \
 jd_analysis.core_responsibilities the bullet's real work evidences and copy \
 it verbatim into jd_responsibility_addressed ("" if none honestly applies). \
@@ -1175,6 +1261,15 @@ BULLET: "Ran monthly reporting on campaign performance across six channels" \
 GOOD: INJECT, keywords ["reports", "SQL"], strategic_instruction "Keep it \
 about the monthly six-channel performance reports; SQL is a rule-2(d) \
 option the candidate will confirm or drop."
+
+JD terms only in Skills: ["Power BI", "Photoshop"]
+BULLET exp0_b2: "Built a monthly sales dashboard for the regional managers"
+GOOD: listed_skill_placements [{bullet_quote "monthly sales dashboard", \
+term "Power BI", bullet_id "exp0_b2"}, {bullet_quote "", term "Photoshop", \
+bullet_id ""}]; for exp0_b2: INJECT, keywords \
+["Power BI"], strategic_instruction "Say the monthly sales dashboard for the \
+regional managers was built in Power BI."
+BAD: keywords ["Photoshop"] on any bullet — it stays in Skills only.
 </examples>"""
 
 
@@ -1199,6 +1294,7 @@ async def _agent2_semantic_map(
     priority_skills: list[str] | None = None,
     missing_terms: list[str] | None = None,
     humanize_level: int = 50,
+    skills_only_terms: list[str] | None = None,
 ) -> MappingPlan:
     payload = {
         "jd_analysis": jd_analysis.model_dump(),
@@ -1207,6 +1303,10 @@ async def _agent2_semantic_map(
         # What the résumé does not yet contain is where the ATS points are;
         # naming it is a few dozen tokens and focuses the whole plan (rule 3).
         "jd_terms_missing_from_resume": list(missing_terms or [])[:30],
+        # Listed under Skills, shown by no bullet: the ATS reference's rule 3
+        # wants each in a bullet too. The same list the ATS check warns on
+        # (ats_check.skills_only_terms), so tailoring fixes what it flags.
+        "jd_terms_only_in_skills": list(skills_only_terms or [])[:15],
         "keyword_intensity": _keyword_intensity(humanize_level),
     }
     # "premium" (not "pro") deliberately — this is the one call in the
@@ -2226,7 +2326,9 @@ async def analyze_jd_match(
 # 3: scores count the post's soft skills, years and advanced degree
 #    (services/jd_requirements); a version-2 session scored without them
 #    would show a "before" that disagrees with the job page.
-TAILOR_PIPELINE_VERSION = "3"
+# 4: Agent 2 places JD terms listed only under Skills into the bullet that
+#    shows them (rule 3, "LISTED BUT NOT SHOWN").
+TAILOR_PIPELINE_VERSION = "4"
 
 
 def tailor_fingerprint(
@@ -2304,10 +2406,16 @@ async def run_tailoring_pipeline(
     indexed_resume, _ = _index_bullets(resume_content)
 
     # ── Agent 2 — semantic mapping (pro model) ────────────────────────────────
+    # Local: ats_check pulls in the PDF renderer, which this module needn't.
+    from app.services.ats_check import jd_hard_terms, skills_only_terms
+
+    listed_only = skills_only_terms(resume_content, jd_hard_terms(analysis.jd_analysis))
     mapping_plan = await _agent2_semantic_map(
         analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
         missing_terms=analysis.missing_skills, humanize_level=humanize_level,
+        skills_only_terms=listed_only,
     )
+    mapping_plan = apply_listed_skill_placements(mapping_plan, listed_only[:15])
 
     # ── Agent 3 — precision bullet rewrite ──────────────────────────────────
     original_skills = resume_content.get("skills", [])

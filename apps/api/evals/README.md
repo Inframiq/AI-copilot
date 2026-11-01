@@ -325,3 +325,54 @@ wording and too few numbers. Neither is measured by the ATS score.
 | ats_delta | 15.2 | 13.4 (noise) |
 | tokens_total | 7364 | 7753 |
 | quantify_questions / fixture | — | 2.4 |
+
+
+## Skills listed but not shown (`results/skills-only-before.json` → `skills-only-after.json`)
+
+The ATS reference's rule 3: each important skill belongs in Skills **and**
+in a bullet that shows it in use. The ATS check already warned when a JD
+term sat only in Skills; tailoring now fixes it. Agent 2 gets
+`jd_terms_only_in_skills` (the same list the check warns on,
+`ats_check.skills_only_terms`) and returns `listed_skill_placements`: per
+term, the bullet whose work used it plus a short quote of that work, or
+`""`. Code (`apply_listed_skill_placements`) adds each placed term to its
+bullet's keywords spelled as listed, and removes any term placed nowhere or
+without a real quote from every bullet.
+
+New metrics: `skills_only_shown` (share of those terms a bullet shows after
+tailoring) and `forced_skills` (terms a fixture marks as unevidenced that
+still reached a bullet). Two fixtures added for them:
+`skills_listed_not_shown` and the negative control
+`skills_listed_unevidenced` (Blender listed, no 3D work anywhere).
+
+| | runs | skills_only_shown | forced | reverts | specificity |
+|---|---|---|---|---|---|
+| before | 3 | 0.44 every run | 0 | 1/108 | 1.00 |
+| after (final) | 2 | 0.87, 0.82 | 0 | 3/72 | 0.96–1.00 |
+
+ATS lift is unchanged within noise — expected, since a listed skill already
+counts as matched; the gain is the second placement recruiters and rankers
+weigh. `career_changer_thin_overlap` swung 20→55 across same-prompt runs and
+dominates `ats_delta` noise.
+
+Three things the iterations showed, each fixed before the final runs:
+
+1. **A soft rule did nothing.** "Assign each to the bullet whose work used
+   it" left `skills_only_shown` at 0.34: Agent 2 folds the skill into a
+   longer JD phrase ("design and analyse A/B tests") and the writer never
+   prints "A/B testing". An explicit per-term decision plus the code merge
+   fixed it.
+2. **A forced decision invites invention.** Asked to place every term,
+   Agent 2 pinned Blender to "Built a component library" (2 of 4 probes)
+   with evidence "as per skills listed". Fix: the quote must be ≤8 words of
+   that bullet naming the activity the skill performs, and code drops any
+   placement whose quote isn't in the bullet — then removes the term
+   everywhere. 0 forced in every run after.
+3. **Wording leaks into every keyword.** "As its own keyword, not folded
+   into a longer phrase" made Agent 2 split *all* JD phrases into fragments
+   ("system design", "code quality"), which the writer glued back on as
+   invented endings — reverts rose to 11/108. Since code already adds the
+   term, the prompt now only says so and that other phrases follow rule 3;
+   reverts fell back to 3/72. The remaining reverts are the known writer
+   habits (a JD's "8-12 engineers" copied in; a purpose tail), caught by the
+   fact-lock as before.

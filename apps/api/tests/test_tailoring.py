@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.tailoring import (
     get_or_generate_prep_questions, PrepQuestionData,
     InterviewQuestionData, InterviewQuestionsWrapper, PrepAnswerData, PrepAnswersWrapper,
@@ -2266,3 +2266,120 @@ async def test_quantify_failure_never_fails_the_tailor():
     provider.complete_structured = AsyncMock(side_effect=RuntimeError("boom"))
     content = {"experience": [{"title": "Eng", "bullets": ["Built the checkout flow."]}]}
     assert await _agent_quantify_questions(content, provider) == {}
+
+
+# ── Rule 3, "listed but not shown" ───────────────────────────────────────────
+# The ATS reference wants each important skill in Skills AND in a bullet that
+# shows it. Agent 2 is handed the JD terms the résumé lists only under Skills
+# — the same list the ATS check warns on — to place where the work used them.
+
+@pytest.mark.asyncio
+async def test_agent2_is_sent_the_terms_listed_only_in_skills():
+    import json as _json
+    from app.services.tailoring import _agent2_semantic_map
+
+    provider = make_mock_provider(structured_return=MappingPlan(mapping_plan=[], plausible_skills_to_add=[]))
+    await _agent2_semantic_map(make_jd_analysis(), {"experience": []}, provider, skills_only_terms=["Tableau"])
+    payload = _json.loads(provider.complete_structured.call_args.args[1])
+    assert payload["jd_terms_only_in_skills"] == ["Tableau"]
+
+
+@pytest.mark.asyncio
+async def test_the_pipeline_finds_them_with_the_ats_checks_test():
+    from app.services import tailoring
+    from app.services.tailoring import JDAnalysis, run_tailoring_pipeline
+
+    content = {
+        "skills": ["Tableau", "SQL", "Photoshop"],
+        "experience": [{"title": "Analyst", "company": "A",
+                        "bullets": ["Built weekly churn dashboards", "Wrote SQL to join billing data"]}],
+    }
+    analysis = JDAnalysis(
+        exact_technical_tools=["Tableau", "SQL", "Python"], methodologies_and_frameworks=[],
+        domain_expertise_themes=[], seniority_indicators=[], ats_filter_phrases=[],
+    )
+    seen = {}
+
+    async def capture(*args, **kwargs):
+        seen.update(kwargs)
+        raise RuntimeError("stop after Agent 2's inputs")
+
+    with patch.object(tailoring, "_agent2_semantic_map", side_effect=capture):
+        with pytest.raises(RuntimeError, match="stop after"):
+            await run_tailoring_pipeline(content, "jd", 50, MagicMock(), db=None,
+                                         cached_jd_analysis=analysis, cached_semantic_verdicts={})
+    # SQL is already in a bullet; Python is not listed; Photoshop is not in the JD.
+    assert seen["skills_only_terms"] == ["Tableau"]
+
+
+def test_agent2_prompt_says_to_place_them_or_leave_them_out():
+    from app.services.tailoring import _AGENT2_SYSTEM
+
+    assert "jd_terms_only_in_skills" in _AGENT2_SYSTEM
+    assert "listed_skill_placements" in _AGENT2_SYSTEM
+    assert 'bullet_id is "" and the skill stays in Skills only' in _AGENT2_SYSTEM
+
+
+def _listed_plan(placements, entries):
+    from app.services.tailoring import BulletMapping, ListedSkillPlacement
+    return MappingPlan(
+        listed_skill_placements=[ListedSkillPlacement(**p) for p in placements],
+        mapping_plan=[BulletMapping(original_bullet_id=i, original_text=t, transformation=tr,
+                                    target_jd_keywords_to_inject=list(k), preserved_metrics=[],
+                                    strategic_instruction="Keep it.")
+                      for i, t, tr, k in entries],
+        plausible_skills_to_add=[],
+    )
+
+
+def test_a_placed_skill_reaches_the_writer_spelled_as_listed():
+    from app.services.tailoring import apply_listed_skill_placements
+
+    plan = apply_listed_skill_placements(_listed_plan(
+        [{"bullet_quote": "Ran 14 pricing experiments", "term": "a/b testing", "bullet_id": "exp0_b0"}],
+        [("exp0_b0", "Ran 14 pricing experiments on the upgrade page", "REINFORCE", ["design and analyse A/B tests"])],
+    ), ["A/B testing"])
+    entry = plan.mapping_plan[0]
+    assert entry.target_jd_keywords_to_inject == ["design and analyse A/B tests", "A/B testing"]
+    assert "Show A/B testing in use" in entry.strategic_instruction
+
+
+def test_a_skill_already_carried_word_for_word_is_not_doubled():
+    from app.services.tailoring import apply_listed_skill_placements
+
+    plan = apply_listed_skill_placements(_listed_plan(
+        [{"bullet_quote": "wrote queries", "term": "SQL", "bullet_id": "b"}],
+        [("b", "Wrote queries joining billing data", "INJECT", ["write SQL to pull data"])],
+    ), ["SQL"])
+    assert plan.mapping_plan[0].target_jd_keywords_to_inject == ["write SQL to pull data"]
+
+
+def test_a_skill_placed_nowhere_or_without_a_real_quote_is_removed_everywhere():
+    """Seen in probes: asked to decide each listed skill, the model pinned
+    Blender to "Built a component library" and wrote it into the plan."""
+    from app.services.tailoring import apply_listed_skill_placements
+
+    entries = [
+        ("b0", "Built a component library of 120 parts", "INJECT", ["design system", "Blender"]),
+        ("b1", "Wrote the copy and layouts for 6 app store screenshots before launch", "REINFORCE", ["3D illustrations in Blender"]),
+    ]
+    for placement in (
+        {"bullet_quote": "", "term": "Blender", "bullet_id": ""},
+        # The quote is from b0, the placement says b1.
+        {"bullet_quote": "Built a component library", "term": "Blender", "bullet_id": "b1"},
+        # The whole bullet is no quote of an activity.
+        {"bullet_quote": "Wrote the copy and layouts for 6 app store screenshots before launch", "term": "Blender", "bullet_id": "b1"},
+    ):
+        plan = apply_listed_skill_placements(_listed_plan([placement], entries), ["Blender"])
+        assert [m.target_jd_keywords_to_inject for m in plan.mapping_plan] == [["design system"], []], placement
+
+
+def test_only_terms_that_were_sent_are_touched():
+    from app.services.tailoring import apply_listed_skill_placements
+
+    plan = apply_listed_skill_placements(_listed_plan(
+        [{"bullet_quote": "Built dashboards", "term": "Kubernetes", "bullet_id": "b"}],
+        [("b", "Built dashboards for sales", "INJECT", ["Tableau dashboards"])],
+    ), ["Tableau"])
+    # Kubernetes was never sent; Tableau, placed nowhere, is removed.
+    assert plan.mapping_plan[0].target_jd_keywords_to_inject == []
