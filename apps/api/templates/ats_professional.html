@@ -80,7 +80,7 @@
   ('contact.github', contact.github | url_link(contact.github_label, 'contact.github')),
   ('contact.website', contact.website | url_link(contact.website_label, 'contact.website'))
 ] %}
-      {% for path, value in contact_parts if value %}{% if not loop.first %} | {% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}
+      {% for path, value in contact_parts if value %}{% if not loop.first %}{{ " | " | contact_sep(loop.index) }}{% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}
     </div>
   </div>
   {% if contact.photo_url %}<img class="photo" src="{{ contact.photo_url }}">{% endif %}

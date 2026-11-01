@@ -4,6 +4,7 @@ import { sanitizeInline } from "@/lib/rich-text";
 import { pageGeometry, pageCount } from "@/lib/page-geometry";
 import { scopeBodyToHost } from "@/lib/shadow-document";
 import { ensureResumeFonts } from "@/lib/resume-fonts";
+import { hideLineEndSeparators } from "@/lib/contact-separators";
 
 /**
  * Editing affordance, injected into the shadow root rather than written into
@@ -272,6 +273,28 @@ export function ResumeCanvas({
     if (frame.parentElement) observer.observe(frame.parentElement);
     observer.observe(host);
     return () => observer.disconnect();
+  }, [html]);
+
+  // A wrapped contact line keeps no separator at a line's end — the same
+  // rule the PDF applies (lib/contact-separators). Again once the résumé
+  // fonts arrive, since a fallback font wraps the line differently.
+  useEffect(() => {
+    const root = rootRef.current;
+    const host = hostRef.current;
+    if (!root || !host) return;
+    let live = true;
+    const run = () => {
+      if (live) hideLineEndSeparators(root);
+    };
+    run();
+    document.fonts?.ready.then(run).catch(() => {});
+    if (typeof ResizeObserver === "undefined") return () => { live = false; };
+    const observer = new ResizeObserver(run);
+    observer.observe(host);
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
   }, [html]);
 
   // Measure after layout, and again whenever the document reflows — a wider

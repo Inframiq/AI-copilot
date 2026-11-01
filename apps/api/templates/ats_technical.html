@@ -72,7 +72,7 @@
   ('contact.github', contact.github | url_link(contact.github_label, 'contact.github')),
   ('contact.website', contact.website | url_link(contact.website_label, 'contact.website'))
 ] %}
-<div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %} &nbsp;/&nbsp; {% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
+<div class="contact">{% for path, value in contact_parts if value %}{% if not loop.first %}{{ " &nbsp;/&nbsp; " | contact_sep(loop.index) }}{% endif %}<span class="contact-item" data-field="{{ path }}">{{ value }}</span>{% endfor %}</div>
 
 {% import "_blocks.html" as blocks with context %}
 {{ blocks.sections({"skills_cls": "skills-rail", "line_cls": "skills", "headings": {"skills": "Technical Skills"}, "order": ["summary_or_objective", "skills", "experience", "projects", "education", "languages", "certifications", "coursework", "awards", "achievements", "leadership", "volunteer", "interests"]}) }}

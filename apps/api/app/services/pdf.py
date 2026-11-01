@@ -240,6 +240,26 @@ _jinja_env.filters["phone_link"] = _phone_link
 _jinja_env.filters["url_link"] = _url_link
 
 
+def _contact_sep(sep: str, index: int) -> Markup:
+    """The separator before contact item *index*, as its own span.
+
+    *sep* is the template's own constant (" | ", " &nbsp;·&nbsp; "…), never
+    user text. Its leading space becomes non-breaking, so a contact line
+    that wraps can only break AFTER a separator — never leave one at the
+    start of the next line. A separator left at the end of a line is then
+    hidden: by _render_document for the PDF, and by the Studio canvas
+    (apps/web/lib/contact-separators.ts) on screen.
+    """
+    text = sep.replace("&nbsp;", "\u00a0")
+    body = text.lstrip(" ")
+    if len(body) != len(text):
+        body = "\u00a0" + body
+    return Markup(f'<span class="contact-sep" data-contact-sep="{int(index)}">{escape(body)}</span>')
+
+
+_jinja_env.filters["contact_sep"] = _contact_sep
+
+
 def _gpa_label(value: str | None) -> str:
     """The label before a bare grade, so it reads as one: "CGPA" for a grade
     out of 10 (how India writes it, and the ATS reference's "CGPA: 8.5/10"),
@@ -822,9 +842,45 @@ def _render_document(
         heading_size_delta, body_size_delta, page_size,
     )
     font_config, font_css = _print_fonts(font_choice)
-    return weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher()).render(
-        stylesheets=[font_css], font_config=font_config,
-    )
+    source = weasyprint.HTML(string=html, url_fetcher=_blocked_url_fetcher())
+    document = source.render(stylesheets=[font_css], font_config=font_config)
+    # A contact line that wrapped left a separator at the end of a line
+    # ("Hyderabad, India |"). Hidden, not removed: it keeps its width, so the
+    # second layout breaks exactly where the first did, and a hidden glyph is
+    # not drawn — so it is not in the PDF's text either.
+    line_end = _line_end_separators(document)
+    if line_end:
+        hide = weasyprint.CSS(string="".join(
+            f'[data-contact-sep="{i}"]{{visibility:hidden}}' for i in sorted(line_end)
+        ))
+        document = source.render(stylesheets=[font_css, hide], font_config=font_config)
+    return document
+
+
+def _line_end_separators(document) -> set[int]:
+    """Indexes of contact separators that ended a line: the contact item
+    after them starts lower on the page. Reaches into WeasyPrint's box tree;
+    anything unexpected reads as "none" (the separator simply stays)."""
+    found: set[int] = set()
+    try:
+        for page in document.pages[:1]:
+            pending: "tuple[int, float] | None" = None
+            for box in page._page_box.descendants():
+                element = getattr(box, "element", None)
+                if element is None or getattr(box, "position_y", None) is None:
+                    continue
+                if type(box).__name__ != "InlineBox":
+                    continue
+                sep = element.get("data-contact-sep")
+                if sep is not None:
+                    pending = (int(sep), float(box.position_y))
+                elif pending and "contact-item" in (element.get("class") or "").split():
+                    if float(box.position_y) > pending[1] + 1:
+                        found.add(pending[0])
+                    pending = None
+    except Exception:  # pragma: no cover - defensive against layout-internals drift
+        return set()
+    return found
 
 
 def _last_page_fill_fraction(page) -> float:

@@ -61,6 +61,12 @@ spacing 0–24, every font, A4 and Letter):
 - **List markers inside** (`list-style-position: inside`): markers drawn
   outside were written after the whole page as stray "•".
 - **Contact items never wrap** (`.contact-item { white-space: nowrap }`).
+- **Contact separators through `contact_sep`** — `blocks.contact_line(sep)`
+  does it; a hand-written contact line uses `{{ " | " | contact_sep(loop.index) }}`.
+  The separator is joined to the item before it, and one left at a line's
+  end is hidden (the PDF in `pdf._render_document`, the Studio canvas in
+  `lib/contact-separators.ts`). `tests/test_contact_separators.py` fails a
+  template that joins items with a bare string.
 - **Standard headings only** — `ats_check.APPROVED_HEADINGS`.
 - **Accent colour ≥ 4.5:1 on white** (`MIN_ACCENT_CONTRAST`), so headings
   never become hidden text; a lighter one falls back to the template's own.
