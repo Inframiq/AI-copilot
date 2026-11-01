@@ -229,6 +229,7 @@ def validate_resume(
         ("leadership", "Leadership", "leadership"),
         ("volunteer", "Volunteer", "volunteer"),
         ("interests", "Interests", "interests"),
+        ("coursework", "Coursework", "coursework"),
     ]:
         items = resume_content.get(key) or []
         limits = HARD_LIMITS[limit_key]

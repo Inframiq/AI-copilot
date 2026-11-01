@@ -288,7 +288,7 @@ class ResumeUnreadable(ValueError):
 
 # Optional one-line text fields and plain lists of lines the prompt asks for.
 _TEXT_FIELDS = ("headline", "summary", "objective")
-_LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer", "interests")
+_LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer", "interests", "coursework")
 
 
 async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
@@ -369,6 +369,8 @@ _HEADING_HOMES: list[tuple[re.Pattern, str | None]] = [
     (_SKILL_HEADING, "skills"),
     (re.compile(r"achievement|highlight|accomplish|publication|patent", re.I), "achievements"),
     (re.compile(r"award|hono(u)?r", re.I), "awards"),
+    # Before certifications: "Relevant Coursework" matches its "course".
+    (re.compile(r"course ?work|courses taken|relevant courses", re.I), "coursework"),
     (re.compile(r"certif|training|course|workshop", re.I), "certifications"),
     (re.compile(r"volunteer", re.I), "volunteer"),
     (re.compile(r"hobb|interest", re.I), "interests"),

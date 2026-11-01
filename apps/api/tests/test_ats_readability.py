@@ -312,3 +312,28 @@ def test_a_job_without_a_title_is_an_error_and_one_without_points_a_warning():
     assert ("title-missing", "error", "experience.0.title") in findings
     assert ("no-points", "warning", "experience.0.bullets") in findings
     assert not {f for f in findings if f[2] and f[2].startswith("experience.1")}
+
+
+# ── Coursework (student set) ────────────────────────────────────────────────
+
+def test_a_coursework_heading_is_filed_as_coursework_not_certifications():
+    from app.services.resume_parser import _home_of
+    for heading in ("Relevant Coursework", "COURSEWORK", "Courses Taken", "Course work"):
+        assert _home_of(heading) == "coursework", heading
+    assert _home_of("Certifications & Training") == "certifications"
+    assert _home_of("Online Courses") == "certifications"
+
+
+@pytest.mark.parametrize("template_id", sorted(P.ALLOWED_TEMPLATES))
+def test_coursework_reads_clean_in_every_template(template_id):
+    content = {**RICH, "coursework": ["Data Structures", "Operating Systems", "DBMS"]}
+    pdf = _render(content, template_id)
+    text, findings = check_pdf(content, pdf, template_id)
+    assert _errors(findings) == [], text
+    assert "COURSEWORK" in text.upper() and "Operating Systems" in text
+
+
+def test_coursework_counts_as_evidence_for_scoring():
+    from app.services.ats import build_resume_text
+    full, _ = build_resume_text({"coursework": ["Machine Learning"]})
+    assert "Machine Learning" in full

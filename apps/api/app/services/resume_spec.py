@@ -49,7 +49,7 @@ SECTION_ORDER: dict[CandidateType, list[str]] = {
 # they aren't on either candidate type's canonical rung (the spec says to
 # include these "only when relevant/useful", not at a fixed position).
 # These render at the end, after the candidate type's own ordered list.
-TRAILING_OPTIONAL_SECTIONS = ["languages", "awards", "volunteer", "interests"]
+TRAILING_OPTIONAL_SECTIONS = ["languages", "coursework", "awards", "volunteer", "interests"]
 
 # ── Hard content limits ───────────────────────────────────────────────────────
 # All counts are (min, max) where min=0 unless noted; "target" is what the
@@ -72,6 +72,7 @@ HARD_LIMITS = {
     "leadership": {"min": 1, "max": 4},
     "volunteer": {"min": 1, "max": 3},
     "interests": {"min": 1, "max": 6},
+    "coursework": {"min": 1, "max": 8},
     # Bullet prose style, applies to every bullet regardless of section.
     "bullet_words": {"prefer_min": 15, "prefer_max": 28, "max": 35},
 }
@@ -133,6 +134,7 @@ _SECTION_CONTENT_KEYS: dict[str, list[str]] = {
     "awards": ["awards"],
     "volunteer": ["volunteer"],
     "interests": ["interests"],
+    "coursework": ["coursework"],
 }
 
 

@@ -41,6 +41,7 @@ APPROVED_HEADINGS: dict[str, set[str]] = {
     "volunteer": {"volunteer experience"},
     "languages": {"languages"},
     "interests": {"interests"},
+    "coursework": {"coursework", "relevant coursework"},
 }
 
 # Characters that mean the text did not come out clean: the replacement
@@ -138,7 +139,7 @@ def _content_words(content: dict) -> list[str]:
             parts += [str(i) for i in items or []]
     else:
         parts += [str(s) for s in skills or []]
-    for key in ("certifications", "awards", "achievements", "leadership", "volunteer", "interests"):
+    for key in ("certifications", "awards", "achievements", "leadership", "volunteer", "interests", "coursework"):
         parts += [str(i) for i in content.get(key) or []]
     for lang in content.get("languages") or []:
         if isinstance(lang, dict):
@@ -153,7 +154,7 @@ def _sections_present(content: dict) -> list[str]:
     elif content.get("objective"):
         present.append("objective")
     for key in ("experience", "projects", "education", "skills", "certifications", "awards",
-                "achievements", "leadership", "volunteer", "languages", "interests"):
+                "achievements", "leadership", "volunteer", "languages", "interests", "coursework"):
         if content.get(key):
             present.append(key)
     return present
