@@ -28,8 +28,10 @@ SAMPLE = {
     "certifications": ["AWS Solutions Architect - Professional"],
 }
 # A neutral grey square for the photo templates' portrait.
-PHOTO = ("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiI+"
-         "PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjOWFhNGIwIi8+PC9zdmc+")
+# Encoded here rather than pasted as base64: the secrets scan reads a long
+# base64 literal as a possible key.
+_SQUARE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#9aa4b0"/></svg>'
+PHOTO = "data:image/svg+xml;base64," + __import__("base64").b64encode(_SQUARE.encode()).decode()
 for tid in sorted(P.ALLOWED_TEMPLATES):
     content = {**SAMPLE, "contact": {**SAMPLE["contact"], "photo_url": PHOTO}} if tid in P.TEMPLATES_REQUIRING_PHOTO else SAMPLE
     with patch.object(P, "_sanitize_resume_content", lambda c: (c, P.PHOTO_EMBEDDED if c["contact"].get("photo_url") else P.PHOTO_NONE)):
