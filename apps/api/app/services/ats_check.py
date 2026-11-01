@@ -21,6 +21,7 @@ from dataclasses import asdict, dataclass
 
 from app.services.pdf import TEMPLATE_SETS, TEMPLATES_REQUIRING_PHOTO, display_url
 from app.services.plain_text import plain_deep
+from app.services.phone import tidy_phone
 from app.services.resume_dates import is_present, is_standard_date, tidy_resume_dates
 from app.services.rich_text import strip_inline_tags
 
@@ -84,7 +85,7 @@ _FIRST_PERSON = re.compile(r"(?<![\w.])I(?![\w.])|(?i:\b(?:me|my|mine|myself)\b)
 _BUZZWORDS = re.compile(
     r"\b(hard[- ]?working|go[- ]getter|think(?:ing)? outside the box|synerg(?:y|ies|ize|ise)"
     r"|results[- ](?:driven|oriented)|proven track record|track record of success|best[- ]of[- ]breed"
-    r"|value[- ]add(?:ed)?|rock ?star|ninja|guru|wizard|self[- ]starter|passionate"
+    r"|(?<!non-)(?<!non )value[- ]add(?:ed)?|rock ?star|ninja|guru|wizard|self[- ]starter|passionate"
     r"|highly motivated|seasoned|leverag(?:e|ed|es|ing)|utili[sz](?:e|ed|es|ing))\b",
     re.I,
 )
@@ -100,8 +101,12 @@ MAX_SAME_OPENER = 3
 # says nothing done.
 MAX_BULLET_WORDS = 40
 MIN_BULLET_WORDS = 4
+# Past this many of one per-point finding, they are reported as one.
+MAX_LISTED_PER_CHECK = 3
 # Pages: one for a student or fresher, two at most otherwise.
 MAX_PAGES = {"student": 1, "professional": 2}
+# A label in front of a point: one to three capitalised words and a colon.
+_POINT_LABEL = re.compile(r"^\s*[A-Z][A-Za-z&/]*(?:\s+[A-Za-z&/]+){0,2}\s*:\s+(?=\S)")
 
 
 @dataclass
@@ -148,8 +153,11 @@ def _content_words(content: dict) -> list[str]:
     """Every word the résumé asks to be printed."""
     parts: list[str] = []
     contact = content.get("contact") or {}
-    for key in ("name", "email", "phone", "location"):
+    for key in ("name", "email", "location"):
         parts.append(str(contact.get(key) or ""))
+    # As printed: the PDF writes the standard form ("+91 96521 77526"), so
+    # the raw "+91 9652177526" is never one word on the page.
+    parts.append(tidy_phone(str(contact.get("phone") or "")))
     for key in ("linkedin", "github", "website"):
         if contact.get(key):
             parts.append(display_url(str(contact[key])))
@@ -240,6 +248,9 @@ def _points(content: dict) -> list[tuple[str, str]]:
                 if isinstance(proj, dict):
                     for j, b in enumerate(proj.get("bullets") or []):
                         out.append((f"{section}.{i}.projects.{k}.bullets.{j}", strip_inline_tags(str(b)).strip()))
+    # A point saved as "Responsibilities: Developed the plan" (older
+    # résumés, label-style CVs) is judged on what follows its label.
+    out = [(f, _POINT_LABEL.sub("", t, count=1)) for f, t in out]
     return [(f, t) for f, t in out if t]
 
 
@@ -264,6 +275,7 @@ def _quality_findings(content: dict, page_count: int | None, template_id: str | 
                 f"{numbered} of {len(points)} points have a number. Where there is one, add it: users, time saved, size, %.",
             ))
     openers: dict[str, list[str]] = {}
+    weak: list[tuple[str, str]] = []
     for field, t in points:
         first = _first_word(t)
         if not first:
@@ -271,28 +283,37 @@ def _quality_findings(content: dict, page_count: int | None, template_id: str | 
         openers.setdefault(first, []).append(field)
         # "Responsible for…" already has its own finding.
         if first in _WEAK_OPENERS and not _FILLER.search(t):
-            findings.append(Finding(
-                "weak-opener", "warning",
-                f'Starts with "{t.split()[0]}": lead with a strong verb for what was done (Built, Led, Cut).',
-                field,
-            ))
+            weak.append((field, t.split()[0]))
+    if len(weak) <= MAX_LISTED_PER_CHECK:
+        findings += [Finding(
+            "weak-opener", "warning",
+            f'Starts with "{word}": lead with a strong verb for what was done (Built, Led, Cut).', field,
+        ) for field, word in weak]
+    else:
+        findings.append(Finding(
+            "weak-opener", "warning",
+            f"{len(weak)} points start with a weak word ({', '.join(dict.fromkeys(w for _, w in weak))}): "
+            "lead each with a strong verb for what was done.",
+        ))
     for verb, fields in openers.items():
         if len(fields) > MAX_SAME_OPENER and verb not in _WEAK_OPENERS:
             findings.append(Finding(
                 "repeated-opener", "warning",
                 f'{len(fields)} points start with "{verb.capitalize()}". Vary the verbs.',
-                fields[0],
             ))
 
     # Writing: passive voice, first person, buzzwords.
-    for field, t in points:
-        m = _PASSIVE.search(t)
-        if m:
-            findings.append(Finding(
-                "passive-voice", "warning",
-                f'Reads as passive ("{m.group(0)}"): start with the verb for what was done.',
-                field,
-            ))
+    passive = [(field, m.group(0)) for field, t in points if (m := _PASSIVE.search(t))]
+    if len(passive) <= MAX_LISTED_PER_CHECK:
+        findings += [Finding(
+            "passive-voice", "warning",
+            f'Reads as passive ("{phrase}"): start with the verb for what was done.', field,
+        ) for field, phrase in passive]
+    else:
+        findings.append(Finding(
+            "passive-voice", "warning",
+            f"{len(passive)} points read as passive: start each with the verb for what was done.",
+        ))
     first_person = [f for f, t in points if _FIRST_PERSON.search(t)]
     if _FIRST_PERSON.search(summary):
         first_person.insert(0, "summary" if content.get("summary") else "objective")
@@ -301,7 +322,7 @@ def _quality_findings(content: dict, page_count: int | None, template_id: str | 
         findings.append(Finding(
             "first-person", "warning",
             f'"I" or "my" in {len(first_person)} {places}. Résumés leave the first person out.',
-            first_person[0],
+            first_person[0] if len(first_person) == 1 else None,
         ))
     buzz = list(dict.fromkeys(
         m.group(1).lower() for t in [summary] + [t for _, t in points] for m in _BUZZWORDS.finditer(t)
@@ -313,12 +334,18 @@ def _quality_findings(content: dict, page_count: int | None, template_id: str | 
         ))
 
     # Length: points, pages, sections.
-    for field, t in points:
-        n = len(t.split())
-        if n > MAX_BULLET_WORDS:
-            findings.append(Finding("point-too-long", "warning", f"{n} words: keep a point to one or two lines.", field))
-        elif n < MIN_BULLET_WORDS:
-            findings.append(Finding("point-too-short", "warning", "Very short point: say what was done and what came of it.", field))
+    long = [(f, len(t.split())) for f, t in points if len(t.split()) > MAX_BULLET_WORDS]
+    short = [f for f, t in points if len(t.split()) < MIN_BULLET_WORDS]
+    # One line per point while there are a few; past that, one line in all
+    # — seven identical rows read as noise, not as seven things to do.
+    if len(long) <= MAX_LISTED_PER_CHECK:
+        findings += [Finding("point-too-long", "warning", f"{n} words: keep a point to one or two lines.", f) for f, n in long]
+    else:
+        findings.append(Finding("point-too-long", "warning", f"{len(long)} points run past {MAX_BULLET_WORDS} words: keep each to one or two lines."))
+    if len(short) <= MAX_LISTED_PER_CHECK:
+        findings += [Finding("point-too-short", "warning", "Very short point: say what was done and what came of it.", f) for f in short]
+    else:
+        findings.append(Finding("point-too-short", "warning", f"{len(short)} very short points: say what was done and what came of it."))
     limit = MAX_PAGES.get(TEMPLATE_SETS.get(template_id or "", ""))
     if page_count and limit and page_count > limit:
         norm = "One page is the norm for a student or fresher." if limit == 1 else "Keep it to two."
@@ -618,7 +645,9 @@ def _requirement_findings(content: dict, req) -> list[Finding]:
     if unshown:
         findings.append(Finding(
             "soft-skill-not-shown", "warning",
-            f"The job asks for {_join(unshown[:4])}, and no point shows it. Where it is true, show it in a point.",
+            f"The job asks for {_join(unshown[:4])}, and no point shows "
+            + ("it. Where it is true, show it in a point." if len(unshown[:4]) == 1
+               else "them. Where each is true, show it in a point."),
         ))
     if req.min_years:
         have = resume_years(content)

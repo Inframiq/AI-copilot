@@ -318,7 +318,7 @@ def test_buzzwords_repeated_openers_and_length():
                "Developed 4 tools for the support team", long_point),
     })
     assert ("buzzwords", None) in found
-    assert ("repeated-opener", "experience.0.bullets.0") in found
+    assert ("repeated-opener", None) in found
     assert ("point-too-short", "experience.0.bullets.0") in found
     assert ("point-too-long", "experience.0.bullets.4") in found
 
@@ -346,3 +346,55 @@ def test_quality_checks_are_never_errors():
     for f in check_text(content, TEXT, "student_clean", 3):
         if f.id in quality:
             assert f.level == "warning", f
+
+
+def test_label_style_points_are_judged_after_their_label():
+    """Seen live (2026-11-01): older résumés hold points like
+    "Responsibilities: Developed KripaX"; the label is not the verb."""
+    found = _quality(_job(
+        "Responsibilities: Built 2 services for the payments team",
+        "Responsibilities: Cut deploy time by 40% with cached runners",
+        "Responsibilities: Led 4 engineers through a Postgres upgrade",
+        "Responsibilities: Shipped 3 releases a quarter for retail clients",
+        "Achievements: Helped the team close 12 audits",
+    ))
+    assert not {f for f in found if f[0] == "repeated-opener"}
+    assert ("weak-opener", "experience.0.bullets.4") in found
+
+
+def test_the_phone_counts_as_printed():
+    """Seen live: a phone saved as "+91 9652177526" prints as
+    "+91 96521 77526", and the word check called it missing (83%)."""
+    content = {"contact": {"name": "Asha Rao", "email": "a@x.com", "phone": "+91 9652177526"}}
+    text = "Asha Rao\na@x.com | +91 96521 77526"
+    assert "words-missing" not in {f.id for f in check_text(content, text)}
+
+
+def test_soft_skill_message_counts_its_skills():
+    from app.services.ats_check import check_against_jd
+
+    a = with_requirements(_analysis(), "Strong negotiation and prioritization skills.")
+    msg = {f.id: f.message for f in check_against_jd(CONTENT, a)}["soft-skill-not-shown"]
+    assert msg == ("The job asks for negotiation and prioritization, and no point shows them. "
+                   "Where each is true, show it in a point.")
+
+
+def test_many_of_one_finding_read_as_one_line():
+    """Seen live: seven identical "Very short point" rows on one résumé."""
+    found = [f for f in check_text({"contact": {"name": "Asha Rao"}, **_job(*["Built it"] * 7)}, TEXT)
+             if f.id == "point-too-short"]
+    assert [(f.message, f.field) for f in found] == [
+        # Spread over sections, so it names none.
+        ("7 very short points: say what was done and what came of it.", None),
+    ]
+    few = [f for f in check_text({"contact": {"name": "Asha Rao"}, **_job(*["Built it"] * 3)}, TEXT)
+           if f.id == "point-too-short"]
+    assert len(few) == 3
+
+
+def test_lean_non_value_added_is_not_a_buzzword():
+    """Seen live: "eliminate non-value-added tasks" (Lean Six Sigma) was
+    flagged as the buzzword "value-added"."""
+    found = _quality(_job("Used Lean Six Sigma DMAIC to remove 12 non-value-added tasks from intake"))
+    assert ("buzzwords", None) not in found
+    assert ("buzzwords", None) in _quality(_job("Delivered 3 value-added reports a week"))
