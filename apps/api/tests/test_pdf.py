@@ -238,6 +238,11 @@ TEMPLATE_DEFAULT_ACCENT_LOWER = {
     "ats_portrait": "#6d4c41",
     "ats_technical": "#00695c",
 }
+# A student template keeps its twin's colour.
+TEMPLATE_DEFAULT_ACCENT_LOWER.update({
+    "student_clean": "#111111", "student_modern": "#5c6bc0",
+    "student_minimal": "#1a1a1a", "student_technical": "#00695c",
+})
 
 
 def test_every_template_declares_a_default_accent():
@@ -805,9 +810,10 @@ def test_every_allowed_template_has_a_file_to_render():
     """An id on the allowlist with no template beside it is a 500 the moment
     somebody picks it — the allowlist is what the API validates against, so
     it must not promise a template that does not exist."""
-    from app.services.pdf import TEMPLATES_DIR
+    from app.services.pdf import TEMPLATE_FILES, TEMPLATES_DIR
 
-    missing = sorted(t for t in ALLOWED_TEMPLATES if not (TEMPLATES_DIR / f"{t}.html").is_file())
+    missing = sorted(t for t in ALLOWED_TEMPLATES
+                     if not (TEMPLATES_DIR / f"{TEMPLATE_FILES.get(t, t)}.html").is_file())
     assert not missing, f"no template file for: {missing}"
 
 
@@ -828,6 +834,11 @@ def test_the_web_gallery_lists_exactly_the_templates_the_api_renders():
 
     listed = {tid for tid, _ in entries}
     assert listed == ALLOWED_TEMPLATES
+
+    # Each sits in the same gallery tab on both sides.
+    from app.services.pdf import TEMPLATE_SETS
+    web_sets = {tid: re.search(r'set:\s*"(student|professional)"', rest).group(1) for tid, rest in entries}
+    assert web_sets == TEMPLATE_SETS
 
     # And the two photo lists have to agree: a template this side calls
     # photo-required, but the gallery does not, refuses to render with no

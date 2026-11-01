@@ -21,7 +21,7 @@ from app.schemas.resume import (
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
 from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
-    render_resume_html_with_meta, PhotoRequiredError, photo_owned_by,
+    render_resume_html_with_meta, PhotoRequiredError, photo_owned_by, ALLOWED_TEMPLATES,
 )
 from app.services.ats_check import check_against_jd, check_pdf
 from app.services.tailoring import JDAnalysis
@@ -189,10 +189,8 @@ _MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
 ]
 
-_VALID_TEMPLATES = {
-    "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
-    "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
-}
+# One list of templates: the renderer's.
+_VALID_TEMPLATES = ALLOWED_TEMPLATES
 
 
 def _check_magic_bytes(data: bytes) -> None:

@@ -40,7 +40,12 @@
     list_cls     class of the bulleted lists (certifications, awards…)
     headings     section → heading, for the few a template renames; every
                  value must be on ats_check.APPROVED_HEADINGS
-    order        the default section order, when the résumé sets none
+    order        the default section order, when the résumé sets none (a
+                 student template always uses STUDENT_ORDER instead)
+
+  The renderer also passes template_set ("professional" | "student") and
+  all_internships (every role is an internship: the student set heads the
+  section "Internships").
 #}
 
 {% from "_job_projects.html" import job_projects with context %}
@@ -56,15 +61,24 @@
             "leadership", "volunteer", "interests"],
 } %}
 
+{# The Student / fresher set's order: what a recruiter reads first for a
+   student is the degree, then internships and projects. #}
+{% set STUDENT_ORDER = ["summary_or_objective", "education", "experience", "projects", "skills",
+                        "coursework", "leadership", "awards", "achievements", "certifications",
+                        "languages", "volunteer", "interests"] %}
+
 {% set HEADINGS = {
   "summary": "Summary", "objective": "Objective", "experience": "Experience",
-  "projects": "Projects", "education": "Education", "skills": "Skills",
+  "internships": "Internships", "projects": "Projects", "education": "Education", "skills": "Skills",
   "languages": "Languages", "certifications": "Certifications", "coursework": "Coursework",
   "awards": "Awards", "achievements": "Achievements", "leadership": "Leadership",
   "volunteer": "Volunteer Experience", "interests": "Interests",
 } %}
 
-{% macro heading(S, key) -%}{{ S.headings.get(key, HEADINGS[key]) }}{%- endmacro %}
+{% macro heading(S, key) -%}
+  {%- if key == "experience" and template_set == "student" and all_internships -%}{{ HEADINGS["internships"] }}
+  {%- else -%}{{ S.headings.get(key, HEADINGS[key]) }}{%- endif -%}
+{%- endmacro %}
 
 {% macro section(S, key) -%}
   {%- if S.layout == "sidebar" %}
@@ -237,7 +251,7 @@
 {% set lists = {"certifications": certifications, "awards": awards, "achievements": achievements,
                 "leadership": leadership, "volunteer": volunteer, "interests": interests,
                 "coursework": coursework} %}
-{% for key in (section_order or S.order) %}
+{% for key in (section_order or (STUDENT_ORDER if template_set == "student" else S.order)) %}
   {% if key == "summary_or_objective" %}{{ summary_or_objective(S) }}
   {% elif key == "experience" %}{{ experience_block(S) }}
   {% elif key == "projects" %}{{ projects_block(S) }}

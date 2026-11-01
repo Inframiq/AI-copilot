@@ -17,10 +17,29 @@ from app.services import sandbox
 from app.core.config import settings
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-ALLOWED_TEMPLATES = {
-    "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
-    "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
+# Every template, by the set its gallery tab shows it in. "professional":
+# Summary first, Experience (with projects and clients) leading. "student":
+# the Student / fresher set — Education right after the Objective, then
+# internships, projects, skills, coursework, leadership and awards.
+#
+# A student template is a design plus the student order: it renders from
+# the same file as its professional twin (TEMPLATE_FILES), because the
+# sections come from templates/_blocks.html and only their order differs.
+# Must stay in step with apps/web/lib/resume-templates.ts (the API test
+# test_the_web_gallery_lists_exactly_the_templates_the_api_renders).
+TEMPLATE_SETS = {
+    "ats_clean": "professional", "ats_modern": "professional", "ats_sidebar": "professional",
+    "ats_professional": "professional", "ats_minimal": "professional",
+    "ats_executive": "professional", "ats_compact": "professional", "ats_banner": "professional",
+    "ats_portrait": "professional", "ats_technical": "professional",
+    "student_clean": "student", "student_modern": "student", "student_minimal": "student",
+    "student_technical": "student",
 }
+TEMPLATE_FILES = {
+    "student_clean": "ats_clean", "student_modern": "ats_modern",
+    "student_minimal": "ats_minimal", "student_technical": "ats_technical",
+}
+ALLOWED_TEMPLATES = set(TEMPLATE_SETS)
 
 # Mirrors apps/web/lib/resume-templates.ts's templateRequiresPhoto — these
 # two templates' whole layout (banner/sidebar photo block) only shows up
@@ -218,14 +237,19 @@ _jinja_env.filters["url_link"] = _url_link
 
 
 def _gpa_label(value: str | None) -> str:
-    """"GPA " before a bare grade ("8.6", "3.9/4.0"), so it reads as one;
-    nothing when the value already says what it is ("CGPA 8.6", "85%",
-    "First Class"). Printed outside the editable value, which stays the
-    grade as written."""
+    """The label before a bare grade, so it reads as one: "CGPA" for a grade
+    out of 10 (how India writes it, and the ATS reference's "CGPA: 8.5/10"),
+    "GPA" otherwise ("8.6", "3.9/4.0"); nothing when the value already says
+    what it is ("CGPA 8.6", "85%", "First Class"). Printed outside the
+    editable value, which stays the grade as written.
+
+    Joined to the grade by a non-breaking space: a line that wrapped between
+    them left "GPA" at one line's end and the grade on the next, read apart.
+    """
     text = (value or "").strip()
     if not text or "%" in text or re.search(r"[A-Za-z]", text):
         return ""
-    return "GPA "
+    return ("CGPA" if re.search(r"/\s*10(\.0+)?$", text) else "GPA") + "\u00a0"
 
 
 _jinja_env.filters["gpa_label"] = _gpa_label
@@ -470,6 +494,21 @@ TEMPLATE_DEFAULT_ACCENT = {
     "ats_portrait": "#6d4c41",
     "ats_technical": "#00695c",
 }
+# A student template keeps its twin's colour.
+TEMPLATE_DEFAULT_ACCENT.update({tid: TEMPLATE_DEFAULT_ACCENT[f] for tid, f in TEMPLATE_FILES.items()})
+
+# A role counts as an internship when its title or company says so — the
+# same reading as the web's experienceTypeFor (lib/career-profile-client.ts).
+_INTERNSHIP = re.compile(r"\bintern(ship)?\b", re.I)
+
+
+def _all_internships(experience) -> bool:
+    """True when every role is an internship: the student set then heads the
+    section "Internships", which the ATS reference lists as a standard name."""
+    roles = [e for e in experience or [] if isinstance(e, dict)]
+    return bool(roles) and all(
+        _INTERNSHIP.search(f"{e.get('title') or ''} {e.get('company') or ''}") for e in roles
+    )
 
 
 # Résumé page sizes → the CSS @page size each one renders at. A4 is the
@@ -641,7 +680,7 @@ def _render_html_meta(
     # One date style everywhere, "Present" for a role still held: an ATS
     # sums the spans to get total experience (services/resume_dates.py).
     resume_content = tidy_resume_dates(resume_content)
-    template = _jinja_env.get_template(f"{template_id}.html")
+    template = _jinja_env.get_template(f"{TEMPLATE_FILES.get(template_id, template_id)}.html")
     resolved_accent = resolve_accent(accent_color, template_id)
     contact = resume_content.get("contact") if isinstance(resume_content.get("contact"), dict) else {}
     html = template.render(
@@ -659,6 +698,8 @@ def _render_html_meta(
         font_family=Markup(FONT_STACKS.get(font_choice, FONT_STACKS["sans"])),
         accent_color=Markup(resolved_accent),
         experience_entries=_experience_entries(resume_content.get("experience") or []),
+        template_set=TEMPLATE_SETS[template_id],
+        all_internships=_all_internships(resume_content.get("experience")),
         # Applied per declaration by the templates, so the step and its floor
         # are decided in one place. Clamped rather than trusted.
         heading_size=_size_stepper(heading_size_delta),

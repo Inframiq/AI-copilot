@@ -4,6 +4,8 @@ without taking the institution with it."""
 import html as htmllib
 import re
 
+NBSP = "\u00a0"  # the label never wraps away from its grade
+
 import pytest
 from app.services.ats import build_resume_text
 from app.services.pdf import ALLOWED_TEMPLATES, TEMPLATES_REQUIRING_PHOTO, _gpa_label, render_resume_html
@@ -31,7 +33,7 @@ def _text(markup: str) -> str:
 
 def _check(markup: str) -> None:
     text = _text(markup)
-    assert "GPA 8.6/10" in text
+    assert "CGPA 8.6/10" in text
     assert "First Class with Distinction" in text
     assert "92%" in text and "GPA 92%" not in text
     # An entry with neither prints no stray separator after its year.
@@ -55,10 +57,10 @@ def test_the_photo_templates_print_them_too(template_id, avatar_store, trusted_s
 
 
 @pytest.mark.parametrize("value, label", [
-    ("8.6", "GPA "), ("3.9/4.0", "GPA "), ("8.6/10", "GPA "),
+    ("8.6", "GPA" + NBSP), ("3.9/4.0", "GPA" + NBSP), ("8.6/10", "CGPA" + NBSP), ("9 / 10.0", "CGPA" + NBSP),
     ("85%", ""), ("CGPA 8.6", ""), ("First Class", ""), ("", ""), (None, ""),
 ])
-def test_a_bare_grade_is_labelled_gpa(value, label):
+def test_a_bare_grade_is_labelled_cgpa_out_of_10_else_gpa(value, label):
     assert _gpa_label(value) == label
 
 

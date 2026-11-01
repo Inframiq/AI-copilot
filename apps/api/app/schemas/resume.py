@@ -9,6 +9,7 @@ from app.services.plain_text import plain_deep
 ValidTemplateId = Literal[
     "ats_clean", "ats_modern", "ats_sidebar", "ats_professional", "ats_minimal",
     "ats_executive", "ats_compact", "ats_banner", "ats_portrait", "ats_technical",
+    "student_clean", "student_modern", "student_minimal", "student_technical",
 ]
 
 FontChoice = Literal["sans", "modern_sans", "serif", "classic_serif"]
