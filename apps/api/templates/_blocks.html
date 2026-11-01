@@ -1,0 +1,251 @@
+{#
+  Every résumé section, written once for all templates.
+
+  A template keeps its own look — its <style>, its header or masthead — and
+  hands the sections a style table, S, saying how it writes the parts that
+  differ between templates: the separator between a title and its company,
+  the date style, class names its CSS targets, which headings it renames,
+  and its default section order. Everything else (which fields print, in
+  what order, the Studio's data-field paths, the ATS rules from the
+  reference: standard headings, dates on the title line, links as their
+  address) lives here, so a fix lands in every template at once.
+
+  Usage, at the end of a template's <body>:
+      {% import "_blocks.html" as blocks with context %}
+      {% set S = {"title_sep": " &mdash; ", ...} %}
+      {{ blocks.sections(S) }}
+
+  Keys of S (defaults in DEFAULTS below):
+    layout       "standard" (an <h2> per section) or "sidebar" (a labelled
+                 .section with a .section-body, two-line job entries and
+                 language bars)
+    row          class of a job/project title line
+    wrap_title   true: title, company and location sit inside one
+                 span.job-title (each still its own data-field)
+    title_sep    between a job title and its company
+    company      "b" | "b.company" | "span" (span.company)
+    date_cls     class of the span around dates
+    date_lead    printed before the dates
+    dash         between start and end
+    link_cls     class of the span around a project's link
+    tech_sep     before a project's tech stack; tech_tag its element and
+                 tech_cls its class
+    edu          "inline" (one line) or "stacked" (degree | year, then school)
+    edu_sep      between degree and school on an inline line
+    inst_cls     class on the school's span on an inline line
+    skills_cls   class of the skills line(s)
+    line_cls     class of the languages, interests and coursework lines
+                 (defaults to skills_cls)
+    join         between skills; lang_join between languages
+    list_cls     class of the bulleted lists (certifications, awards…)
+    headings     section → heading, for the few a template renames; every
+                 value must be on ats_check.APPROVED_HEADINGS
+    order        the default section order, when the résumé sets none
+#}
+
+{% from "_job_projects.html" import job_projects with context %}
+
+{% set DEFAULTS = {
+  "layout": "standard", "row": "job-row", "wrap_title": false,
+  "title_sep": ", ", "company": "b", "date_cls": "dates", "date_lead": "&nbsp;|&nbsp; ",
+  "dash": " – ", "link_cls": "company", "tech_sep": " — ", "tech_tag": "span", "tech_cls": "",
+  "edu": "inline", "edu_sep": ", ", "inst_cls": "", "skills_cls": "skills", "line_cls": "",
+  "join": ", ", "lang_join": ", ", "list_cls": "plain", "headings": {},
+  "order": ["summary_or_objective", "experience", "projects", "education", "skills",
+            "languages", "certifications", "coursework", "awards", "achievements",
+            "leadership", "volunteer", "interests"],
+} %}
+
+{% set HEADINGS = {
+  "summary": "Summary", "objective": "Objective", "experience": "Experience",
+  "projects": "Projects", "education": "Education", "skills": "Skills",
+  "languages": "Languages", "certifications": "Certifications", "coursework": "Coursework",
+  "awards": "Awards", "achievements": "Achievements", "leadership": "Leadership",
+  "volunteer": "Volunteer Experience", "interests": "Interests",
+} %}
+
+{% macro heading(S, key) -%}{{ S.headings.get(key, HEADINGS[key]) }}{%- endmacro %}
+
+{% macro section(S, key) -%}
+  {%- if S.layout == "sidebar" %}
+  <div class="section">
+    <div class="section-label">{{ heading(S, key) }}</div>
+    <div class="section-body">{{ caller() }}</div>
+  </div>
+  {%- else %}
+  <h2>{{ heading(S, key) }}</h2>
+  {{ caller() }}
+  {%- endif %}
+{%- endmacro %}
+
+{% macro bullets(base, items) -%}
+<table class="bullets">{% for b in items or [] %}<tr><td class="bdot">&#8226;</td><td class="btxt" data-field="{{ base }}.bullets.{{ loop.index0 }}" data-field-rich>{{ b | highlight(skills) }}</td></tr>{% endfor %}</table>
+{%- endmacro %}
+
+{% macro dates(S, base, start, end) -%}
+<span class="{{ S.date_cls }}">{{ S.date_lead | safe }}<span data-field="{{ base }}.start">{{ start }}</span>{{ S.dash | safe }}<span data-field="{{ base }}.end">{{ end or "Present" }}</span></span>
+{%- endmacro %}
+
+{% macro company(S, base, value) -%}
+  {%- if S.company == "span" -%}<span class="company" data-field="{{ base }}.company">{{ value }}</span>
+  {%- elif S.company == "b.company" -%}<b class="company" data-field="{{ base }}.company">{{ value }}</b>
+  {%- else -%}<b data-field="{{ base }}.company">{{ value }}</b>
+  {%- endif -%}
+{%- endmacro %}
+
+{# ── Summary / objective ─────────────────────────────────────────────────── #}
+{% macro summary_or_objective(S) %}
+  {% if summary %}
+  {% call section(S, "summary") %}<p class="summary" data-field="summary" data-field-rich>{{ summary | rich }}</p>{% endcall %}
+  {% elif objective %}
+  {% call section(S, "objective") %}<p class="summary" data-field="objective">{{ objective }}</p>{% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Experience ──────────────────────────────────────────────────────────── #}
+{% macro experience_block(S) %}
+  {% if experience %}
+  {% call section(S, "experience") %}
+  {% for job in experience_entries %}
+    {% set base = "experience." ~ job._index %}
+    {% if S.layout == "sidebar" %}
+      <div class="job">
+        <div class="job-title-line"><span class="title" data-field="{{ base }}.title">{{ job.title }}</span> {{ dates(S, base, job.start, job.end) }}</div>
+        <div class="job-company"><span data-field="{{ base }}.company">{{ job.company }}</span>{% if job.location %} &middot; <span data-field="{{ base }}.location">{{ job.location }}</span>{% endif %}</div>
+        {{ bullets(base, job.bullets) }}
+    {{- job_projects(job) }}
+      </div>
+    {% else %}
+    <div class="{{ S.row }}">{% if S.wrap_title %}<span class="job-title"><span data-field="{{ base }}.title">{{ job.title }}</span>{{ S.title_sep | safe }}{{ company(S, base, job.company) }}{% if job.location %} &middot; <span class="company" data-field="{{ base }}.location">{{ job.location }}</span>{% endif %}</span>{% else %}<span class="job-title" data-field="{{ base }}.title">{{ job.title }}</span>{{ S.title_sep | safe }}{{ company(S, base, job.company) }}{% if job.location %} &middot; <span class="company" data-field="{{ base }}.location">{{ job.location }}</span>{% endif %}{% endif %} {{ dates(S, base, job.start, job.end) }}</div>
+    {{ bullets(base, job.bullets) }}
+    {{- job_projects(job) }}
+    {% endif %}
+  {% endfor %}
+  {% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Projects ────────────────────────────────────────────────────────────── #}
+{% macro projects_block(S) %}
+  {% if projects %}
+  {% call section(S, "projects") %}
+  {% for p in projects %}
+    {% set base = "projects." ~ loop.index0 %}
+    {% set links %}{% if p.link %} &middot; <span class="{{ S.link_cls }}">{{ p.link | url_link(p.link_label, base ~ '.link') }}</span>{% endif %}{% if p.live_link %} &middot; <span class="{{ S.link_cls }}">{{ p.live_link | url_link(p.live_link_label, base ~ '.live_link') }}</span>{% endif %}{% endset %}
+    {% if S.layout == "sidebar" %}
+      <div class="job">
+        <div class="job-title-line"><span class="title" data-field="{{ base }}.name">{{ p.name }}</span>{{ links }}{% if p.start %} {{ dates(S, base, p.start, p.end) }}{% endif %}</div>
+        {% if p.tech_stack %}<div class="job-company" data-field="{{ base }}.tech_stack">{{ p.tech_stack }}</div>{% endif %}
+        {{ bullets(base, p.bullets) }}
+      </div>
+    {% else %}
+    {% set tech %}{% if p.tech_stack %}{{ S.tech_sep | safe }}<{{ S.tech_tag }}{% if S.tech_cls %} class="{{ S.tech_cls }}"{% endif %} data-field="{{ base }}.tech_stack">{{ p.tech_stack }}</{{ S.tech_tag }}>{% endif %}{% endset %}
+  <div class="{{ S.row }}">{% if S.wrap_title %}<span class="job-title"><span data-field="{{ base }}.name">{{ p.name }}</span>{{ links }}{{ tech }}</span>{% else %}<span class="job-title" data-field="{{ base }}.name">{{ p.name }}</span>{{ links }}{{ tech }}{% endif %}{% if p.start %} {{ dates(S, base, p.start, p.end) }}{% endif %}</div>
+  {{ bullets(base, p.bullets) }}
+    {% endif %}
+  {% endfor %}
+  {% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Education ───────────────────────────────────────────────────────────── #}
+{% macro education_block(S) %}
+  {% if education %}
+  {% call section(S, "education") %}
+  {% for edu in education %}
+    {% set base = "education." ~ loop.index0 %}
+    {% set grade %}{% if edu.gpa %}{{ edu.gpa | gpa_label }}<span data-field="{{ base }}.gpa">{{ edu.gpa }}</span>{% endif %}{% endset %}
+    {% if S.layout == "sidebar" %}
+      <div class="edu-item">
+        {# Degree first, then the school: the order the ATS reference's
+           education entry uses, and the one parsers expect. #}
+        <span class="degree" data-field="{{ base }}.degree">{{ edu.degree }}</span>
+        <span class="school"><span data-field="{{ base }}.institution">{{ edu.institution }}</span>{% if edu.year %}, <span data-field="{{ base }}.year">{{ edu.year }}</span>{% endif %}</span>{% if edu.gpa or edu.honors %}
+        <span class="degree">{{ grade }}{% if edu.gpa and edu.honors %} &middot; {% endif %}{% if edu.honors %}<span data-field="{{ base }}.honors">{{ edu.honors }}</span>{% endif %}</span>{% endif %}
+      </div>
+    {% elif S.edu == "stacked" %}
+  <div class="edu-row"><span class="edu-degree" data-field="{{ base }}.degree">{{ edu.degree }}</span>{% if edu.year %} <span class="{{ S.date_cls }}">{{ S.date_lead | safe }}<span data-field="{{ base }}.year">{{ edu.year }}</span></span>{% endif %}</div>
+  {% if edu.gpa or edu.honors %}<div class="edu-institution"><span data-field="{{ base }}.institution">{{ edu.institution }}</span>{% if edu.gpa %} &middot; {{ grade }}{% endif %}{% if edu.honors %} &middot; <span data-field="{{ base }}.honors">{{ edu.honors }}</span>{% endif %}</div>{% else %}<div class="edu-institution" data-field="{{ base }}.institution">{{ edu.institution }}</div>{% endif %}
+    {% else %}
+  <div class="edu-row"><span class="job-title" data-field="{{ base }}.degree">{{ edu.degree }}</span>{{ S.edu_sep | safe }}<span{% if S.inst_cls %} class="{{ S.inst_cls }}"{% endif %} data-field="{{ base }}.institution">{{ edu.institution }}</span>{% if edu.year %} <span class="{{ S.date_cls }}">{{ S.date_lead | safe }}<span data-field="{{ base }}.year">{{ edu.year }}</span></span>{% endif %}{% if edu.gpa %} <span class="{{ S.date_cls }}">&nbsp;·&nbsp; {{ grade }}</span>{% endif %}{% if edu.honors %} <span class="{{ S.date_cls }}">&nbsp;·&nbsp; <span data-field="{{ base }}.honors">{{ edu.honors }}</span></span>{% endif %}</div>
+    {% endif %}
+  {% endfor %}
+  {% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Skills ──────────────────────────────────────────────────────────────── #}
+{% macro skills_block(S) %}
+  {% if skills %}
+  {% call section(S, "skills") %}
+  {% set cls = "skills-line" if S.layout == "sidebar" else S.skills_cls %}
+  {% if skills is mapping %}
+    {% for category, items in skills.items() %}
+    <div class="{{ cls }}"><b>{{ category }}:</b> {{ items | join(S.join) }}</div>
+    {% endfor %}
+  {% else %}
+  <div class="{{ cls }}" data-field="skills" data-field-split="{{ S.join }}">{{ skills | join(S.join) }}</div>
+  {% endif %}
+  {% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Languages ───────────────────────────────────────────────────────────── #}
+{% macro languages_block(S) %}
+  {% if languages %}
+  {% call section(S, "languages") %}
+  {% if S.layout == "sidebar" %}
+      {% set levels = {"native": 98, "c2": 95, "c1": 85, "proficient": 85, "fluent": 90,
+                        "b2": 70, "upper-intermediate": 70, "b1": 55, "intermediate": 55,
+                        "a2": 35, "basic": 35, "a1": 20, "beginner": 20} %}
+      {% for l in languages %}
+      <div class="lang-row">
+        {# The level is written beside the name as words, so it is read with
+           its language; the bar after it is decoration only. No stated
+           level means no bar: a default-width one would invent the
+           proficiency in picture form. #}
+        <div class="lang-name"><b data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</b>{% if l.level %} (<span data-field="languages.{{ loop.index0 }}.level">{{ l.level }}</span>){% endif %}</div>
+        {% if l.level %}<div class="lang-bar-track"><div class="lang-bar-fill" style="width: {{ levels.get(l.level | lower, 60) }}%;"></div></div>{% endif %}
+      </div>
+      {% endfor %}
+  {% else %}
+  <div class="{{ S.line_cls or S.skills_cls }}">{% for l in languages %}<span data-field="languages.{{ loop.index0 }}.name">{{ l.name }}</span>{% if l.level %} (<span data-field="languages.{{ loop.index0 }}.level">{{ l.level }}</span>){% endif %}{% if not loop.last %}{{ S.lang_join | safe }}{% endif %}{% endfor %}</div>
+  {% endif %}
+  {% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── One-line-per-item lists: certifications, awards, achievements… ──────── #}
+{% macro list_block(S, key, items) %}
+  {% if items %}
+  {% call section(S, key) %}<ul class="{{ S.list_cls }}">{% for it in items %}<li data-field="{{ key }}.{{ loop.index0 }}">{{ it }}</li>{% endfor %}</ul>{% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Comma lines: interests, coursework ──────────────────────────────────── #}
+{% macro line_block(S, key, items) %}
+  {% if items %}
+  {% call section(S, key) %}{% if S.layout == "sidebar" %}{% for it in items %}<span data-field="{{ key }}.{{ loop.index0 }}">{{ it }}</span>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}
+  <div class="{{ S.line_cls or S.skills_cls }}">{% for it in items %}<span data-field="{{ key }}.{{ loop.index0 }}">{{ it }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</div>
+  {% endif %}{% endcall %}
+  {% endif %}
+{% endmacro %}
+
+{# ── Every section, in the résumé's order or the template's ─────────────── #}
+{% macro sections(style) %}
+{% set S = dict(DEFAULTS, **style) %}
+{% set lists = {"certifications": certifications, "awards": awards, "achievements": achievements,
+                "leadership": leadership, "volunteer": volunteer, "interests": interests,
+                "coursework": coursework} %}
+{% for key in (section_order or S.order) %}
+  {% if key == "summary_or_objective" %}{{ summary_or_objective(S) }}
+  {% elif key == "experience" %}{{ experience_block(S) }}
+  {% elif key == "projects" %}{{ projects_block(S) }}
+  {% elif key == "education" %}{{ education_block(S) }}
+  {% elif key == "skills" %}{{ skills_block(S) }}
+  {% elif key == "languages" %}{{ languages_block(S) }}
+  {% elif key in ("certifications", "awards", "achievements", "leadership", "volunteer") %}{{ list_block(S, key, lists[key]) }}
+  {% elif key in ("interests", "coursework") %}{{ line_block(S, key, lists[key]) }}
+  {% endif %}
+{% endfor %}
+{% endmacro %}
