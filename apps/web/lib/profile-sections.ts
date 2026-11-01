@@ -199,8 +199,8 @@ export function profileSectionsToResume(s: Partial<ProfileSections>): Partial<Re
 }
 
 /** Whether a section has anything in it — the Profile shows those. */
-export function sectionHasContent(s: Partial<ProfileSections>, key: ExtraSection): boolean {
+export function sectionHasContent(s: Partial<ProfileSections>, key: ExtraSection | "summary"): boolean {
   const v = s[key];
-  if (key === "objective") return !!text(v);
+  if (key === "objective" || key === "summary") return !!text(v);
   return Array.isArray(v) && v.length > 0;
 }

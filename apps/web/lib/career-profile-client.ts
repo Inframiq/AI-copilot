@@ -434,9 +434,9 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
 // and the Resume Builder's EditorPanel (the "merge into one entry" offer for
 // two roles at the same company — a promotion or internal transfer). Both
 // need the identical adjacency rule so the two screens never disagree about
-// which roles "belong together" — matching the same rule the PDF templates
-// use server-side (pdf.py's _group_experience_by_company) to group these
-// under one company header.
+// which roles "belong together". The PDF no longer groups them: each role
+// prints its own title, company and dates line, as the ATS reference asks
+// (pdf.py's _experience_entries).
 
 /** Same company, case/whitespace-insensitive. Blank/missing company never
  * matches anything, even itself. */

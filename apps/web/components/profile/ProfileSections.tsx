@@ -6,7 +6,6 @@ import { SuggestInput } from "@/components/ui/SuggestInput";
 import { repeatedAt } from "@/lib/duplicates";
 import { wordCount } from "@/lib/misc-points";
 import {
-  EXTRA_SECTIONS,
   PROFILE_LIMITS as L,
   SECTION_INFO,
   capEdit,
@@ -16,6 +15,7 @@ import {
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { SectionHeader, cardCls, inputCls, textareaCls } from "./ProfileFormParts";
+import { OPTIONAL_INFO, type OptionalSection } from "@/lib/profile-layout";
 
 const removeBtnCls =
   "w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors";
@@ -51,13 +51,26 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
   );
 }
 
-/** Always on the Profile, after Contact. */
-export function SummaryCard({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** A professional's always-shown statement, after Contact — or, on a
+ * student's Profile, an optional section with Remove (lib/profile-layout). */
+export function SummaryCard({ value, onChange, title = "Professional summary", onRemove }: {
+  value: string;
+  onChange: (v: string) => void;
+  title?: string;
+  /** Offered when the summary is an optional section (a student's). */
+  onRemove?: () => void;
+}) {
   return (
-    <section className={cardCls}>
+    <section id="profile-section-summary" className={cardCls}>
       <SectionHeader
-        title="Summary"
+        title={title}
         info="Two or three sentences on who you are and what you do best. A résumé started from your profile opens with it."
+        action={onRemove && (
+          <button type="button" onClick={onRemove} aria-label={`Remove ${title} section`} title="Remove section"
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+            <X size={16} />
+          </button>
+        )}
       />
       <CappedText
         id="profile-summary"
@@ -170,25 +183,29 @@ function LinesEditor({ section, value, onChange }: {
   );
 }
 
-/** One added section: its editor, and Remove to take it off the Profile. */
-export function ExtraSectionCard({ section, sections, onChange, onRemove }: {
+/** One added section: its editor, and Remove to take it off the Profile.
+ * Without onRemove it is pinned — a student's Career objective. */
+export function ExtraSectionCard({ section, sections, onChange, onRemove, title }: {
   section: ExtraSection;
   sections: ProfileSections;
   onChange: (patch: Partial<ProfileSections>) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
+  /** The heading, when the Profile names the section its own way. */
+  title?: string;
 }) {
-  const { label, hint, placeholder } = SECTION_INFO[section];
+  const { hint, placeholder } = SECTION_INFO[section];
+  const label = title ?? SECTION_INFO[section].label;
   return (
     <section id={`profile-section-${section}`} className={cardCls}>
       <SectionHeader
         title={label}
         info={hint}
-        action={
+        action={onRemove && (
           <button type="button" onClick={onRemove} aria-label={`Remove ${label} section`} title="Remove section"
             className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
             <X size={16} />
           </button>
-        }
+        )}
       />
       {section === "objective" ? (
         <CappedText
@@ -210,14 +227,15 @@ export function ExtraSectionCard({ section, sections, onChange, onRemove }: {
 }
 
 /** "+ Add section": a full-width button, and the sheet of what's left. */
-export function AddSectionButton({ hidden, onPick, open, setOpen }: {
-  /** Sections already on the Profile — not offered again. */
-  hidden: readonly ExtraSection[];
-  onPick: (s: ExtraSection) => void;
+export function AddSectionButton({ options, onPick, open, setOpen }: {
+  /** What's not on the Profile yet, most relevant first (lib/profile-layout:
+   * a student is offered Coursework and Leadership before Languages). */
+  options: readonly OptionalSection[];
+  onPick: (s: OptionalSection) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
 }) {
-  const left = EXTRA_SECTIONS.filter((s) => !hidden.includes(s));
+  const left = options;
   if (left.length === 0) return null;
   return (
     <>
@@ -246,8 +264,8 @@ export function AddSectionButton({ hidden, onPick, open, setOpen }: {
                   >
                     <Plus size={16} weight="bold" className="mt-0.5 shrink-0 text-primary" />
                     <span className="min-w-0">
-                      <span className="block text-label-md font-semibold text-on-surface">{SECTION_INFO[s].label}</span>
-                      <span className="block text-body-sm text-on-surface-variant">{SECTION_INFO[s].hint}</span>
+                      <span className="block text-label-md font-semibold text-on-surface">{OPTIONAL_INFO[s].label}</span>
+                      <span className="block text-body-sm text-on-surface-variant">{OPTIONAL_INFO[s].hint}</span>
                     </span>
                   </button>
                 </li>

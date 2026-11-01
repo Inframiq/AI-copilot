@@ -1,6 +1,6 @@
 "use client";
 import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { safeHref } from "@/lib/safe-url";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -70,9 +70,9 @@ import {
   resumeSectionsToProfile,
   sectionHasContent,
   wordCapError,
-  type ExtraSection,
   type ProfileSections,
 } from "@/lib/profile-sections";
+import { profileLayout, type MainSection, type OptionalSection } from "@/lib/profile-layout";
 import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
@@ -167,7 +167,7 @@ export default function ProfilePage() {
   // Summary, Objective, Languages, Awards… (lib/profile-sections.ts). The
   // optional ones are shown when they hold something or were just added.
   const [sections, setSections] = useState<ProfileSections>(emptyProfileSections());
-  const [shownSections, setShownSections] = useState<ExtraSection[]>([]);
+  const [shownSections, setShownSections] = useState<OptionalSection[]>([]);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const savedLinks = useRef({ linkedin: "", github: "" });
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
@@ -268,15 +268,15 @@ export default function ProfilePage() {
   /** Fill the sections, showing each optional one that holds something. */
   function showSections(next: ProfileSections) {
     setSections(next);
-    setShownSections(EXTRA_SECTIONS.filter((k) => sectionHasContent(next, k)));
+    setShownSections((["summary", ...EXTRA_SECTIONS] as OptionalSection[]).filter((k) => sectionHasContent(next, k)));
   }
 
   const updateSections = (patch: Partial<ProfileSections>) => setSections((prev) => ({ ...prev, ...patch }));
 
-  function addSection(section: ExtraSection) {
+  function addSection(section: OptionalSection) {
     setShownSections((prev) => [...prev, section]);
     // A list opens with a line to type in.
-    if (section !== "objective" && sections[section].length === 0) {
+    if (section !== "objective" && section !== "summary" && sections[section].length === 0) {
       updateSections(section === "languages" ? { languages: [{ name: "", level: "" }] } : { [section]: [""] });
     }
     requestAnimationFrame(() => {
@@ -286,7 +286,7 @@ export default function ProfilePage() {
     });
   }
 
-  function removeSection(section: ExtraSection) {
+  function removeSection(section: OptionalSection) {
     setShownSections((prev) => prev.filter((s) => s !== section));
     updateSections({ [section]: emptyProfileSections()[section] });
   }
@@ -604,7 +604,9 @@ export default function ProfilePage() {
     setExperiences(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
   const removeExp = (id: string) => setExperiences(prev => prev.filter(e => e.id !== id));
   const addExp = () => {
-    const e = emptyExp();
+    // A student's "Add Internship" starts the entry as one; the type can
+    // still be changed on the entry (nothing is locked to the status).
+    const e = profileLayout(roleStatus).student ? blankExperienceEntry({ type: "internship" }) : emptyExp();
     setExperiences(prev => [...prev, e]);
     setCollapsedExp(prev => ({ ...prev, [e.id]: false }));
   };
@@ -682,6 +684,549 @@ export default function ProfilePage() {
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
   // A certification named twice is flagged, not removed: a renewal is real.
   const repeatedCerts = repeatedAt(certifications.map(c => c.name));
+
+  const layout = profileLayout(roleStatus);
+
+  // The always-on sections, in the order lib/profile-layout gives the
+  // status (a student's Education and Projects lead). One element each,
+  // so reordering never re-creates a card's inputs while typing.
+  const mainSections: Record<MainSection, React.ReactNode> = {
+    skills: (
+      <>
+          {/* ── Skills ──────────────────────────────────────────────────────────── */}
+          <section className={cardCls}>
+            <SectionHeader title="Skills" />
+            <div className="flex flex-col gap-sm">
+              <div className="flex gap-xs">
+                <div className="relative flex-1">
+                  <MagnifyingGlass size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+                  <SuggestInput kind="skill" value={skillDraft} onValueChange={v => { setSkillDraft(v); setSkillNote(null); }} onPick={addSkill}
+                    exclude={skills}
+                    aria-label="Add a skill" aria-describedby={skillNote ? "profile-skill-note" : undefined}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+                    placeholder="Add a skill — e.g. React, AWS, Figma…"
+                    className={iconInputCls} />
+                </div>
+                <button type="button" onClick={() => addSkill()} disabled={!skillDraft.trim()}
+                  className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Plus size={16} weight="bold" />
+                </button>
+              </div>
+              <p id="profile-skill-note" role="status" className="text-caption text-on-surface-variant empty:hidden">{skillNote}</p>
+              {skills.length > 0 && (
+                <div className="flex flex-wrap gap-sm">
+                  {skills.map(s => (
+                    <span key={s} className="flex items-center gap-xs pl-sm pr-xs py-xs bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface text-caption rounded-full font-semibold hover:border-primary/50 hover:shadow-md transition-all">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
+                      {s}
+                      <button type="button" onClick={() => removeSkill(s)} aria-label={`Remove ${s}`}
+                        className="relative rounded-full p-0.5 before:absolute before:-inset-1.5 before:content-[''] hover:bg-primary/15 hover:text-error transition-colors">
+                        <X size={11} weight="bold" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+      </>
+    ),
+    experience: (
+      <>
+          {/* ── Experience ─────────────────────────────────────────────────────── */}
+          <section className={cardCls}>
+            <SectionHeader
+              title="Experience"
+              info="Add roles in any order. If you add a second role at the same company, they're grouped together automatically and their combined time there is totaled."
+              onAdd={addExp}
+              addLabel={layout.addExperienceLabel}
+            />
+            {experiences.length === 0 ? (
+              <button type="button" onClick={addExp}
+                className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
+                <Plus size={24} weight="bold" />
+                <span className="text-label-sm">{layout.firstExperienceLabel}</span>
+              </button>
+            ) : (
+              <div className="relative [--rail:24px] md:[--rail:32px] pl-[var(--rail)] flex flex-col gap-md">
+                {/* The timeline: one width, --rail, places both the line and the
+                    dots, so they stay centred on each other at every size (they
+                    were set with separate numbers and drifted 3-13px apart). Each
+                    entry draws the line from its own dot down to the next one's,
+                    so it starts and ends on a dot. */}
+                {experiences.map((exp, idx) => {
+                  const collapsed = collapsedExp[exp.id] ?? false;
+                  const roleDuration = formatRoleDuration(exp.start, exp.current ? undefined : exp.end, exp.current);
+                  // A role belongs to a "company group" when it's adjacent to
+                  // another entry with the same company — same rule the Resume
+                  // Builder's merge offer uses, so both screens agree on which
+                  // roles "belong together" (the PDF prints each role as its
+                  // own entry, per the ATS reference). The
+                  // group total is only shown once, on the group's first (most
+                  // recent) entry, not repeated on every role in it.
+                  const isContinuationOfPrevious = sameCompany(exp.company, experiences[idx - 1]?.company);
+                  const isStartOfMultiRoleGroup = !isContinuationOfPrevious
+                    && sameCompany(exp.company, experiences[idx + 1]?.company);
+                  let companyTotalDuration: string | null = null;
+                  if (isStartOfMultiRoleGroup) {
+                    const groupRoles = [exp];
+                    for (let j = idx + 1; j < experiences.length && sameCompany(experiences[j].company, exp.company); j++) {
+                      groupRoles.push(experiences[j]);
+                    }
+                    companyTotalDuration = formatCompanyTotalDuration(
+                      groupRoles.map(r => ({ start: r.start, end: r.current ? undefined : r.end, current: r.current }))
+                    );
+                  }
+                  return (
+                    <div key={exp.id} className="relative">
+                      {idx < experiences.length - 1 && (
+                        <div
+                          aria-hidden
+                          className="absolute left-[calc(var(--rail)_/_-2_-_1px)] top-7 h-[calc(100%_+_var(--spacing-md))] w-0.5 bg-outline-variant/30"
+                        />
+                      )}
+                      <div
+                        aria-hidden
+                        className={`absolute left-[calc(var(--rail)_/_-2_-_8px)] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`}
+                      />
+                      {isStartOfMultiRoleGroup && (
+                        <p className="text-caption text-primary/80 font-medium mb-xs flex items-center gap-xs">
+                          <Buildings size={11} />
+                          Multiple roles at {exp.company}{companyTotalDuration ? ` · ${companyTotalDuration} total` : ""}
+                        </p>
+                      )}
+                      <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
+                      {/* Header */}
+                      <div className="flex items-center gap-xs sm:gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
+                        <div className="flex flex-col sm:flex-row rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
+                          {(["full-time", "internship"] as const).map(t => (
+                            <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
+                              className={`px-xs sm:px-sm py-xs font-medium transition-colors ${
+                                exp.type === t
+                                  ? t === "internship" ? "bg-secondary-container text-on-secondary-container" : "bg-primary text-on-primary"
+                                  : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"
+                              }`}>
+                              {t === "full-time" ? "Full-time" : <><span className="sm:hidden">Intern</span><span className="hidden sm:inline">Internship</span></>}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {exp.company || exp.title ? (
+                            <>
+                              <p className="text-label-md text-on-surface font-bold truncate">{exp.title || "Untitled Role"}</p>
+                              <p className="text-caption text-on-surface-variant mt-0.5 truncate">
+                                <Buildings size={12} className="inline -mt-0.5 mr-xs text-primary/60" />
+                                {exp.company}{(exp.start || exp.end) ? ` · ${exp.start}${exp.current ? " - Present" : exp.end ? ` - ${exp.end}` : ""}` : ""}
+                                {roleDuration ? ` · ${roleDuration}` : ""}
+                              </p>
+                            </>
+                          ) : (
+                            <span className="text-caption text-on-surface-variant">#{idx + 1} — new entry</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-0.5 sm:gap-xs ml-auto shrink-0">
+                          <button type="button" onClick={() => moveExp(idx, "up")} disabled={idx === 0}
+                            title="Move up"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
+                            <ArrowUp size={13} />
+                          </button>
+                          <button type="button" onClick={() => moveExp(idx, "down")} disabled={idx === experiences.length - 1}
+                            title="Move down"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
+                            <ArrowDown size={13} />
+                          </button>
+                          <button type="button" onClick={() => setCollapsedExp(p => ({ ...p, [exp.id]: !collapsed }))}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                          </button>
+                          <button type="button" onClick={() => removeExp(exp.id)}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Fields */}
+                      {!collapsed && (
+                        <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
+                          <div className="grid grid-cols-2 gap-sm">
+                            <div className="flex flex-col gap-xs">
+                              <label className="text-caption text-on-surface-variant">Company *</label>
+                              <input value={exp.company ?? ""} onChange={e => updateExp(exp.id, "company", e.target.value)}
+                                placeholder="Google" className={inputCls} />
+                            </div>
+                            <div className="flex flex-col gap-xs">
+                              <label className="text-caption text-on-surface-variant">Role / Title *</label>
+                              <SuggestInput kind="jobTitle" value={exp.title ?? ""} onValueChange={v => updateExp(exp.id, "title", v)}
+                                placeholder="Software Engineer" className={inputCls} />
+                            </div>
+                            <div className="flex flex-col gap-xs col-span-2">
+                              <label className="text-caption text-on-surface-variant">Location</label>
+                              <SuggestInput kind="city" value={exp.location ?? ""} onValueChange={v => updateExp(exp.id, "location", v)}
+                                placeholder="London, UK or Remote" className={inputCls} />
+                            </div>
+                            {/* Start and End side by side, with one plain checkbox
+                                under them for a role that hasn't ended. Ticking it
+                                leaves the typed end date alone, so unticking brings
+                                it back instead of leaving "Present" in the box. */}
+                            <div className="flex flex-col gap-xs">
+                              <label htmlFor={`exp-start-${exp.id}`} className="text-caption text-on-surface-variant">Start</label>
+                              <MonthYearField id={`exp-start-${exp.id}`} label="Start" value={exp.start ?? ""}
+                                onChange={v => updateExp(exp.id, "start", v)} placeholder="Jan 2022" className={inputCls} />
+                            </div>
+                            <div className="flex flex-col gap-xs">
+                              <label htmlFor={`exp-end-${exp.id}`} className="text-caption text-on-surface-variant">End</label>
+                              {exp.current ? (
+                                <input id={`exp-end-${exp.id}`} value="Present" readOnly tabIndex={-1}
+                                  className={`${inputCls} bg-surface-container-high! focus:bg-surface-container-high! hover:border-outline-variant/40 text-on-surface-variant cursor-default`} />
+                              ) : (
+                                <MonthYearField id={`exp-end-${exp.id}`} label="End" value={exp.end === "Present" ? "" : exp.end ?? ""}
+                                  start={exp.start} onChange={v => updateExp(exp.id, "end", v)}
+                                  placeholder="Dec 2023" className={inputCls} />
+                              )}
+                            </div>
+                            <label className="col-span-2 -mt-xs flex items-center gap-sm self-start min-h-8 pr-sm cursor-pointer text-body-sm text-on-surface">
+                              <input type="checkbox" checked={exp.current}
+                                onChange={e => updateExp(exp.id, "current", e.target.checked)}
+                                className="w-4 h-4 shrink-0 accent-primary cursor-pointer" />
+                              I work here now
+                            </label>
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
+                            <textarea value={exp.responsibilities ?? ""} onChange={e => updateExp(exp.id, "responsibilities", e.target.value)}
+                              rows={2} placeholder="Led backend API development, mentored junior engineers…" className={textareaCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Achievements</label>
+                            <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
+                              rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Impact</label>
+                            <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
+                              rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
+                          </div>
+                          {/* The role's projects — the old free-text Projects box
+                              became the first card (withWorkProjects). */}
+                          <WorkProjects
+                            entryId={exp.id}
+                            projects={exp.workProjects ?? []}
+                            onChange={workProjects => setExperiences(prev => prev.map(e => e.id === exp.id ? { ...e, workProjects } : e))}
+                          />
+                        </div>
+                      )}
+                      </div>
+                      {exp.company.trim() && (
+                        <button type="button" onClick={() => addRoleAtCompany(idx)}
+                          className="-mt-xs -mb-sm py-sm ml-md flex items-center gap-xs text-caption text-primary/80 hover:text-primary transition-colors">
+                          <Plus size={11} weight="bold" />
+                          Add another role at {exp.company.trim()}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+      </>
+    ),
+    projects: (
+      <>
+          {/* ── Projects ───────────────────────────────────────────────────────── */}
+          <section className={cardCls}>
+            <SectionHeader title="Projects" onAdd={addProj} addLabel="Add Project" />
+            <p className="hidden sm:block text-caption text-on-surface-variant -mt-sm mb-md">
+              {roleStatus === "student"
+                ? "Since you may not have work experience yet, this is often the most important section on your resume."
+                : "Personal, open-source, or side projects worth showing alongside your work experience."}
+            </p>
+            {projects.length === 0 ? (
+              <button type="button" onClick={addProj}
+                className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
+                <Plus size={24} weight="bold" />
+                <span className="text-label-sm">Add your first project</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-sm sm:gap-md">
+                {projects.map((proj, idx) => {
+                  const collapsed = collapsedProj[proj.id] ?? false;
+                  const tint = idx % 2 === 0 ? "primary" : "secondary";
+                  return (
+                    <div key={proj.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
+                      {collapsed ? (
+                        <div onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: false }))}
+                          className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
+                          <div className="flex items-start justify-between mb-sm sm:mb-md">
+                            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                              tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                            }`}>
+                              <Code size={22} />
+                            </div>
+                            <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                              <button type="button" onClick={e => { e.stopPropagation(); setCollapsedProj(p => ({ ...p, [proj.id]: false })); }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                                <PencilSimple size={14} />
+                              </button>
+                              <button type="button" onClick={e => { e.stopPropagation(); removeProj(proj.id); }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                                <Trash size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{proj.name || `Untitled Project #${idx + 1}`}</h3>
+                          <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
+                            {proj.description || proj.techStack || "No description yet — click to edit"}
+                          </p>
+                          {safeHref(proj.liveLink || proj.link) && (
+                            <a href={safeHref(proj.liveLink || proj.link)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                              className={`mt-md w-fit flex items-center gap-xs text-label-sm font-semibold rounded-lg px-md py-xs transition-all ${
+                                tint === "primary" ? "text-primary bg-primary/5 hover:bg-primary/10" : "text-secondary bg-secondary/5 hover:bg-secondary/10"
+                              }`}>
+                              View Project <ArrowSquareOut size={12} />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          {/* Header */}
+                          <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
+                            <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                            {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
+                            <div className="flex items-center gap-xs ml-auto shrink-0">
+                              <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                                <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                              </button>
+                              <button type="button" onClick={() => removeProj(proj.id)}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Fields */}
+                          <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
+                            <div className="grid grid-cols-2 gap-sm">
+                              <div className="flex flex-col gap-xs">
+                                <label className="text-caption text-on-surface-variant">Project Name *</label>
+                                <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
+                                  placeholder="Campus Marketplace" className={inputCls} />
+                              </div>
+                              <div className="flex flex-col gap-xs">
+                                <label className="text-caption text-on-surface-variant">Tech Stack</label>
+                                <SuggestInput kind="skill" list value={proj.techStack ?? ""} onValueChange={v => updateProj(proj.id, "techStack", v)}
+                                  placeholder="React, Node.js, PostgreSQL" className={inputCls} />
+                              </div>
+                              <div className="flex flex-col gap-xs">
+                                <label htmlFor={`proj-start-${proj.id}`} className="text-caption text-on-surface-variant">Start</label>
+                                <MonthYearField id={`proj-start-${proj.id}`} label="Start" value={proj.start ?? ""}
+                                  onChange={v => updateProj(proj.id, "start", v)} placeholder="Jan 2024" className={inputCls} />
+                              </div>
+                              <div className="flex flex-col gap-xs">
+                                <label htmlFor={`proj-end-${proj.id}`} className="text-caption text-on-surface-variant">End</label>
+                                <MonthYearField id={`proj-end-${proj.id}`} label="End" value={proj.end ?? ""} start={proj.start} allowPresent
+                                  onChange={v => updateProj(proj.id, "end", v)} placeholder="May 2024 or Present" className={inputCls} />
+                              </div>
+                              <div className="flex flex-col gap-xs">
+                                <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Code link (optional)</label>
+                                <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
+                                  placeholder="https://github.com/you/project" className={inputCls} />
+                              </div>
+                              <div className="flex flex-col gap-xs">
+                                <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Live link (optional)</label>
+                                <input type="url" value={proj.liveLink ?? ""} onChange={e => updateProj(proj.id, "liveLink", e.target.value)}
+                                  placeholder="https://project.vercel.app" className={inputCls} />
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-xs">
+                              <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
+                              <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
+                                rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+      </>
+    ),
+    education: (
+      <>
+          {/* ── Education ──────────────────────────────────────────────────────── */}
+          <section className={cardCls}>
+            <SectionHeader title="Education" onAdd={addEdu} addLabel="Add Education" />
+            {education.length === 0 ? (
+              <button type="button" onClick={addEdu}
+                className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
+                <Plus size={24} weight="bold" />
+                <span className="text-label-sm">Add education history</span>
+              </button>
+            ) : (
+              <div className="flex flex-col gap-sm">
+                {education.map((edu, idx) => {
+                  const collapsed = collapsedEdu[edu.id] ?? false;
+                  return (
+                    <div key={edu.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
+                      <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
+                        <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                        {edu.institution && (
+                          <span className="text-label-sm text-on-surface font-semibold truncate flex-1">
+                            {edu.institution}{edu.degree ? ` · ${edu.degree}` : ""}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-xs ml-auto shrink-0">
+                          <button type="button" onClick={() => setCollapsedEdu(p => ({ ...p, [edu.id]: !collapsed }))}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                          </button>
+                          <button type="button" onClick={() => removeEdu(edu.id)}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      {!collapsed && (
+                        <div className="p-sm sm:p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
+                          <div className="flex flex-col gap-xs col-span-2">
+                            <label className="text-caption text-on-surface-variant">Institution *</label>
+                            <SuggestInput kind="college" value={edu.institution ?? ""} onValueChange={v => updateEdu(edu.id, "institution", v)}
+                              placeholder="Stanford University" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Degree</label>
+                            <SuggestInput kind="degree" value={edu.degree ?? ""} onValueChange={v => updateEdu(edu.id, "degree", v)}
+                              placeholder="B.S. / M.S. / Ph.D." className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Field of Study</label>
+                            <input value={edu.field ?? ""} onChange={e => updateEdu(edu.id, "field", e.target.value)}
+                              placeholder="Computer Science" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">Graduation Year</label>
+                            <input value={edu.year ?? ""} onChange={e => updateEdu(edu.id, "year", e.target.value)}
+                              placeholder="2020" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs">
+                            <label className="text-caption text-on-surface-variant">GPA / CGPA (optional)</label>
+                            <input value={edu.gpa ?? ""} onChange={e => updateEdu(edu.id, "gpa", e.target.value)}
+                              placeholder="e.g. 3.8/4.0 or 8.5/10" className={inputCls} />
+                          </div>
+                          <div className="flex flex-col gap-xs col-span-2">
+                            <label className="text-caption text-on-surface-variant">Honors / Activities (optional)</label>
+                            <input value={edu.honors ?? ""} onChange={e => updateEdu(edu.id, "honors", e.target.value)}
+                              placeholder="Magna Cum Laude, Dean's List, Hackathon winner…" className={inputCls} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+      </>
+    ),
+    certifications: (
+      <>
+          {/* ── Certifications ─────────────────────────────────────────────────── */}
+          <section className={cardCls}>
+            <SectionHeader title="Certifications" onAdd={addCert} addLabel="Add Certification" />
+            {certifications.length === 0 ? (
+              <button type="button" onClick={addCert}
+                className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
+                <Plus size={24} weight="bold" />
+                <span className="text-label-sm">Add a certification</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-sm sm:gap-md">
+                {certifications.map((cert, idx) => {
+                  const collapsed = collapsedCert[cert.id] ?? false;
+                  const tint = idx % 2 === 0 ? "primary" : "secondary";
+                  return (
+                    <div key={cert.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
+                      {collapsed ? (
+                        <div onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: false }))}
+                          className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
+                          <div className="flex items-start justify-between mb-sm sm:mb-md">
+                            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
+                              tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                            }`}>
+                              <Certificate size={22} />
+                            </div>
+                            <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                              <button type="button" onClick={e => { e.stopPropagation(); setCollapsedCert(p => ({ ...p, [cert.id]: false })); }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                                <PencilSimple size={14} />
+                              </button>
+                              <button type="button" onClick={e => { e.stopPropagation(); removeCert(cert.id); }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                                <Trash size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{cert.name || `Untitled Certification #${idx + 1}`}</h3>
+                          {cert.issuer && (
+                            <p className={`text-caption font-semibold flex items-center gap-xs mb-xs ${tint === "primary" ? "text-primary" : "text-secondary"}`}>
+                              <Buildings size={12} /> {cert.issuer}
+                            </p>
+                          )}
+                          {cert.year && <p className="text-caption text-on-surface-variant">Issued: {cert.year}</p>}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
+                            <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
+                            {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
+                            <div className="flex items-center gap-xs ml-auto shrink-0">
+                              <button type="button" onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: !collapsed }))}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
+                                <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+                              </button>
+                              <button type="button" onClick={() => removeCert(cert.id)}
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-sm sm:p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
+                            <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
+                              <label className="text-caption text-on-surface-variant">Certification Name *</label>
+                              <SuggestInput kind="certification" value={cert.name ?? ""} onValueChange={v => updateCert(cert.id, "name", v)}
+                                exclude={certifications.filter(c => c.id !== cert.id).map(c => c.name)}
+                                aria-invalid={repeatedCerts.has(certifications.indexOf(cert)) || undefined}
+                                placeholder="AWS Solutions Architect"
+                                className={`${inputCls} ${repeatedCerts.has(certifications.indexOf(cert)) ? "border-error!" : ""}`} />
+                              {repeatedCerts.has(certifications.indexOf(cert)) && (
+                                <p className="text-caption text-error">Already listed. A renewal can stay; otherwise remove one.</p>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
+                              <label className="text-caption text-on-surface-variant">Issuing Organisation</label>
+                              <input value={cert.issuer ?? ""} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
+                                placeholder="Amazon Web Services" className={inputCls} />
+                            </div>
+                            <div className="flex flex-col gap-xs col-span-1">
+                              <label className="text-caption text-on-surface-variant">Year</label>
+                              <input value={cert.year ?? ""} onChange={e => updateCert(cert.id, "year", e.target.value)}
+                                placeholder="2023" className={inputCls} />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+      </>
+    ),
+  };
 
   return (
     <div className="w-full min-w-0 max-w-4xl mx-auto p-gutter pb-[calc(var(--spacing-xxl)+64px)] md:pb-xxl flex flex-col gap-section">
@@ -915,541 +1460,37 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* ── Summary — always shown ────────────────────────────────────────── */}
-      <SummaryCard value={sections.summary ?? ""} onChange={(summary) => updateSections({ summary })} />
+      {/* ── Statement: a student's Career objective, everyone else's
+             Professional summary — always shown (lib/profile-layout) ──── */}
+      {layout.statement === "objective" ? (
+        <ExtraSectionCard section="objective" title={layout.statementLabel} sections={sections} onChange={updateSections} />
+      ) : (
+        <SummaryCard value={sections.summary ?? ""} title={layout.statementLabel} onChange={(summary) => updateSections({ summary })} />
+      )}
 
-      {/* ── Skills ──────────────────────────────────────────────────────────── */}
-      <section className={cardCls}>
-        <SectionHeader title="Skills" />
-        <div className="flex flex-col gap-sm">
-          <div className="flex gap-xs">
-            <div className="relative flex-1">
-              <MagnifyingGlass size={18} className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-              <SuggestInput kind="skill" value={skillDraft} onValueChange={v => { setSkillDraft(v); setSkillNote(null); }} onPick={addSkill}
-                exclude={skills}
-                aria-label="Add a skill" aria-describedby={skillNote ? "profile-skill-note" : undefined}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
-                placeholder="Add a skill — e.g. React, AWS, Figma…"
-                className={iconInputCls} />
-            </div>
-            <button type="button" onClick={() => addSkill()} disabled={!skillDraft.trim()}
-              className="shrink-0 w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
-              <Plus size={16} weight="bold" />
-            </button>
-          </div>
-          <p id="profile-skill-note" role="status" className="text-caption text-on-surface-variant empty:hidden">{skillNote}</p>
-          {skills.length > 0 && (
-            <div className="flex flex-wrap gap-sm">
-              {skills.map(s => (
-                <span key={s} className="flex items-center gap-xs pl-sm pr-xs py-xs bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface text-caption rounded-full font-semibold hover:border-primary/50 hover:shadow-md transition-all">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
-                  {s}
-                  <button type="button" onClick={() => removeSkill(s)} aria-label={`Remove ${s}`}
-                    className="relative rounded-full p-0.5 before:absolute before:-inset-1.5 before:content-[''] hover:bg-primary/15 hover:text-error transition-colors">
-                    <X size={11} weight="bold" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ── Experience ─────────────────────────────────────────────────────── */}
-      <section className={cardCls}>
-        <SectionHeader
-          title="Experience"
-          info="Add roles in any order. If you add a second role at the same company, they're grouped together automatically and their combined time there is totaled."
-          onAdd={addExp}
-          addLabel="Add Experience"
-        />
-        {experiences.length === 0 ? (
-          <button type="button" onClick={addExp}
-            className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
-            <Plus size={24} weight="bold" />
-            <span className="text-label-sm">Add your first experience</span>
-          </button>
-        ) : (
-          <div className="relative [--rail:24px] md:[--rail:32px] pl-[var(--rail)] flex flex-col gap-md">
-            {/* The timeline: one width, --rail, places both the line and the
-                dots, so they stay centred on each other at every size (they
-                were set with separate numbers and drifted 3-13px apart). Each
-                entry draws the line from its own dot down to the next one's,
-                so it starts and ends on a dot. */}
-            {experiences.map((exp, idx) => {
-              const collapsed = collapsedExp[exp.id] ?? false;
-              const roleDuration = formatRoleDuration(exp.start, exp.current ? undefined : exp.end, exp.current);
-              // A role belongs to a "company group" when it's adjacent to
-              // another entry with the same company — same rule the Resume
-              // Builder (EditorPanel's merge offer) and the PDF templates
-              // (pdf.py's _group_experience_by_company) already use, so all
-              // three screens agree on which roles "belong together." The
-              // group total is only shown once, on the group's first (most
-              // recent) entry, not repeated on every role in it.
-              const isContinuationOfPrevious = sameCompany(exp.company, experiences[idx - 1]?.company);
-              const isStartOfMultiRoleGroup = !isContinuationOfPrevious
-                && sameCompany(exp.company, experiences[idx + 1]?.company);
-              let companyTotalDuration: string | null = null;
-              if (isStartOfMultiRoleGroup) {
-                const groupRoles = [exp];
-                for (let j = idx + 1; j < experiences.length && sameCompany(experiences[j].company, exp.company); j++) {
-                  groupRoles.push(experiences[j]);
-                }
-                companyTotalDuration = formatCompanyTotalDuration(
-                  groupRoles.map(r => ({ start: r.start, end: r.current ? undefined : r.end, current: r.current }))
-                );
-              }
-              return (
-                <div key={exp.id} className="relative">
-                  {idx < experiences.length - 1 && (
-                    <div
-                      aria-hidden
-                      className="absolute left-[calc(var(--rail)_/_-2_-_1px)] top-7 h-[calc(100%_+_var(--spacing-md))] w-0.5 bg-outline-variant/30"
-                    />
-                  )}
-                  <div
-                    aria-hidden
-                    className={`absolute left-[calc(var(--rail)_/_-2_-_8px)] top-5 w-4 h-4 rounded-full ring-4 ring-surface-container-low ${collapsed ? "bg-outline-variant" : "bg-primary"}`}
-                  />
-                  {isStartOfMultiRoleGroup && (
-                    <p className="text-caption text-primary/80 font-medium mb-xs flex items-center gap-xs">
-                      <Buildings size={11} />
-                      Multiple roles at {exp.company}{companyTotalDuration ? ` · ${companyTotalDuration} total` : ""}
-                    </p>
-                  )}
-                  <div className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
-                  {/* Header */}
-                  <div className="flex items-center gap-xs sm:gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
-                    <div className="flex flex-col sm:flex-row rounded-lg overflow-hidden border border-outline-variant/30 shrink-0 text-caption">
-                      {(["full-time", "internship"] as const).map(t => (
-                        <button key={t} type="button" onClick={() => updateExp(exp.id, "type", t)}
-                          className={`px-xs sm:px-sm py-xs font-medium transition-colors ${
-                            exp.type === t
-                              ? t === "internship" ? "bg-secondary-container text-on-secondary-container" : "bg-primary text-on-primary"
-                              : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"
-                          }`}>
-                          {t === "full-time" ? "Full-time" : <><span className="sm:hidden">Intern</span><span className="hidden sm:inline">Internship</span></>}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {exp.company || exp.title ? (
-                        <>
-                          <p className="text-label-md text-on-surface font-bold truncate">{exp.title || "Untitled Role"}</p>
-                          <p className="text-caption text-on-surface-variant mt-0.5 truncate">
-                            <Buildings size={12} className="inline -mt-0.5 mr-xs text-primary/60" />
-                            {exp.company}{(exp.start || exp.end) ? ` · ${exp.start}${exp.current ? " - Present" : exp.end ? ` - ${exp.end}` : ""}` : ""}
-                            {roleDuration ? ` · ${roleDuration}` : ""}
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-caption text-on-surface-variant">#{idx + 1} — new entry</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-0.5 sm:gap-xs ml-auto shrink-0">
-                      <button type="button" onClick={() => moveExp(idx, "up")} disabled={idx === 0}
-                        title="Move up"
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
-                        <ArrowUp size={13} />
-                      </button>
-                      <button type="button" onClick={() => moveExp(idx, "down")} disabled={idx === experiences.length - 1}
-                        title="Move down"
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
-                        <ArrowDown size={13} />
-                      </button>
-                      <button type="button" onClick={() => setCollapsedExp(p => ({ ...p, [exp.id]: !collapsed }))}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                        <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                      </button>
-                      <button type="button" onClick={() => removeExp(exp.id)}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* Fields */}
-                  {!collapsed && (
-                    <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                      <div className="grid grid-cols-2 gap-sm">
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Company *</label>
-                          <input value={exp.company ?? ""} onChange={e => updateExp(exp.id, "company", e.target.value)}
-                            placeholder="Google" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">Role / Title *</label>
-                          <SuggestInput kind="jobTitle" value={exp.title ?? ""} onValueChange={v => updateExp(exp.id, "title", v)}
-                            placeholder="Software Engineer" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs col-span-2">
-                          <label className="text-caption text-on-surface-variant">Location</label>
-                          <SuggestInput kind="city" value={exp.location ?? ""} onValueChange={v => updateExp(exp.id, "location", v)}
-                            placeholder="London, UK or Remote" className={inputCls} />
-                        </div>
-                        {/* Start and End side by side, with one plain checkbox
-                            under them for a role that hasn't ended. Ticking it
-                            leaves the typed end date alone, so unticking brings
-                            it back instead of leaving "Present" in the box. */}
-                        <div className="flex flex-col gap-xs">
-                          <label htmlFor={`exp-start-${exp.id}`} className="text-caption text-on-surface-variant">Start</label>
-                          <MonthYearField id={`exp-start-${exp.id}`} label="Start" value={exp.start ?? ""}
-                            onChange={v => updateExp(exp.id, "start", v)} placeholder="Jan 2022" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label htmlFor={`exp-end-${exp.id}`} className="text-caption text-on-surface-variant">End</label>
-                          {exp.current ? (
-                            <input id={`exp-end-${exp.id}`} value="Present" readOnly tabIndex={-1}
-                              className={`${inputCls} bg-surface-container-high! focus:bg-surface-container-high! hover:border-outline-variant/40 text-on-surface-variant cursor-default`} />
-                          ) : (
-                            <MonthYearField id={`exp-end-${exp.id}`} label="End" value={exp.end === "Present" ? "" : exp.end ?? ""}
-                              start={exp.start} onChange={v => updateExp(exp.id, "end", v)}
-                              placeholder="Dec 2023" className={inputCls} />
-                          )}
-                        </div>
-                        <label className="col-span-2 -mt-xs flex items-center gap-sm self-start min-h-8 pr-sm cursor-pointer text-body-sm text-on-surface">
-                          <input type="checkbox" checked={exp.current}
-                            onChange={e => updateExp(exp.id, "current", e.target.checked)}
-                            className="w-4 h-4 shrink-0 accent-primary cursor-pointer" />
-                          I work here now
-                        </label>
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
-                        <textarea value={exp.responsibilities ?? ""} onChange={e => updateExp(exp.id, "responsibilities", e.target.value)}
-                          rows={2} placeholder="Led backend API development, mentored junior engineers…" className={textareaCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Achievements</label>
-                        <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
-                          rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Impact</label>
-                        <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
-                          rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
-                      </div>
-                      {/* The role's projects — the old free-text Projects box
-                          became the first card (withWorkProjects). */}
-                      <WorkProjects
-                        entryId={exp.id}
-                        projects={exp.workProjects ?? []}
-                        onChange={workProjects => setExperiences(prev => prev.map(e => e.id === exp.id ? { ...e, workProjects } : e))}
-                      />
-                    </div>
-                  )}
-                  </div>
-                  {exp.company.trim() && (
-                    <button type="button" onClick={() => addRoleAtCompany(idx)}
-                      className="-mt-xs -mb-sm py-sm ml-md flex items-center gap-xs text-caption text-primary/80 hover:text-primary transition-colors">
-                      <Plus size={11} weight="bold" />
-                      Add another role at {exp.company.trim()}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* ── Projects ───────────────────────────────────────────────────────── */}
-      <section className={cardCls}>
-        <SectionHeader title="Projects" onAdd={addProj} addLabel="Add Project" />
-        <p className="hidden sm:block text-caption text-on-surface-variant -mt-sm mb-md">
-          {roleStatus === "student"
-            ? "Since you may not have work experience yet, this is often the most important section on your resume."
-            : "Personal, open-source, or side projects worth showing alongside your work experience."}
-        </p>
-        {projects.length === 0 ? (
-          <button type="button" onClick={addProj}
-            className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
-            <Plus size={24} weight="bold" />
-            <span className="text-label-sm">Add your first project</span>
-          </button>
-        ) : (
-          <div className="grid grid-cols-2 gap-sm sm:gap-md">
-            {projects.map((proj, idx) => {
-              const collapsed = collapsedProj[proj.id] ?? false;
-              const tint = idx % 2 === 0 ? "primary" : "secondary";
-              return (
-                <div key={proj.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
-                  {collapsed ? (
-                    <div onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: false }))}
-                      className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
-                      <div className="flex items-start justify-between mb-sm sm:mb-md">
-                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
-                          tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
-                        }`}>
-                          <Code size={22} />
-                        </div>
-                        <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <button type="button" onClick={e => { e.stopPropagation(); setCollapsedProj(p => ({ ...p, [proj.id]: false })); }}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                            <PencilSimple size={14} />
-                          </button>
-                          <button type="button" onClick={e => { e.stopPropagation(); removeProj(proj.id); }}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{proj.name || `Untitled Project #${idx + 1}`}</h3>
-                      <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
-                        {proj.description || proj.techStack || "No description yet — click to edit"}
-                      </p>
-                      {safeHref(proj.liveLink || proj.link) && (
-                        <a href={safeHref(proj.liveLink || proj.link)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                          className={`mt-md w-fit flex items-center gap-xs text-label-sm font-semibold rounded-lg px-md py-xs transition-all ${
-                            tint === "primary" ? "text-primary bg-primary/5 hover:bg-primary/10" : "text-secondary bg-secondary/5 hover:bg-secondary/10"
-                          }`}>
-                          View Project <ArrowSquareOut size={12} />
-                        </a>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {/* Header */}
-                      <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
-                        <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                        {proj.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{proj.name}{proj.techStack ? ` · ${proj.techStack}` : ""}</span>}
-                        <div className="flex items-center gap-xs ml-auto shrink-0">
-                          <button type="button" onClick={() => setCollapsedProj(p => ({ ...p, [proj.id]: !collapsed }))}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                          </button>
-                          <button type="button" onClick={() => removeProj(proj.id)}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      {/* Fields */}
-                      <div className="p-sm sm:p-lg flex flex-col gap-sm bg-surface-container-lowest">
-                        <div className="grid grid-cols-2 gap-sm">
-                          <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Project Name *</label>
-                            <input value={proj.name ?? ""} onChange={e => updateProj(proj.id, "name", e.target.value)}
-                              placeholder="Campus Marketplace" className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Tech Stack</label>
-                            <SuggestInput kind="skill" list value={proj.techStack ?? ""} onValueChange={v => updateProj(proj.id, "techStack", v)}
-                              placeholder="React, Node.js, PostgreSQL" className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label htmlFor={`proj-start-${proj.id}`} className="text-caption text-on-surface-variant">Start</label>
-                            <MonthYearField id={`proj-start-${proj.id}`} label="Start" value={proj.start ?? ""}
-                              onChange={v => updateProj(proj.id, "start", v)} placeholder="Jan 2024" className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label htmlFor={`proj-end-${proj.id}`} className="text-caption text-on-surface-variant">End</label>
-                            <MonthYearField id={`proj-end-${proj.id}`} label="End" value={proj.end ?? ""} start={proj.start} allowPresent
-                              onChange={v => updateProj(proj.id, "end", v)} placeholder="May 2024 or Present" className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Code link (optional)</label>
-                            <input type="url" value={proj.link ?? ""} onChange={e => updateProj(proj.id, "link", e.target.value)}
-                              placeholder="https://github.com/you/project" className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant flex items-center gap-xs"><LinkIcon size={12} /> Live link (optional)</label>
-                            <input type="url" value={proj.liveLink ?? ""} onChange={e => updateProj(proj.id, "liveLink", e.target.value)}
-                              placeholder="https://project.vercel.app" className={inputCls} />
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-xs">
-                          <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
-                          <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
-                            rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* ── Education ──────────────────────────────────────────────────────── */}
-      <section className={cardCls}>
-        <SectionHeader title="Education" onAdd={addEdu} addLabel="Add Education" />
-        {education.length === 0 ? (
-          <button type="button" onClick={addEdu}
-            className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
-            <Plus size={24} weight="bold" />
-            <span className="text-label-sm">Add education history</span>
-          </button>
-        ) : (
-          <div className="flex flex-col gap-sm">
-            {education.map((edu, idx) => {
-              const collapsed = collapsedEdu[edu.id] ?? false;
-              return (
-                <div key={edu.id} className="rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all">
-                  <div className="flex items-center gap-sm px-md py-sm bg-surface-container/60">
-                    <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                    {edu.institution && (
-                      <span className="text-label-sm text-on-surface font-semibold truncate flex-1">
-                        {edu.institution}{edu.degree ? ` · ${edu.degree}` : ""}
-                      </span>
-                    )}
-                    <div className="flex items-center gap-xs ml-auto shrink-0">
-                      <button type="button" onClick={() => setCollapsedEdu(p => ({ ...p, [edu.id]: !collapsed }))}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                        <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                      </button>
-                      <button type="button" onClick={() => removeEdu(edu.id)}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  {!collapsed && (
-                    <div className="p-sm sm:p-md grid grid-cols-2 gap-sm bg-surface-container-lowest">
-                      <div className="flex flex-col gap-xs col-span-2">
-                        <label className="text-caption text-on-surface-variant">Institution *</label>
-                        <SuggestInput kind="college" value={edu.institution ?? ""} onValueChange={v => updateEdu(edu.id, "institution", v)}
-                          placeholder="Stanford University" className={inputCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Degree</label>
-                        <SuggestInput kind="degree" value={edu.degree ?? ""} onValueChange={v => updateEdu(edu.id, "degree", v)}
-                          placeholder="B.S. / M.S. / Ph.D." className={inputCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Field of Study</label>
-                        <input value={edu.field ?? ""} onChange={e => updateEdu(edu.id, "field", e.target.value)}
-                          placeholder="Computer Science" className={inputCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">Graduation Year</label>
-                        <input value={edu.year ?? ""} onChange={e => updateEdu(edu.id, "year", e.target.value)}
-                          placeholder="2020" className={inputCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs">
-                        <label className="text-caption text-on-surface-variant">GPA / CGPA (optional)</label>
-                        <input value={edu.gpa ?? ""} onChange={e => updateEdu(edu.id, "gpa", e.target.value)}
-                          placeholder="e.g. 3.8/4.0 or 8.5/10" className={inputCls} />
-                      </div>
-                      <div className="flex flex-col gap-xs col-span-2">
-                        <label className="text-caption text-on-surface-variant">Honors / Activities (optional)</label>
-                        <input value={edu.honors ?? ""} onChange={e => updateEdu(edu.id, "honors", e.target.value)}
-                          placeholder="Magna Cum Laude, Dean's List, Hackathon winner…" className={inputCls} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* ── Certifications ─────────────────────────────────────────────────── */}
-      <section className={cardCls}>
-        <SectionHeader title="Certifications" onAdd={addCert} addLabel="Add Certification" />
-        {certifications.length === 0 ? (
-          <button type="button" onClick={addCert}
-            className="w-full py-xl flex flex-col items-center gap-sm rounded-xl border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-on-surface-variant/60 hover:text-primary">
-            <Plus size={24} weight="bold" />
-            <span className="text-label-sm">Add a certification</span>
-          </button>
-        ) : (
-          <div className="grid grid-cols-2 gap-sm sm:gap-md">
-            {certifications.map((cert, idx) => {
-              const collapsed = collapsedCert[cert.id] ?? false;
-              const tint = idx % 2 === 0 ? "primary" : "secondary";
-              return (
-                <div key={cert.id} className={`rounded-2xl border border-outline-variant/30 overflow-hidden bg-surface-container-lowest/60 hover:border-primary/30 transition-all ${collapsed ? "min-w-0" : "col-span-2"}`}>
-                  {collapsed ? (
-                    <div onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: false }))}
-                      className="p-md sm:p-lg flex flex-col h-full cursor-pointer group">
-                      <div className="flex items-start justify-between mb-sm sm:mb-md">
-                        <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform ${
-                          tint === "primary" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
-                        }`}>
-                          <Certificate size={22} />
-                        </div>
-                        <div className="flex items-center gap-xs [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <button type="button" onClick={e => { e.stopPropagation(); setCollapsedCert(p => ({ ...p, [cert.id]: false })); }}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                            <PencilSimple size={14} />
-                          </button>
-                          <button type="button" onClick={e => { e.stopPropagation(); removeCert(cert.id); }}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{cert.name || `Untitled Certification #${idx + 1}`}</h3>
-                      {cert.issuer && (
-                        <p className={`text-caption font-semibold flex items-center gap-xs mb-xs ${tint === "primary" ? "text-primary" : "text-secondary"}`}>
-                          <Buildings size={12} /> {cert.issuer}
-                        </p>
-                      )}
-                      {cert.year && <p className="text-caption text-on-surface-variant">Issued: {cert.year}</p>}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-sm px-sm sm:px-lg py-sm sm:py-md bg-surface-container/60">
-                        <span className="text-caption text-on-surface-variant shrink-0">#{idx + 1}</span>
-                        {cert.name && <span className="text-label-sm text-on-surface font-semibold truncate flex-1">{cert.name}{cert.issuer ? ` · ${cert.issuer}` : ""}</span>}
-                        <div className="flex items-center gap-xs ml-auto shrink-0">
-                          <button type="button" onClick={() => setCollapsedCert(p => ({ ...p, [cert.id]: !collapsed }))}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors">
-                            <CaretDown size={14} className={`transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
-                          </button>
-                          <button type="button" onClick={() => removeCert(cert.id)}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="p-sm sm:p-lg grid grid-cols-3 gap-sm bg-surface-container-lowest">
-                        <div className="flex flex-col gap-xs col-span-3 md:col-span-1">
-                          <label className="text-caption text-on-surface-variant">Certification Name *</label>
-                          <SuggestInput kind="certification" value={cert.name ?? ""} onValueChange={v => updateCert(cert.id, "name", v)}
-                            exclude={certifications.filter(c => c.id !== cert.id).map(c => c.name)}
-                            aria-invalid={repeatedCerts.has(certifications.indexOf(cert)) || undefined}
-                            placeholder="AWS Solutions Architect"
-                            className={`${inputCls} ${repeatedCerts.has(certifications.indexOf(cert)) ? "border-error!" : ""}`} />
-                          {repeatedCerts.has(certifications.indexOf(cert)) && (
-                            <p className="text-caption text-error">Already listed. A renewal can stay; otherwise remove one.</p>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-xs col-span-2 md:col-span-1">
-                          <label className="text-caption text-on-surface-variant">Issuing Organisation</label>
-                          <input value={cert.issuer ?? ""} onChange={e => updateCert(cert.id, "issuer", e.target.value)}
-                            placeholder="Amazon Web Services" className={inputCls} />
-                        </div>
-                        <div className="flex flex-col gap-xs col-span-1">
-                          <label className="text-caption text-on-surface-variant">Year</label>
-                          <input value={cert.year ?? ""} onChange={e => updateCert(cert.id, "year", e.target.value)}
-                            placeholder="2023" className={inputCls} />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {layout.main.map((key) => <Fragment key={key}>{mainSections[key]}</Fragment>)}
 
       {/* ── Objective, Languages, Awards… — added from the sheet ───────────── */}
-      {EXTRA_SECTIONS.filter((s) => shownSections.includes(s)).map((s) => (
-        <ExtraSectionCard
-          key={s}
-          section={s}
-          sections={sections}
-          onChange={updateSections}
-          onRemove={() => removeSection(s)}
-        />
-      ))}
+      {layout.optional.filter((s) => shownSections.includes(s)).map((s) =>
+        s === "summary" ? (
+          <SummaryCard
+            key={s}
+            value={sections.summary ?? ""}
+            onChange={(summary) => updateSections({ summary })}
+            onRemove={() => removeSection(s)}
+          />
+        ) : (
+          <ExtraSectionCard
+            key={s}
+            section={s}
+            sections={sections}
+            onChange={updateSections}
+            onRemove={() => removeSection(s)}
+          />
+        ),
+      )}
       <AddSectionButton
-        hidden={shownSections}
+        options={layout.optional.filter((s) => !shownSections.includes(s))}
         onPick={addSection}
         open={addSectionOpen}
         setOpen={setAddSectionOpen}

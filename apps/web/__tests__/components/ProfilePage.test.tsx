@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -480,7 +480,7 @@ describe("My Profile — every résumé section", () => {
   it("always shows Summary, and offers the rest from Add section with a hint each", async () => {
     getCareerProfile.mockResolvedValue(profile());
     renderPage();
-    expect(await screen.findByRole("heading", { name: "Summary" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Professional summary" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Leadership" })).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /add section/i }));
@@ -524,7 +524,7 @@ describe("My Profile — every résumé section", () => {
     const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
     getCareerProfile.mockResolvedValue(profile({ summary: long }));
     renderPage();
-    await screen.findByRole("heading", { name: "Summary" });
+    await screen.findByRole("heading", { name: "Professional summary" });
     const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
     expect(summary.value).toBe(long);
     expect(screen.getByText("330 / 80 words")).toBeInTheDocument();
@@ -541,7 +541,7 @@ describe("My Profile — every résumé section", () => {
     try {
       getCareerProfile.mockResolvedValue(profile({ summary: Array.from({ length: 90 }, (_, i) => `w${i}`).join(" ") }));
       renderPage();
-      await screen.findByRole("heading", { name: "Summary" });
+      await screen.findByRole("heading", { name: "Professional summary" });
       await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent("Trim it to 80 or fewer to save.");
@@ -558,7 +558,7 @@ describe("My Profile — every résumé section", () => {
   it("caps the summary at 80 words", async () => {
     getCareerProfile.mockResolvedValue(profile());
     renderPage();
-    await screen.findByRole("heading", { name: "Summary" });
+    await screen.findByRole("heading", { name: "Professional summary" });
     const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
     await userEvent.click(summary);
     await userEvent.paste(Array.from({ length: 90 }, (_, i) => `w${i}`).join(" "));
@@ -773,5 +773,80 @@ describe("My Profile — projects inside a role", () => {
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     expect(await screen.findByText(/An end date comes before its start \(Barclays\)/)).toBeInTheDocument();
     expect(upsertCareerProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("My Profile — student or working professional (lib/profile-layout)", () => {
+  const profile = (extra: Record<string, unknown> = {}) => ({
+    user_id: "u1", master_resume_id: null,
+    contact: { name: "Jane", email: "j@x.com" },
+    experience: [], projects: [], education: [], skills: [], certifications: [],
+    headline: null, role_status: null, photo_url: null, photo_path: null,
+    created_at: "", updated_at: "",
+    ...extra,
+  });
+  const headings = () => screen.getAllByRole("heading").map((h) => h.textContent?.trim() ?? "");
+  const before = (a: string, b: string) => {
+    const hs = headings();
+    expect(hs.indexOf(a), `${a} shown`).toBeGreaterThanOrEqual(0);
+    expect(hs.indexOf(a), `${a} before ${b}`).toBeLessThan(hs.indexOf(b));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertCareerProfile.mockResolvedValue({});
+  });
+
+  it("leads a student's Profile with the Career objective, Education and Projects", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Career objective" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Professional summary" })).toBeNull();
+    before("Career objective", "Education");
+    before("Education", "Projects");
+    before("Projects", "Experience");
+    before("Experience", "Skills");
+    expect(screen.getAllByRole("button", { name: /add internship/i }).length).toBeGreaterThan(0);
+  });
+
+  it("suggests the student sections first, and keeps the summary on offer", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /add section/i }));
+    const options = within(screen.getByRole("dialog", { name: "Add a section" }))
+      .getAllByRole("button").map((b) => b.textContent ?? "").filter((t) => t.trim());
+    expect(options[0]).toMatch(/^Coursework/);
+    expect(options[1]).toMatch(/^Leadership/);
+    expect(options.some((t) => t.startsWith("Professional summary"))).toBe(true);
+    expect(options.some((t) => t.startsWith("Objective"))).toBe(false);
+  });
+
+  it("keeps a working professional's Profile as it was", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "working" }));
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Professional summary" })).toBeInTheDocument();
+    before("Skills", "Experience");
+    before("Experience", "Education");
+    expect(screen.getAllByRole("button", { name: /add experience/i }).length).toBeGreaterThan(0);
+  });
+
+  it("only reorders when the status switches — a written summary stays on the page", async () => {
+    getCareerProfile.mockResolvedValue(profile({ summary: "Backend engineer building payment APIs." }));
+    renderPage();
+    await screen.findByRole("heading", { name: "Professional summary" });
+    await userEvent.selectOptions(screen.getByLabelText(/experience level/i), "student");
+    expect(screen.getByRole("heading", { name: "Career objective" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Professional summary" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Backend engineer building payment APIs.")).toBeInTheDocument();
+    before("Education", "Experience");
+  });
+
+  it("starts a student's new entry as an internship", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
+    renderPage();
+    await userEvent.click((await screen.findAllByRole("button", { name: /add internship/i }))[0]);
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].experience[0].type).toBe("internship");
   });
 });
