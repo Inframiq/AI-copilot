@@ -7,15 +7,13 @@ import { CheckCircle, UploadSimple, FilePdf, FileDoc, Spinner, Trash, Magnifying
 import Image from "next/image";
 import { apiClient } from "@/lib/api-client";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
-import { RESUME_TEMPLATES } from "@/lib/resume-templates";
+import { TEMPLATE_SET_LABELS, templatesInSet, type TemplateSet } from "@/lib/resume-templates";
 import { TemplatePreviewSheet } from "@/components/studio/TemplatePreviewSheet";
 import { fileUnplacedPoints, getCareerProfile, profileToResumeContent } from "@/lib/career-profile-client";
 import { usePageReady } from "@/lib/reveal";
 import type { Resume } from "@career-copilot/types";
 
-const PICKER_TEMPLATES = RESUME_TEMPLATES.filter((t) =>
-  ["ats_clean", "ats_modern", "ats_professional", "ats_minimal"].includes(t.id)
-);
+const SETS: TemplateSet[] = ["student", "professional"];
 
 // A single stable reference reused as the query's "no data yet" fallback.
 // A fresh `[]` literal in the destructuring default (the previous code) is a
@@ -34,7 +32,12 @@ export default function StudioIndexPage() {
   const queryClient = useQueryClient();
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("ats_clean");
-  // Index into PICKER_TEMPLATES of the template open full size, or null.
+  // The picker's tab. Starts on the set that matches the status in the
+  // Profile (Student → Student / fresher); the user can switch either way.
+  const [templateSet, setTemplateSet] = useState<TemplateSet>("professional");
+  const [setChosen, setSetChosen] = useState(false);
+  const pickerTemplates = templatesInSet(templateSet);
+  // Index into pickerTemplates of the template open full size, or null.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("blank");
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +60,24 @@ export default function StudioIndexPage() {
   // EMPTY_RESUMES, not a fresh `?? []` literal — see its definition above.
   const resumes = resumesQuery.data ?? EMPTY_RESUMES;
   const isLoading = resumesQuery.isLoading;
+  const { data: careerProfile } = useQuery({ queryKey: ["careerProfile"], queryFn: getCareerProfile });
+
+  function chooseSet(next: TemplateSet) {
+    setTemplateSet(next);
+    setSetChosen(true);
+    setPreviewIndex(null);
+    // The selection follows the tab, so Create never uses a template the
+    // user can no longer see.
+    if (!templatesInSet(next).some((t) => t.id === selected)) setSelected(templatesInSet(next)[0].id);
+  }
+
+  // Once the Profile loads, a student starts on the Student / fresher tab —
+  // unless they already picked a tab themselves.
+  useEffect(() => {
+    if (setChosen || careerProfile?.role_status !== "student") return;
+    setTemplateSet("student");
+    setSelected(templatesInSet("student")[0].id);
+  }, [careerProfile?.role_status, setChosen]);
 
   // Single source of truth: always re-derive from the "resumes" query data,
   // for both the initial load AND any later mutation (delete, etc.) that
@@ -363,8 +384,24 @@ export default function StudioIndexPage() {
         <p className="text-label-sm text-on-surface-variant uppercase tracking-wider mb-md text-center">
           Choose a template
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
-          {PICKER_TEMPLATES.map((t, i) => {
+        <div role="tablist" aria-label="Template set" className="mx-auto mb-md flex w-fit gap-xs rounded-full bg-surface-container-low p-0.5">
+          {SETS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              aria-selected={templateSet === s}
+              onClick={() => chooseSet(s)}
+              className={`rounded-full px-md py-xs text-label-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                templateSet === s ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              {TEMPLATE_SET_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" aria-label={TEMPLATE_SET_LABELS[templateSet]} className="grid grid-cols-2 md:grid-cols-4 gap-md">
+          {pickerTemplates.map((t, i) => {
             const isSelected = selected === t.id;
             return (
               // The Preview button sits beside the card's own button, not
@@ -422,7 +459,7 @@ export default function StudioIndexPage() {
 
       {previewIndex !== null && (
         <TemplatePreviewSheet
-          templates={PICKER_TEMPLATES}
+          templates={pickerTemplates}
           index={previewIndex}
           selectedId={selected}
           onIndexChange={setPreviewIndex}

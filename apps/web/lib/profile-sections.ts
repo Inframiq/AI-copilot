@@ -11,7 +11,7 @@ import { withoutRepeats } from "@/lib/duplicates";
  *
  * Summary isn't listed: the Profile always shows it.
  */
-export const LINE_SECTIONS = ["awards", "achievements", "leadership", "volunteer", "interests"] as const;
+export const LINE_SECTIONS = ["coursework", "awards", "achievements", "leadership", "volunteer", "interests"] as const;
 export type LineSection = (typeof LINE_SECTIONS)[number];
 
 export const EXTRA_SECTIONS = ["objective", "languages", ...LINE_SECTIONS] as const;
@@ -29,6 +29,12 @@ export const SECTION_INFO: Record<ExtraSection, { label: string; hint: string; p
     label: "Languages",
     hint: "Languages you speak, and how well: Native, Fluent, B2.",
     placeholder: "e.g. Spanish",
+  },
+  coursework: {
+    item: "course",
+    label: "Coursework",
+    hint: "Courses that matter for the roles you want: Data Structures, DBMS, Machine Learning.",
+    placeholder: "Data Structures and Algorithms",
   },
   awards: {
     item: "award",
@@ -86,6 +92,7 @@ export interface ProfileSections {
   summary: string | null;
   objective: string | null;
   languages: LanguageEntry[];
+  coursework: string[];
   awards: string[];
   achievements: string[];
   leadership: string[];
@@ -95,7 +102,7 @@ export interface ProfileSections {
 
 export function emptyProfileSections(): ProfileSections {
   return {
-    summary: null, objective: null, languages: [],
+    summary: null, objective: null, languages: [], coursework: [],
     awards: [], achievements: [], leadership: [], volunteer: [], interests: [],
   };
 }
@@ -154,6 +161,7 @@ export function fitProfileSections(s: Partial<ProfileSections>): ProfileSections
         .filter((l) => l.name),
       (l) => l.name,
     ).slice(0, L.languages),
+    coursework: lines(s.coursework),
     awards: lines(s.awards),
     achievements: lines(s.achievements),
     leadership: lines(s.leadership),
@@ -169,6 +177,7 @@ export function resumeSectionsToProfile(c: ResumeContent): ProfileSections {
     summary: c.summary ?? null,
     objective: c.objective ?? null,
     languages: (c.languages ?? []).map((l) => ({ name: l?.name ?? "", level: l?.level ?? "" })),
+    coursework: c.coursework,
     awards: c.awards,
     achievements: c.achievements,
     leadership: c.leadership,

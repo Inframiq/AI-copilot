@@ -51,6 +51,7 @@ const FULL: ProfileSections = {
   summary: "Backend engineer building payment APIs.",
   objective: "Seeking a platform engineering role.",
   languages: [{ name: "Telugu", level: "Native" }, { name: "German", level: "" }],
+  coursework: ["Data Structures", "Operating Systems"],
   awards: ["Dean's List, 2024"],
   achievements: ["98.6 percentile, CAT 2024"],
   leadership: ["President, Coding Club"],
@@ -96,11 +97,16 @@ describe("every Profile section is a résumé section", () => {
   });
 
   it("is printed by every résumé template", () => {
+    // Sections are written once, in _blocks.html, and every template draws
+    // them from there (apps/api/tests/test_template_blocks.py renders each).
     const dir = join(API, "templates");
+    const blocks = readFileSync(join(dir, "_blocks.html"), "utf8");
+    for (const key of ["languages", ...LINE_SECTIONS]) {
+      expect(blocks, `heading for ${key}`).toContain(`"${key}": "`);
+    }
+    expect(blocks, "objective").toMatch(/\{% elif objective %\}/);
     for (const file of readdirSync(dir).filter((f) => /^ats_.*\.html$/.test(f))) {
-      const html = readFileSync(join(dir, file), "utf8");
-      for (const key of ["languages", ...LINE_SECTIONS]) expect(html, `${file}: ${key}`).toContain(`render_${key}()`);
-      expect(html, `${file}: objective`).toMatch(/\{% elif objective %\}/);
+      expect(readFileSync(join(dir, file), "utf8"), file).toContain("blocks.sections(");
     }
   });
 
@@ -131,7 +137,12 @@ describe("the limits", () => {
     expect(num("MAX_ITEM_CHARS")).toBe(PROFILE_LIMITS.itemChars);
     expect(num("MAX_LANGUAGES")).toBe(PROFILE_LIMITS.languages);
     expect(num("MAX_LANGUAGE_CHARS")).toBe(PROFILE_LIMITS.languageChars);
-    for (const key of LINE_SECTIONS) expect(mig, key).toContain(`"${key}"`);
+    // 053 made the first lists; 057 added Coursework with the same limits.
+    const coursework = readFileSync(join(API, "alembic/versions/057_profile_coursework.py"), "utf8");
+    for (const key of LINE_SECTIONS.filter((k) => k !== "coursework")) expect(mig, key).toContain(`"${key}"`);
+    expect(coursework).toContain("coursework jsonb");
+    expect(Number(/^MAX_ITEMS = (\d+)/m.exec(coursework)?.[1])).toBe(PROFILE_LIMITS.items);
+    expect(Number(/^MAX_ITEM_CHARS = (\d+)/m.exec(coursework)?.[1])).toBe(PROFILE_LIMITS.itemChars);
     // Raised by 055 so an uploaded résumé's long summary fits whole.
     const raised = readFileSync(join(API, "alembic/versions/055_long_uploaded_summary_fits.py"), "utf8");
     const now = (name: string) => Number(new RegExp(`^${name} = (\\d+)`, "m").exec(raised)?.[1]);

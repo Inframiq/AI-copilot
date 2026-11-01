@@ -83,6 +83,8 @@ export interface ResumeContent {
     level: string;
   }>;
   certifications?: string[];
+  /** Courses taken (the student set), one per line; printed on one line. */
+  coursework?: string[];
   awards?: string[];
   achievements?: string[];
   leadership?: string[];

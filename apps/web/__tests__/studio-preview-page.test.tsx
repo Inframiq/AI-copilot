@@ -417,7 +417,7 @@ describe("Studio preview page", () => {
     await renderPage();
     await waitFor(() => screen.getByRole("button", { name: /template/i }));
     fireEvent.click(screen.getByRole("button", { name: /template/i }));
-    expect(screen.getByRole("radio", { name: /minimal/i })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Minimal" })).toBeTruthy();
   });
 
   it("keeps the template picker available in preview as well as edit", async () => {

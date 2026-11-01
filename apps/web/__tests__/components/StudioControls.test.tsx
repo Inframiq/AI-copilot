@@ -16,7 +16,7 @@ describe("StudioControls", () => {
   it("opens the gallery and switches the résumé's template", () => {
     render(<StudioControls />);
     fireEvent.click(screen.getByRole("button", { name: /template/i }));
-    fireEvent.click(screen.getByRole("radio", { name: /minimal/i }));
+    fireEvent.click(screen.getByRole("radio", { name: "Minimal" }));
     expect(useResumeStore.getState().templateId).toBe("ats_minimal");
   });
 

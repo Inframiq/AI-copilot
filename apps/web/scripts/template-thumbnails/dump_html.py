@@ -27,13 +27,32 @@ SAMPLE = {
     "languages": [{"name": "English", "level": "Native"}, {"name": "French", "level": "Professional"}],
     "certifications": ["AWS Solutions Architect - Professional"],
 }
+# The Student / fresher set is shown with a student's résumé.
+STUDENT = {
+    "contact": {"name": "Ada Lovelace", "email": "ada@example.com", "phone": "+91 98765 43210",
+                "location": "Hyderabad, India", "linkedin": "linkedin.com/in/adalovelace",
+                "github": "github.com/adalovelace"},
+    "objective": "Final-year Computer Science student seeking a backend engineering internship.",
+    "education": [{"degree": "Bachelor of Technology (B.Tech), Computer Science", "institution": "JNTU Hyderabad",
+                   "year": "Expected May 2027", "gpa": "8.7/10"}],
+    "experience": [{"title": "Software Engineering Intern", "company": "Analytical Engine Co", "start": "May 2026", "end": "Jul 2026",
+                    "bullets": ["Built a caching layer that cut API response time by 35%.",
+                                "Wrote integration tests for 12 payment endpoints."]}],
+    "projects": [{"name": "Campus Marketplace", "link": "github.com/adalovelace/market", "tech_stack": "React, FastAPI, PostgreSQL",
+                  "bullets": ["Listings app used by 400+ students; real-time chat over WebSockets."]}],
+    "skills": ["Python", "Java", "SQL", "React", "FastAPI", "Git"],
+    "coursework": ["Data Structures", "Operating Systems", "DBMS", "Computer Networks"],
+    "leadership": ["President, Coding Club - ran weekly sessions for 60 students"],
+    "awards": ["Smart India Hackathon 2025, finalist"],
+}
 # A neutral grey square for the photo templates' portrait.
 # Encoded here rather than pasted as base64: the secrets scan reads a long
 # base64 literal as a possible key.
 _SQUARE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#9aa4b0"/></svg>'
 PHOTO = "data:image/svg+xml;base64," + __import__("base64").b64encode(_SQUARE.encode()).decode()
 for tid in sorted(P.ALLOWED_TEMPLATES):
-    content = {**SAMPLE, "contact": {**SAMPLE["contact"], "photo_url": PHOTO}} if tid in P.TEMPLATES_REQUIRING_PHOTO else SAMPLE
+    base = STUDENT if P.TEMPLATE_SETS[tid] == "student" else SAMPLE
+    content = {**base, "contact": {**base["contact"], "photo_url": PHOTO}} if tid in P.TEMPLATES_REQUIRING_PHOTO else base
     with patch.object(P, "_sanitize_resume_content", lambda c: (c, P.PHOTO_EMBEDDED if c["contact"].get("photo_url") else P.PHOTO_NONE)):
         html = P.render_resume_html(content, tid)
     faces = "\n".join(

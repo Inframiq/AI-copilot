@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESUME_TEMPLATES, templateRequiresPhoto } from "../lib/resume-templates";
+import { RESUME_TEMPLATES, setOfTemplate, templateRequiresPhoto, templatesInSet } from "../lib/resume-templates";
 
 // Kept in step with pdf.py's TEMPLATES_REQUIRING_PHOTO — the API-side test
 // test_the_web_gallery_lists_exactly_the_templates_the_api_renders parses this
@@ -13,6 +13,10 @@ const TEXT_ONLY = [
   "ats_compact",
   "ats_banner",
   "ats_technical",
+  "student_clean",
+  "student_modern",
+  "student_minimal",
+  "student_technical",
 ];
 
 describe("templateRequiresPhoto", () => {
@@ -37,6 +41,18 @@ describe("templateRequiresPhoto", () => {
 });
 
 describe("the gallery itself", () => {
+  it("splits into the Student / fresher and Working professional tabs", () => {
+    expect(templatesInSet("student").map((t) => t.id)).toEqual(
+      ["student_clean", "student_modern", "student_minimal", "student_technical"],
+    );
+    expect(templatesInSet("professional")).toHaveLength(10);
+    // No photo template among the student ones: they are meant for portals.
+    expect(templatesInSet("student").some((t) => "photo" in t)).toBe(false);
+    expect(setOfTemplate("student_clean")).toBe("student");
+    expect(setOfTemplate("ats_clean")).toBe("professional");
+    expect(setOfTemplate("nope")).toBe("professional");
+  });
+
   it("covers every template exactly once", () => {
     const ids = RESUME_TEMPLATES.map((t) => t.id);
     expect(ids).toHaveLength(PHOTO_TEMPLATES.length + TEXT_ONLY.length);
