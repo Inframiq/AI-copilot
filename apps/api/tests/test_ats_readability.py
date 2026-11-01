@@ -295,3 +295,20 @@ def test_without_importance_ratings_the_exact_tools_count_as_important():
     from app.services.ats_check import check_against_jd
     content = {"skills": ["Kubernetes"], "experience": [{"title": "Data Engineer", "company": "A", "bullets": ["Ran batch jobs."]}]}
     assert ("skill-not-shown", "Kubernetes") in _ids(check_against_jd(content, _jd(importance={})))
+
+
+def test_a_job_without_a_title_is_an_error_and_one_without_points_a_warning():
+    """Seen on a real uploaded résumé (2026-11-01): roles printed as
+    ", WIPRO | Jul 2019 - Jul 2022" with no title and no points, and the
+    check said it read cleanly."""
+    content = {
+        "contact": {"name": "Asha Rao", "email": "a@x.com", "phone": "+91 98765 43210"},
+        "experience": [
+            {"title": "", "company": "WIPRO", "start": "Jul 2019", "end": "Jul 2022", "bullets": []},
+            {"title": "Engineer", "company": "Acme", "start": "2018", "end": "2019", "bullets": ["Built it."]},
+        ],
+    }
+    findings = {(f.id, f.level, f.field) for f in check_text(content, "Asha Rao\na@x.com | +91 98765 43210")}
+    assert ("title-missing", "error", "experience.0.title") in findings
+    assert ("no-points", "warning", "experience.0.bullets") in findings
+    assert not {f for f in findings if f[2] and f[2].startswith("experience.1")}

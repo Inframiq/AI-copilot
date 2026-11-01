@@ -269,6 +269,25 @@ def check_text(content: dict, text: str, template_id: str | None = None) -> list
                 f"{round(coverage * 100)}% of the résumé's words came out in the extracted text (at least 98% is the bar). Missing: {sample}",
             ))
 
+    # ── Jobs ────────────────────────────────────────────────────────────────
+    # A job without a title reaches the ATS as a company and dates alone, and
+    # the title is what recruiters search and the match tools weigh.
+    for i, job in enumerate(content.get("experience") or []):
+        if not isinstance(job, dict):
+            continue
+        if not str(job.get("title") or "").strip():
+            findings.append(Finding(
+                "title-missing", "error",
+                f"Add the job title for {str(job.get('company') or 'this job').strip()}.",
+                f"experience.{i}.title",
+            ))
+        if not [b for b in job.get("bullets") or [] if strip_inline_tags(str(b)).strip()]:
+            findings.append(Finding(
+                "no-points", "warning",
+                f"{str(job.get('company') or 'This job').strip()} has no points: add what was done there, with a number where possible.",
+                f"experience.{i}.bullets",
+            ))
+
     # ── Dates ───────────────────────────────────────────────────────────────
     for section in ("experience", "projects"):
         for i, entry in enumerate(content.get(section) or []):
