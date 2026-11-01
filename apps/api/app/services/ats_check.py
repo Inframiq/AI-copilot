@@ -19,7 +19,7 @@ import io
 import re
 from dataclasses import asdict, dataclass
 
-from app.services.pdf import TEMPLATES_REQUIRING_PHOTO, display_url
+from app.services.pdf import TEMPLATE_SETS, TEMPLATES_REQUIRING_PHOTO, display_url
 from app.services.plain_text import plain_deep
 from app.services.resume_dates import is_present, is_standard_date, tidy_resume_dates
 from app.services.rich_text import strip_inline_tags
@@ -64,6 +64,44 @@ MAX_ENTRY_SPREAD = 2
 
 _FILLER = re.compile(r"\b(responsible for|duties included|tasked with|worked on various)\b", re.I)
 _BARE_GRADE = re.compile(r"^\s*\d+(\.\d+)?\s*$")
+
+# ── Résumé quality (the reference's Part B "Impact", "Writing", "Length") ──
+# Openers that say someone was near the work rather than what they did.
+_WEAK_OPENERS = frozenset({
+    "helped", "assisted", "worked", "participated", "involved", "handled",
+    "did", "made", "got", "was", "were", "am", "is", "responsible", "tasked",
+    "duties", "various", "tried", "attempted",
+})
+# "was developed", "were migrated", "is maintained": the doer drops out.
+_PASSIVE = re.compile(
+    r"\b(?:was|were|been|being|is|are|got)\s+(?:\w+ly\s+)?"
+    r"(?!(?:responsible|involved|based|able|tasked|required|expected|located|interested|skilled|experienced)\b)"
+    r"(\w+ed|built|done|made|run|given|taken|written|shown|chosen|sent|held|kept)\b",
+    re.I,
+)
+_FIRST_PERSON = re.compile(r"(?<![\w.])I(?![\w.])|(?i:\b(?:me|my|mine|myself)\b)")
+# Words the checker tools flag: claims anyone can make, shown by nothing.
+_BUZZWORDS = re.compile(
+    r"\b(hard[- ]?working|go[- ]getter|think(?:ing)? outside the box|synerg(?:y|ies|ize|ise)"
+    r"|results[- ](?:driven|oriented)|proven track record|track record of success|best[- ]of[- ]breed"
+    r"|value[- ]add(?:ed)?|rock ?star|ninja|guru|wizard|self[- ]starter|passionate"
+    r"|highly motivated|seasoned|leverag(?:e|ed|es|ing)|utili[sz](?:e|ed|es|ing))\b",
+    re.I,
+)
+_HAS_NUMBER = re.compile(
+    r"\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|dozen|hundred|thousand|million|billion)s?\b", re.I,
+)
+# Fewer than half the points with a number is where the tools start
+# asking for results.
+MIN_NUMBERED_SHARE = 0.5
+# One opening verb on more points than this reads as a template.
+MAX_SAME_OPENER = 3
+# A point is one or two lines: past 40 words it is a paragraph, under 4 it
+# says nothing done.
+MAX_BULLET_WORDS = 40
+MIN_BULLET_WORDS = 4
+# Pages: one for a student or fresher, two at most otherwise.
+MAX_PAGES = {"student": 1, "professional": 2}
 
 
 @dataclass
@@ -188,7 +226,116 @@ def _line_of(lines_norm: list[str], needle: str, start: int = 0) -> int | None:
     return None
 
 
-def check_text(content: dict, text: str, template_id: str | None = None) -> list[Finding]:
+def _points(content: dict) -> list[tuple[str, str]]:
+    """(field path, plain text) for every point on the résumé: job points,
+    the points of projects inside a job, and project points."""
+    out: list[tuple[str, str]] = []
+    for section in ("experience", "projects"):
+        for i, entry in enumerate(content.get(section) or []):
+            if not isinstance(entry, dict):
+                continue
+            for j, b in enumerate(entry.get("bullets") or []):
+                out.append((f"{section}.{i}.bullets.{j}", strip_inline_tags(str(b)).strip()))
+            for k, proj in enumerate(entry.get("projects") or []):
+                if isinstance(proj, dict):
+                    for j, b in enumerate(proj.get("bullets") or []):
+                        out.append((f"{section}.{i}.projects.{k}.bullets.{j}", strip_inline_tags(str(b)).strip()))
+    return [(f, t) for f, t in out if t]
+
+
+def _first_word(text: str) -> str:
+    words = text.split()
+    return re.sub(r"[^a-z]", "", words[0].lower()) if words else ""
+
+
+def _quality_findings(content: dict, page_count: int | None, template_id: str | None) -> list[Finding]:
+    """The reference's résumé-quality checks — no job post needed. All
+    warnings: each is a writing point, never something a parser loses."""
+    findings: list[Finding] = []
+    points = _points(content)
+    summary = strip_inline_tags(str(content.get("summary") or content.get("objective") or ""))
+
+    # Impact: numbers, and verbs that say what was done.
+    if len(points) >= 3:
+        numbered = sum(1 for _, t in points if _HAS_NUMBER.search(t))
+        if numbered / len(points) < MIN_NUMBERED_SHARE:
+            findings.append(Finding(
+                "few-numbers", "warning",
+                f"{numbered} of {len(points)} points have a number. Where there is one, add it: users, time saved, size, %.",
+            ))
+    openers: dict[str, list[str]] = {}
+    for field, t in points:
+        first = _first_word(t)
+        if not first:
+            continue
+        openers.setdefault(first, []).append(field)
+        # "Responsible for…" already has its own finding.
+        if first in _WEAK_OPENERS and not _FILLER.search(t):
+            findings.append(Finding(
+                "weak-opener", "warning",
+                f'Starts with "{t.split()[0]}": lead with a strong verb for what was done (Built, Led, Cut).',
+                field,
+            ))
+    for verb, fields in openers.items():
+        if len(fields) > MAX_SAME_OPENER and verb not in _WEAK_OPENERS:
+            findings.append(Finding(
+                "repeated-opener", "warning",
+                f'{len(fields)} points start with "{verb.capitalize()}". Vary the verbs.',
+                fields[0],
+            ))
+
+    # Writing: passive voice, first person, buzzwords.
+    for field, t in points:
+        m = _PASSIVE.search(t)
+        if m:
+            findings.append(Finding(
+                "passive-voice", "warning",
+                f'Reads as passive ("{m.group(0)}"): start with the verb for what was done.',
+                field,
+            ))
+    first_person = [f for f, t in points if _FIRST_PERSON.search(t)]
+    if _FIRST_PERSON.search(summary):
+        first_person.insert(0, "summary" if content.get("summary") else "objective")
+    if first_person:
+        places = "place" if len(first_person) == 1 else "places"
+        findings.append(Finding(
+            "first-person", "warning",
+            f'"I" or "my" in {len(first_person)} {places}. Résumés leave the first person out.',
+            first_person[0],
+        ))
+    buzz = list(dict.fromkeys(
+        m.group(1).lower() for t in [summary] + [t for _, t in points] for m in _BUZZWORDS.finditer(t)
+    ))
+    if buzz:
+        findings.append(Finding(
+            "buzzwords", "warning",
+            f"Buzzwords: {', '.join(buzz[:5])}. Swap each for what was actually done.",
+        ))
+
+    # Length: points, pages, sections.
+    for field, t in points:
+        n = len(t.split())
+        if n > MAX_BULLET_WORDS:
+            findings.append(Finding("point-too-long", "warning", f"{n} words: keep a point to one or two lines.", field))
+        elif n < MIN_BULLET_WORDS:
+            findings.append(Finding("point-too-short", "warning", "Very short point: say what was done and what came of it.", field))
+    limit = MAX_PAGES.get(TEMPLATE_SETS.get(template_id or "", ""))
+    if page_count and limit and page_count > limit:
+        norm = "One page is the norm for a student or fresher." if limit == 1 else "Keep it to two."
+        findings.append(Finding("too-long", "warning", f"{page_count} pages. {norm}"))
+    skills = content.get("skills")
+    if not skills or (isinstance(skills, dict) and not any(skills.values())):
+        findings.append(Finding("skills-missing", "warning", "Add a Skills section: parsers and recruiters look there first for keywords.", "skills"))
+    if not content.get("education"):
+        findings.append(Finding("education-missing", "warning", "Add Education: most applications filter on it.", "education"))
+    if not content.get("experience") and not content.get("projects"):
+        findings.append(Finding("work-missing", "warning", "Add experience or projects: they are what the résumé is judged on.", "experience"))
+    return findings
+
+
+def check_text(
+    content: dict, text: str, template_id: str | None = None, page_count: int | None = None,
+) -> list[Finding]:
     """Findings for *text* — the text pulled out of *content*'s PDF."""
     content = _rendered_content(content)
     findings: list[Finding] = []
@@ -360,13 +507,17 @@ def check_text(content: dict, text: str, template_id: str | None = None) -> list
         if gpa and _BARE_GRADE.match(gpa):
             findings.append(Finding("gpa-scale", "warning", f"Give the grade with its scale, like {gpa.strip()}/10.", f"education.{i}.gpa"))
 
+    findings += _quality_findings(content, page_count, template_id)
     return findings
 
 
 def check_pdf(content: dict, pdf_bytes: bytes, template_id: str | None = None) -> tuple[str, list[Finding]]:
     """(extracted text, findings) for *content* rendered as *pdf_bytes*."""
+    from pypdf import PdfReader
+
     text = extract_text(pdf_bytes)
-    return text, check_text(content, text, template_id)
+    page_count = len(PdfReader(io.BytesIO(pdf_bytes)).pages)
+    return text, check_text(content, text, template_id, page_count)
 
 
 # ── Against a job post ──────────────────────────────────────────────────────
@@ -450,4 +601,41 @@ def check_against_jd(content: dict, jd_analysis) -> list[Finding]:
                 "keyword-repeated", "warning",
                 f"{term} appears {uses} times. Repeating a keyword reads as stuffing; keep the uses that show real work.",
             ))
+
+    findings += _requirement_findings(content, getattr(jd_analysis, "requirements", None))
     return findings
+
+
+def _requirement_findings(content: dict, req) -> list[Finding]:
+    """The post's soft skills, years and advanced degree (read from its
+    text by services/jd_requirements), where the résumé falls short."""
+    from app.services.jd_requirements import LEVELS, resume_degree_levels, resume_years, soft_skills_shown
+
+    if req is None:
+        return []
+    findings: list[Finding] = []
+    unshown = [s for s, hit in soft_skills_shown(content, req.soft_skills).items() if not hit]
+    if unshown:
+        findings.append(Finding(
+            "soft-skill-not-shown", "warning",
+            f"The job asks for {_join(unshown[:4])}, and no point shows it. Where it is true, show it in a point.",
+        ))
+    if req.min_years:
+        have = resume_years(content)
+        if have is not None and have < req.min_years:
+            findings.append(Finding(
+                "years-short", "warning",
+                f"The job asks for {req.min_years:g}+ years of experience; the dates here add up to {have:g}.",
+                "experience",
+            ))
+    if req.advanced_degree:
+        name = "a master's degree" if req.advanced_degree == "master" else "a doctorate"
+        done, ongoing = resume_degree_levels(content)
+        need = LEVELS[req.advanced_degree]
+        if done < need and ongoing < need:
+            findings.append(Finding("degree-missing", "warning", f"The job asks for {name}; Education shows none.", "education"))
+    return findings
+
+
+def _join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]

@@ -259,6 +259,7 @@ def blend_scores(
     nice_to_have_verdicts: dict[str, str] | None = None,
     title_verdict: str | None = None,
     importance: dict[str, str] | None = None,
+    requirement_signals: "list[tuple[float, str]] | None" = None,
 ) -> DeltaResult:
     """Turn per-phrase verdicts into a blended ATS score.
 
@@ -289,6 +290,12 @@ def blend_scores(
                                   unrated phrases are treated as medium, so
                                   leaving this out reproduces the old
                                   flat-weight score exactly.
+
+        requirement_signals     — (weight, verdict) for the post's soft
+                                  skills, years of experience and advanced
+                                  degree (services/jd_requirements). Never
+                                  chips: the score only. Omitted → the
+                                  score is exactly what it was without them.
 
     Score = round(100 × Σ(weightᵢ · valueᵢ) / Σ(weightᵢ)), where value is
     1.0 / 0.5 / 0.0 for matched / partial / missing and weight is
@@ -327,6 +334,10 @@ def blend_scores(
         # how much the posting hinges on a title match (_AGENT1_SYSTEM rule 9).
         weight = _TITLE_WEIGHT * _importance_weight("job title", importance)
         weighted_hit += weight * _VERDICT_VALUE.get(title_verdict, 0.0)
+        weighted_total += weight
+
+    for weight, verdict in requirement_signals or []:
+        weighted_hit += weight * _VERDICT_VALUE.get(verdict, 0.0)
         weighted_total += weight
 
     score = round((weighted_hit / weighted_total) * 100) if weighted_total > 0 else 0
@@ -391,9 +402,12 @@ def score_content(content: dict, jd_analysis, semantic_verdicts: dict[str, str])
 
     # getattr, not attribute access: a JDAnalysis rebuilt from a cache written
     # before `importance` existed (and the test doubles) may not carry it.
+    from app.services.jd_requirements import requirement_signals
+
     blended = blend_scores(
         skill_verdicts, resp_verdicts, nice_verdicts, title_verdict,
         importance=getattr(jd_analysis, "importance", None) or {},
+        requirement_signals=requirement_signals(content, getattr(jd_analysis, "requirements", None)),
     )
     return JdScore(
         matched=blended.matched,

@@ -19,6 +19,7 @@ from app.schemas.ai import (
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
+from app.services.jd_requirements import JdRequirements
 from app.services.tailoring import (
     run_tailoring_pipeline, analyze_jd_match, JDAnalysis,
     build_single_bullet_system, tailor_fingerprint, _bullet_text,
@@ -601,6 +602,13 @@ async def project_score(
     # rewrites, credit each kept rewrite for what it targeted. Without them
     # (older sessions, older clients) fall back to the JD's cached verdicts.
     stored = session.score_verdicts or {}
+    # The soft skills / years / degree this run's scores counted. A session
+    # from before they existed has none and is re-scored without them, so
+    # its projection stays on the footing of its own "before".
+    if stored.get("requirements") is not None:
+        jd_analysis = jd_analysis.model_copy(
+            update={"requirements": JdRequirements(**stored["requirements"])}
+        )
     # Every rewrite on screen, with the JD terms its original matched word
     # for word ("carried"): a kept rewrite that rewords one keeps its credit
     # if the after-check found it still there, and loses it only if it

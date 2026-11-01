@@ -24,6 +24,7 @@ from app.services.pdf import (
     render_resume_html_with_meta, PhotoRequiredError, photo_owned_by, ALLOWED_TEMPLATES,
 )
 from app.services.ats_check import check_against_jd, check_pdf
+from app.services.jd_requirements import with_requirements
 from app.services.tailoring import JDAnalysis
 from app.services.resume_parser import ResumeUnreadable, parse_resume_text
 from app.services import sandbox
@@ -651,7 +652,7 @@ async def ats_check_endpoint(
         raw = (jd_row.parsed or {}).get("agent1") if isinstance(jd_row.parsed, dict) else None
         if raw:
             try:
-                jd_analysis = JDAnalysis(**raw)
+                jd_analysis = with_requirements(JDAnalysis(**raw), jd_row.raw_text)
             except Exception:
                 jd_analysis = None  # an unreadable cache is no analysis, not an error
 

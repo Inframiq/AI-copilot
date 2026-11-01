@@ -21,7 +21,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Literal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.ai_budget import jd_for_model
 from app.services.ai_engine.base import AIProvider
@@ -33,6 +33,7 @@ from app.services.ats import (
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
+from app.services.jd_requirements import JdRequirements, with_requirements
 from app.services.ai_engine.base import AITruncatedError
 
 logger = logging.getLogger("app")
@@ -95,6 +96,11 @@ class JDAnalysis(BaseModel):
     target_job_titles: list[str] = []  # the role title(s) this JD is hiring for
     nice_to_have_skills: list[str] = []  # skills the JD frames as preferred / "a plus", not required
     importance: dict[str, str] = {}  # {term_lowercased: "high"|"medium"|"low"}; "job title" key for the title signal
+    # Soft skills, years and an advanced degree, read from the post's text
+    # in code (services/jd_requirements.py), never by a model. Excluded from
+    # every dump: model payloads carry jd_analysis.model_dump(), and this
+    # must never change what a model is sent. None = not read yet.
+    requirements: JdRequirements | None = Field(default=None, exclude=True)
 
     # Runs on EVERY construction path — a fresh Agent 1 parse AND a
     # JDAnalysis rebuilt from a previously cached DB row (routers/ai.py's
@@ -2164,6 +2170,9 @@ async def analyze_jd_match(
     else:
         company_intel = None
         jd_analysis = await _agent1_parse_jd(jd_text, provider)
+    # Soft skills, years and degree come from the post's own text, the same
+    # on every path (fresh parse or cache), so they score alike everywhere.
+    jd_analysis = with_requirements(jd_analysis, jd_text)
 
     # ── lexical + semantic + title blend, all via the pure score_content ────
     resume_text, _ = build_resume_text(resume_content)
@@ -2214,7 +2223,10 @@ async def analyze_jd_match(
 # Bump when a prompt or pipeline change should stop old results being reused.
 # 2: sessions now store score_verdicts and per-rewrite score_delta; version-1
 #    results lack both, so reusing them froze the review's live score.
-TAILOR_PIPELINE_VERSION = "2"
+# 3: scores count the post's soft skills, years and advanced degree
+#    (services/jd_requirements); a version-2 session scored without them
+#    would show a "before" that disagrees with the job page.
+TAILOR_PIPELINE_VERSION = "3"
 
 
 def tailor_fingerprint(
@@ -2533,5 +2545,12 @@ async def run_tailoring_pipeline(
             "before": before_verdicts,
             "after": after_verdicts,
             "jd_analysis": analysis.jd_analysis.model_dump(),
+            # What the before/after scores counted, so project-score re-scores
+            # on the same footing (a session from before these existed has
+            # none, and is re-scored without them).
+            "requirements": (
+                analysis.jd_analysis.requirements.model_dump()
+                if analysis.jd_analysis.requirements is not None else None
+            ),
         },
     )
