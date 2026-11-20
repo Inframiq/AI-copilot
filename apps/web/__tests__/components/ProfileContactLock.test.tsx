@@ -60,7 +60,38 @@ describe("My Profile — contact information is fixed against résumé uploads",
     const email = (await screen.findByLabelText(/Email Address/)) as HTMLInputElement;
     await waitFor(() => expect(email.value).toBe("jane@account.com"));
     expect(email.readOnly).toBe(true);
-    expect(screen.getByText(/It cannot be changed/)).toBeInTheDocument();
+    expect(email).toHaveAccessibleDescription("The sign-in email for this account. It cannot be changed.");
+  });
+
+  it("shows the saved name read-only and saves it, whatever the form held", async () => {
+    renderPage();
+    const name = (await screen.findByLabelText(/Full Name/)) as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("Jane Smith"));
+    expect(name.readOnly).toBe(true);
+    expect(name).toHaveAccessibleDescription("Set when the profile was created. It cannot be changed.");
+    await userEvent.type(name, "x");
+    expect(name.value).toBe("Jane Smith");
+    await userEvent.type(screen.getByPlaceholderText("Senior Software Engineer · Open to Work"), "Engineer");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].contact).toMatchObject({ name: "Jane Smith", email: "jane@account.com" });
+  });
+
+  it("lets a profile with no name yet take one, then fixes it", async () => {
+    getCareerProfile.mockResolvedValueOnce({
+      user_id: "u1", master_resume_id: null, contact: { name: "", email: "jane@account.com" },
+      experience: [], projects: [], education: [], skills: [], certifications: [],
+      headline: null, role_status: null, photo_url: null, photo_path: null, created_at: "", updated_at: "",
+    });
+    renderPage();
+    const name = (await screen.findByLabelText(/Full Name/)) as HTMLInputElement;
+    expect(name.readOnly).toBe(false);
+    expect(name).toHaveAccessibleDescription("Cannot be changed after saving.");
+    await userEvent.type(name, "Jane Smith");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].contact.name).toBe("Jane Smith");
+    await waitFor(() => expect((screen.getByLabelText(/Full Name/) as HTMLInputElement).readOnly).toBe(true));
   });
 
   it("keeps the user's contact details when a résumé is uploaded, filling only empty fields", async () => {

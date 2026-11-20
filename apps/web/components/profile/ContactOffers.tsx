@@ -1,11 +1,11 @@
 "use client";
 import { FileArrowUp } from "@phosphor-icons/react";
 import type { ContactInfo } from "@/lib/career-profile-client";
-import type { ContactDifference, FillableContactField } from "@/lib/contact-lock";
+import type { ContactDifference, OfferedContactField } from "@/lib/contact-lock";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
-const LABEL: Record<FillableContactField, string> = {
-  name: "Full name", phone: "Phone", location: "Location",
+const LABEL: Record<OfferedContactField, string> = {
+  phone: "Phone", location: "Location",
   linkedin: "LinkedIn", github: "GitHub", website: "Website",
 };
 

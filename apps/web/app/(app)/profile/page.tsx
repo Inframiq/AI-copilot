@@ -77,7 +77,7 @@ import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
-import { contactDifferences, lockedEmail, mergeParsedContact, type ContactDifference } from "@/lib/contact-lock";
+import { contactDifferences, lockedEmail, lockedName, mergeParsedContact, type ContactDifference } from "@/lib/contact-lock";
 import { ContactOffers } from "@/components/profile/ContactOffers";
 import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
@@ -149,6 +149,9 @@ export default function ProfilePage() {
   // once (acceptFile), so a plain value here would be the first render's.
   const accountEmailRef = useRef(accountEmail);
   accountEmailRef.current = accountEmail;
+  // The name the profile was saved with: fixed once there is one (set up
+  // at onboarding). Empty only for a profile made before names were asked.
+  const [savedName, setSavedName] = useState("");
   const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -236,6 +239,7 @@ export default function ProfilePage() {
   function hydrate(profile: CareerProfile) {
     // A phone saved before lib/phone shows in the standard form, which the
     // next save stores.
+    setSavedName((profile.contact.name ?? "").trim());
     setContact({
       ...emptyContact(), ...profile.contact,
       ...(profile.contact.phone ? { phone: tidyPhone(profile.contact.phone) } : {}),
@@ -365,7 +369,7 @@ export default function ProfilePage() {
       }
       const profileInput: CareerProfileInput = {
         master_resume_id: resumeId,
-        contact: { ...contact, email: lockedEmail(contact.email, accountEmail) },
+        contact: { ...contact, name: lockedName(contact.name, savedName), email: lockedEmail(contact.email, accountEmail) },
         headline: headline || null,
         experience: experiences,
         projects,
@@ -378,6 +382,7 @@ export default function ProfilePage() {
         ...sections,
       };
       await upsertCareerProfile(profileInput);
+      setSavedName(profileInput.contact.name ?? "");
       // The new résumé's loose points go to Miscellaneous, in place of the
       // previous résumé's (bar those kept). Once the profile row exists.
       if (pendingUpload) {
@@ -1377,9 +1382,17 @@ export default function ProfilePage() {
         />
         <div className="grid grid-cols-2 gap-x-sm sm:gap-x-lg gap-y-sm sm:gap-y-md">
           <div className="flex flex-col gap-xs">
-            <label className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>
-            <input value={contact.name ?? ""} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
-              placeholder="Jane Smith" className={inputCls} />
+            <label htmlFor="profile-name" className={fieldLabelCls}><User size={14} className="text-primary/70" /> Full Name</label>
+            {savedName ? (
+              <input id="profile-name" value={savedName} readOnly aria-describedby="profile-name-note"
+                className={`${inputCls} bg-surface-container-high! text-on-surface-variant cursor-default`} />
+            ) : (
+              <input id="profile-name" value={contact.name ?? ""} onChange={e => setContact(p => ({ ...p, name: e.target.value }))}
+                aria-describedby="profile-name-note" placeholder="Jane Smith" className={inputCls} />
+            )}
+            <p id="profile-name-note" className="text-caption text-on-surface-variant">
+              {savedName ? "Set when the profile was created. It cannot be changed." : "Cannot be changed after saving."}
+            </p>
           </div>
           <div className="flex flex-col gap-xs">
             <label htmlFor="profile-experience-level" className={fieldLabelCls}><Briefcase size={14} className="text-primary/70" /> Experience Level</label>

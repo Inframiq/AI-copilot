@@ -303,7 +303,7 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
 
   it("offers the résumé's different contact details instead of applying them, never the email", async () => {
     getCareerProfile.mockResolvedValue({
-      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210" },
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210", location: "Hyderabad" },
     });
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
@@ -311,7 +311,8 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       title: "Jane's Resume", unplaced: [],
       content: {
-        // Same phone written another way; a different name; an old email.
+        // Same phone written another way; another place; a different name
+        // and an old email, both fixed.
         contact: { name: "Jane Smith", email: "old@work.com", phone: "9876543210", location: "Pune" },
         skills: [], education: [],
       },
@@ -323,29 +324,31 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
     const offers = await screen.findByRole("region", { name: "Details from the uploaded résumé" });
-    // The name differs, so it's offered; the phone is the same number; the
-    // empty location just fills; the email is never offered.
+    // The location differs, so it's offered; the phone is the same number;
+    // the name and email are fixed, never offered.
     // Each beside the profile's own, to compare without scrolling.
-    expect(offers).toHaveTextContent("Full nameProfileJaneRésuméJane Smith");
+    expect(offers).toHaveTextContent("LocationProfileHyderabadRésuméPune");
     expect(offers).not.toHaveTextContent("98765");
     expect(offers).not.toHaveTextContent("old@work.com");
-    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane");
+    expect(offers).not.toHaveTextContent("Jane Smith");
+    expect(screen.getByLabelText(/Full Name/)).toHaveValue("Jane");
 
-    await userEvent.click(screen.getByRole("button", { name: "Use Jane Smith as Full name" }));
-    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane Smith");
+    await userEvent.click(screen.getByRole("button", { name: "Use Pune as Location" }));
+    expect(screen.getByDisplayValue("Pune")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Full Name/)).toHaveValue("Jane");
     expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
   });
 
   it("takes every offered detail at once with Use all", async () => {
     getCareerProfile.mockResolvedValue({
-      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210" },
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", phone: "+91 98765 43210", location: "Hyderabad" },
     });
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
     (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       title: "Jane's Resume", unplaced: [],
-      content: { contact: { name: "Jane Smith", phone: "(+91)-9123456780" }, skills: [], education: [] },
+      content: { contact: { name: "Jane Smith", phone: "(+91)-9123456780", location: "Pune" }, skills: [], education: [] },
     });
     global.fetch = vi.fn().mockResolvedValue({
       ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
@@ -354,21 +357,22 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: /re-parse/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Use all" }));
-    expect(screen.getByPlaceholderText("Jane Smith")).toHaveValue("Jane Smith");
+    expect(screen.getByLabelText(/Full Name/)).toHaveValue("Jane");
     expect(screen.getByRole("textbox", { name: "Phone number" })).toHaveValue("+91 91234 56780");
+    expect(screen.getByDisplayValue("Pune")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
   });
 
   it("saves with an offer unanswered as Keep mine, and closes the offers", async () => {
     getCareerProfile.mockResolvedValue({
-      ...withMasterResume, contact: { name: "Jane", email: "j@x.com" },
+      ...withMasterResume, contact: { name: "Jane", email: "j@x.com", location: "Hyderabad" },
     });
     (apiClient.getOriginalResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       signed_url: "https://sb.example/orig.pdf", file_name: "jane.pdf",
     });
     (apiClient.readResumeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       title: "Jane's Resume", unplaced: [],
-      content: { contact: { name: "Jane Smith" }, skills: [], education: [] },
+      content: { contact: { name: "Jane Smith", location: "Pune" }, skills: [], education: [] },
     });
     global.fetch = vi.fn().mockResolvedValue({
       ok: true, blob: async () => new Blob(["%PDF"], { type: "application/pdf" }),
@@ -382,21 +386,22 @@ describe("My Profile — resume re-parse & unsaved-changes guard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
-    expect(upsertCareerProfile.mock.calls[0][0].contact.name).toBe("Jane");
+    expect(upsertCareerProfile.mock.calls[0][0].contact).toMatchObject({ name: "Jane", location: "Hyderabad" });
     await waitFor(() =>
       expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull());
   });
 
   it("prompts before leaving once the form has unsaved edits", async () => {
     renderPage();
-    const nameInput = await screen.findByPlaceholderText("Jane Smith");
+    const headlineInput = await screen.findByPlaceholderText("Senior Software Engineer · Open to Work");
+    await screen.findByDisplayValue("Jane");
 
     // Pristine — leaving is not blocked.
     const clean = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(clean);
     expect(clean.defaultPrevented).toBe(false);
 
-    await userEvent.type(nameInput, " Smith");
+    await userEvent.type(headlineInput, "Engineer");
 
     const dirty = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(dirty);

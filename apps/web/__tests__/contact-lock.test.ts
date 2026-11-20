@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contactDifferences, lockedEmail, mergeParsedContact } from "@/lib/contact-lock";
+import { contactDifferences, lockedEmail, lockedName, mergeParsedContact } from "@/lib/contact-lock";
 
 describe("contact details are the user's, not the résumé's", () => {
   it("keeps every filled field and fills only the empty ones from a parsed résumé", () => {
@@ -26,7 +26,7 @@ describe("contact details are the user's, not the résumé's", () => {
     expect(lockedEmail("j@x.com", null)).toBe("j@x.com");
   });
 
-  it("offers only details the résumé prints differently, never the email", () => {
+  it("offers only details the résumé prints differently, never the name or email", () => {
     const mine = {
       name: "Jane Smith", email: "jane@account.com", phone: "+91 98765 43210", location: "Pune",
       linkedin: "linkedin.com/in/jane", github: "", website: "https://jane.dev/",
@@ -36,9 +36,15 @@ describe("contact details are the user's, not the résumé's", () => {
       linkedin: "https://www.linkedin.com/in/jane/", github: "github.com/jane", website: "jane.dev",
     })).toEqual([{ field: "location", value: "Hyderabad" }]);
     expect(contactDifferences(mine, { name: "Jane S.", phone: "+1 555 010 0100" })).toEqual([
-      { field: "name", value: "Jane S." },
       { field: "phone", value: "+1 555 010 0100" },
     ]);
     expect(contactDifferences(mine, undefined)).toEqual([]);
+  });
+
+  it("keeps the saved name once there is one", () => {
+    expect(lockedName("Someone Else", "Jane Smith")).toBe("Jane Smith");
+    expect(lockedName("", "Jane Smith")).toBe("Jane Smith");
+    expect(lockedName(" Jane Smith ", "")).toBe("Jane Smith");
+    expect(lockedName("Jane Smith", null)).toBe("Jane Smith");
   });
 });

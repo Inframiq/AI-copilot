@@ -3,7 +3,7 @@ import { isResumeLimitCancelled } from "@/stores/resume-limit-store";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { UploadSimple, FilePdf, FileDoc, Spinner, ArrowRight, User, EnvelopeSimple, Phone, Briefcase } from "@phosphor-icons/react";
+import { UploadSimple, FilePdf, FileDoc, Spinner, ArrowRight, User, EnvelopeSimple, Phone, Briefcase, LockSimple } from "@phosphor-icons/react";
 import { createBrowserClient } from "@/lib/supabase";
 import { apiClient } from "@/lib/api-client";
 import {
@@ -159,16 +159,20 @@ export default function OnboardingPage() {
 
           <form onSubmit={handleDetailsSubmit} className="flex flex-col gap-md">
             <div className="flex flex-col gap-xs">
-              <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><User size={14} /> Full Name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} required
+              <label htmlFor="onboarding-name" className="text-label-sm text-on-surface-variant flex items-center gap-xs"><User size={14} /> Full Name</label>
+              <input id="onboarding-name" value={name} onChange={(e) => setName(e.target.value)} required
+                aria-describedby="onboarding-name-note onboarding-fixed-note"
                 placeholder="Jane Smith" className={inputCls} />
+              <p id="onboarding-name-note" className="text-caption text-on-surface-variant">
+                As it should appear on your résumés.
+              </p>
             </div>
             <div className="flex flex-col gap-xs">
               <label className="text-label-sm text-on-surface-variant flex items-center gap-xs"><EnvelopeSimple size={14} /> Email</label>
-              <input type="email" value={email} readOnly required aria-describedby="onboarding-email-note"
+              <input type="email" value={email} readOnly required aria-describedby="onboarding-email-note onboarding-fixed-note"
                 className={`${inputCls} text-on-surface-variant cursor-default`} />
               <p id="onboarding-email-note" className="text-caption text-on-surface-variant">
-                The sign-in email for this account. It cannot be changed.
+                The sign-in email for this account.
               </p>
             </div>
             <div className="flex flex-col gap-xs">
@@ -186,6 +190,12 @@ export default function OnboardingPage() {
                 <option value="student">Student</option>
               </select>
             </div>
+
+            <p id="onboarding-fixed-note"
+              className="flex items-start gap-sm rounded-xl border border-outline-variant/40 bg-surface-container px-md py-sm text-body-sm text-on-surface">
+              <LockSimple size={16} className="mt-[2px] shrink-0 text-primary" aria-hidden />
+              <span>Name and email cannot be changed after this step. Check them before continuing.</span>
+            </p>
 
             <button
               type="submit"

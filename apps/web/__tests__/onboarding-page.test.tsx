@@ -63,6 +63,18 @@ describe("Onboarding — plan step", () => {
     vi.mocked(apiClient.getPlans).mockResolvedValue(CATALOG);
   });
 
+  it("says before saving that the name and email can't be changed later", async () => {
+    renderOnboarding();
+    await screen.findByDisplayValue("Jane");
+    const notice = screen.getByText("Name and email cannot be changed after this step. Check them before continuing.");
+    expect(screen.getByRole("textbox", { name: "Full Name" })).toHaveAccessibleDescription(
+      expect.stringContaining(notice.textContent!),
+    );
+    expect(screen.getByDisplayValue("jane@example.com")).toHaveAccessibleDescription(
+      expect.stringContaining(notice.textContent!),
+    );
+  });
+
   it("shows the plan cards after the résumé step and finishes on 'Continue on Free'", async () => {
     const user = userEvent.setup();
     renderOnboarding();
