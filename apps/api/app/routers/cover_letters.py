@@ -39,6 +39,7 @@ def first_free_title(base: str, taken: "set[str | None]") -> str:
 # A draft nobody saved within this long was abandoned: cleared out the next
 # time the same user generates a letter, so unsaved drafts don't pile up.
 _DRAFT_TTL = timedelta(days=1)
+from app.services import account_contact
 from app.services.ai_engine.factory import get_ai_provider
 from app.services.tailoring import write_cover_letter, analyze_jd_match, JDAnalysis
 from app.services.pdf import generate_letter_pdf, upload_letter_pdf
@@ -158,6 +159,8 @@ async def generate_cover_letter(
             raise HTTPException(status_code=404, detail="Tailoring session not found")
         if session_row.tailored_content:
             resume_content = session_row.tailored_content
+    # The letter is signed with the account's name, whatever the résumé holds.
+    resume_content = account_contact.onto(resume_content, await account_contact.load(db, user))
 
     await spend_credits(db, uid, "cover_letter", email=user.get("email"))
 
@@ -366,7 +369,11 @@ async def generate_cover_letter_pdf(
     resume_row = (
         await db.execute(select(Resume).where(Resume.id == letter.resume_id, Resume.user_id == uid))
     ).scalar_one_or_none()
-    contact = (resume_row.content or {}).get("contact", {}) if resume_row else {}
+    # Headed with the account's name, email and phone, like every résumé.
+    contact = account_contact.onto(
+        {"contact": (resume_row.content or {}).get("contact", {}) if resume_row else {}},
+        await account_contact.load(db, user),
+    )["contact"]
     now = datetime.now(timezone.utc)
     date_str = f"{now:%B} {now.day}, {now:%Y}"
 

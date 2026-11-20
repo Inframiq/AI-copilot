@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { AuthBackLink } from "@/components/auth/AuthBackLink";
 import { createBrowserClient } from "@/lib/supabase";
+import { DEVICES_AT_A_TIME } from "@/lib/devices";
 import { BetaBadge } from "@/components/ui/BetaBadge";
 import { markPolicyConsent } from "@/lib/legal-versions";
 
@@ -11,6 +12,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Sent here by lib/supabase leaveEndedSession: this device's sign-in ended.
+  const [ended, setEnded] = useState(false);
+  useEffect(() => {
+    // Read after the first paint: the server render has no address bar.
+    setEnded(new URLSearchParams(window.location.search).has("ended"));
+  }, []);
   const supabase = createBrowserClient();
 
   async function handleGoogleSignIn() {
@@ -46,6 +53,13 @@ export default function LoginPage() {
         </div>
 
         <h1 className="text-headline-lg text-on-surface mb-md">Sign in</h1>
+
+        {ended && !error && (
+          <div role="status" className="mb-md p-md rounded-lg bg-surface-container border border-outline-variant/40 text-on-surface text-body-sm">
+            Signed out on this device. An account can be signed in on {DEVICES_AT_A_TIME} devices at a time,
+            and a newer sign-in ended this one.
+          </div>
+        )}
 
         {error && (
           <div className="mb-md p-md rounded-lg bg-error-container text-on-error-container text-body-sm">

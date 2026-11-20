@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Resume } from "@career-copilot/types";
+import type { OtherPerson, Resume } from "@career-copilot/types";
 
 /**
  * The one field we ask about after a résumé upload: the headline under the
@@ -18,7 +18,10 @@ import type { Resume } from "@career-copilot/types";
  */
 
 /** What the popup needs: a saved résumé, or an upload as read (id ""). */
-export type HeadlineSubject = Pick<Resume, "id" | "content"> & Partial<Pick<Resume, "updated_at">>;
+export type HeadlineSubject = Pick<Resume, "id" | "content"> & Partial<Pick<Resume, "updated_at">> & {
+  /** Set when the upload looks like someone else's résumé: the popup says so. */
+  other_person?: OtherPerson | null;
+};
 
 interface State {
   resume: HeadlineSubject | null;

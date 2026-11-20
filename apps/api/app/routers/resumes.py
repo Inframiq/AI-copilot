@@ -16,9 +16,10 @@ from app.core.credits import spend_credits, refund_credits
 from app.core.nul_chars import _without_nul
 from app.schemas.resume import (
     ResumeCreate, ResumeUpdate, ResumeOut, UploadedResumeOut, UnplacedSection, PdfGenerateRequest,
-    OriginalFileOut, ReadUploadOut,
+    OriginalFileOut, ReadUploadOut, OtherPersonOut,
 )
 from app.schemas.ai import GenerateResumeRequest, GenerateResumeOut
+from app.services import account_contact
 from app.services.pdf import (
     generate_pdf, generate_pdf_with_meta, upload_pdf, get_signed_url,
     render_resume_html_with_meta, PhotoRequiredError, photo_owned_by, ALLOWED_TEMPLATES,
@@ -215,6 +216,8 @@ async def create_resume(body: ResumeCreate, user=Depends(get_current_user), db: 
     # on it, so every view of the questions updates the moment they exist.
     uid = uuid.UUID(user["sub"])
     payload = body.model_dump(exclude={"jd_id"})
+    # The account's name, email and phone, whatever the request says.
+    payload["content"] = account_contact.onto(payload.get("content") or {}, await account_contact.load(db, user))
     # The size columns are NOT NULL; None means "not chosen", which the
     # column default already encodes. Passing it through writes a NULL.
     for field in ("heading_size_delta", "body_size_delta"):
@@ -327,6 +330,10 @@ async def update_resume(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # The account's name, email and phone, whatever the request says. Read
+    # before the row is locked, to keep the lock short.
+    if body.content is not None:
+        body.content = account_contact.onto(body.content, await account_contact.load(db, user))
     # Locked, so two saves made from the same version can't both pass the
     # check below: the second waits, then sees the first's updated_at.
     result = await db.execute(
@@ -496,6 +503,9 @@ async def generate_resume_pdf(
     # Only the user's own photo: the render reads the private bucket with the
     # service key, so a photo URL is never trusted on the content's word.
     content = photo_owned_by((body.content if is_preview else resume.content) or {}, user["sub"])
+    # Printed with the account's name, email and phone — a row saved before
+    # these were fixed, or a preview sent by hand, included.
+    content = account_contact.onto(content, await account_contact.load(db, user))
     # WeasyPrint layout/rasterization is synchronous CPU work — offload it so it
     # doesn't block every other concurrent request (including autosave PATCHes)
     # on this worker for the duration of rendering.
@@ -582,6 +592,7 @@ async def render_resume_html_endpoint(
     content = photo_owned_by(
         (body.content if body and body.content is not None else resume.content) or {}, user["sub"]
     )
+    content = account_contact.onto(content, await account_contact.load(db, user))
     try:
         html, meta = await asyncio.to_thread(
             render_resume_html_with_meta,
@@ -640,6 +651,7 @@ async def ats_check_endpoint(
     content = photo_owned_by(
         (body.content if body and body.content is not None else resume.content) or {}, user["sub"]
     )
+    content = account_contact.onto(content, await account_contact.load(db, user))
     jd_analysis = None
     if jd_id is not None:
         jd_row = (await db.execute(
@@ -731,6 +743,9 @@ async def generate_resume_endpoint(
             template_id=body.template_id,
         )
 
+        generated.resume_content = account_contact.onto(
+            generated.resume_content, await account_contact.load(db, user)
+        )
         name = (generated.resume_content.get("contact") or {}).get("name", "").strip()
         title = body.title or (f"{name}'s Resume" if name else "Generated Resume")
 
@@ -776,10 +791,24 @@ async def generate_resume_endpoint(
         raise
 
 
-def _uploaded(resume: Resume, unplaced: list[dict]) -> UploadedResumeOut:
+def _uploaded(
+    resume: Resume, unplaced: list[dict], other: account_contact.OtherPerson | None = None
+) -> UploadedResumeOut:
     out = UploadedResumeOut.model_validate(resume)
     out.unplaced = [UnplacedSection(**g) for g in unplaced]
+    out.other_person = _other_person_out(other)
     return out
+
+
+def _other_person_out(other: account_contact.OtherPerson | None) -> OtherPersonOut | None:
+    return OtherPersonOut(reason=other.reason, printed_name=other.printed_name) if other else None
+
+
+async def _as_the_accounts(db: AsyncSession, user: dict, parsed: dict):
+    """An upload as read, made the account's: its name, email and phone are
+    replaced, after noting whether it looks like someone else's résumé."""
+    account = await account_contact.load(db, user)
+    return account_contact.onto(parsed, account), account_contact.looks_like_someone_else(parsed, account)
 
 
 async def _vetted_upload(file: UploadFile) -> tuple[bytes, str | None]:
@@ -937,6 +966,7 @@ async def parse_and_create_resume(
         # Points printed under no job go back to the page for the profile's
         # Miscellaneous; the résumé keeps only what it printed in place.
         unplaced = parsed.pop("unplaced", [])
+        parsed, other = await _as_the_accounts(db, user, parsed)
 
         title = _upload_title(parsed, file_name)
 
@@ -953,7 +983,7 @@ async def parse_and_create_resume(
                 _remove_stored_file(previous_path)
             await db.refresh(existing_resume)
             response.status_code = status.HTTP_200_OK
-            return _uploaded(existing_resume, unplaced)
+            return _uploaded(existing_resume, unplaced, other)
 
         await _claim_room_for_a_new_resume(db, uuid.UUID(user["sub"]))
         title = await _dedupe_title(db, uuid.UUID(user["sub"]), title)
@@ -970,7 +1000,7 @@ async def parse_and_create_resume(
         await db.commit()
         saved = True
         await db.refresh(resume)
-        return _uploaded(resume, unplaced)
+        return _uploaded(resume, unplaced, other)
     except Exception:
         if saved:
             raise
@@ -1019,10 +1049,12 @@ async def read_uploaded_resume(
         await db.commit()
         raise
     unplaced = parsed.pop("unplaced", [])
+    parsed, other = await _as_the_accounts(db, user, parsed)
     return ReadUploadOut(
         title=_upload_title(parsed, file_name),
         content=parsed,
         unplaced=[UnplacedSection(**g) for g in unplaced],
+        other_person=_other_person_out(other),
     )
 
 
@@ -1055,6 +1087,7 @@ async def save_uploaded_resume(
         fields = ResumeUpdate(content=decoded).content
     except (ValueError, ValidationError):
         raise HTTPException(status_code=422, detail="The résumé's content couldn't be read. Upload it again.")
+    fields = account_contact.onto(fields, await account_contact.load(db, user))
     if resume_id is not None:
         await _owned_resume(db, user_id, resume_id)
     raw_bytes, file_name = await _vetted_upload(file)

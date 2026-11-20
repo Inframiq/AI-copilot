@@ -6,7 +6,7 @@ import { LinkEditor } from "../../components/studio/LinkEditor";
 import { writeField } from "../../lib/field-path";
 import type { ResumeContent } from "@career-copilot/types";
 
-const HTML = `<div class="contact"><span data-field="contact.email">a@b.com</span> |
+const HTML = `<div class="contact"><span data-field="contact.email">a@b.com</span> | <span data-field="contact.location">Pune</span> |
 <span data-field="contact.linkedin"><a href="https://linkedin.com/in/jane" data-link="contact.linkedin"
  data-link-url="linkedin.com/in/jane">linkedin.com/in/jane</a></span></div>`;
 
@@ -67,8 +67,9 @@ describe("editing links in the Studio", () => {
     // The field holding the link is not typed into in place.
     const wrapper = root.querySelector<HTMLElement>('[data-field="contact.linkedin"]')!;
     expect(wrapper.getAttribute("contenteditable")).toBe("false");
-    // Other contact fields still are.
-    expect(root.querySelector('[data-field="contact.email"]')!.getAttribute("contenteditable")).toBe("true");
+    // Other contact fields still are, bar the account's (name, email, phone).
+    expect(root.querySelector('[data-field="contact.location"]')!.getAttribute("contenteditable")).toBe("true");
+    expect(root.querySelector('[data-field="contact.email"]')!.getAttribute("contenteditable")).toBe("false");
   });
 
   it("opens from the keyboard too", () => {

@@ -94,6 +94,41 @@ describe("My Profile — contact information is fixed against résumé uploads",
     await waitFor(() => expect((screen.getByLabelText(/Full Name/) as HTMLInputElement).readOnly).toBe(true));
   });
 
+  it("shows the phone fixed until 30 days after its last change, and offers no other", async () => {
+    const changed = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    getCareerProfile.mockResolvedValueOnce({
+      user_id: "u1", master_resume_id: null,
+      contact: { name: "Jane Smith", email: "jane@account.com", phone: "+91 98765 43210" },
+      phone_changed_at: changed.toISOString(),
+      experience: [], projects: [], education: [], skills: [], certifications: [],
+      headline: null, role_status: null, photo_url: null, photo_path: null, created_at: "", updated_at: "",
+    });
+    vi.mocked(apiClient.readResumeFile).mockResolvedValue({
+      title: "Résumé", unplaced: [],
+      content: { contact: { name: "Jane Smith", phone: "+91 91234 56789" }, experience: [], education: [], skills: [] },
+    } as never);
+    const { container } = renderPage();
+    const phone = (await screen.findByLabelText("Phone number")) as HTMLInputElement;
+    await waitFor(() => expect(phone.readOnly).toBe(true));
+    const until = new Date(changed.getTime() + 30 * 24 * 60 * 60 * 1000)
+      .toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    expect(phone).toHaveAccessibleDescription(`Can be changed again on ${until}.`);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File(["%PDF"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(apiClient.readResumeFile).toHaveBeenCalled());
+    expect(screen.queryByRole("region", { name: "Details from the uploaded résumé" })).toBeNull();
+    expect((screen.getByLabelText("Phone number") as HTMLInputElement).value).toBe("+91 98765 43210");
+  });
+
+  it("says a changed phone stays for 30 days, while it can still change", async () => {
+    renderPage();
+    const phone = (await screen.findByLabelText("Phone number")) as HTMLInputElement;
+    await waitFor(() => expect(phone.value).toBe("+91 98765 43210"));
+    expect(phone.readOnly).toBe(false);
+    expect(phone).toHaveAccessibleDescription("After a change, it stays for 30 days.");
+  });
+
   it("keeps the user's contact details when a résumé is uploaded, filling only empty fields", async () => {
     vi.mocked(apiClient.readResumeFile).mockResolvedValue({
       title: "Résumé", unplaced: [],

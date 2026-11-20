@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getSessionMock = vi.fn();
+const leaveEndedSession = vi.fn();
 
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({
     auth: { getSession: getSessionMock },
   }),
+  leaveEndedSession: () => leaveEndedSession(),
 }));
 
 import { apiClient, ApiError } from "../lib/api-client";
@@ -28,6 +30,24 @@ describe("apiClient", () => {
       data: { session: { access_token: "test-token-123" } },
     });
     vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("signs this device out when the API says its sign-in ended", async () => {
+    leaveEndedSession.mockReset();
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ detail: "Invalid token" }, { ok: false, status: 401, statusText: "Unauthorized" }),
+    );
+    await expect(apiClient.getResumes()).rejects.toBeInstanceOf(ApiError);
+    expect(leaveEndedSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves an expired token to the next refresh", async () => {
+    leaveEndedSession.mockReset();
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ detail: "Token expired" }, { ok: false, status: 401, statusText: "Unauthorized" }),
+    );
+    await expect(apiClient.getResumes()).rejects.toBeInstanceOf(ApiError);
+    expect(leaveEndedSession).not.toHaveBeenCalled();
   });
 
   it("hands an out-of-credits refusal to the app-wide dialog, and still throws it", async () => {

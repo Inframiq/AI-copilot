@@ -24,6 +24,23 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
+@pytest.fixture(autouse=True)
+def no_account_details(request, monkeypatch):
+    """Most tests fake the database with mocks that can't answer the career
+    profile query services/account_contact.load makes on every résumé save
+    and render; for them the account has no details, so résumés pass
+    through untouched. The lock itself is tested on a real Postgres in
+    test_account_contact.py, which opts out with @pytest.mark.real_account."""
+    if request.node.get_closest_marker("real_account"):
+        return
+    from app.services import account_contact
+
+    async def _none(db, user):
+        return account_contact.Account()
+
+    monkeypatch.setattr(account_contact, "load", _none)
+
+
 @pytest.fixture
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

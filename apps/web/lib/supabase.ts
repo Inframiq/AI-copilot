@@ -90,3 +90,26 @@ export function leaveSignedOut() {
   standDownLeaveWarnings();
   window.location.replace("/login");
 }
+
+let leavingEnded = false;
+
+/**
+ * The API refused this device's sign-in: its session ended — most often a
+ * newer sign-in on another device pushed it out (migration 060). Supabase
+ * itself still holds the session, so nothing else would notice: every
+ * request would fail while the page stayed up. Ends it here (the local
+ * sign-out also removes it on the server, leaving the other devices be)
+ * and says why on the sign-in page. Once per page, however many requests
+ * were refused together.
+ */
+export async function leaveEndedSession() {
+  if (leavingEnded) return;
+  leavingEnded = true;
+  standDownLeaveWarnings();
+  try {
+    await createBrowserClient().auth.signOut({ scope: "local" });
+  } catch {
+    // nothing left to clear
+  }
+  window.location.replace("/login?ended=1");
+}

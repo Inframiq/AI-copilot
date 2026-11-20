@@ -77,7 +77,7 @@ import {
   SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
-import { contactDifferences, lockedEmail, lockedName, mergeParsedContact, type ContactDifference } from "@/lib/contact-lock";
+import { PHONE_CHANGE_DAYS, contactDifferences, lockedEmail, lockedName, mergeParsedContact, phoneChangeableFrom, type ContactDifference } from "@/lib/contact-lock";
 import { ContactOffers } from "@/components/profile/ContactOffers";
 import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
@@ -152,6 +152,13 @@ export default function ProfilePage() {
   // The name the profile was saved with: fixed once there is one (set up
   // at onboarding). Empty only for a profile made before names were asked.
   const [savedName, setSavedName] = useState("");
+  // The phone changes at most once in 30 days (migration 059): until the
+  // date, it shows fixed and an upload doesn't offer another.
+  const [savedPhone, setSavedPhone] = useState("");
+  const [phoneChangedAt, setPhoneChangedAt] = useState<string | null>(null);
+  const phoneFixedUntil = phoneChangeableFrom(phoneChangedAt);
+  const phoneFixedRef = useRef(false);
+  phoneFixedRef.current = phoneFixedUntil !== null;
   const [roleStatus, setRoleStatus] = useState<RoleStatus | "">("");
   const [headline, setHeadline] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -240,6 +247,8 @@ export default function ProfilePage() {
     // A phone saved before lib/phone shows in the standard form, which the
     // next save stores.
     setSavedName((profile.contact.name ?? "").trim());
+    setSavedPhone((profile.contact.phone ?? "").trim());
+    setPhoneChangedAt(profile.phone_changed_at ?? null);
     setContact({
       ...emptyContact(), ...profile.contact,
       ...(profile.contact.phone ? { phone: tidyPhone(profile.contact.phone) } : {}),
@@ -381,8 +390,10 @@ export default function ProfilePage() {
         photo_path: photoPath,
         ...sections,
       };
-      await upsertCareerProfile(profileInput);
+      const savedRow = await upsertCareerProfile(profileInput);
       setSavedName(profileInput.contact.name ?? "");
+      setSavedPhone((profileInput.contact.phone ?? "").trim());
+      if (savedRow && "phone_changed_at" in savedRow) setPhoneChangedAt(savedRow.phone_changed_at ?? null);
       // The new résumé's loose points go to Miscellaneous, in place of the
       // previous résumé's (bar those kept). Once the profile row exists.
       if (pendingUpload) {
@@ -498,13 +509,18 @@ export default function ProfilePage() {
       // Merged against the contact as it is now, not as this handler's
       // closure saw it on first render (that read empty, and the parsed
       // résumé then replaced everything).
-      setContact((prev) => ({
-        ...emptyContact(),
-        ...mergeParsedContact(prev, parsedContact, accountEmailRef.current),
-      }));
+      setContact((prev) => {
+        const merged = mergeParsedContact(prev, parsedContact, accountEmailRef.current);
+        // A phone that can't change yet stays as it is, even empty.
+        if (phoneFixedRef.current) {
+          if (prev.phone) merged.phone = prev.phone; else delete merged.phone;
+        }
+        return { ...emptyContact(), ...merged };
+      });
       // A detail the profile already has stays; one the résumé prints
       // differently is offered beside the form, never applied for them.
-      setContactOffers(contactDifferences(contactRef.current, parsedContact));
+      setContactOffers(contactDifferences(contactRef.current, parsedContact)
+        .filter(d => !(d.field === "phone" && phoneFixedRef.current)));
       setHeadline(newHeadline);
       setSkills(newSkills);
       setExperiences(newExperiences);
@@ -1419,10 +1435,23 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col gap-xs">
             <label className={fieldLabelCls}><Phone size={14} className="text-primary/70" /> Phone Number</label>
-            <input aria-label="Phone number" type="tel" value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
-              // In the standard form on leaving the field (lib/phone).
-              onBlur={e => { const tidy = tidyPhone(e.target.value); if (tidy !== e.target.value) setContact(p => ({ ...p, phone: tidy })); }}
-              placeholder="+91 98765 43210" className={inputCls} />
+            {phoneFixedUntil ? (
+              <input aria-label="Phone number" type="tel" value={contact.phone ?? ""} readOnly aria-describedby="profile-phone-note"
+                className={`${inputCls} bg-surface-container-high! text-on-surface-variant cursor-default`} />
+            ) : (
+              <input aria-label="Phone number" type="tel" value={contact.phone ?? ""} onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
+                // In the standard form on leaving the field (lib/phone).
+                onBlur={e => { const tidy = tidyPhone(e.target.value); if (tidy !== e.target.value) setContact(p => ({ ...p, phone: tidy })); }}
+                aria-describedby={savedPhone ? "profile-phone-note" : undefined}
+                placeholder="+91 98765 43210" className={inputCls} />
+            )}
+            {(phoneFixedUntil || savedPhone) && (
+              <p id="profile-phone-note" className="text-caption text-on-surface-variant">
+                {phoneFixedUntil
+                  ? `Can be changed again on ${phoneFixedUntil.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.`
+                  : `After a change, it stays for ${PHONE_CHANGE_DAYS} days.`}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-xs col-span-2">
             <label className={fieldLabelCls}><MapPin size={14} className="text-primary/70" /> Location</label>

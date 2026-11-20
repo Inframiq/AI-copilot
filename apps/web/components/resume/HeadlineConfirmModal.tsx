@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { CircleNotch } from "@phosphor-icons/react";
+import { CircleNotch, Warning } from "@phosphor-icons/react";
 import { apiClient } from "@/lib/api-client";
 import { FOCUS_RING } from "@/lib/focus";
 import { Sheet, SheetBody, SheetHeader } from "@/components/ui/Sheet";
@@ -81,6 +81,8 @@ function HeadlineDialog({ resume, resolve }: { resume: HeadlineSubject; resolve:
               : "None was found on your résumé. It's the line under your name: your role and what you focus on."}
           </SheetHeader>
 
+          {resume.other_person && <OtherPersonNote resume={resume} />}
+
           <div>
             <label htmlFor="headline-confirm-input" className="sr-only">Headline</label>
             <input
@@ -117,5 +119,26 @@ function HeadlineDialog({ resume, resolve }: { resume: HeadlineSubject; resolve:
         </SheetBody>
       </form>
     </Sheet>
+  );
+}
+
+/** The upload looks like someone else's résumé (POST parse/read-upload
+ * other_person). Said once, here; the résumé already carries the account's
+ * name, email and phone either way. */
+function OtherPersonNote({ resume }: { resume: HeadlineSubject }) {
+  const other = resume.other_person!;
+  const account = (resume.content.contact?.name ?? "").trim();
+  return (
+    <div role="note" aria-label="Someone else's résumé?"
+      className="flex items-start gap-sm rounded-lg border border-error/30 bg-error-container/40 px-md py-sm text-body-sm text-on-surface">
+      <Warning size={16} className="mt-[2px] shrink-0 text-error" aria-hidden />
+      <p>
+        {other.reason === "name" && other.printed_name
+          ? <>Printed under another name: <strong>{other.printed_name}</strong>. </>
+          : "Shares no employer or school with your profile. "}
+        Each account is for one person, so this résumé uses the account&apos;s name, email and phone
+        {account ? <> ({account})</> : null}.
+      </p>
+    </div>
   );
 }

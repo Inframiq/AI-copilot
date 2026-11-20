@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contactDifferences, lockedEmail, lockedName, mergeParsedContact } from "@/lib/contact-lock";
+import { PHONE_CHANGE_DAYS, contactDifferences, lockedEmail, lockedName, mergeParsedContact, phoneChangeableFrom } from "@/lib/contact-lock";
 
 describe("contact details are the user's, not the résumé's", () => {
   it("keeps every filled field and fills only the empty ones from a parsed résumé", () => {
@@ -46,5 +46,14 @@ describe("contact details are the user's, not the résumé's", () => {
     expect(lockedName("", "Jane Smith")).toBe("Jane Smith");
     expect(lockedName(" Jane Smith ", "")).toBe("Jane Smith");
     expect(lockedName("Jane Smith", null)).toBe("Jane Smith");
+  });
+
+  it("says when the phone can change again: 30 days after its last change", () => {
+    const now = new Date("2026-11-20T12:00:00Z");
+    expect(PHONE_CHANGE_DAYS).toBe(30);
+    expect(phoneChangeableFrom(null, now)).toBeNull();
+    expect(phoneChangeableFrom("2026-11-10T12:00:00Z", now)).toEqual(new Date("2026-12-10T12:00:00Z"));
+    expect(phoneChangeableFrom("2026-10-20T11:59:00Z", now)).toBeNull();
+    expect(phoneChangeableFrom("not a date", now)).toBeNull();
   });
 });

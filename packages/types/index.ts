@@ -105,6 +105,14 @@ export interface UnplacedSection {
   points: string[];
 }
 
+/** Why an uploaded résumé looks like someone else's: printed under another
+ *  name, or sharing no employer or school with the profile. A warning only:
+ *  the résumé takes the account's name, email and phone either way. */
+export interface OtherPerson {
+  reason: "name" | "history";
+  printed_name: string | null;
+}
+
 /** The paper a résumé's PDF renders on. A4 is the default. */
 export type PageSize = "A4" | "Letter";
 

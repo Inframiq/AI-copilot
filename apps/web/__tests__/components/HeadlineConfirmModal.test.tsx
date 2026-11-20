@@ -92,3 +92,25 @@ describe("HeadlineConfirmModal", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });
+
+describe("an upload that looks like someone else's résumé", () => {
+  it("says it was printed under another name, and that the account's details are used", () => {
+    render(<HeadlineConfirmModal />);
+    act(() => { void confirmHeadline({ ...resume("Analyst"), other_person: { reason: "name", printed_name: "Ravi Kumar" } }); });
+    expect(screen.getByRole("note", { name: "Someone else's résumé?" })).toHaveTextContent(
+      "Printed under another name: Ravi Kumar. Each account is for one person, so this résumé uses the account's name, email and phone (Jane).",
+    );
+  });
+
+  it("says when it shares no employer or school with the profile", () => {
+    render(<HeadlineConfirmModal />);
+    act(() => { void confirmHeadline({ ...resume("Analyst"), other_person: { reason: "history", printed_name: null } }); });
+    expect(screen.getByRole("note", { name: "Someone else's résumé?" })).toHaveTextContent(/^Shares no employer or school with your profile\./);
+  });
+
+  it("says nothing for the person's own", () => {
+    render(<HeadlineConfirmModal />);
+    act(() => { void confirmHeadline(resume("Analyst")); });
+    expect(screen.queryByRole("note", { name: "Someone else's résumé?" })).toBeNull();
+  });
+});

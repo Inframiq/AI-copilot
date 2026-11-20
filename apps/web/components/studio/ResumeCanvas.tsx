@@ -54,6 +54,11 @@ const AFFORDANCE_CSS = `
   background-color: rgba(59, 91, 219, 0.11);
   box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.11), inset 0 0 0 1px rgba(59, 91, 219, 0.4);
 }
+[data-field="contact.name"], [data-field="contact.email"], [data-field="contact.phone"] { cursor: default; }
+[data-field="contact.name"]:hover, [data-field="contact.email"]:hover, [data-field="contact.phone"]:hover {
+  background-color: transparent;
+  box-shadow: none;
+}
 [data-link] {
   cursor: pointer;
   border-radius: 3px;
@@ -138,6 +143,10 @@ const PROJECT_LINKS = [
 
 /** A role's or project's start or end date in the document. */
 const DATE_FIELD = /^(experience|projects)\.\d+(\.projects\.\d+)?\.(start|end)$/;
+
+/** The account's details on every résumé (apps/api services/account_contact):
+ * printed from the account, never typed over on the page. */
+export const ACCOUNT_FIELD = /^contact\.(name|email|phone)$/;
 
 export interface DateTarget {
   /** "experience.0.start" */
@@ -448,6 +457,12 @@ export function ResumeCanvas({
 
     for (const node of nodes) {
       const path = node.dataset.field ?? "";
+      if (ACCOUNT_FIELD.test(path)) {
+        node.setAttribute("contenteditable", "false");
+        if (editable) node.setAttribute("title", "From the account");
+        else node.removeAttribute("title");
+        continue;
+      }
       if (DATE_FIELD.test(path) && onEditDate) {
         node.setAttribute("contenteditable", "false");
         if (!editable) {

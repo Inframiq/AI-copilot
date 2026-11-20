@@ -6,6 +6,10 @@ import type { ResumeContent } from "@career-copilot/types";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 import { tidyPhone } from "@/lib/phone";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { authUserQuery, careerProfileQuery } from "@/lib/reveal";
+import { accountContact } from "@/lib/contact-lock";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -23,6 +27,11 @@ export function ContactSection() {
   const templateId = useResumeStore((s) => s.templateId);
   const setPhotoModal = useResumeStore((s) => s.setPhotoModal);
   const photoSrc = useAvatarSrc(content?.contact.photo_url);
+  // Name, email and phone are the account's on every résumé (the API puts
+  // them there on save and on every render): shown here, not edited.
+  const profile = useQuery(careerProfileQuery).data;
+  const authUser = useQuery(authUserQuery).data;
+  const account = accountContact(profile?.contact, authUser?.email ?? null);
   if (!content) return null;
 
   return (
@@ -83,6 +92,27 @@ export function ContactSection() {
           const social = key === "linkedin" || key === "github" ? key : null;
           const bad = social !== null && !isSocialLinkOk(social, content.contact[social]);
           const id = `builder-contact-${key}`;
+          const fixed = key === "name" || key === "email" || key === "phone" ? account[key] : undefined;
+          if (fixed) {
+            return (
+              <div key={key} className="flex flex-col gap-xs">
+                <label htmlFor={id} className="text-label-sm text-on-surface-variant">{label}</label>
+                <input
+                  id={id}
+                  type={type ?? "text"}
+                  value={fixed}
+                  readOnly
+                  aria-describedby={`${id}-note`}
+                  className="w-full px-md py-sm rounded-lg border border-outline-variant/50 bg-surface-container-high text-on-surface-variant text-body-md cursor-default focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <p id={`${id}-note`} className="text-caption text-on-surface-variant">
+                  {key === "phone"
+                    ? <>From the account. Change it in <Link href="/profile" className="text-primary font-semibold hover:underline">My Profile</Link>.</>
+                    : "From the account. It cannot be changed."}
+                </p>
+              </div>
+            );
+          }
           return (
             <div key={key} className="flex flex-col gap-xs">
               <label htmlFor={id} className="text-label-sm text-on-surface-variant">{label}</label>

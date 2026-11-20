@@ -164,12 +164,21 @@ class UnplacedSection(BaseModel):
     points: list[str]
 
 
+class OtherPersonOut(BaseModel):
+    """Why an uploaded résumé looks like someone else's (services/
+    account_contact.looks_like_someone_else): printed under another name,
+    or sharing no employer or school with the profile. A warning only."""
+    reason: Literal["name", "history"]
+    printed_name: str | None = None
+
+
 class UploadedResumeOut(ResumeOut):
     """An upload's résumé, and the points it printed under no job ("Key
     Responsibilities" after all the jobs). Those aren't saved on the résumé
     — it keeps only what it printed where it printed it — and go to the
     profile's Miscellaneous instead (apps/web lib/career-profile-client)."""
     unplaced: list[UnplacedSection] = []
+    other_person: OtherPersonOut | None = None
 
 
 class ReadUploadOut(BaseModel):
@@ -179,6 +188,7 @@ class ReadUploadOut(BaseModel):
     title: str
     content: dict
     unplaced: list[UnplacedSection] = []
+    other_person: OtherPersonOut | None = None
 
 
 class OriginalFileOut(BaseModel):

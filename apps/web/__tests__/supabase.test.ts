@@ -10,7 +10,7 @@ vi.mock("@supabase/ssr", () => ({
 
 // Import the real file by relative path — the vitest.config alias only
 // intercepts "@/lib/supabase" imports elsewhere, not this direct import.
-import { createBrowserClient, createServerClient, leaveSignedOut, signOutHere } from "../lib/supabase";
+import { createBrowserClient, createServerClient, leaveEndedSession, leaveSignedOut, signOutHere } from "../lib/supabase";
 
 describe("lib/supabase", () => {
   beforeEach(() => {
@@ -68,5 +68,23 @@ describe("leaveSignedOut", () => {
       vi.unstubAllGlobals();
     }
     expect(replace).toHaveBeenCalledWith("/login");
+  });
+});
+
+describe("leaveEndedSession", () => {
+  it("signs out on this device only, once, and says why on the sign-in page", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null });
+    createBrowserClientMock.mockReturnValue({ auth: { signOut } });
+    const replace = vi.fn();
+    vi.stubGlobal("window", { location: { replace } });
+    try {
+      await Promise.all([leaveEndedSession(), leaveEndedSession()]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/login?ended=1");
   });
 });

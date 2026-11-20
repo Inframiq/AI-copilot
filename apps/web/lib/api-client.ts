@@ -1,4 +1,4 @@
-import { createBrowserClient } from "@/lib/supabase";
+import { createBrowserClient, leaveEndedSession } from "@/lib/supabase";
 import { withResumeRoom } from "@/stores/resume-limit-store";
 import { confirmHeadline } from "@/stores/headline-confirm-store";
 import { reportCreditRefusal } from "@/stores/credits-store";
@@ -28,6 +28,7 @@ import type {
   AdminUser,
   DeletionRequestAdmin,
   DeletionRequestStatus,
+  OtherPerson,
 } from "@career-copilot/types";
 
 export type { AtsFix } from "@career-copilot/types";
@@ -92,6 +93,12 @@ function detailMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+/** The API's answer to a token whose sign-in has ended (app/core/security):
+ * not "Token expired", which the next refresh fixes. */
+function isEndedSession(status: number, detail: unknown): boolean {
+  return status === 401 && detail === "Invalid token";
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -112,6 +119,8 @@ async function request<T>(
     if (res.status === 402) reportCreditRefusal(err.detail);
     // A feature that needs agreement to newer terms: the prompt asks for it.
     if (res.status === 403) reportPolicyRefusal(err.detail);
+    // This device's sign-in ended (often: signed in on too many devices).
+    if (isEndedSession(res.status, err.detail)) void leaveEndedSession();
     throw new ApiError(res.status, detailMessage(err.detail, "Request failed"), err.detail);
   }
   if (res.status === 204) return undefined as T;
@@ -130,6 +139,7 @@ async function postForm<T>(path: string, form: FormData, fallback: string): Prom
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     if (res.status === 402) reportCreditRefusal(err.detail);
     if (res.status === 403) reportPolicyRefusal(err.detail);
+    if (isEndedSession(res.status, err.detail)) void leaveEndedSession();
     throw new ApiError(res.status, detailMessage(err.detail, fallback), err.detail);
   }
   return res.json() as Promise<T>;
@@ -140,6 +150,7 @@ export interface ReadUpload {
   title: string;
   content: ResumeContent;
   unplaced: UnplacedSection[];
+  other_person?: OtherPerson | null;
 }
 
 export interface PolicyAcceptance {
@@ -337,7 +348,7 @@ export const apiClient = {
      * creating a new, orphaned one — used by the Profile page's "Replace"
      * flow so re-uploading doesn't leave the old resume dangling around. */
     resumeId?: string
-  ): Promise<Resume & { unplaced?: UnplacedSection[] }> =>
+  ): Promise<Resume & { unplaced?: UnplacedSection[]; other_person?: OtherPerson | null }> =>
     // A new résumé (no resumeId) can hit the limit — same ask-and-retry as
     // createResume. Replacing one in place never does.
     withResumeRoom(() => {
@@ -345,7 +356,7 @@ export const apiClient = {
       form.append("file", file);
       form.append("template_id", templateId);
       if (resumeId) form.append("resume_id", resumeId);
-      return postForm<Resume & { unplaced?: UnplacedSection[] }>("/resumes/parse-upload", form, "Upload failed");
+      return postForm<Resume & { unplaced?: UnplacedSection[]; other_person?: OtherPerson | null }>("/resumes/parse-upload", form, "Upload failed");
     }).then(
       // Every upload asks the person to check the headline the parser
       // read, so each caller gets the résumé back with it confirmed.
@@ -365,7 +376,7 @@ export const apiClient = {
       return postForm<ReadUpload>("/resumes/read-upload", form, "Upload failed");
     }).then(async (read) => ({
       ...read,
-      content: (await confirmHeadline({ id: "", content: read.content })).content,
+      content: (await confirmHeadline({ id: "", content: read.content, other_person: read.other_person })).content,
     })),
 
   /** Stores a read upload: the file as the résumé's original, the content

@@ -124,6 +124,9 @@ export interface CareerProfile extends Partial<ProfileSections> {
   /** Storage object key for photo_url ("<uid>/profile.<ext>") — kept so a
    *  later replace/remove knows the exact object. null iff photo_url is null. */
   photo_path: string | null;
+  /** When the phone last changed (migration 059): it changes at most once
+   *  in 30 days. Set by the database alone; absent before 059 runs. */
+  phone_changed_at?: string | null;
   /** Points saved from the notes canvas. Absent until migration 009 has
    *  run on the database, which callers read as "not available yet". */
   miscellaneous?: MiscPoint[];
@@ -138,7 +141,7 @@ export interface CareerProfile extends Partial<ProfileSections> {
  * in them (saving a photo) leaves them as they are; the Profile page gives
  * them all, so clearing one there clears it. */
 export type CareerProfileInput = Omit<
-  CareerProfile, "user_id" | "created_at" | "updated_at" | "miscellaneous"
+  CareerProfile, "user_id" | "created_at" | "updated_at" | "miscellaneous" | "phone_changed_at"
 >;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -174,7 +177,9 @@ export async function upsertCareerProfile(input: CareerProfileInput): Promise<Ca
   // Callers often pass a whole loaded CareerProfile, which TypeScript accepts
   // as an input. Stripped here so its (possibly stale) Miscellaneous never
   // rides along — see CareerProfileInput.
-  const { miscellaneous: _misc, ...fields } = input as CareerProfileInput & { miscellaneous?: unknown };
+  // phone_changed_at is the database's to set (migration 059).
+  const { miscellaneous: _misc, phone_changed_at: _phoneAt, ...fields } =
+    input as CareerProfileInput & { miscellaneous?: unknown; phone_changed_at?: unknown };
   // Saved as keyboard text: no curly quotes, long dashes or odd spaces
   // (lib/plain-text) — the API does the same for everything it saves.
   Object.assign(fields, plainDeep(fields));

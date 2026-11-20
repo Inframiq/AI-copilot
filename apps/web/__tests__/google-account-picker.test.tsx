@@ -17,6 +17,25 @@ import RegisterPage from "../app/(auth)/register/page";
  * account the browser already holds, so after signing out nobody can switch
  * to another Google account (found during test ATK-049).
  */
+describe("the sign-in page after this device's sign-in ended", () => {
+  it("says why: a newer sign-in on another device, past the limit", () => {
+    window.history.replaceState(null, "", "/login?ended=1");
+    try {
+      render(<LoginPage />);
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Signed out on this device. An account can be signed in on 2 devices at a time, and a newer sign-in ended this one.",
+      );
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("says nothing on an ordinary visit", () => {
+    render(<LoginPage />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
 describe("the Google buttons always let the person pick an account", () => {
   it.each([
     ["sign in", LoginPage],

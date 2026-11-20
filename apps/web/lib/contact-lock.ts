@@ -46,6 +46,22 @@ export function lockedName(current: string | undefined, savedName: string | null
   return (savedName ?? "").trim() || (current ?? "").trim();
 }
 
+/** How often the phone may change: at most once in this many days. The
+ * database enforces it (apps/api migration 059, PHONE_RULE_DAYS — a test
+ * keeps the two equal). */
+export const PHONE_CHANGE_DAYS = 30;
+
+/** The date the phone can change again, or null when it can change now —
+ * PHONE_CHANGE_DAYS after its last change. A profile's first phone starts
+ * no clock (changedAt stays null); removing one does. */
+export function phoneChangeableFrom(changedAt: string | null | undefined, now: Date = new Date()): Date | null {
+  if (!changedAt) return null;
+  const at = new Date(changedAt);
+  if (Number.isNaN(at.getTime())) return null;
+  const until = new Date(at.getTime() + PHONE_CHANGE_DAYS * 24 * 60 * 60 * 1000);
+  return until > now ? until : null;
+}
+
 export type FillableContactField = (typeof FILLABLE)[number];
 
 /** Details an upload may offer in place of the profile's: not the name or
@@ -87,4 +103,22 @@ export function contactDifferences(
     if (mine && theirs && !sameDetail(field, mine, theirs)) out.push({ field, value: theirs });
   }
   return out;
+}
+
+/**
+ * The name, email and phone every résumé carries: the account's
+ * (apps/api services/account_contact). A detail the account has no value
+ * for is undefined, and the résumé keeps its own — a profile made before
+ * names were asked for, or one with no phone.
+ */
+export function accountContact(
+  profileContact: Partial<ContactInfo> | undefined | null,
+  accountEmail: string | null,
+): { name?: string; email?: string; phone?: string } {
+  const clean = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  return {
+    name: clean(profileContact?.name),
+    email: clean(accountEmail) ?? clean(profileContact?.email),
+    phone: clean(profileContact?.phone),
+  };
 }
