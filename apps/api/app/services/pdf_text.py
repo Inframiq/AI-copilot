@@ -132,24 +132,34 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     text = "\n".join(pages).strip()
     reference = _reference_words(file_bytes)
     if reference is not None:
-        text = rejoin_split_words(text, *reference)
+        # Apart first: "•Winner-T echSprint" joins only once the bullet is off.
+        text = rejoin_split_words(split_glued_words(text, *reference), *reference)
     return _append_link_hints(text, links)[:MAX_TEXT_CHARS]
 
 
-# ── Words split by a space that isn't there ─────────────────────────────────
+# ── Spaces pypdf gets wrong ─────────────────────────────────────────────────
 #
 # pypdf puts a space wherever a run of text starts past where it thinks the
 # previous run ended. It works that end out without the PDF's extra letter
 # and word spacing, so in many PDFs (Word's justified text, a capital kerned
 # into the next letter) it sees a gap inside a word: "Indi a", "T echnical",
-# "new -hire", "35 -40%". pdfminer places every character where it is drawn
-# and gets those words whole — but reads columns and lines in a worse order,
-# so pypdf stays the reader and pdfminer is asked only which words exist.
+# "new -hire", "35 -40%". And where a PDF moves to the next word without
+# drawing a space (LaTeX and Typst do, around bold text, links and a date
+# set at the right margin) it sees none: "pipelinefor", "usingPython",
+# "Ltd.July". pdfminer places every character where it is drawn and gets
+# both right — but reads columns and lines in a worse order, so pypdf stays
+# the reader and pdfminer is asked only which words the file holds.
+
+# In a PDF that spaces out its letters pdfminer reads "E x p e r i e n c e":
+# then most of its words are one letter, and it says nothing about words.
+# A résumé it reads well has 1-2% of them.
+LETTER_BY_LETTER = 0.25
+
 
 def _reference_words(file_bytes: bytes) -> tuple[set[str], set[tuple[str, str]]] | None:
     """Every word pdfminer reads in the file, and every pair of words it
-    reads side by side; None when it can't read the file (the text is then
-    left as pypdf read it)."""
+    reads side by side; None when it can't read the file, or reads it letter
+    by letter (the text is then left as pypdf read it)."""
     try:
         import logging
 
@@ -159,6 +169,8 @@ def _reference_words(file_bytes: bytes) -> tuple[set[str], set[tuple[str, str]]]
         logging.getLogger("pdfminer").setLevel(logging.ERROR)
         words = extract_text(io.BytesIO(file_bytes), laparams=LAParams(), maxpages=REFERENCE_PAGES).split()
     except Exception:
+        return None
+    if not words or sum(1 for w in words if len(w) == 1 and w.isalpha()) / len(words) > LETTER_BY_LETTER:
         return None
     return set(words), set(zip(words, words[1:]))
 
@@ -174,8 +186,16 @@ def rejoin_split_words(text: str, words: set[str], pairs: set[tuple[str, str]]) 
     stay apart even where they also occur joined. Both pieces must hold a
     letter or digit: a separator glyph neither reader could name ("71.63% ?
     2023") is no piece of a word."""
+    def known(pieces: list[str]) -> bool:
+        if "".join(pieces) in words:
+            return True
+        # Two words hyphenated, the second split: "Winner-T echSprint," where
+        # pdfminer reads "Winner - TechSprint,".
+        head, dash, tail = pieces[0].rpartition("-")
+        return bool(dash) and head in words and tail + "".join(pieces[1:]) in words
+
     def joined(pieces: list[str]) -> bool:
-        return (all(_WORDLIKE.search(p) for p in pieces) and "".join(pieces) in words
+        return (all(_WORDLIKE.search(p) for p in pieces) and known(pieces)
                 and not any(pair in pairs for pair in zip(pieces, pieces[1:])))
 
     def line_of(line: str) -> str:
@@ -191,6 +211,87 @@ def rejoin_split_words(text: str, words: set[str], pairs: set[tuple[str, str]]) 
         return " ".join(out)
 
     return "\n".join(line_of(line) for line in text.split("\n"))
+
+
+# Where one word ends and the next begins, with no space between them: a
+# small letter then a capital or digit ("SystemJan", "Engineering2024"), a
+# digit then a letter, or a stop, colon or bracket then the next word
+# ("Ltd.July", "CS:Data"). Not a hyphen: "e-commerce" is one word.
+_BOUNDARY = re.compile(r"[a-z][A-Z0-9]|[A-Za-z][0-9]|[0-9][A-Za-z]|[.:;,)\]][A-Za-z0-9(]")
+# Never apart, even where pdfminer reads them so: two digits ("070"), two
+# capitals or a capital and a small letter ("THPi", "PLt2" — a formula, an
+# acronym), or either side of a dash or slash ("STATISTICS-3", "2–3",
+# "doi:10.1145/2347736").
+_NO_CUT = re.compile(r"[0-9][0-9]|[A-Z][A-Za-z]|[-–—/].|.[-–—/]")
+_ACRONYM_THEN_WORD = re.compile(r"[A-Z]{2}[a-z]{3}")
+# A run of words with no space between them at all: "usingEfficientNet-B2across6,000+".
+MAX_GLUED_WORDS = 6
+_ONE_LETTER_WORDS = {"a", "A", "I"}
+_NUMBER = re.compile(r"[(\[]?[0-9][0-9.,%+/\-–]*[)\]]?")
+_LETTER = re.compile(r"[^\W\d_]")
+
+
+def _whole(piece: str) -> bool:
+    """A piece that can be a word of its own: two letters or more ("for",
+    "(MPC)", "4-agent"), "a" or "I", or a number ("2024", "300+", "2-3", "1.")."""
+    return (len(_LETTER.findall(piece)) > 1 or piece in _ONE_LETTER_WORDS
+            or bool(_NUMBER.fullmatch(piece)))
+
+
+def _bullet_glyph(piece: str) -> bool:
+    """A bullet neither reader could name ("?Built"): one non-ASCII mark."""
+    return len(piece) == 1 and not piece.isascii() and not piece.isalnum()
+
+
+def _split_point(token: str, words: set[str], pairs: set[tuple[str, str]],
+                 followers: dict[str, set[str]]) -> int | None:
+    """Where *token* is two words pdfminer read apart, or None."""
+    cuts = [k for k in range(1, len(token)) if not _NO_CUT.fullmatch(token[k - 1:k + 1])]
+    # Read side by side: "pipelinefor" where pdfminer has "pipeline for"
+    # (and "teamsusingPython" where it has "teams using Python").
+    for k in range(1, len(token)):
+        a, b = token[:k], token[k:]
+        if not (_whole(b) and (_whole(a) or _bullet_glyph(a)) and len(a) + len(b) > 2):
+            continue
+        if k in cuts and ((a, b) in pairs or any(b.startswith(n) for n in followers.get(a, ()))):
+            return k
+        # An acronym, then a word: "Grad-CAMexplainability" where pdfminer
+        # reads exactly "Grad-CAM explainability".
+        if (a, b) in pairs and _ACRONYM_THEN_WORD.fullmatch(token[max(0, k - 2):k + 3]):
+            return k
+    # Read in different places (a date at the margin, a column apart), so
+    # only at a plain word boundary: "Engineering2024", "Ltd.July".
+    for k in cuts:
+        a, b = token[:k], token[k:]
+        if (a in words and b in words and _whole(a) and _whole(b) and min(len(a), len(b)) > 1
+                and _BOUNDARY.fullmatch(token[k - 1:k + 1])):
+            return k
+    return None
+
+
+def split_glued_words(text: str, words: set[str], pairs: set[tuple[str, str]]) -> str:
+    """text with "ab" made "a b" wherever pdfminer never reads "ab" as one
+    word but reads "a" and "b" as two: a space the PDF shows by position,
+    with no space character, which pypdf misses. A word pdfminer also reads
+    whole anywhere in the file is left as it is."""
+    # The words pdfminer reads right after each word: "teams" -> "using".
+    followers: dict[str, set[str]] = {}
+    for a, b in pairs:
+        if _whole(b):
+            followers.setdefault(a, set()).add(b)
+
+    def token_of(token: str) -> str:
+        out: list[str] = []
+        rest = token
+        while rest and rest not in words and len(out) < MAX_GLUED_WORDS - 1:
+            k = _split_point(rest, words, pairs, followers)
+            if k is None:
+                break
+            out.append(rest[:k])
+            rest = rest[k:]
+        return " ".join([*out, rest])
+
+    return "\n".join(" ".join(token_of(t) for t in line.split(" ")) for line in text.split("\n"))
 
 
 # Things a PDF can carry that run, launch, submit or embed something. A
