@@ -129,6 +129,25 @@ describe("My Profile — contact information is fixed against résumé uploads",
     expect(phone).toHaveAccessibleDescription("After a change, it stays for 30 days.");
   });
 
+  it("has no Field of Study: an old one reads into the degree, and saves that way", async () => {
+    getCareerProfile.mockResolvedValueOnce({
+      user_id: "u1", master_resume_id: null,
+      contact: { name: "Jane Smith", email: "jane@account.com" },
+      experience: [], projects: [], skills: [], certifications: [],
+      education: [{ id: "ed1", institution: "GITAM", degree: "B.Tech", field: "Mechanical", year: "2019" }],
+      headline: null, role_status: null, photo_url: null, photo_path: null, created_at: "", updated_at: "",
+    });
+    renderPage();
+    expect(await screen.findByDisplayValue("B.Tech in Mechanical")).toBeInTheDocument();
+    expect(screen.queryByText("Field of Study")).toBeNull();
+    await userEvent.type(screen.getByPlaceholderText("Senior Software Engineer · Open to Work"), "Engineer");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
+    expect(upsertCareerProfile.mock.calls[0][0].education).toEqual([
+      { id: "ed1", institution: "GITAM", degree: "B.Tech in Mechanical", year: "2019" },
+    ]);
+  });
+
   it("keeps the user's contact details when a résumé is uploaded, filling only empty fields", async () => {
     vi.mocked(apiClient.readResumeFile).mockResolvedValue({
       title: "Résumé", unplaced: [],

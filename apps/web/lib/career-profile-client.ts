@@ -90,7 +90,10 @@ export interface EducationEntry {
   id: string;
   institution: string;
   degree: string;
-  field: string;
+  /** Field of Study, from before it was folded into the degree ("B.Tech in
+   *  Computer Science", as résumés print it). Only on rows saved before
+   *  then; withDegreeField reads it into the degree. */
+  field?: string;
   year: string;
   gpa?: string;
   honors?: string;
@@ -169,6 +172,22 @@ export async function getCareerProfile(): Promise<CareerProfile | null> {
   // A profile saved before lib/plain-text existed reads back as keyboard
   // text, which the next save stores.
   return data ? plainDeep(data as CareerProfile) : null;
+}
+
+/**
+ * An education entry with an old Field of Study read into its degree, the
+ * way résumés print it: "B.Tech" + "Computer Science" is "B.Tech in
+ * Computer Science". A field the degree already names isn't added twice;
+ * a field with no degree becomes the degree. The field itself goes.
+ */
+export function withDegreeField(entry: EducationEntry): EducationEntry {
+  const { field, ...rest } = entry;
+  const f = (field ?? "").trim();
+  const degree = (entry.degree ?? "").trim();
+  if (!f) return { ...rest, degree: entry.degree ?? "" };
+  if (!degree) return { ...rest, degree: f };
+  if (degree.toLowerCase().includes(f.toLowerCase())) return { ...rest, degree };
+  return { ...rest, degree: `${degree} in ${f}` };
 }
 
 export async function upsertCareerProfile(input: CareerProfileInput): Promise<CareerProfile> {
@@ -367,7 +386,6 @@ export function resumeContentToCareerProfileInput(
           id: crypto.randomUUID(),
           institution: e.institution,
           degree: e.degree,
-          field: "",
           year: e.year,
           gpa: e.gpa ?? "",
           honors: e.honors ?? "",
@@ -422,7 +440,7 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
     })),
     education: profile.education.map(e => ({
       institution: e.institution,
-      degree: `${e.degree}${e.field ? ` in ${e.field}` : ""}`,
+      degree: withDegreeField(e).degree,
       year: e.year,
       gpa: e.gpa || undefined,
       ...(e.honors?.trim() ? { honors: e.honors.trim() } : {}),

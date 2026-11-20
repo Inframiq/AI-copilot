@@ -56,6 +56,7 @@ import {
   blankExperienceEntry,
   insertRoleAfter,
   moveExperience,
+  withDegreeField,
   type CareerProfile,
   type ExperienceEntry,
 } from "../lib/career-profile-client";
@@ -769,5 +770,23 @@ describe("career-profile-client", () => {
     it("returns an unchanged copy for an invalid index", () => {
       expect(moveExperience(list(), 9, "up").map((e) => e.id)).toEqual(["a", "b", "c"]);
     });
+  });
+});
+
+describe("withDegreeField — Field of Study is part of the degree now", () => {
+  const edu = (degree: string, field?: string) => ({ id: "e", institution: "MIT", degree, year: "2025", ...(field !== undefined ? { field } : {}) });
+
+  it("reads an old field into the degree, as résumés print it", () => {
+    expect(withDegreeField(edu("B.Tech", "Computer Science"))).toEqual({ id: "e", institution: "MIT", degree: "B.Tech in Computer Science", year: "2025" });
+  });
+
+  it("doesn't name the field twice, and a field alone becomes the degree", () => {
+    expect(withDegreeField(edu("B.Tech in Computer Science", "computer science")).degree).toBe("B.Tech in Computer Science");
+    expect(withDegreeField(edu("", "Computer Science")).degree).toBe("Computer Science");
+  });
+
+  it("leaves an entry with no field as it is, without the key", () => {
+    expect(withDegreeField(edu("MBA", ""))).toEqual({ id: "e", institution: "MIT", degree: "MBA", year: "2025" });
+    expect(withDegreeField(edu("MBA"))).toEqual({ id: "e", institution: "MIT", degree: "MBA", year: "2025" });
   });
 });

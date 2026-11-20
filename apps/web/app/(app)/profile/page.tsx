@@ -38,6 +38,7 @@ import {
   upsertCareerProfile,
   inferExpType,
   withWorkProjects,
+  withDegreeField,
   resumeProjectToWork,
   sameCompany,
   formatRoleDuration,
@@ -101,7 +102,7 @@ const emptyContact = (): ContactInfo => ({
 const emptyExp = (): ExperienceEntry => blankExperienceEntry();
 
 const emptyEdu = (): EducationEntry => ({
-  id: newId(), institution: "", degree: "", field: "", year: "", gpa: "", honors: "",
+  id: newId(), institution: "", degree: "", year: "", gpa: "", honors: "",
 });
 
 const emptyCert = (): CertEntry => ({ id: newId(), name: "", issuer: "", year: "" });
@@ -264,7 +265,8 @@ export default function ProfilePage() {
       workProjects: (e.workProjects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })),
     })));
     setProjects((profile.projects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })));
-    setEducation(profile.education);
+    // An old Field of Study reads into the degree; saved that way next time.
+    setEducation(profile.education.map(withDegreeField));
     setCertifications(profile.certifications);
     setMasterResumeId(profile.master_resume_id);
     setPhotoUrl(profile.photo_url ?? null);
@@ -493,7 +495,7 @@ export default function ProfilePage() {
       const newEducation: EducationEntry[] = Array.isArray(c.education)
         ? (c.education as Array<{institution:string;degree:string;year:string;gpa?:string;honors?:string}>).map(e => ({
             id: newId(), institution: e.institution, degree: e.degree,
-            field: "", year: e.year, gpa: e.gpa ?? "", honors: e.honors ?? "",
+            year: e.year, gpa: e.gpa ?? "", honors: e.honors ?? "",
           }))
         : [];
       const newCertifications: CertEntry[] = Array.isArray(c.certifications)
@@ -1117,15 +1119,10 @@ export default function ProfilePage() {
                             <SuggestInput kind="college" value={edu.institution ?? ""} onValueChange={v => updateEdu(edu.id, "institution", v)}
                               placeholder="Stanford University" className={inputCls} />
                           </div>
-                          <div className="flex flex-col gap-xs">
+                          <div className="flex flex-col gap-xs col-span-2">
                             <label className="text-caption text-on-surface-variant">Degree</label>
                             <SuggestInput kind="degree" value={edu.degree ?? ""} onValueChange={v => updateEdu(edu.id, "degree", v)}
-                              placeholder="B.S. / M.S. / Ph.D." className={inputCls} />
-                          </div>
-                          <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Field of Study</label>
-                            <input value={edu.field ?? ""} onChange={e => updateEdu(edu.id, "field", e.target.value)}
-                              placeholder="Computer Science" className={inputCls} />
+                              placeholder="B.Tech in Computer Science" className={inputCls} />
                           </div>
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant">Graduation Year</label>
