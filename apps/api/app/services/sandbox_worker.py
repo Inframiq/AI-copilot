@@ -33,6 +33,10 @@ def _load(job: str):
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         import pypdf  # noqa: F401
         import pypdf.filters  # noqa: F401
+        # The word check in pdf_text (rejoin_split_words). Its CMaps load
+        # lazily as plain reads, which the lock-down still allows.
+        import pdfminer.high_level  # noqa: F401
+        import pdfminer.layout  # noqa: F401
         from app.services import pdf_text
         return pdf_text
     from PIL import GifImagePlugin, Image, ImageOps, JpegImagePlugin, PngImagePlugin, WebPImagePlugin  # noqa: F401

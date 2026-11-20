@@ -2,7 +2,7 @@
 the uploaded file.
 
 Imports nothing from the app (no settings, no secrets, no database), only
-pypdf: the sandbox worker (app/services/sandbox_worker.py) loads this module
+pypdf and pdfminer: the sandbox worker (app/services/sandbox_worker.py) loads this module
 alone, in a separate process that holds none of the API's secrets. Nothing
 in the API process should call these on an uploaded file directly — go
 through app.services.sandbox.
@@ -13,6 +13,9 @@ from typing import NamedTuple
 
 MAX_PDF_PAGES = 50
 MAX_TEXT_CHARS = 100_000
+# pdfminer reads this many pages for the word check below: a résumé's, and
+# few enough to stay well inside the sandbox's time limit on a long PDF.
+REFERENCE_PAGES = 6
 
 
 class _Link(NamedTuple):
@@ -127,7 +130,67 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         pages.append(page.extract_text() or "")
         links.extend(_extract_links(page))
     text = "\n".join(pages).strip()
+    reference = _reference_words(file_bytes)
+    if reference is not None:
+        text = rejoin_split_words(text, *reference)
     return _append_link_hints(text, links)[:MAX_TEXT_CHARS]
+
+
+# ── Words split by a space that isn't there ─────────────────────────────────
+#
+# pypdf puts a space wherever a run of text starts past where it thinks the
+# previous run ended. It works that end out without the PDF's extra letter
+# and word spacing, so in many PDFs (Word's justified text, a capital kerned
+# into the next letter) it sees a gap inside a word: "Indi a", "T echnical",
+# "new -hire", "35 -40%". pdfminer places every character where it is drawn
+# and gets those words whole — but reads columns and lines in a worse order,
+# so pypdf stays the reader and pdfminer is asked only which words exist.
+
+def _reference_words(file_bytes: bytes) -> tuple[set[str], set[tuple[str, str]]] | None:
+    """Every word pdfminer reads in the file, and every pair of words it
+    reads side by side; None when it can't read the file (the text is then
+    left as pypdf read it)."""
+    try:
+        import logging
+
+        from pdfminer.high_level import extract_text
+        from pdfminer.layout import LAParams
+
+        logging.getLogger("pdfminer").setLevel(logging.ERROR)
+        words = extract_text(io.BytesIO(file_bytes), laparams=LAParams(), maxpages=REFERENCE_PAGES).split()
+    except Exception:
+        return None
+    return set(words), set(zip(words, words[1:]))
+
+
+_WORDLIKE = re.compile(r"\w")
+# "Fundam entals" is two pieces; three covers a word split twice.
+MAX_PIECES = 3
+
+
+def rejoin_split_words(text: str, words: set[str], pairs: set[tuple[str, str]]) -> str:
+    """text with "a b" made "ab" wherever "ab" is one word in the reference
+    and "a b" is never two words side by side in it — so two real words
+    stay apart even where they also occur joined. Both pieces must hold a
+    letter or digit: a separator glyph neither reader could name ("71.63% ?
+    2023") is no piece of a word."""
+    def joined(pieces: list[str]) -> bool:
+        return (all(_WORDLIKE.search(p) for p in pieces) and "".join(pieces) in words
+                and not any(pair in pairs for pair in zip(pieces, pieces[1:])))
+
+    def line_of(line: str) -> str:
+        parts = line.split(" ")
+        out: list[str] = []
+        i = 0
+        while i < len(parts):
+            # The longest run of up to MAX_PIECES pieces that is one word.
+            take = next((n for n in range(min(MAX_PIECES, len(parts) - i), 1, -1)
+                         if joined(parts[i:i + n])), 1)
+            out.append("".join(parts[i:i + take]))
+            i += take
+        return " ".join(out)
+
+    return "\n".join(line_of(line) for line in text.split("\n"))
 
 
 # Things a PDF can carry that run, launch, submit or embed something. A

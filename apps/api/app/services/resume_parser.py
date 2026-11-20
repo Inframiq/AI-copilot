@@ -347,7 +347,37 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     data["unplaced"] = []
     for group in groups:
         _file_by_heading(data, group["heading"], group["points"])
-    return data
+    # Last, so the points filed from the text are tidied too.
+    return _tidy_spaces_deep(data)
+
+
+# Spacing a PDF leaves in its text, not anything the person typed: a
+# doubled space, a line's trailing space, a space before a comma or after a
+# bracket ("Nagpur ( IIM Nagpur) , 86.8 %"). A full stop counts only at a
+# sentence's end, so ".NET" in "C# .NET" stays.
+_SPACE_RUN = re.compile(r"[ \t]{2,}")
+_SPACE_BEFORE = re.compile(r"(?<=\S) +(?=[,;:!?%)\]](?:\s|$|[,;:!?.%)\]]))|(?<=\S) +(?=\.(?:\s|$))")
+_SPACE_AFTER_OPEN = re.compile(r"(?<=[(\[]) +")
+_BLANK_LINES = re.compile(r"\n{3,}")
+
+
+def tidy_spaces(text: str) -> str:
+    lines = []
+    for line in text.split("\n"):
+        line = _SPACE_RUN.sub(" ", line).strip()
+        line = _SPACE_AFTER_OPEN.sub("", _SPACE_BEFORE.sub("", line))
+        lines.append(line)
+    return _BLANK_LINES.sub("\n\n", "\n".join(lines)).strip()
+
+
+def _tidy_spaces_deep(value):
+    if isinstance(value, str):
+        return tidy_spaces(value)
+    if isinstance(value, list):
+        return [_tidy_spaces_deep(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _tidy_spaces_deep(v) for k, v in value.items()}
+    return value
 
 
 # Points printed under no job: "Key Responsibilities", "Roles &

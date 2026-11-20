@@ -18,4 +18,8 @@ pydyf==0.11.0
 jinja2==3.1.6
 python-multipart==0.0.32
 pypdf==6.21.4
+# Asked, in the upload sandbox, which words a PDF really holds: pypdf splits
+# some ("Indi a", "new -hire"), see services/pdf_text.rejoin_split_words.
+# Also what tests/test_ats_check reads templates with, as ATS parsers do.
+pdfminer.six==20260107
 slowapi==0.1.9
