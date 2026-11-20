@@ -40,6 +40,9 @@ import {
   withWorkProjects,
   withDegreeField,
   resumeProjectToWork,
+  asPointLines,
+  pointLines,
+  resumePoints,
   sameCompany,
   formatRoleDuration,
   formatCompanyTotalDuration,
@@ -62,6 +65,7 @@ import type { ResumeContent, UnplacedSection, WorkProject } from "@career-copilo
 import { useRouter } from "next/navigation";
 import { ResumePreviewModal } from "@/components/resume/ResumePreviewModal";
 import { ProfilePhotoCard } from "@/components/profile/ProfilePhotoCard";
+import { PointsTextarea } from "@/components/profile/PointsTextarea";
 import { MiscellaneousPoints } from "@/components/profile/MiscellaneousPoints";
 import { AddSectionButton, ExtraSectionCard, SummaryCard } from "@/components/profile/ProfileSections";
 import {
@@ -75,7 +79,7 @@ import {
 } from "@/lib/profile-sections";
 import { profileLayout, type MainSection, type OptionalSection } from "@/lib/profile-layout";
 import {
-  SectionHeader, cardCls, inputCls, textareaCls, iconInputCls, fieldLabelCls,
+  SectionHeader, cardCls, inputCls, iconInputCls, fieldLabelCls,
 } from "@/components/profile/ProfileFormParts";
 import { uploadProfilePhoto } from "@/lib/photo-upload";
 import { PHONE_CHANGE_DAYS, contactDifferences, lockedEmail, lockedName, mergeParsedContact, phoneChangeableFrom, type ContactDifference } from "@/lib/contact-lock";
@@ -260,11 +264,20 @@ export default function ProfilePage() {
     // Dates typed before the month-year picker read in its form ("January
     // 2022" → "Jan 2022"), and are saved that way with the next Save.
     // The old Projects box moves into the role's first project card.
+    // Points saved as "a; b; c" show one per line, as the résumé prints them.
     setExperiences(profile.experience.map(withWorkProjects).map(e => ({
       ...e, start: tidyDate(e.start), end: tidyDate(e.end),
-      workProjects: (e.workProjects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })),
+      responsibilities: asPointLines(e.responsibilities), achievements: asPointLines(e.achievements),
+      impact: asPointLines(e.impact),
+      workProjects: (e.workProjects ?? []).map(p => ({
+        ...p, start: tidyDate(p.start), end: tidyDate(p.end),
+        responsibilities: asPointLines(p.responsibilities), achievements: asPointLines(p.achievements),
+        impact: asPointLines(p.impact),
+      })),
     })));
-    setProjects((profile.projects ?? []).map(p => ({ ...p, start: tidyDate(p.start), end: tidyDate(p.end) })));
+    setProjects((profile.projects ?? []).map(p => ({
+      ...p, start: tidyDate(p.start), end: tidyDate(p.end), description: asPointLines(p.description),
+    })));
     // An old Field of Study reads into the degree; saved that way next time.
     setEducation(profile.education.map(withDegreeField));
     setCertifications(profile.certifications);
@@ -479,7 +492,7 @@ export default function ProfilePage() {
             location: e.location ?? "",
             start: tidyDate(e.start), end: tidyDate(e.end) || "Present",
             current: !e.end || isPresent(e.end),
-            responsibilities: (e.bullets ?? []).join("; "),
+            responsibilities: pointLines(e.bullets),
             achievements: "", projects: "", impact: "",
             workProjects: (e.projects ?? []).map(resumeProjectToWork),
           }))
@@ -489,7 +502,7 @@ export default function ProfilePage() {
             id: newId(), name: p.name, techStack: p.tech_stack ?? "", link: p.link ?? "",
             linkLabel: p.link_label ?? "", liveLink: p.live_link ?? "", liveLinkLabel: p.live_link_label ?? "",
             start: tidyDate(p.start), end: tidyDate(p.end),
-            description: (p.bullets ?? []).join("; "),
+            description: pointLines(p.bullets),
           }))
         : [];
       const newEducation: EducationEntry[] = Array.isArray(c.education)
@@ -915,19 +928,19 @@ export default function ProfilePage() {
                             </label>
                           </div>
                           <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
-                            <textarea value={exp.responsibilities ?? ""} onChange={e => updateExp(exp.id, "responsibilities", e.target.value)}
-                              rows={2} placeholder="Led backend API development, mentored junior engineers…" className={textareaCls} />
+                            <label htmlFor={`exp-responsibilities-${exp.id}`} className="text-caption text-on-surface-variant">Responsibilities & Roles</label>
+                            <PointsTextarea id={`exp-responsibilities-${exp.id}`} value={exp.responsibilities ?? ""} onChange={v => updateExp(exp.id, "responsibilities", v)}
+                              placeholder="• Led backend API development, mentored junior engineers…" />
                           </div>
                           <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Achievements</label>
-                            <textarea value={exp.achievements ?? ""} onChange={e => updateExp(exp.id, "achievements", e.target.value)}
-                              rows={2} placeholder="Reduced API latency by 40%, shipped 3 major features…" className={textareaCls} />
+                            <label htmlFor={`exp-achievements-${exp.id}`} className="text-caption text-on-surface-variant">Achievements</label>
+                            <PointsTextarea id={`exp-achievements-${exp.id}`} value={exp.achievements ?? ""} onChange={v => updateExp(exp.id, "achievements", v)}
+                              placeholder="• Reduced API latency by 40%, shipped 3 major features…" />
                           </div>
                           <div className="flex flex-col gap-xs">
-                            <label className="text-caption text-on-surface-variant">Impact</label>
-                            <textarea value={exp.impact ?? ""} onChange={e => updateExp(exp.id, "impact", e.target.value)}
-                              rows={2} placeholder="Saved $200k/yr, improved NPS by 15pts…" className={textareaCls} />
+                            <label htmlFor={`exp-impact-${exp.id}`} className="text-caption text-on-surface-variant">Impact</label>
+                            <PointsTextarea id={`exp-impact-${exp.id}`} value={exp.impact ?? ""} onChange={v => updateExp(exp.id, "impact", v)}
+                              placeholder="• Saved $200k/yr, improved NPS by 15pts…" />
                           </div>
                           {/* The role's projects — the old free-text Projects box
                               became the first card (withWorkProjects). */}
@@ -999,7 +1012,7 @@ export default function ProfilePage() {
                           </div>
                           <h3 className="text-label-md text-on-surface font-bold mb-xs truncate">{proj.name || `Untitled Project #${idx + 1}`}</h3>
                           <p className="text-caption text-on-surface-variant line-clamp-2 flex-1">
-                            {proj.description || proj.techStack || "No description yet — click to edit"}
+                            {resumePoints(proj.description).join(" · ") || proj.techStack || "No description yet — click to edit"}
                           </p>
                           {safeHref(proj.liveLink || proj.link) && (
                             <a href={safeHref(proj.liveLink || proj.link)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
@@ -1062,9 +1075,9 @@ export default function ProfilePage() {
                               </div>
                             </div>
                             <div className="flex flex-col gap-xs">
-                              <label className="text-caption text-on-surface-variant">What did you build / achieve?</label>
-                              <textarea value={proj.description ?? ""} onChange={e => updateProj(proj.id, "description", e.target.value)}
-                                rows={3} placeholder="Built a full-stack listings app used by 200+ students; Implemented real-time chat with WebSockets…" className={textareaCls} />
+                              <label htmlFor={`proj-desc-${proj.id}`} className="text-caption text-on-surface-variant">What did you build / achieve?</label>
+                              <PointsTextarea id={`proj-desc-${proj.id}`} value={proj.description ?? ""} onChange={v => updateProj(proj.id, "description", v)}
+                                placeholder={"• Built a full-stack listings app used by 200+ students\n• Implemented real-time chat with WebSockets"} />
                             </div>
                           </div>
                         </>

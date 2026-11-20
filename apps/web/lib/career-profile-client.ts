@@ -360,7 +360,7 @@ export function resumeContentToCareerProfileInput(
           start: tidyDate(e.start),
           end: tidyDate(e.end) || "Present",
           current: !e.end || saysPresent(e.end),
-          responsibilities: (e.bullets ?? []).join("; "),
+          responsibilities: pointLines(e.bullets),
           achievements: "",
           projects: "",
           impact: "",
@@ -378,7 +378,7 @@ export function resumeContentToCareerProfileInput(
           liveLinkLabel: p.live_link_label ?? "",
           start: tidyDate(p.start),
           end: tidyDate(p.end),
-          description: (p.bullets ?? []).join("; "),
+          description: pointLines(p.bullets),
         }))
       : [],
     education: Array.isArray(c.education)
@@ -434,9 +434,7 @@ export function profileToResumeContent(profile: CareerProfileInput | CareerProfi
       live_link_label: (p.liveLink && p.liveLinkLabel) || undefined,
       start: p.start || undefined,
       end: p.end || undefined,
-      bullets: p.description
-        ? p.description.split(/\n|;/).map(s => s.trim()).filter(Boolean)
-        : [],
+      bullets: resumePoints(p.description),
     })),
     education: profile.education.map(e => ({
       institution: e.institution,
@@ -521,17 +519,36 @@ export function withWorkProjects(e: ExperienceEntry): ExperienceEntry {
   return { ...e, workProjects: cards };
 }
 
+const POINT_MARK = /^\s*(?:[-*•–·]|\d+[.)])(?:\s+|$)/;
+
 /**
- * A Profile box as standard résumé points: one point per item — the box
- * takes several, one per line or separated by "; " (how an upload fills
- * it) — each without the box's name in front and without a typed bullet
- * mark. A résumé never labels its points "Responsibilities:".
+ * A Profile box as standard résumé points, each without a typed bullet
+ * mark. The box holds one point per line (PointsTextarea); a box saved
+ * before that, all on one unmarked line, held them separated by "; ", as
+ * uploads filled it. A résumé never labels its points "Responsibilities:".
  */
 export function resumePoints(text: string | undefined | null): string[] {
-  return (text ?? "")
-    .split(/\n|;\s+/)
-    .map((t) => t.replace(/^\s*(?:[-*•–·]|\d+[.)])\s+/, "").trim())
+  const t = (text ?? "").trim();
+  const byLine = t.includes("\n") || POINT_MARK.test(t);
+  return t
+    .split(byLine ? "\n" : /;\s+/)
+    .map((p) => p.replace(POINT_MARK, "").trim())
     .filter(Boolean);
+}
+
+/** A box's text as PointsTextarea shows it: one bulleted point per line. */
+export function asPointLines(text: string | undefined | null): string {
+  return resumePoints(text).map((p) => `• ${p}`).join("\n");
+}
+
+/** A résumé's points as a Profile box holds them. */
+export function pointLines(bullets: string[] | undefined | null): string {
+  return (bullets ?? [])
+    .flatMap((b) => b.split("\n"))
+    .map((p) => p.replace(POINT_MARK, "").trim())
+    .filter(Boolean)
+    .map((p) => `• ${p}`)
+    .join("\n");
 }
 
 /** An internship's title as a résumé prints it: "Intern" added unless the
@@ -563,7 +580,7 @@ export function resumeProjectToWork(p: WorkProject): WorkProjectEntry {
   return blankWorkProject({
     client: p.client ?? "", name: p.name ?? "", role: p.role ?? "", domain: p.domain ?? "",
     start: tidyDate(p.start), end: tidyDate(p.end), techStack: p.tech_stack ?? "",
-    responsibilities: (p.bullets ?? []).join("; "),
+    responsibilities: pointLines(p.bullets),
   });
 }
 

@@ -355,6 +355,34 @@ describe("career-profile-client", () => {
       expect(resumePoints(undefined)).toEqual([]);
     });
 
+    it("reads a box of lines line by line, so a point keeps its own semicolon", async () => {
+      const { resumePoints } = await import("../lib/career-profile-client");
+      expect(resumePoints("• Built the API; cut latency 40%\n• Mentored two juniors"))
+        .toEqual(["Built the API; cut latency 40%", "Mentored two juniors"]);
+      expect(resumePoints("• Built the API; cut latency 40%")).toEqual(["Built the API; cut latency 40%"]);
+      // A bullet left with nothing after it is no point.
+      expect(resumePoints("• Built the API\n• \n•")).toEqual(["Built the API"]);
+    });
+
+    it("shows a box saved as \"a; b\" one point per line, as the résumé prints it", async () => {
+      const { asPointLines, pointLines } = await import("../lib/career-profile-client");
+      expect(asPointLines("Built the API; Mentored two juniors")).toBe("• Built the API\n• Mentored two juniors");
+      expect(asPointLines("• Built the API\n• Mentored")).toBe("• Built the API\n• Mentored");
+      expect(asPointLines("")).toBe("");
+      // An upload's points go in one per line, each whole.
+      expect(pointLines(["Built the API; cut latency 40%", "- Mentored two juniors", " "]))
+        .toBe("• Built the API; cut latency 40%\n• Mentored two juniors");
+    });
+
+    it("prints a project's points from its box, a point's semicolon kept", () => {
+      const result = profileToResumeContent({
+        ...SAMPLE_PROFILE,
+        projects: [{ id: "p", name: "Market", techStack: "", link: "", liveLink: "", start: "", end: "",
+          description: "• Built listings for 200+ students; launched in a week\n• Added real-time chat" }],
+      } as any) as any;
+      expect(result.projects[0].bullets).toEqual(["Built listings for 200+ students; launched in a week", "Added real-time chat"]);
+    });
+
     it("marks current roles as Present", () => {
       const profile = {
         ...SAMPLE_PROFILE,

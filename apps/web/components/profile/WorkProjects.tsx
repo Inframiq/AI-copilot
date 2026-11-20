@@ -5,7 +5,8 @@ import { SuggestInput } from "@/components/ui/SuggestInput";
 import { MonthYearField } from "@/components/ui/MonthYearPicker";
 import { blankWorkProject, workToResumeProject, type WorkProjectEntry } from "@/lib/career-profile-client";
 import { projectLine } from "@/lib/work-projects";
-import { inputCls, textareaCls } from "./ProfileFormParts";
+import { inputCls } from "./ProfileFormParts";
+import { PointsTextarea } from "./PointsTextarea";
 
 const iconBtn =
   "w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary/10 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
@@ -114,18 +115,18 @@ export function WorkProjects({ entryId, projects, onChange }: {
                 </div>
                 <div className="col-span-2 flex flex-col gap-xs">
                   <label htmlFor={`${id}-resp`} className={labelCls}>Responsibilities</label>
-                  <textarea id={`${id}-resp`} value={p.responsibilities} onChange={(e) => set(p.id, { responsibilities: e.target.value })}
-                    rows={2} placeholder="Led the payments module for a team of 12…" className={textareaCls} />
+                  <PointsTextarea id={`${id}-resp`} value={p.responsibilities} onChange={(responsibilities) => set(p.id, { responsibilities })}
+                    placeholder="• Led the payments module for a team of 12…" />
                 </div>
                 <div className="flex flex-col gap-xs">
                   <label htmlFor={`${id}-ach`} className={labelCls}>Achievements</label>
-                  <textarea id={`${id}-ach`} value={p.achievements} onChange={(e) => set(p.id, { achievements: e.target.value })}
-                    rows={2} placeholder="Shipped settlement v2 a month early…" className={textareaCls} />
+                  <PointsTextarea id={`${id}-ach`} value={p.achievements} onChange={(achievements) => set(p.id, { achievements })}
+                    placeholder="• Shipped settlement v2 a month early…" />
                 </div>
                 <div className="flex flex-col gap-xs">
                   <label htmlFor={`${id}-impact`} className={labelCls}>Impact</label>
-                  <textarea id={`${id}-impact`} value={p.impact} onChange={(e) => set(p.id, { impact: e.target.value })}
-                    rows={2} placeholder="Cut settlement time by 30%…" className={textareaCls} />
+                  <PointsTextarea id={`${id}-impact`} value={p.impact} onChange={(impact) => set(p.id, { impact })}
+                    placeholder="• Cut settlement time by 30%…" />
                 </div>
               </div>
             )}

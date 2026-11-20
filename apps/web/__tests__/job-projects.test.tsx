@@ -165,7 +165,7 @@ describe("project cards in the Profile, and their way onto a résumé", () => {
     );
     expect(input.experience[0].workProjects).toEqual([expect.objectContaining({
       client: "Barclays", domain: "Banking", role: "Module Lead", start: "Jan 2022",
-      techStack: "Java", responsibilities: "Led the module.; Shipped v2.",
+      techStack: "Java", responsibilities: "• Led the module.\n• Shipped v2.",
     })]);
   });
 });

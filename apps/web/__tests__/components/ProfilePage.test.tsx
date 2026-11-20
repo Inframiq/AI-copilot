@@ -721,6 +721,23 @@ describe("My Profile — month-year dates", () => {
     expect(await screen.findByText(/An end date comes before its start \(Engineer\)/)).toBeInTheDocument();
     expect(upsertCareerProfile).not.toHaveBeenCalled();
   });
+
+  it("shows points saved as \"a; b\" one per line, as the résumé prints them", async () => {
+    getCareerProfile.mockResolvedValue(profile(
+      [{ ...role("Jan 2021", "Jun 2023"), responsibilities: "Built the API; Mentored two juniors" }],
+      [{ id: "p1", name: "Market", techStack: "", start: "", end: "",
+        description: "Built listings for 200+ students; Added real-time chat" }],
+    ));
+    renderPage();
+    const build = await screen.findByLabelText("What did you build / achieve?") as HTMLTextAreaElement;
+    expect(build.value).toBe("• Built listings for 200+ students\n• Added real-time chat");
+    expect((screen.getByLabelText("Responsibilities & Roles") as HTMLTextAreaElement).value)
+      .toBe("• Built the API\n• Mentored two juniors");
+    // Shown that way on loading; that alone isn't an unsaved change.
+    const leave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(false);
+  });
 });
 
 describe("My Profile — projects inside a role", () => {
@@ -763,7 +780,7 @@ describe("My Profile — projects inside a role", () => {
     await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
     await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalled());
     expect(upsertCareerProfile.mock.calls[0][0].experience[0].workProjects).toEqual([
-      expect.objectContaining({ client: "Barclays", responsibilities: "Led the payments module" }),
+      expect.objectContaining({ client: "Barclays", responsibilities: "• Led the payments module" }),
     ]);
   });
 
