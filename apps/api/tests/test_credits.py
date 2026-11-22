@@ -154,7 +154,7 @@ def test_every_action_that_calls_a_model_is_priced_and_enforced():
     from app.core.credits import ENFORCED_ACTIONS
     model_actions = {
         "tailor", "generate_resume", "cover_letter", "prep_questions",
-        "rewrite_bullet", "restructure_notes", "analyze", "parse_resume",
+        "rewrite_bullet", "restructure_notes", "analyze", "parse_resume", "write_summary",
     }
     for action in model_actions:
         assert CREDIT_COSTS.get(action, 0) > 0, f"{action} is free"

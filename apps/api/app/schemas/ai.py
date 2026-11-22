@@ -128,6 +128,21 @@ class RewriteBulletRequest(BaseModel):
     field: str = Field(default="bullet", pattern="^(bullet|summary)$")
 
 
+class WriteSummaryRequest(BaseModel):
+    # The résumé as the Builder holds it (saved or not). Read for facts only;
+    # contact details are never sent to the model.
+    content: dict
+
+    _check_content_size = field_validator("content")(_validate_content_size)
+
+
+class WriteSummaryOut(BaseModel):
+    summary: str
+    # Why the draft can't be used as it stands (a number the résumé lacks,
+    # a level the candidate doesn't hold…). Empty when every check passed.
+    problems: list[str] = []
+
+
 class RewriteBulletOut(BaseModel):
     rewritten_text: str
     # Non-empty when the deterministic fact-lock flagged the rewrite (a number

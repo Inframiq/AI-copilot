@@ -41,6 +41,10 @@ KNOWN_VALUES = {
     "template_id": "ats_clean",
     "expected_updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat(),
 }
+# The same for a field of type dict only: a résumé with something in it.
+# /ai/write-summary refuses an empty one before charging (there is nothing
+# to write a summary from); a cover letter's text "content" stays a string.
+KNOWN_DICTS = {"content": {"experience": [{"title": "Engineer", "company": "Acme", "bullets": ["Built APIs."]}]}}
 
 BIG = 1_000_000  # characters: past every cap (the largest, résumé content, is 200 KB)
 
@@ -92,6 +96,8 @@ def _valid(name, field):
     if ann in (int, float):
         low = next((getattr(m, "ge", None) for m in field.metadata if getattr(m, "ge", None) is not None), 1)
         return low
+    if origin is dict and name in KNOWN_DICTS:
+        return KNOWN_DICTS[name]
     return {str: "x", bool: True, uuid.UUID: SOME_ID, list: [], dict: {}}.get(origin, "x")
 
 

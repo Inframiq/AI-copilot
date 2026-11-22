@@ -50,6 +50,7 @@ import {
   insertRoleAfter,
   moveExperience,
   fileUnplacedPoints,
+  profileToResumeContent,
   type CareerProfile,
   type CareerProfileInput,
   type ContactInfo,
@@ -300,6 +301,15 @@ export default function ProfilePage() {
   }
 
   const updateSections = (patch: Partial<ProfileSections>) => setSections((prev) => ({ ...prev, ...patch }));
+  // The profile as a résumé, as the form holds it now (saved or not), for
+  // the summary card's "Generate / Regenerate with KripaX". Contact details
+  // are left out; the writer never sends them to the model.
+  const summarySource = () =>
+    profileToResumeContent({
+      master_resume_id: null, contact: {} as ContactInfo, headline: headline || null,
+      experience: experiences, projects, education, skills, certifications,
+      role_status: null, photo_url: null, photo_path: null, ...sections,
+    } as CareerProfileInput);
 
   function addSection(section: OptionalSection) {
     setShownSections((prev) => [...prev, section]);
@@ -1517,7 +1527,7 @@ export default function ProfilePage() {
       {layout.statement === "objective" ? (
         <ExtraSectionCard section="objective" title={layout.statementLabel} sections={sections} onChange={updateSections} />
       ) : (
-        <SummaryCard value={sections.summary ?? ""} title={layout.statementLabel} onChange={(summary) => updateSections({ summary })} />
+        <SummaryCard value={sections.summary ?? ""} title={layout.statementLabel} onChange={(summary) => updateSections({ summary })} writeFrom={summarySource} />
       )}
 
       {layout.main.map((key) => <Fragment key={key}>{mainSections[key]}</Fragment>)}
@@ -1530,6 +1540,7 @@ export default function ProfilePage() {
             value={sections.summary ?? ""}
             onChange={(summary) => updateSections({ summary })}
             onRemove={() => removeSection(s)}
+            writeFrom={summarySource}
           />
         ) : (
           <ExtraSectionCard

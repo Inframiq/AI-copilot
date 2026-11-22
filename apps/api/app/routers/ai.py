@@ -16,6 +16,7 @@ from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, PrepFollowupOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
     RestructureNotesRequest, RestructureNotesOut,
+    WriteSummaryRequest, WriteSummaryOut,
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
@@ -30,6 +31,7 @@ from app.services.prep_questions import (
     answer_followup_for_user, followups_by_question, latest_with_questions_per_jd, resume_fingerprint,
 )
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
+from app.services.summary_writer import write_summary
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
@@ -549,6 +551,43 @@ async def restructure_notes(
             detail="Couldn't find a point to save in that — your credit was returned.",
         )
     return RestructureNotesOut(points=points)
+
+
+@router.post("/write-summary", response_model=WriteSummaryOut)
+@limiter.limit("10/minute")
+@ai_global_limit
+async def write_resume_summary(
+    request: Request,
+    body: WriteSummaryRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The Builder's "Write summary": a professional summary written from the
+    résumé alone (no job), to the same rules and checks as the one every
+    tailoring run writes (services/summary_writer.py). Saves nothing — the
+    Builder shows it and the user chooses to use it."""
+    content = plain_deep(body.content)
+    if not any(content.get(k) for k in ("experience", "projects", "education")):
+        raise HTTPException(
+            status_code=422,
+            detail="Add your experience, projects or education first — the summary is written from them.",
+        )
+
+    uid = uuid.UUID(user["sub"])
+    await spend_credits(db, uid, "write_summary", email=user.get("email"))
+    await db.commit()
+
+    async with record_ai_usage(uid, "write_summary"):
+        result = await write_summary(content, get_ai_provider(), None)
+    if not result.text:
+        # write_summary never raises; an empty result means the model failed.
+        await refund_credits(db, uid, "write_summary", email=user.get("email"))
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Couldn't write a summary just now — your credits were returned. Try again.",
+        )
+    return WriteSummaryOut(summary=result.text, problems=result.problems)
 
 
 @router.post("/project-score", response_model=ProjectScoreOut)

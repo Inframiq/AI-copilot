@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // One save goes through `results` in order; the payload of each is kept.
 let results: Array<{ data: unknown; error: unknown }> = [];
@@ -122,7 +123,8 @@ describe("every Profile section is a résumé section", () => {
       expect(screen.getByRole("heading", { name: SECTION_INFO[key].label }), key).toBeInTheDocument();
     }
     expect(screen.getByLabelText(/^Interests/)).toHaveValue("Chess\nTrekking");
-    render(createElement(SummarySection));
+    // Its Write summary button refreshes the credit balance (react-query).
+    render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(SummarySection)));
     expect(screen.getByLabelText("Objective")).toHaveValue(FULL.objective);
   });
 });

@@ -1226,6 +1226,27 @@ describe("useTailoringStore", () => {
       expect(merged?.skills).toEqual(expect.arrayContaining(["Python", "Kubernetes", "Terraform"]));
     });
 
+    it("starts the summary tailoring wrote on, or off when the run flagged it", async () => {
+      const base = { contact: { name: "", email: "" }, summary: "Mine.", experience: [], education: [], skills: [] };
+      for (const [flagged, expected, used] of [[false, "accept", "For the job."], [true, "reject", "Mine."]] as const) {
+        useResumeStore.getState().setResume("resume-abc", base, "ats_clean");
+        useTailoringStore.getState().setJd("jd-001", "raw text");
+        vi.mocked(apiClient.getSession).mockResolvedValueOnce({
+          ...mockCompletedSession,
+          tailored_content: { ...base, summary: "For the job." },
+          reverted_bullets: flagged
+            ? [{ bullet_id: "summary", reasons: ["uses filler words: dynamic"], original_text: "Mine.", rejected_text: "For the job." }]
+            : [],
+        } as never);
+
+        await useTailoringStore.getState().runTailoring("resume-abc");
+
+        expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe(expected);
+        await useTailoringStore.getState().generatePreview("resume-abc");
+        expect(vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2]?.summary).toBe(used);
+      }
+    });
+
     it("setFixDecision calls projectScore with the accepted ids (debounced)", async () => {
       vi.useFakeTimers();
       try {

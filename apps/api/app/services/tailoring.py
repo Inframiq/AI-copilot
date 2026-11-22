@@ -34,6 +34,7 @@ from app.services.ats import (
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
 from app.services.jd_requirements import JdRequirements, with_requirements
+from app.services.summary_writer import write_summary
 from app.services.ai_engine.base import AITruncatedError
 
 logger = logging.getLogger("app")
@@ -2357,7 +2358,8 @@ async def analyze_jd_match(
 # 5: the headline is rewritten for every post: the role in the post's words,
 #    side terms from the résumé; switched on when it is the same job
 #    (gap filler rule 4 + headline_rewrite_ok).
-TAILOR_PIPELINE_VERSION = "5"
+# 6: every run writes the professional summary (services/summary_writer.py).
+TAILOR_PIPELINE_VERSION = "6"
 
 
 def tailor_fingerprint(
@@ -2404,6 +2406,8 @@ async def run_tailoring_pipeline(
          │
     gap filler (fast) ─── speculative bullets/headline for remaining gaps
 
+    summary writer (premium, beside Agents 2-3) ─── the professional summary
+
     Prep questions are NOT generated here — they're lazy (first view of the
     Interview Center); see get_or_generate_prep_questions and the
     GET /ai/sessions/{id}/questions endpoint.
@@ -2439,19 +2443,28 @@ async def run_tailoring_pipeline(
     from app.services.ats_check import jd_hard_terms, skills_only_terms
 
     listed_only = skills_only_terms(resume_content, jd_hard_terms(analysis.jd_analysis))
-    mapping_plan = await _agent2_semantic_map(
-        analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
-        missing_terms=analysis.missing_skills, humanize_level=humanize_level,
-        skills_only_terms=listed_only,
-    )
-    mapping_plan = apply_listed_skill_placements(mapping_plan, listed_only[:15])
-
-    # ── Agent 3 — precision bullet rewrite ──────────────────────────────────
     original_skills = resume_content.get("skills", [])
 
-    tailored_raw = await _agent3_write(
-        mapping_plan, original_skills, humanize_level, provider,
-        seniority_indicators=analysis.jd_analysis.seniority_indicators,
+    async def _map_and_write() -> "tuple[MappingPlan, WriterOutput]":
+        plan = await _agent2_semantic_map(
+            analysis.jd_analysis, indexed_resume, provider, priority_skills=priority_skills,
+            missing_terms=analysis.missing_skills, humanize_level=humanize_level,
+            skills_only_terms=listed_only,
+        )
+        plan = apply_listed_skill_placements(plan, listed_only[:15])
+        # ── Agent 3 — precision bullet rewrite ──────────────────────────────
+        raw = await _agent3_write(
+            plan, original_skills, humanize_level, provider,
+            seniority_indicators=analysis.jd_analysis.seniority_indicators,
+        )
+        return plan, raw
+
+    # The professional summary is written for every post (the user's call,
+    # from their research), from the résumé as written — so it runs beside
+    # Agents 2 and 3 rather than after them. write_summary never raises.
+    (mapping_plan, tailored_raw), summary = await asyncio.gather(
+        _map_and_write(),
+        write_summary(resume_content, provider, analysis.jd_analysis, call_name="tailor_summary"),
     )
 
     # Prep questions are generated lazily on first view in the Interview
@@ -2477,6 +2490,20 @@ async def run_tailoring_pipeline(
             [(r["bullet_id"], r["reasons"]) for r in reverted_bullets],
         )
     tailored_content = _apply_writer_output(indexed_resume, guarded, mapping_plan)
+    # The summary goes into the tailored résumé, so the after-score counts it
+    # and the review's Summary card shows it beside the user's own. One the
+    # checks refused is flagged like a rewrite: kept, started switched off,
+    # with its reasons (the review reads the "summary" entry).
+    if summary.text:
+        tailored_content["summary"] = summary.text
+        if summary.problems:
+            reverted_bullets.append({
+                "bullet_id": "summary",
+                "original_text": str(resume_content.get("summary") or ""),
+                "rejected_text": summary.text,
+                "reasons": summary.problems,
+            })
+            logger.info("summary flagged: %s", summary.problems)
 
     # ── re-score against the *tailored* resume ──────────────────────────────
     # The first analyze_jd_match ran on the resume the user started with — its

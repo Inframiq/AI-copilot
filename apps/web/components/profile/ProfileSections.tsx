@@ -15,6 +15,8 @@ import {
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { SectionHeader, cardCls, inputCls, textareaCls } from "./ProfileFormParts";
+import { SummaryWriter } from "@/components/resume/SummaryWriter";
+import type { ResumeContent } from "@career-copilot/types";
 import { OPTIONAL_INFO, type OptionalSection } from "@/lib/profile-layout";
 
 const removeBtnCls =
@@ -53,12 +55,15 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
 
 /** A professional's always-shown statement, after Contact — or, on a
  * student's Profile, an optional section with Remove (lib/profile-layout). */
-export function SummaryCard({ value, onChange, title = "Professional summary", onRemove }: {
+export function SummaryCard({ value, onChange, title = "Professional summary", onRemove, writeFrom }: {
   value: string;
   onChange: (v: string) => void;
   title?: string;
   /** Offered when the summary is an optional section (a student's). */
   onRemove?: () => void;
+  /** The profile as a résumé, as the form holds it now (saved or not), for
+   * "Generate / Regenerate with KripaX". */
+  writeFrom?: () => ResumeContent;
 }) {
   return (
     <section id="profile-section-summary" className={cardCls}>
@@ -81,6 +86,7 @@ export function SummaryCard({ value, onChange, title = "Professional summary", o
         rows={4}
         placeholder="Backend engineer with four years building payment APIs in Go and PostgreSQL…"
       />
+      {writeFrom && <SummaryWriter current={value} getContent={writeFrom} onUse={onChange} />}
     </section>
   );
 }

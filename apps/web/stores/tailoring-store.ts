@@ -256,11 +256,10 @@ export function buildMergedContent(
     bullets: merge(p.bullets, originalContent.projects?.[i]?.bullets, `proj${i}`),
   }));
 
-  // Summary: untouched by the initial tailoring pass (pendingContent.summary
-  // starts identical to originalContent.summary) — only ever diverges once
-  // the user explicitly triggers Rewrite/Humanize/a custom-instruction
-  // rewrite (see BulletReviewPanel's SummaryBlock), same opt-in shape as
-  // per-bullet Rewrite/Humanize. "reject" reverts to the original text.
+  // Summary: every tailoring run writes one (services/summary_writer.py),
+  // and Rewrite/Humanize/a custom instruction in the review replace it.
+  // Starts "accept" when it passed every check, "reject" when the run
+  // flagged it (runTailoring). "reject" keeps the user's own text.
   const mergedSummary =
     (bulletDecisions["summary"] ?? "accept") === "reject"
       ? originalContent.summary
@@ -999,6 +998,9 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
               initialDecisions[change.key] =
                 kind === "reworded" && !flagged.has(change.key) ? "accept" : "reject";
             }
+            // The summary tailoring wrote: on when every check passed, off
+            // (the user's own stays) when one failed — the card says why.
+            initialDecisions["summary"] = flagged.has("summary") ? "reject" : "accept";
             const originalSkills = originalContent.skills || [];
             const originalSkillsSet = new Set(originalSkills);
             const tailoredSkillsSet = new Set(session.tailored_content.skills || []);

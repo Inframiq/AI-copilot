@@ -2,6 +2,7 @@
 import { useResumeStore } from "@/stores/resume-store";
 import { wordCount } from "@/lib/misc-points";
 import { PROFILE_LIMITS, SECTION_INFO, capEdit } from "@/lib/profile-sections";
+import { SummaryWriter } from "@/components/resume/SummaryWriter";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
@@ -39,6 +40,12 @@ export function SummarySection() {
         rows={7}
         placeholder="Write a compelling professional summary…"
         className="w-full px-md py-md rounded-xl border border-outline-variant/50 bg-surface-container-lowest text-on-surface text-body-md leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+      />
+
+      <SummaryWriter
+        current={content.summary ?? ""}
+        getContent={() => content}
+        onUse={(summary) => updateContent({ summary })}
       />
       {count >= SUMMARY_MAX_WORDS && (
         <p className="text-caption text-error">

@@ -1,11 +1,12 @@
 "use client";
-import { ArrowsClockwise, Sparkle, PaperPlaneRight, CircleNotch } from "@phosphor-icons/react";
+import { ArrowsClockwise, Sparkle, PaperPlaneRight, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
 
 /**
- * The professional summary. Tailoring leaves it untouched, so there is
- * nothing to review until the user asks for a rewrite — then a two-way
- * toggle picks between their original and the new version.
+ * The professional summary. Every tailoring run writes one for the job
+ * (services/summary_writer.py); a two-way toggle picks between it and the
+ * user's own. One that failed a check starts on the user's own and says
+ * why. Rewrite / Humanize / a custom instruction replace the new version.
  */
 export function SummaryCard({
   original,
@@ -17,6 +18,7 @@ export function SummaryCard({
   setPrompt,
   onDecide,
   onRewrite,
+  flags,
 }: {
   original: string;
   tailored: string;
@@ -27,6 +29,8 @@ export function SummaryCard({
   setPrompt: (v: string) => void;
   onDecide: (d: "accept" | "reject") => void;
   onRewrite: (mode: "rewrite" | "humanize" | "custom") => void;
+  /** Why the summary tailoring wrote started switched off (its checks). */
+  flags?: string[];
 }) {
   if (!original.trim() && !tailored.trim()) return null;
   const changed = tailored.trim() !== original.trim();
@@ -51,7 +55,7 @@ export function SummaryCard({
                     active ? "bg-surface-container-lowest font-semibold text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
                   }`}
                 >
-                  {d === "accept" ? "Rewrite" : "Your original"}
+                  {d === "accept" ? "For this job" : original.trim() ? "Your original" : "None"}
                 </button>
               );
             })}
@@ -62,6 +66,19 @@ export function SummaryCard({
       <p className={`text-body-md leading-relaxed text-on-surface transition-opacity ${busy ? "opacity-50" : ""}`}>
         {shown || <em className="not-italic opacity-50">— empty —</em>}
       </p>
+
+      {(flags?.length ?? 0) > 0 && (
+        <p
+          data-testid="summary-flags"
+          className="flex items-start gap-xs rounded-xl bg-tertiary-container/60 px-sm py-xs text-caption text-on-tertiary-container"
+        >
+          <WarningCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
+          <span>
+            {usingRewrite ? "Check before you keep this — it" : "The summary for this job is off because it"}{" "}
+            {flags!.join("; ")}.
+          </span>
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="rounded-xl bg-error-container px-sm py-xs text-caption text-on-error-container">

@@ -54,6 +54,9 @@ CREDIT_COSTS: dict[str, int] = {
     # the next follow-up.
     "followup_answer": 3,
     "rewrite_bullet": 1,
+    # The Builder's "Write summary": one premium call (a second only when
+    # the first draft fails the checks), priced by the user (2026-11-23).
+    "write_summary": 3,
     # The notes canvas: one fast call that tidies what the user typed into
     # points for the profile's Miscellaneous section.
     "restructure_notes": 1,
@@ -72,6 +75,7 @@ ACTION_LABELS: dict[str, str] = {
     "prep_questions": "Interview questions",
     "followup_answer": "A follow-up answer",
     "rewrite_bullet": "A rewrite",
+    "write_summary": "Writing a summary",
     "restructure_notes": "Tidying your notes",
     "analyze": "Analyzing a job description",
     "parse_resume": "Reading an uploaded résumé",

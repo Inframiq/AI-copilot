@@ -229,6 +229,12 @@ export function ReviewShell({
     }
   }
 
+  // The run's checks on the summary it wrote, shown while that draft is the
+  // one on the card (a Rewrite replaces it).
+  const summaryFlag = revertedBullets.find((r) => r.bullet_id === "summary");
+  const summaryFlags =
+    summaryFlag && summaryFlag.rejected_text === (pendingContent?.summary ?? "") ? summaryFlag.reasons : undefined;
+
   function handleApply() {
     // Recording the decisions is not enough: the Studio renders resume-store,
     // so the merged résumé has to be written there or it shows the original.
@@ -410,6 +416,7 @@ export function ReviewShell({
                   setPrompt={setSummaryPrompt}
                   onDecide={(d) => setBulletDecision("summary", d)}
                   onRewrite={handleRewriteSummary}
+                  flags={summaryFlags}
                 />
 
                 {/* Below xl there is no room for a third column, so the notes
