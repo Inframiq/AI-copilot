@@ -263,7 +263,9 @@ export function ReviewShell({
     pointsTotal: bulletChanges.length + aiFixes.length + miscIds.length,
     skillsAdded,
     onAutoSelect: () =>
-      applyBulletDecisions(autoSelectDecisions(bulletChanges, flaggedKeys, pointsByChange(bulletRationale, bulletDeltas))),
+      applyBulletDecisions(
+        autoSelectDecisions(bulletChanges, flaggedKeys, pointsByChange(bulletRationale, bulletDeltas), aiFixes),
+      ),
     onClear: () => applyBulletDecisions(clearDecisions(bulletChanges, aiFixes, miscIds)),
     onApply: handleApply,
     canApply: !!pendingContent && !!originalContent,

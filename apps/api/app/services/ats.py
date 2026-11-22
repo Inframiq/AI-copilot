@@ -908,6 +908,48 @@ def title_match_verdict(jd_titles: list[str], resume_titles: list[str]) -> str:
     return {0: "missing", 1: "partial", 2: "matched"}[best]
 
 
+_TITLE_RANK = {"missing": 0, "partial": 1, "matched": 2}
+
+
+def _title_tokens(text: str) -> set[str]:
+    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if t}
+
+
+def headline_rename_ok(old: str, new: str, jd_titles: list[str]) -> bool:
+    """True when `new` is the candidate's own headline with its role words
+    renamed to the job's wording — the same job under another name, so the
+    review may start it switched on, like a reworded point.
+
+    The gap filler judges "same role"; this checks what can be checked:
+      - the seniority stays the candidate's: the level word is unchanged and
+        no level word or ordinal is added ("Software Developer" never becomes
+        "Senior Software Engineer" because the job says Senior);
+      - every word the rename adds comes from a target job title;
+      - whatever follows a "|" in the old headline (its specialty) is kept;
+      - the new headline matches a job title better than the old one did.
+    """
+    old, new = (old or "").strip(), (new or "").strip()
+    titles = [t for t in jd_titles if t and t.strip()]
+    if not old or not new or not titles or old.lower() == new.lower():
+        return False
+    if _title_parts(old)[0] != _title_parts(new)[0]:
+        return False
+    added = _title_tokens(new) - _title_tokens(old)
+    if added & (_SENIORITY_WORDS | _LEVEL_ORDINALS):
+        return False
+    if not added <= set().union(*(_title_tokens(t) for t in titles)):
+        return False
+    new_flat = " ".join(new.lower().split())
+    for part in re.split(r"\s*[|•·]\s*", old)[1:]:
+        part = " ".join(part.lower().split())
+        if part and part not in new_flat:
+            return False
+    return (
+        _TITLE_RANK[title_match_verdict(titles, [new])]
+        > _TITLE_RANK[title_match_verdict(titles, [old])]
+    )
+
+
 def default_importance(
     term: str,
     *,

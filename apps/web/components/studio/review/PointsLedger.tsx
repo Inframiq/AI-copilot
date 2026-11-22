@@ -20,8 +20,16 @@ type Decision = "accept" | "reject";
 type Filter = "all" | "reworded" | "adds_terms" | "ai";
 type Provenance = "reworded" | "adds_terms" | "ai" | "profile";
 
-/** Auto-select: every point built on the user's own bullets. AI-written
- * points are left alone — they need the user's word, not a click. */
+/** The candidate's own headline with its job title renamed to the post's
+ * wording (the same job under another name). The API marks it grounded and
+ * starts it on; every other headline fix is a new claim. */
+export function isHeadlineRename(f: AtsFix): boolean {
+  return f.type === "headline" && f.grounded;
+}
+
+/** Auto-select: every point built on the user's own bullets, and a renamed
+ * headline. AI-written points are left alone — they need the user's word,
+ * not a click. */
 export function autoSelectDecisions(
   changes: BulletChange[],
   /** Rewrites the fact-lock flagged. Like AI-written points, each needs its
@@ -31,12 +39,17 @@ export function autoSelectDecisions(
    * nothing (it drops a keyword from the job) is never switched on in bulk —
    * a button that lowers the score isn't an "auto-select". */
   points: Readonly<Record<string, number | undefined>> = {},
+  /** Every AI fix; only a headline rename is switched on. */
+  fixes: AtsFix[] = [],
 ): Record<string, Decision> {
-  return Object.fromEntries(
-    changes
-      .filter((c) => !flagged.has(c.key) && (points[c.key] ?? 0) >= 0)
-      .map((c) => [c.key, "accept" as const]),
-  );
+  return {
+    ...Object.fromEntries(
+      changes
+        .filter((c) => !flagged.has(c.key) && (points[c.key] ?? 0) >= 0)
+        .map((c) => [c.key, "accept" as const]),
+    ),
+    ...Object.fromEntries(fixes.filter(isHeadlineRename).map((f) => [`fix:${f.id}`, "accept" as const])),
+  };
 }
 
 /** Each rewrite's points as its badge shows them: the live re-score's value,
@@ -184,8 +197,9 @@ export function PointsLedger({
     (f: AtsFix) => liveDeltas?.[f.id] ?? f.score_delta,
     [liveDeltas],
   );
+  const renames = useMemo(() => aiFixes.filter(isHeadlineRename), [aiFixes]);
   const sortedAi = useMemo(
-    () => [...aiFixes].sort((a, b) => fixPoints(b) - fixPoints(a)),
+    () => aiFixes.filter((f) => !isHeadlineRename(f)).sort((a, b) => fixPoints(b) - fixPoints(a)),
     [aiFixes, fixPoints],
   );
 
@@ -205,9 +219,9 @@ export function PointsLedger({
 
   const tabs: { id: Filter; label: string; count: number }[] = [
     { id: "all", label: "All", count: total },
-    { id: "reworded", label: "Reworded", count: reworded.length },
+    { id: "reworded", label: "Reworded", count: reworded.length + renames.length },
     { id: "adds_terms", label: "Adds JD terms", count: addsTerms.length },
-    { id: "ai", label: "Written by AI", count: aiFixes.length },
+    { id: "ai", label: "Written by AI", count: sortedAi.length },
   ];
   const show = (f: Filter) => filter === "all" || filter === f;
   const onCount = countPointsOn(changes, aiFixes, decisions);
@@ -266,7 +280,9 @@ export function PointsLedger({
           </span>
           <button
             type="button"
-            onClick={() => onBulk(autoSelectDecisions(changes, flaggedKeys, pointsByChange(rationale, liveBulletDeltas)))}
+            onClick={() =>
+              onBulk(autoSelectDecisions(changes, flaggedKeys, pointsByChange(rationale, liveBulletDeltas), aiFixes))
+            }
             title="Turns on every point built on your own bullets. AI-written points stay as they are."
             className={`flex items-center gap-1 rounded-xl bg-primary px-md py-xs text-label-sm font-semibold text-on-primary active:brightness-90 ${PRESS} ${FOCUS_RING}`}
           >
@@ -282,8 +298,18 @@ export function PointsLedger({
         </div>
       </div>
 
-      {show("reworded") && reworded.length > 0 && (
+      {show("reworded") && reworded.length + renames.length > 0 && (
         <Group title="Reworded from your résumé" hint="Same facts, new words — safe to accept">
+          {renames.map((fix) => (
+            <HeadlineRenameCard
+              key={fix.id}
+              fix={fix}
+              was={original.headline ?? ""}
+              points={liveDeltas?.[fix.id]}
+              on={decisions[`fix:${fix.id}`] === "accept"}
+              onToggle={(on) => onFixDecide(fix.id, on ? "accept" : "reject")}
+            />
+          ))}
           {reworded.map((c) => cardFor(c, "reworded"))}
         </Group>
       )}
@@ -297,7 +323,7 @@ export function PointsLedger({
         </Group>
       )}
 
-      {show("ai") && aiFixes.length > 0 && (
+      {show("ai") && sortedAi.length > 0 && (
         <Group
           title="Written by AI — not in your résumé"
           hint="Add only what you have actually done; you will be asked about it"
@@ -675,6 +701,57 @@ function NewTermMarks({
         ),
       )}
     </>
+  );
+}
+
+/** The headline with its job title renamed to the post's wording. Same job,
+ * so it sits with the reworded points and needs no "I have done this". */
+function HeadlineRenameCard({
+  fix,
+  was,
+  points,
+  on,
+  onToggle,
+}: {
+  fix: AtsFix;
+  was: string;
+  points?: number;
+  on: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  const [showWas, setShowWas] = useState(false);
+  return (
+    <Card on={on} provenance="reworded">
+      <CardHeader
+        provenance="reworded"
+        where="Headline · job title in the post's words"
+        points={points ?? fix.score_delta}
+        zeroHint="Already covered — a job title you have selected matches the post"
+      >
+        <Switch on={on} label={`Use this headline: ${fix.text}`} onChange={onToggle} />
+      </CardHeader>
+      <p className="text-body-md leading-relaxed text-on-surface">
+        {was ? (
+          <BulletDiff original={was} tailored={fix.text} side="added" testId={`headline-diff-added-${fix.id}`} />
+        ) : (
+          fix.text
+        )}
+      </p>
+      {showWas && was && (
+        <p className="rounded-2xl bg-surface-container px-md py-sm text-body-sm leading-relaxed text-on-surface-variant">
+          <span className="mr-xs text-label-caps">Original</span>
+          <BulletDiff original={was} tailored={fix.text} side="removed" testId={`headline-diff-removed-${fix.id}`} />
+        </p>
+      )}
+      {was && (
+        <div className="-ml-xs flex flex-wrap items-center gap-1 border-t border-outline-variant/20 pt-xs">
+          <CardAction onClick={() => setShowWas((v) => !v)} pressed={showWas}>
+            <CaretRight size={12} className={`transition-transform ${showWas ? "rotate-90" : ""}`} />
+            {showWas ? "Hide original" : "Show original"}
+          </CardAction>
+        </div>
+      )}
+    </Card>
   );
 }
 

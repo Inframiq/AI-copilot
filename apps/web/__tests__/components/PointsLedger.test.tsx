@@ -311,5 +311,55 @@ describe("PointsLedger", () => {
     fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
     expect(p.onBulk).toHaveBeenCalledWith({ exp0_b0: "accept" });
   });
+
+  // A headline naming the same job in other words, renamed to the post's
+  // title: the candidate's own fact, so it sits with the reworded points.
+  const rename: AtsFix = {
+    id: "headline:job-title", type: "headline", gap: "job title", importance: "high", grounded: true,
+    text: "Software Engineer | Backend", experience_index: null, score_delta: 5, default_accept: true,
+  };
+  const ORIGINAL_WITH_HEADLINE = { ...(ORIGINAL as object), headline: "Software Developer | Backend" } as never;
+
+  it("shows a renamed headline with the reworded points, switched on without a confirmation", () => {
+    const p = setup({
+      aiFixes: [rename, aiBullet],
+      original: ORIGINAL_WITH_HEADLINE,
+      decisions: { exp0_b1: "accept", exp0_b0: "reject", "fix:headline:job-title": "accept" },
+    });
+    const reworded = screen.getByRole("region", { name: /reworded from your résumé/i });
+    const sw = within(reworded).getByRole("switch", { name: /use this headline: Software Engineer \| Backend/i });
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    expect((sw as HTMLButtonElement).disabled).toBe(false);
+    expect(within(reworded).getByText("+5 pts")).toBeTruthy();
+    const ai = screen.getByRole("region", { name: /written by ai/i });
+    expect(within(ai).queryByText(/Software Engineer \| Backend/)).toBeNull();
+    expect(screen.getByRole("button", { name: /^reworded/i }).textContent).toMatch(/2$/);
+    expect(screen.getByRole("button", { name: /written by ai/i }).textContent).toMatch(/1$/);
+
+    fireEvent.click(sw);
+    expect(p.onFixDecide).toHaveBeenCalledWith("headline:job-title", "reject");
+    // The headline leads the group; each rewrite card has its own button too.
+    fireEvent.click(within(reworded).getAllByRole("button", { name: /show original/i })[0]);
+    expect(screen.getByTestId("headline-diff-removed-headline:job-title").textContent).toMatch(/Developer/);
+  });
+
+  it("keeps a headline for a different job with the AI-written points, locked until confirmed", () => {
+    setup({ aiFixes: [{ ...rename, grounded: false, default_accept: false }], original: ORIGINAL_WITH_HEADLINE });
+    const ai = screen.getByRole("region", { name: /written by ai/i });
+    const add = within(ai).getByRole("switch", { name: /add this new headline/i }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+  });
+
+  it("auto-select switches on a renamed headline but not an AI-written one", () => {
+    const p = setup({
+      aiFixes: [rename, aiBullet],
+      original: ORIGINAL_WITH_HEADLINE,
+      decisions: { exp0_b1: "reject", exp0_b0: "reject", "fix:headline:job-title": "reject" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /auto-select/i }));
+    expect(p.onBulk).toHaveBeenCalledWith({
+      exp0_b1: "accept", exp0_b0: "accept", "fix:headline:job-title": "accept",
+    });
+  });
 });
 
