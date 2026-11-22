@@ -534,6 +534,11 @@ interface TailoringState {
    * bullet's rewrite into the wrong section. */
   updatePendingBullet: (key: string, text: string) => void;
   updatePendingSummary: (text: string) => void;
+  /** The review's "Rewrite for this job": the summary writer for this run's
+   * job (3 credits), from the résumé as the user wrote it. The new summary
+   * goes on the card, switched off when a check failed; returns the
+   * checks' problems. Throws when it couldn't be written. */
+  rewriteSummaryForJob: () => Promise<{ summary: string; problems: string[] }>;
   runAnalysis: (resumeId: string) => Promise<void>;
   /** fresh skips the server's reuse of an identical earlier run and
    * spends a credit on new wording — "Try another version". */
@@ -784,6 +789,17 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
     });
     useResumeStore.getState().setPdfSignedUrl(null);
     get().refreshProjectedScore();
+  },
+
+  rewriteSummaryForJob: async () => {
+    const original = useResumeStore.getState().content;
+    const { sessionId } = get();
+    if (!original || !sessionId) throw new Error("this tailoring run isn't loaded");
+    const out = await apiClient.writeSummary(original, sessionId);
+    get().updatePendingSummary(out.summary);
+    get().setBulletDecision("summary", out.problems.length > 0 ? "reject" : "accept");
+    queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    return out;
   },
 
   updatePendingSummary: (text) => {

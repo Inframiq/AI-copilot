@@ -297,3 +297,48 @@ async def test_write_summary_out_of_credits(ledger):
     r, balance = await _post_summary(ledger, JAVA, p, credits=2)
     assert r.status_code == 402 and balance == 2
     p.complete_structured.assert_not_called()
+
+
+# ── the review's "Rewrite for this job": the same endpoint with session_id ──
+
+from fastapi import HTTPException
+
+SESSION_ID = "11111111-1111-1111-1111-111111111111"
+
+
+async def _post_for_job(ledger, provider, lookup):
+    ledger.set(TEST_USER_ID, 50)
+    override, _ = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=provider), \
+             patch("app.routers.ai._completed_session_jd", lookup):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/write-summary", json={"content": JAVA, "session_id": SESSION_ID},
+                    headers=make_auth_header(),
+                )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    return r, ledger.balance(TEST_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_rewrite_for_this_job_writes_for_the_runs_job(ledger):
+    jd = _jd(["Senior Java Developer"], ["Java", "Kafka"])
+    lookup = AsyncMock(return_value=(None, None, jd))
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, balance = await _post_for_job(ledger, p, lookup)
+    assert r.status_code == 200 and balance == 47
+    assert str(lookup.call_args.args[2]) == SESSION_ID
+    payload = p.complete_structured.call_args.args[1]
+    assert '"target_role": "Senior Java Developer"' in payload
+
+
+@pytest.mark.asyncio
+async def test_rewrite_for_another_users_run_is_refused_for_free(ledger):
+    lookup = AsyncMock(side_effect=HTTPException(status_code=404, detail="Completed session not found"))
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, balance = await _post_for_job(ledger, p, lookup)
+    assert r.status_code == 404 and balance == 50
+    p.complete_structured.assert_not_called()

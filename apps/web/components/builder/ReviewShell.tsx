@@ -78,6 +78,7 @@ export function ReviewShell({
   const missingSkills = useTailoringStore((s) => s.missingSkills);
   const bulletRationale = useTailoringStore((s) => s.bulletRationale);
   const revertedBullets = useTailoringStore((s) => s.revertedBullets);
+  const rewriteSummaryForJob = useTailoringStore((s) => s.rewriteSummaryForJob);
   const atsFixes = useTailoringStore((s) => s.atsFixes);
   const fixDeltas = useTailoringStore((s) => s.fixDeltas);
   const bulletDeltas = useTailoringStore((s) => s.bulletDeltas);
@@ -110,6 +111,8 @@ export function ReviewShell({
   const [summaryLoading, setSummaryLoading] = useState<"rewrite" | "humanize" | "custom" | null>(null);
   const [summaryPrompt, setSummaryPrompt] = useState("");
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  // The checks on a summary "Rewrite for this job" wrote, with its text.
+  const [summaryRewriteFlags, setSummaryRewriteFlags] = useState<{ text: string; reasons: string[] } | null>(null);
 
   const bulletChanges = useMemo<BulletChange[]>(
     () => deriveBulletChanges(pendingContent, originalContent),
@@ -203,15 +206,20 @@ export function ReviewShell({
 
   async function handleRewriteSummary(mode: "rewrite" | "humanize" | "custom") {
     const currentSummary = (pendingContent?.summary || originalContent?.summary || "").trim();
-    if (!currentSummary) return;
     if (mode === "custom" && !summaryPrompt.trim()) return;
     setSummaryLoading(mode);
     setSummaryError(null);
     try {
+      if (mode === "rewrite") {
+        // The summary writer, for this run's job (3 credits).
+        const { summary, problems } = await rewriteSummaryForJob();
+        setSummaryRewriteFlags({ text: summary, reasons: problems });
+        return;
+      }
+      if (!currentSummary) return;
       const { rewritten_text } = await apiClient.rewriteBullet({
         bullet_text: currentSummary,
         mode,
-        jd_context: mode === "rewrite" ? jdText : undefined,
         humanize_level: humanizeLevel,
         custom_instruction: mode === "custom" ? summaryPrompt.trim() : undefined,
         field: "summary",
@@ -231,7 +239,9 @@ export function ReviewShell({
 
   // The run's checks on the summary it wrote, shown while that draft is the
   // one on the card (a Rewrite replaces it).
-  const summaryFlag = revertedBullets.find((r) => r.bullet_id === "summary");
+  const summaryFlag = summaryRewriteFlags
+    ? { rejected_text: summaryRewriteFlags.text, reasons: summaryRewriteFlags.reasons }
+    : revertedBullets.find((r) => r.bullet_id === "summary");
   const summaryFlags =
     summaryFlag && summaryFlag.rejected_text === (pendingContent?.summary ?? "") ? summaryFlag.reasons : undefined;
 

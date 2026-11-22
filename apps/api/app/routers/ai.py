@@ -553,6 +553,39 @@ async def restructure_notes(
     return RestructureNotesOut(points=points)
 
 
+async def _completed_session_jd(
+    db: AsyncSession, uid: uuid.UUID, session_id: uuid.UUID,
+) -> "tuple[TailoringSession, JobDescription | None, JDAnalysis]":
+    """The user's completed tailoring session, its JD row and the job's
+    parse. 404 when the session isn't theirs or isn't done; 409 when no
+    parse of the job is stored."""
+    session = (
+        await db.execute(
+            select(TailoringSession).where(
+                TailoringSession.id == session_id,
+                TailoringSession.user_id == uid,
+            )
+        )
+    ).scalar_one_or_none()
+    if not session or session.status != "completed" or not session.tailored_content:
+        raise HTTPException(status_code=404, detail="Completed session not found")
+
+    # Queried, not `session.jd`: that relationship is lazy, and async
+    # SQLAlchemy cannot lazy-load (MissingGreenlet) — every re-score 500'd.
+    jd_row = (
+        await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
+    ).scalar_one_or_none()
+    # The JD's cached parse, else the one this run used: a run with a company
+    # name never caches Agent 1 on the JD, and 409ing here showed the review
+    # an error instead of a score.
+    agent1 = ((jd_row.parsed or {}).get("agent1") if jd_row else None) or (
+        (session.score_verdicts or {}).get("jd_analysis")
+    )
+    if not agent1:
+        raise HTTPException(status_code=409, detail="Session JD has no cached analysis")
+    return session, jd_row, JDAnalysis(**agent1)
+
+
 @router.post("/write-summary", response_model=WriteSummaryOut)
 @limiter.limit("10/minute")
 @ai_global_limit
@@ -562,10 +595,12 @@ async def write_resume_summary(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """The Builder's "Write summary": a professional summary written from the
-    résumé alone (no job), to the same rules and checks as the one every
-    tailoring run writes (services/summary_writer.py). Saves nothing — the
-    Builder shows it and the user chooses to use it."""
+    """"Generate / Regenerate with KripaX" (Builder, Profile) and the review's
+    "Rewrite for this job": a professional summary to the same rules and
+    checks as the one every tailoring run writes
+    (services/summary_writer.py). With session_id it is written for that
+    run's job; without, from the résumé alone. Saves nothing — the page
+    shows it and the user chooses to use it."""
     content = plain_deep(body.content)
     if not any(content.get(k) for k in ("experience", "projects", "education")):
         raise HTTPException(
@@ -574,11 +609,14 @@ async def write_resume_summary(
         )
 
     uid = uuid.UUID(user["sub"])
+    # Before charging: a session that isn't the user's, or has no job parse,
+    # is refused for free.
+    jd = (await _completed_session_jd(db, uid, body.session_id))[2] if body.session_id else None
     await spend_credits(db, uid, "write_summary", email=user.get("email"))
     await db.commit()
 
     async with record_ai_usage(uid, "write_summary"):
-        result = await write_summary(content, get_ai_provider(), None)
+        result = await write_summary(content, get_ai_provider(), jd)
     if not result.text:
         # write_summary never raises; an empty result means the model failed.
         await refund_credits(db, uid, "write_summary", email=user.get("email"))
@@ -610,31 +648,7 @@ async def project_score(
         body.accepted_fix_ids applied here.
     """
     uid = uuid.UUID(user["sub"])
-    session = (
-        await db.execute(
-            select(TailoringSession).where(
-                TailoringSession.id == body.session_id,
-                TailoringSession.user_id == uid,
-            )
-        )
-    ).scalar_one_or_none()
-    if not session or session.status != "completed" or not session.tailored_content:
-        raise HTTPException(status_code=404, detail="Completed session not found")
-
-    # Queried, not `session.jd`: that relationship is lazy, and async
-    # SQLAlchemy cannot lazy-load (MissingGreenlet) — every re-score 500'd.
-    jd_row = (
-        await db.execute(select(JobDescription).where(JobDescription.id == session.jd_id))
-    ).scalar_one_or_none()
-    # The JD's cached parse, else the one this run used: a run with a company
-    # name never caches Agent 1 on the JD, and 409ing here showed the review
-    # an error instead of a score.
-    agent1 = ((jd_row.parsed or {}).get("agent1") if jd_row else None) or (
-        (session.score_verdicts or {}).get("jd_analysis")
-    )
-    if not agent1:
-        raise HTTPException(status_code=409, detail="Session JD has no cached analysis")
-    jd_analysis = JDAnalysis(**agent1)
+    session, jd_row, jd_analysis = await _completed_session_jd(db, uid, body.session_id)
     verdicts = (jd_row.parsed or {}).get("semantic", {}).get("verdicts", {}) or {}
 
     # With the session's before/after verdicts and the list of kept

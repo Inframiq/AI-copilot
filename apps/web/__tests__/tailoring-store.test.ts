@@ -13,6 +13,7 @@ vi.mock("@/lib/api-client", () => ({
     createJd: vi.fn(),
     analyzeJd: vi.fn(),
     projectScore: vi.fn(),
+    writeSummary: vi.fn(),
   },
 }));
 
@@ -1245,6 +1246,42 @@ describe("useTailoringStore", () => {
         await useTailoringStore.getState().generatePreview("resume-abc");
         expect(vi.mocked(apiClient.generatePdf).mock.calls.at(-1)?.[2]?.summary).toBe(used);
       }
+    });
+
+    it("Rewrite for this job writes from the user's résumé for this run's job", async () => {
+      const original = { contact: { name: "", email: "" }, summary: "Mine.", experience: [], education: [], skills: [] };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.setState({
+        sessionId: "sess-1",
+        pendingContent: { ...original, summary: "From the run.", experience: [{ title: "Tailored", bullets: [] }] },
+        bulletDecisions: { summary: "reject" },
+      } as never);
+      vi.mocked(apiClient.writeSummary).mockResolvedValueOnce({ summary: "For the job.", problems: [] });
+
+      const out = await useTailoringStore.getState().rewriteSummaryForJob();
+
+      expect(apiClient.writeSummary).toHaveBeenCalledWith(original, "sess-1");
+      expect(out.summary).toBe("For the job.");
+      expect(useTailoringStore.getState().pendingContent?.summary).toBe("For the job.");
+      expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe("accept");
+    });
+
+    it("Rewrite for this job leaves a draft that failed a check switched off", async () => {
+      useResumeStore.getState().setResume("resume-abc", { contact: { name: "", email: "" }, experience: [], education: [], skills: [] }, "ats_clean");
+      useTailoringStore.setState({ sessionId: "sess-1", pendingContent: { summary: "x", experience: [] } } as never);
+      vi.mocked(apiClient.writeSummary).mockResolvedValueOnce({ summary: "Lead engineer.", problems: ["opens with a level (lead)"] });
+
+      const out = await useTailoringStore.getState().rewriteSummaryForJob();
+
+      expect(out.problems).toEqual(["opens with a level (lead)"]);
+      expect(useTailoringStore.getState().pendingContent?.summary).toBe("Lead engineer.");
+      expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe("reject");
+    });
+
+    it("Rewrite for this job refuses without a loaded run", async () => {
+      useTailoringStore.setState({ sessionId: null } as never);
+      await expect(useTailoringStore.getState().rewriteSummaryForJob()).rejects.toThrow(/isn't loaded/);
+      expect(apiClient.writeSummary).not.toHaveBeenCalled();
     });
 
     it("setFixDecision calls projectScore with the accepted ids (debounced)", async () => {

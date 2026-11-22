@@ -132,6 +132,9 @@ class WriteSummaryRequest(BaseModel):
     # The résumé as the Builder holds it (saved or not). Read for facts only;
     # contact details are never sent to the model.
     content: dict
+    # The review's "Rewrite for this job": the tailoring run whose job the
+    # summary is written for. Absent in the Builder and Profile.
+    session_id: uuid.UUID | None = None
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

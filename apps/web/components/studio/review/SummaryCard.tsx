@@ -1,6 +1,7 @@
 "use client";
 import { ArrowsClockwise, Sparkle, PaperPlaneRight, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
+import { WRITE_SUMMARY_CREDITS } from "@/components/resume/SummaryWriter";
 
 /**
  * The professional summary. Every tailoring run writes one for the job
@@ -91,7 +92,7 @@ export function SummaryCard({
           type="button"
           disabled={!!busy}
           onClick={() => onRewrite("rewrite")}
-          title="Rewrite it for this job — uses a credit"
+          title={`Write it again for this job — uses ${WRITE_SUMMARY_CREDITS} credits`}
           className={`flex items-center gap-xs rounded-xl px-sm py-xs text-label-sm text-on-surface-variant hover:bg-primary/10 hover:text-primary active:bg-primary/20 disabled:opacity-40 ${PRESS} ${FOCUS_RING}`}
         >
           <ArrowsClockwise size={14} className={busy === "rewrite" ? "animate-spin" : ""} />

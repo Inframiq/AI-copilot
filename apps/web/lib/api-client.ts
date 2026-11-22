@@ -524,12 +524,16 @@ export const apiClient = {
    * tagged with a section (see lib/misc-points). Spends a credit; saves
    * nothing — the canvas writes the points the user confirms. `flags` say
    * what the fact-lock caught, e.g. a number they never wrote. */
-  /** The Builder's "Write summary" (3 credits): a professional summary
-   * written from the résumé alone. Saves nothing. `problems` is non-empty
+  /** "Generate / Regenerate with KripaX" and the review's "Rewrite for
+   * this job" (3 credits): a professional summary. Saves nothing. `problems` is non-empty
    * when the draft failed a check (a number the résumé lacks…), so the
    * Builder shows why before the user decides to use it. */
-  writeSummary: (content: ResumeContent): Promise<{ summary: string; problems: string[] }> =>
-    request("POST", "/ai/write-summary", { content }),
+  writeSummary: (
+    content: ResumeContent,
+    /** The review's "Rewrite for this job": write it for this run's job. */
+    sessionId?: string,
+  ): Promise<{ summary: string; problems: string[] }> =>
+    request("POST", "/ai/write-summary", sessionId ? { content, session_id: sessionId } : { content }),
 
   restructureNotes: (text: string): Promise<{
     /** `ask`: a question for a detail the note didn't give that would make
