@@ -915,18 +915,79 @@ def _title_tokens(text: str) -> set[str]:
     return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if t}
 
 
-def headline_rename_ok(old: str, new: str, jd_titles: list[str]) -> bool:
-    """True when `new` is the candidate's own headline with its role words
-    renamed to the job's wording — the same job under another name, so the
-    review may start it switched on, like a reworded point.
+_HEADLINE_SPLIT = re.compile(r"\s*(?:\||•|·|—|–|\s-\s)\s*")
+_SIDE_TERM_SPLIT = re.compile(r"\s*(?:,|&|/|\||•|·|;|\band\b)\s*", re.IGNORECASE)
+_LEVEL_TOKENS = _SENIORITY_WORDS | _LEVEL_ORDINALS
+_TERM_FILLER = {"a", "an", "and", "of", "for", "the", "in", "on", "with", "to"}
+
+
+def _headline_parts(headline: str) -> tuple[str, list[str]]:
+    """("Data Analyst | SQL, Python & Power BI") → ("Data Analyst",
+    ["SQL", "Python", "Power BI"]): the role, then the side terms."""
+    parts = _HEADLINE_SPLIT.split(headline.strip(), maxsplit=1)
+    role = parts[0].strip()
+    side = parts[1] if len(parts) > 1 else ""
+    return role, [t.strip() for t in _SIDE_TERM_SPLIT.split(side) if t and t.strip()]
+
+
+def _plain_words(text: str) -> list[str]:
+    return re.sub(r"[^a-z0-9+#]+", " ", (text or "").lower()).split()
+
+
+def _term_shown(term: str, shown: set[str]) -> bool:
+    """Every word of a headline side term appears in the résumé: the word
+    itself, or for words of five letters or more one sharing its first five
+    ("Requirements Gathering" is shown by "gathered requirements")."""
+    words = [w for w in _plain_words(term) if w not in _TERM_FILLER]
+    if not words:
+        return False
+    stems = {w[:5] for w in shown if len(w) >= 5}
+    return all(w in shown or (len(w) >= 5 and w[:5] in stems) for w in words)
+
+
+def _levels(text: str) -> set[str]:
+    return {_SENIORITY_ALIASES.get(t, t) for t in _title_tokens(text or "") if t in _LEVEL_TOKENS}
+
+
+def honest_headline(new: str, *, level_from: str, evidence: str) -> str:
+    """The gap filler's headline with what it may not claim taken out. The
+    model was told both rules and broke them in live runs ("Senior Java
+    Developer | …, Docker" for a mid-level Java résumé with no Docker), so
+    code enforces them:
+      - a level word or number (Senior, Lead, II) the candidate's own
+        `level_from` (their headline, else their latest job title) lacks;
+      - a side term `evidence` (the résumé as written, old headline
+        included) doesn't show.
+    "" when no role is left."""
+    role, side = _headline_parts(new or "")
+    allowed = _levels(level_from)
+    kept = [w for w in role.split() if _levels(w) <= allowed]
+    role = " ".join(kept).strip(" ,-|")
+    if not (_title_tokens(role) - _LEVEL_TOKENS):
+        return ""
+    shown = set(_plain_words(evidence))
+    terms: list[str] = []
+    for term in side:
+        if _term_shown(term, shown) and term.lower() not in {t.lower() for t in terms}:
+            terms.append(term)
+    return f"{role} | {', '.join(terms)}" if terms else role
+
+
+def headline_rewrite_ok(old: str, new: str, jd_titles: list[str], evidence: str) -> bool:
+    """True when `new` is the candidate's own headline rewritten for the job
+    without claiming anything new — its role words in the job's wording (the
+    same job under another name) and its side terms kept or refined from what
+    the résumé shows — so the review may start it switched on, like a
+    reworded point.
 
     The gap filler judges "same role"; this checks what can be checked:
       - the seniority stays the candidate's: the level word is unchanged and
         no level word or ordinal is added ("Software Developer" never becomes
         "Senior Software Engineer" because the job says Senior);
-      - every word the rename adds comes from a target job title;
-      - whatever follows a "|" in the old headline (its specialty) is kept;
-      - the new headline matches a job title better than the old one did.
+      - every word the role part adds comes from a target job title;
+      - the role part matches a job title at least as well as before;
+      - every side term is in the old headline or in `evidence` (the résumé
+        as written, before tailoring).
     """
     old, new = (old or "").strip(), (new or "").strip()
     titles = [t for t in jd_titles if t and t.strip()]
@@ -934,20 +995,22 @@ def headline_rename_ok(old: str, new: str, jd_titles: list[str]) -> bool:
         return False
     if _title_parts(old)[0] != _title_parts(new)[0]:
         return False
-    added = _title_tokens(new) - _title_tokens(old)
-    if added & (_SENIORITY_WORDS | _LEVEL_ORDINALS):
+    if (_title_tokens(new) - _title_tokens(old)) & _LEVEL_TOKENS:
         return False
-    if not added <= set().union(*(_title_tokens(t) for t in titles)):
+    old_role, _ = _headline_parts(old)
+    new_role, side = _headline_parts(new)
+    if not new_role:
         return False
-    new_flat = " ".join(new.lower().split())
-    for part in re.split(r"\s*[|•·]\s*", old)[1:]:
-        part = " ".join(part.lower().split())
-        if part and part not in new_flat:
-            return False
-    return (
-        _TITLE_RANK[title_match_verdict(titles, [new])]
-        > _TITLE_RANK[title_match_verdict(titles, [old])]
-    )
+    if not (_title_tokens(new_role) - _title_tokens(old_role)) <= set().union(
+        *(_title_tokens(t) for t in titles)
+    ):
+        return False
+    if _TITLE_RANK[title_match_verdict(titles, [new_role])] < _TITLE_RANK[
+        title_match_verdict(titles, [old_role])
+    ]:
+        return False
+    shown = set(_plain_words(old + " " + (evidence or "")))
+    return all(_term_shown(term, shown) for term in side)
 
 
 def default_importance(

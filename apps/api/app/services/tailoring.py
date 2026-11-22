@@ -29,7 +29,7 @@ from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
     bullet_already_present, verdicts_with_rewrites, lost_jd_terms, with_carried_terms,
-    credited_terms, new_jd_terms, headline_rename_ok,
+    credited_terms, new_jd_terms, headline_rewrite_ok, honest_headline,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
@@ -1034,23 +1034,31 @@ sentence under 20 words: past-tense action verb + what was done + with what. \
 No buzzwords, no stacked JD phrases, no purpose clause such as ", ensuring…".
 3. Never invent numbers, employers, dates, or tools. A speculative bullet has \
 no metrics — it describes a capability, not a measured result.
-4. If a gap has kind "title", and only then, also return a `headline` string. \
-First compare the résumé's own headline with target_job_titles:
-   a. SAME ROLE, OTHER NAME — the headline names the same job as a target \
-title, in different words (Software Developer / Software Engineer, Business \
-Analyst / Functional Analyst, HR Executive / HR Generalist). Set \
-headline_same_role=true and return the résumé's headline with ONLY its role \
-words replaced by the target title's wording. Keep the candidate's own \
-seniority exactly as written: never add, raise or drop a level word or \
-number (Senior, Lead, Junior, II) even when the target title has one. Keep \
-everything else word for word, including any specialty after "|". \
-E.g. headline "Software Developer | Backend, Payments", target "Senior \
-Software Engineer" → "Software Engineer | Backend, Payments".
-   b. ANY OTHER CASE — no headline, or a different job (Data Analyst vs \
-Data Scientist, Developer vs Engineering Manager). Set \
-headline_same_role=false and return a concise professional headline \
-aligning the candidate to the target title (e.g. "Senior Data Analyst | \
-Analytics Engineering").
+4. If a gap has kind "title", and only then, also return a `headline` \
+string: the résumé's headline rewritten for this job. A headline is \
+"<role> | <side terms>" — the role, then 2-4 skills or specialties. Keep the \
+candidate's own seniority exactly as written in the role: never add, raise \
+or drop a level word or number (Senior, Lead, Junior, II) even when the \
+target title has one. Side terms come ONLY from skills, tools and \
+specialties the résumé already shows (skills list, bullets, projects); pick \
+the ones this job asks for, the closest ones if it asks for none of them. \
+Never a term the résumé does not show. Plain words, under 12 words, no \
+buzzwords. First compare the résumé's headline with target_job_titles:
+   a. SAME ROLE — the headline names the same job as a target title, in \
+the same or different words (Software Developer / Software Engineer, \
+Business Analyst / Functional Analyst, HR Executive / HR Generalist). Set \
+headline_same_role=true. Role: the target title's wording, at the \
+candidate's own level. Side terms: keep them, or refine them toward what \
+the job asks for. E.g. headline "Software Developer | Java, Spring", target \
+"Senior Software Engineer", the job asks for Java and AWS, the résumé shows \
+AWS → "Software Engineer | Java, Spring, AWS".
+   b. DIFFERENT ROLE, OR NO HEADLINE — set headline_same_role=false. Role: \
+the target title, at the candidate's own level. Side terms: replace the \
+old ones with what the job asks for that the résumé shows. E.g. headline \
+"Data Analyst | SQL, Python & Power BI", target "Business Analyst", the job \
+asks for requirements gathering and stakeholder reporting, both in the \
+résumé's bullets → "Business Analyst | Requirements Gathering, Stakeholder \
+Reporting, SQL".
    With no "title" gap: headline "" and headline_same_role=false.
 5. At most one bullet per gap, in the same order; gaps the résumé already \
 covers produce no bullet at all. Output ONLY valid JSON matching the schema.
@@ -2346,8 +2354,9 @@ async def analyze_jd_match(
 #    would show a "before" that disagrees with the job page.
 # 4: Agent 2 places JD terms listed only under Skills into the bullet that
 #    shows them (rule 3, "LISTED BUT NOT SHOWN").
-# 5: a headline naming the same job in other words is renamed to the post's
-#    title and offered switched on (gap filler rule 4a + headline_rename_ok).
+# 5: the headline is rewritten for every post: the role in the post's words,
+#    side terms from the résumé; switched on when it is the same job
+#    (gap filler rule 4 + headline_rewrite_ok).
 TAILOR_PIPELINE_VERSION = "5"
 
 
@@ -2518,11 +2527,10 @@ async def run_tailoring_pipeline(
             gap_specs.append({"gap": resp, "kind": "responsibility", "importance": _imp(resp)})
     jd_titles = [t for t in (analysis.jd_analysis.target_job_titles or []) if t and t.strip()]
     old_headline = str(tailored_content.get("headline") or "").strip()
-    title_met = post.title_match == "matched"
-    # A recent job title can already match the post while the headline names
-    # the same job in other words; the headline is still worth renaming then.
-    headline_met = bool(old_headline) and title_match_verdict(jd_titles, [old_headline]) == "matched"
-    if jd_titles and not (title_met and (headline_met or not old_headline)):
+    # The headline is rewritten for every post that names a role, matched or
+    # not (the user's call): the role in the post's words, the side terms
+    # refined toward what it asks for.
+    if jd_titles:
         gap_specs.append({"gap": "job title", "kind": "title", "importance": _imp("job title")})
 
     gap_out = await _agent_gap_filler(
@@ -2567,22 +2575,33 @@ async def run_tailoring_pipeline(
             importance=_imp(b.gap), grounded=False, text=b.bullet_text,
             experience_index=exp_idx, default_accept=False,
         ))
-    # headline fix. A same-role rename that passes the code checks is the
-    # candidate's own headline in the job's words: grounded, and on from the
-    # start like a reworded point. Anything else is a new claim, off until
-    # the candidate says it is true — and not offered at all when a job title
-    # already matches the post (only a rename is worth showing then).
-    new_headline = gap_out.headline.strip()
-    if new_headline:
-        renamed = gap_out.headline_same_role and headline_rename_ok(old_headline, new_headline, jd_titles)
-        if gap_out.headline_same_role and not renamed:
-            logger.info("headline rename refused by the checks: %r -> %r", old_headline, new_headline)
-        if renamed or not title_met:
-            fixes.append(AtsFix(
-                id="headline:job-title", type="headline", gap="job title",
-                importance=_imp("job title"), grounded=renamed,
-                text=new_headline, default_accept=renamed,
-            ))
+    # headline fix. A rewrite of the candidate's own headline for the same
+    # job that passes the code checks claims nothing new: grounded, and on
+    # from the start like a reworded point. Anything else (another job, a
+    # side term the résumé doesn't show, a raised level) is still offered —
+    # the user wants a suggestion even with no relation — but as a new claim,
+    # off until the candidate says it is true. Either way honest_headline
+    # first takes out a level the candidate doesn't hold and a side term the
+    # résumé doesn't show — the model adds both despite the prompt.
+    evidence, _ = build_resume_text({**resume_content, "headline": None})
+    latest_title = str(((resume_content.get("experience") or [{}])[0] or {}).get("title") or "")
+    raw_headline = gap_out.headline.strip()
+    new_headline = honest_headline(
+        raw_headline, level_from=old_headline or latest_title, evidence=f"{evidence} {old_headline}",
+    ) if raw_headline else ""
+    if new_headline != raw_headline:
+        logger.info("headline tidied: %r -> %r", raw_headline, new_headline)
+    if new_headline and " ".join(new_headline.lower().split()) != " ".join(old_headline.lower().split()):
+        same_job = gap_out.headline_same_role and headline_rewrite_ok(
+            old_headline, new_headline, jd_titles, evidence,
+        )
+        if gap_out.headline_same_role and not same_job:
+            logger.info("headline rewrite refused by the checks: %r -> %r", old_headline, new_headline)
+        fixes.append(AtsFix(
+            id="headline:job-title", type="headline", gap="job title",
+            importance=_imp("job title"), grounded=same_job,
+            text=new_headline, default_accept=same_job,
+        ))
 
     # One question per bullet that still has no number, for the candidate to
     # answer in the review. Asked of the FINAL text, in its own small call.

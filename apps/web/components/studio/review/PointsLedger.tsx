@@ -20,9 +20,10 @@ type Decision = "accept" | "reject";
 type Filter = "all" | "reworded" | "adds_terms" | "ai";
 type Provenance = "reworded" | "adds_terms" | "ai" | "profile";
 
-/** The candidate's own headline with its job title renamed to the post's
- * wording (the same job under another name). The API marks it grounded and
- * starts it on; every other headline fix is a new claim. */
+/** The candidate's own headline rewritten for the post without a new claim:
+ * the same job in the post's words, side terms the résumé already shows. The
+ * API marks it grounded and starts it on; every other headline fix (another
+ * job, a term the résumé lacks) is a new claim. */
 export function isHeadlineRename(f: AtsFix): boolean {
   return f.type === "headline" && f.grounded;
 }
@@ -704,8 +705,8 @@ function NewTermMarks({
   );
 }
 
-/** The headline with its job title renamed to the post's wording. Same job,
- * so it sits with the reworded points and needs no "I have done this". */
+/** The headline rewritten for the post: same job, the résumé's own terms, so
+ * it sits with the reworded points and needs no "I have done this". */
 function HeadlineRenameCard({
   fix,
   was,
@@ -724,9 +725,9 @@ function HeadlineRenameCard({
     <Card on={on} provenance="reworded">
       <CardHeader
         provenance="reworded"
-        where="Headline · job title in the post's words"
+        where="Headline · rewritten for this job"
         points={points ?? fix.score_delta}
-        zeroHint="Already covered — a job title you have selected matches the post"
+        zeroHint="Wording only — this headline doesn't change the score"
       >
         <Switch on={on} label={`Use this headline: ${fix.text}`} onChange={onToggle} />
       </CardHeader>

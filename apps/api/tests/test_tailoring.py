@@ -1335,9 +1335,14 @@ async def test_pipeline_gap_bullets_are_always_speculative():
     assert bullet_fixes and all(not f.grounded and not f.default_accept for f in bullet_fixes)
 
 
-# ── Headline: the same job under another name is renamed, switched on ────────
+# ── Headline: rewritten for every post; on only when it claims nothing new ───
 
-from app.services.ats import headline_rename_ok
+from app.services.ats import headline_rewrite_ok, honest_headline
+
+_EVIDENCE = (
+    "Built Java and Spring services on AWS. Gathered requirements from "
+    "stakeholders and owned stakeholder reporting. SQL Python Power BI"
+)
 
 
 @pytest.mark.parametrize("old,new,titles", [
@@ -1347,9 +1352,16 @@ from app.services.ats import headline_rename_ok
      ["Senior Software Engineer"]),
     ("Senior HR Executive", "Senior HR Generalist", ["Senior HR Generalist"]),
     ("Sr. Business Analyst", "Sr. Functional Analyst", ["Senior Functional Analyst"]),
+    # side terms refined from what the résumé shows
+    ("Software Developer | Java, Spring", "Software Engineer | Java, Spring, AWS",
+     ["Senior Software Engineer"]),
+    ("Software Developer | Backend, Payments", "Software Engineer | Java & AWS",
+     ["Software Engineer"]),
+    # role already the post's: only the side terms move
+    ("Data Analyst | Excel", "Data Analyst | SQL, Python & Power BI", ["Data Analyst"]),
 ])
-def test_headline_rename_ok_accepts_a_same_role_rename(old, new, titles):
-    assert headline_rename_ok(old, new, titles)
+def test_headline_rewrite_ok_accepts_the_same_job_in_the_posts_words(old, new, titles):
+    assert headline_rewrite_ok(old, new, titles, _EVIDENCE)
 
 
 @pytest.mark.parametrize("old,new,titles", [
@@ -1358,22 +1370,42 @@ def test_headline_rename_ok_accepts_a_same_role_rename(old, new, titles):
     ("Software Developer", "Software Engineer II", ["Software Engineer II"]),
     ("Senior Software Developer", "Lead Software Engineer", ["Lead Software Engineer"]),
     ("Senior Software Developer", "Software Engineer", ["Software Engineer"]),
-    # a word the job title doesn't have
+    # a role word the job title doesn't have
     ("Software Developer", "Cloud Software Engineer", ["Software Engineer"]),
-    # the specialty after "|" lost
-    ("Software Developer | Payments", "Software Engineer", ["Software Engineer"]),
-    # no better a match than before
+    # a side term the résumé never shows
+    ("Software Developer | Java", "Software Engineer | Java, Kubernetes", ["Software Engineer"]),
+    # a worse title match than before
+    ("Data Scientist", "Data Engineer", ["Data Scientist"]),
+    # nothing to rewrite
     ("Software Developer", "Software Developer", ["Software Engineer"]),
-    ("Data Analyst", "Analyst", ["Data Scientist"]),
-    # nothing to rename
     ("", "Software Engineer", ["Software Engineer"]),
     ("Software Developer", "Software Engineer", []),
 ])
-def test_headline_rename_ok_refuses_anything_more_than_a_rename(old, new, titles):
-    assert not headline_rename_ok(old, new, titles)
+def test_headline_rewrite_ok_refuses_anything_that_claims_more(old, new, titles):
+    assert not headline_rewrite_ok(old, new, titles, _EVIDENCE)
 
 
-def _headline_run(headline_out: str, same_role: bool, *, headline: str, job_title: str):
+@pytest.mark.parametrize("new,level_from,expected", [
+    # a level the candidate doesn't hold comes out; theirs stays
+    ("Senior Java Developer | Java, Spring", "Software Engineer", "Java Developer | Java, Spring"),
+    ("Sr. Java Developer | Java", "Senior Software Engineer", "Sr. Java Developer | Java"),
+    ("Lead Java Engineer II | Java", "Java Developer", "Java Engineer | Java"),
+    # side terms the résumé doesn't show come out; loose wording still counts
+    ("Java Developer | Java, Docker, AWS", "", "Java Developer | Java, AWS"),
+    ("Business Analyst | Requirements Gathering & Stakeholder Reporting, Tableau", "",
+     "Business Analyst | Requirements Gathering, Stakeholder Reporting"),
+    ("Product Manager | Roadmapping, A/B Testing", "", "Product Manager"),
+    # repeats dropped; "and" splits terms but not inside a word
+    ("Data Analyst | SQL, sql and Power BI", "", "Data Analyst | SQL, Power BI"),
+    # nothing but a level left
+    ("Senior | Java", "Developer", ""),
+    ("", "Developer", ""),
+])
+def test_honest_headline_takes_out_what_the_candidate_cannot_claim(new, level_from, expected):
+    assert honest_headline(new, level_from=level_from, evidence=_EVIDENCE) == expected
+
+
+def _headline_run(headline_out: str, same_role: bool, *, headline: str, job_title: str, spy=None):
     from app.services.tailoring import GapFillerOutput
 
     responses = {
@@ -1388,102 +1420,105 @@ def _headline_run(headline_out: str, same_role: bool, *, headline: str, job_titl
         ),
         InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
     }
+    provider = make_provider_dispatching_by_schema(responses)
+    if spy is not None:
+        inner = provider.complete_structured.side_effect
+
+        async def watch(system, user, schema, **kwargs):
+            if schema is GapFillerOutput:
+                spy.extend(json.loads(user)["gaps"])
+            return await inner(system, user, schema, **kwargs)
+
+        provider.complete_structured.side_effect = watch
     resume = {
         "headline": headline,
-        "experience": [{"title": job_title, "bullets": ["Built Python services"]}],
-        "skills": ["Python"],
+        "experience": [{"title": job_title, "bullets": ["Built Python services on AWS"]}],
+        "skills": ["Python", "SQL"],
     }
     return run_tailoring_pipeline(
-        resume, "Senior Software Engineer, Python", 50,
-        make_provider_dispatching_by_schema(responses), make_mock_db_with_rows([]),
+        resume, "Senior Software Engineer, Python", 50, provider, make_mock_db_with_rows([]),
     )
 
 
 @pytest.mark.asyncio
-async def test_pipeline_offers_a_same_role_headline_rename_switched_on():
+async def test_pipeline_same_job_headline_rewrite_starts_on():
     result = await _headline_run(
-        "Software Engineer | Backend", True,
+        "Software Engineer | Python, AWS", True,
         headline="Software Developer | Backend", job_title="Backend Developer",
     )
     fix = next(f for f in result.ats_fixes if f.type == "headline")
-    assert fix.text == "Software Engineer | Backend"
+    assert fix.text == "Software Engineer | Python, AWS"
     assert fix.grounded is True and fix.default_accept is True
 
 
 @pytest.mark.asyncio
-async def test_pipeline_rename_that_fails_the_checks_waits_for_a_yes():
-    # the model called it the same role but raised the level: a new claim
+async def test_pipeline_takes_out_a_raised_level_and_an_unshown_skill():
+    # live runs: the model raised the level and listed a JD tool the résumé
+    # never shows, despite the prompt — code takes both out
     result = await _headline_run(
-        "Senior Software Engineer | Backend", True,
+        "Senior Software Engineer | Python, AWS, Docker", True,
         headline="Software Developer | Backend", job_title="Backend Developer",
     )
     fix = next(f for f in result.ats_fixes if f.type == "headline")
+    assert fix.text == "Software Engineer | Python, AWS"
+    assert fix.grounded is True and fix.default_accept is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_rewrite_that_fails_the_checks_is_offered_off():
+    # the model called it the same job but added a role word the post lacks
+    result = await _headline_run(
+        "Cloud Software Engineer | Backend", True,
+        headline="Software Developer | Backend", job_title="Backend Developer",
+    )
+    fix = next(f for f in result.ats_fixes if f.type == "headline")
+    assert fix.text == "Cloud Software Engineer | Backend"
     assert fix.grounded is False and fix.default_accept is False
 
 
 @pytest.mark.asyncio
-async def test_pipeline_different_role_headline_stays_off():
+async def test_pipeline_unrelated_headline_still_gets_a_suggestion_off():
+    # no relation to the post: suggested anyway, as a new claim
     result = await _headline_run(
-        "Senior Software Engineer | Backend", False,
-        headline="QA Analyst", job_title="QA Analyst",
+        "Software Engineer | Python, SQL", False,
+        headline="QA Analyst | Manual Testing", job_title="QA Analyst",
     )
     fix = next(f for f in result.ats_fixes if f.type == "headline")
+    assert fix.text == "Software Engineer | Python, SQL"
     assert fix.grounded is False and fix.default_accept is False
 
 
 @pytest.mark.asyncio
-async def test_pipeline_renames_headline_even_when_a_job_title_already_matches():
-    # "Senior Software Engineer" as the latest role already meets the title;
-    # the headline still names the job differently and is worth renaming.
+async def test_pipeline_suggests_a_headline_when_there_is_none():
     result = await _headline_run(
-        "Senior Software Engineer", True,
-        headline="Senior Software Developer", job_title="Senior Software Engineer",
+        "Software Engineer | Python", False, headline="", job_title="Senior Software Engineer",
     )
     fix = next(f for f in result.ats_fixes if f.type == "headline")
-    assert fix.text == "Senior Software Engineer" and fix.default_accept is True
+    assert fix.default_accept is False
 
 
 @pytest.mark.asyncio
-async def test_pipeline_offers_no_new_headline_claim_when_a_job_title_matches():
+async def test_pipeline_asks_for_the_headline_even_when_the_title_matches():
+    # headline and latest role already name the post's job: its side terms
+    # can still be refined, so the gap filler is still asked
+    seen: list[dict] = []
     result = await _headline_run(
-        "Senior Software Engineer | Platform", False,
-        headline="Engineering Lead", job_title="Senior Software Engineer",
+        "Senior Software Engineer | Python, AWS", True,
+        headline="Senior Software Engineer | Backend", job_title="Senior Software Engineer",
+        spy=seen,
+    )
+    assert any(g["kind"] == "title" for g in seen)
+    fix = next(f for f in result.ats_fixes if f.type == "headline")
+    assert fix.default_accept is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_offers_nothing_when_the_headline_comes_back_unchanged():
+    result = await _headline_run(
+        "senior software engineer |  backend", True,
+        headline="Senior Software Engineer | Backend", job_title="Senior Software Engineer",
     )
     assert not any(f.type == "headline" for f in result.ats_fixes)
-
-
-@pytest.mark.asyncio
-async def test_pipeline_skips_the_title_gap_when_headline_and_job_title_match():
-    from app.services.tailoring import GapFillerOutput
-
-    seen: list[dict] = []
-    responses = {
-        _JDAnalysisWire: make_jd_analysis(
-            exact_technical_tools=["Python"], target_job_titles=["Senior Software Engineer"],
-        ),
-        MappingPlan: MappingPlan(mapping_plan=[], plausible_skills_to_add=[]),
-        WriterOutput: WriterOutput(rewritten_bullets=[], updated_skills=[]),
-        GapFillerOutput: GapFillerOutput(),
-        InterviewQuestionsWrapper: InterviewQuestionsWrapper(questions=[]),
-    }
-    provider = make_provider_dispatching_by_schema(responses)
-    inner = provider.complete_structured.side_effect
-
-    async def spy(system, user, schema, **kwargs):
-        if schema is GapFillerOutput:
-            seen.extend(json.loads(user)["gaps"])
-        return await inner(system, user, schema, **kwargs)
-
-    provider.complete_structured.side_effect = spy
-    resume = {
-        "headline": "Senior Software Engineer",
-        "experience": [{"title": "Senior Software Engineer", "bullets": ["Built Python services"]}],
-        "skills": ["Python"],
-    }
-    await run_tailoring_pipeline(
-        resume, "Senior Software Engineer, Python", 50, provider, make_mock_db_with_rows([]),
-    )
-    assert not any(g["kind"] == "title" for g in seen)
 
 
 # ── Project bullets go through the rewriter too ──────────────────────────────
