@@ -261,7 +261,7 @@ TEXT = "Asha Rao\na@x.com | +91 98765 43210"
 
 def _quality(content, **kw):
     base = {"contact": {"name": "Asha Rao", "email": "a@x.com", "phone": "+91 98765 43210"},
-            "skills": ["Python"], "education": [{"degree": "B.Tech", "year": "2022"}]}
+            "skills": ["Python"], "education": [{"degree": "Bachelor of Technology (B.Tech)", "year": "2022"}]}
     return {(f.id, f.field) for f in check_text(base | content, TEXT, **kw) if f.level == "warning"}
 
 

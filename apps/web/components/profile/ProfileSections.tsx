@@ -53,13 +53,15 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
   );
 }
 
-/** A professional's always-shown statement, after Contact — or, on a
- * student's Profile, an optional section with Remove (lib/profile-layout). */
-export function SummaryCard({ value, onChange, title = "Professional summary", onRemove, writeFrom }: {
+/** The always-shown Professional summary, after Contact, on every
+ * Profile (lib/profile-layout). */
+export function SummaryCard({ value, onChange, title = "Professional summary", onRemove, writeFrom, placeholder }: {
   value: string;
   onChange: (v: string) => void;
   title?: string;
-  /** Offered when the summary is an optional section (a student's). */
+  /** The box's example; a student's Profile gives a student's. */
+  placeholder?: string;
+  /** Offered when the summary is an optional section. */
   onRemove?: () => void;
   /** The profile as a résumé, as the form holds it now (saved or not), for
    * "Generate / Regenerate with KripaX". */
@@ -84,7 +86,7 @@ export function SummaryCard({ value, onChange, title = "Professional summary", o
         maxWords={L.summaryWords}
         maxChars={L.summaryChars}
         rows={4}
-        placeholder="Backend engineer with four years building payment APIs in Go and PostgreSQL…"
+        placeholder={placeholder ?? "Backend engineer with four years building payment APIs in Go and PostgreSQL…"}
       />
       {writeFrom && <SummaryWriter current={value} getContent={writeFrom} onUse={onChange} />}
     </section>
@@ -190,7 +192,7 @@ function LinesEditor({ section, value, onChange }: {
 }
 
 /** One added section: its editor, and Remove to take it off the Profile.
- * Without onRemove it is pinned — a student's Career objective. */
+ * Without onRemove it is pinned. */
 export function ExtraSectionCard({ section, sections, onChange, onRemove, title }: {
   section: ExtraSection;
   sections: ProfileSections;

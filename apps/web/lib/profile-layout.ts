@@ -8,25 +8,25 @@
  * status only reorders, relabels and changes which sections are suggested
  * first. No status yet is laid out as a working professional — the Profile
  * as it always was.
+ *
+ * Every status opens with the Professional summary (2026-11-24, the user's
+ * call: Indian campus hiring prefers a short summary to a career
+ * objective). A student's Career objective is still on offer in
+ * "+ Add section", and one already written stays on the page.
  */
 import type { RoleStatus } from "@/lib/career-profile-client";
 import { SECTION_INFO, type ExtraSection } from "@/lib/profile-sections";
 
-/** The always-shown statement card: a student's Career objective or a
- * professional's summary. */
-export type Statement = "summary" | "objective";
-
 /** The sections that are always on the Profile, in the order they show. */
 export type MainSection = "skills" | "experience" | "projects" | "education" | "certifications";
 
-/** What "+ Add section" can offer: the optional sections, plus whichever
- * statement is not the pinned one. */
-export type OptionalSection = ExtraSection | "summary";
+/** What "+ Add section" can offer. */
+export type OptionalSection = ExtraSection;
 
 export interface ProfileLayout {
   student: boolean;
-  statement: Statement;
-  statementLabel: string;
+  /** The summary box's example, in the voice of the résumé it starts. */
+  summaryPlaceholder: string;
   main: MainSection[];
   /** Optional sections, most relevant first: the order "+ Add section"
    * suggests them and the order their cards show. */
@@ -36,30 +36,23 @@ export interface ProfileLayout {
   firstExperienceLabel: string;
 }
 
-export const OPTIONAL_INFO: Record<OptionalSection, { label: string; hint: string }> = {
-  ...SECTION_INFO,
-  summary: {
-    label: "Professional summary",
-    hint: "Two or three sentences on who you are and what you do best.",
-  },
-};
+export const OPTIONAL_INFO: Record<OptionalSection, { label: string; hint: string }> = SECTION_INFO;
 
 export function profileLayout(status: RoleStatus | "" | null | undefined): ProfileLayout {
   if (status === "student") {
     return {
       student: true,
-      statement: "objective",
-      statementLabel: "Career objective",
+      summaryPlaceholder:
+        "Computer Science student (Bachelor of Technology) who built a campus marketplace app in React and Node.js…",
       main: ["education", "projects", "experience", "skills", "certifications"],
-      optional: ["coursework", "leadership", "awards", "achievements", "volunteer", "languages", "interests", "summary"],
+      optional: ["coursework", "leadership", "awards", "achievements", "volunteer", "languages", "interests", "objective"],
       addExperienceLabel: "Add Internship",
       firstExperienceLabel: "Add your first internship",
     };
   }
   return {
     student: false,
-    statement: "summary",
-    statementLabel: "Professional summary",
+    summaryPlaceholder: "Backend engineer with four years building payment APIs in Go and PostgreSQL…",
     main: ["skills", "experience", "projects", "education", "certifications"],
     optional: ["languages", "awards", "achievements", "leadership", "volunteer", "interests", "coursework", "objective"],
     addExperienceLabel: "Add Experience",

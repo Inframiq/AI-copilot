@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { DegreeFullName } from "@/components/profile/DegreeFullName";
 import { useResumeStore } from "@/stores/resume-store";
 import { Trash } from "@phosphor-icons/react";
 
@@ -69,8 +70,16 @@ export function EducationSection({ focusIndex }: { focusIndex?: number }) {
                   updated[i] = { ...updated[i], degree };
                   updateContent({ education: updated });
                 }}
-                placeholder="e.g. B.S. Computer Science"
+                placeholder="e.g. Bachelor of Technology (B.Tech) in CSE"
                 className="w-full px-sm py-xs rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+              <DegreeFullName
+                value={edu.degree ?? ""}
+                onUse={(degree) => {
+                  const updated = [...content.education];
+                  updated[i] = { ...updated[i], degree };
+                  updateContent({ education: updated });
+                }}
               />
             </div>
             <div className="flex flex-col gap-xs">

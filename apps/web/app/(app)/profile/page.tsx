@@ -89,6 +89,7 @@ import { authUserQuery, careerProfileQuery, usePageReady } from "@/lib/reveal";
 import { SkeletonCard } from "@/components/ui/SkeletonCard";
 import { useLeaveWarning } from "@/lib/use-leave-warning";
 import { SuggestInput } from "@/components/ui/SuggestInput";
+import { DegreeFullName } from "@/components/profile/DegreeFullName";
 import { MonthYearField } from "@/components/ui/MonthYearPicker";
 import { WorkProjects } from "@/components/profile/WorkProjects";
 import { endsBeforeStart, isPresent, tidyDate } from "@/lib/month-year";
@@ -297,7 +298,7 @@ export default function ProfilePage() {
   /** Fill the sections, showing each optional one that holds something. */
   function showSections(next: ProfileSections) {
     setSections(next);
-    setShownSections((["summary", ...EXTRA_SECTIONS] as OptionalSection[]).filter((k) => sectionHasContent(next, k)));
+    setShownSections(EXTRA_SECTIONS.filter((k) => sectionHasContent(next, k)));
   }
 
   const updateSections = (patch: Partial<ProfileSections>) => setSections((prev) => ({ ...prev, ...patch }));
@@ -314,7 +315,7 @@ export default function ProfilePage() {
   function addSection(section: OptionalSection) {
     setShownSections((prev) => [...prev, section]);
     // A list opens with a line to type in.
-    if (section !== "objective" && section !== "summary" && sections[section].length === 0) {
+    if (section !== "objective" && sections[section].length === 0) {
       updateSections(section === "languages" ? { languages: [{ name: "", level: "" }] } : { [section]: [""] });
     }
     requestAnimationFrame(() => {
@@ -1145,7 +1146,8 @@ export default function ProfilePage() {
                           <div className="flex flex-col gap-xs col-span-2">
                             <label className="text-caption text-on-surface-variant">Degree</label>
                             <SuggestInput kind="degree" value={edu.degree ?? ""} onValueChange={v => updateEdu(edu.id, "degree", v)}
-                              placeholder="B.Tech in Computer Science" className={inputCls} />
+                              placeholder="Bachelor of Technology (B.Tech) in Computer Science" className={inputCls} />
+                            <DegreeFullName value={edu.degree ?? ""} onUse={v => updateEdu(edu.id, "degree", v)} />
                           </div>
                           <div className="flex flex-col gap-xs">
                             <label className="text-caption text-on-surface-variant">Graduation Year</label>
@@ -1522,36 +1524,27 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* ── Statement: a student's Career objective, everyone else's
-             Professional summary — always shown (lib/profile-layout) ──── */}
-      {layout.statement === "objective" ? (
-        <ExtraSectionCard section="objective" title={layout.statementLabel} sections={sections} onChange={updateSections} />
-      ) : (
-        <SummaryCard value={sections.summary ?? ""} title={layout.statementLabel} onChange={(summary) => updateSections({ summary })} writeFrom={summarySource} />
-      )}
+      {/* ── Professional summary — always shown, every status
+             (lib/profile-layout) ─────────────────────────────────────── */}
+      <SummaryCard
+        value={sections.summary ?? ""}
+        onChange={(summary) => updateSections({ summary })}
+        writeFrom={summarySource}
+        placeholder={layout.summaryPlaceholder}
+      />
 
       {layout.main.map((key) => <Fragment key={key}>{mainSections[key]}</Fragment>)}
 
       {/* ── Objective, Languages, Awards… — added from the sheet ───────────── */}
-      {layout.optional.filter((s) => shownSections.includes(s)).map((s) =>
-        s === "summary" ? (
-          <SummaryCard
-            key={s}
-            value={sections.summary ?? ""}
-            onChange={(summary) => updateSections({ summary })}
-            onRemove={() => removeSection(s)}
-            writeFrom={summarySource}
-          />
-        ) : (
-          <ExtraSectionCard
-            key={s}
-            section={s}
-            sections={sections}
-            onChange={updateSections}
-            onRemove={() => removeSection(s)}
-          />
-        ),
-      )}
+      {layout.optional.filter((s) => shownSections.includes(s)).map((s) => (
+        <ExtraSectionCard
+          key={s}
+          section={s}
+          sections={sections}
+          onChange={updateSections}
+          onRemove={() => removeSection(s)}
+        />
+      ))}
       <AddSectionButton
         options={layout.optional.filter((s) => !shownSections.includes(s))}
         onPick={addSection}

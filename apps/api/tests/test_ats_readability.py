@@ -229,6 +229,19 @@ def test_unreadable_dates_and_writing_points_are_reported():
     assert ("date-unreadable", "experience.0.end") in findings
     assert ("filler", "experience.0.bullets.0") in findings
     assert ("gpa-scale", "education.0.gpa") in findings
+    assert ("degree-short-form", "education.0.degree") in findings
+
+
+def test_a_degree_written_in_full_is_not_flagged():
+    content = {
+        "contact": {"name": "Asha Rao", "email": "a@x.com", "phone": "+91 98765 43210"},
+        "education": [{"degree": "Bachelor of Technology (B.Tech) in CSE", "institution": "AU", "year": "2025"}],
+    }
+    findings = check_text(content, "Asha Rao\na@x.com | +91 98765 43210")
+    assert "degree-short-form" not in {f.id for f in findings}
+    content["education"][0]["degree"] = "B.Tech in CSE"
+    short = next(f for f in check_text(content, "x") if f.id == "degree-short-form")
+    assert '"Bachelor of Technology (B.Tech) in CSE"' in short.message and short.level == "warning"
 
 
 def test_a_photo_template_is_flagged_for_portals():

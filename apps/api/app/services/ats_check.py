@@ -20,6 +20,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from app.services.pdf import TEMPLATE_SETS, TEMPLATES_REQUIRING_PHOTO, display_url
+from app.services.degree_names import full_degree_name
 from app.services.plain_text import plain_deep
 from app.services.phone import tidy_phone
 from app.services.resume_dates import is_present, is_standard_date, tidy_resume_dates
@@ -533,6 +534,16 @@ def check_text(
         gpa = str((edu or {}).get("gpa") or "") if isinstance(edu, dict) else ""
         if gpa and _BARE_GRADE.match(gpa):
             findings.append(Finding("gpa-scale", "warning", f"Give the grade with its scale, like {gpa.strip()}/10.", f"education.{i}.gpa"))
+        # The user's research: recruiters and some systems miss a degree's
+        # short form ("B.Tech"); write it in full, the short form after.
+        degree = " ".join(str((edu or {}).get("degree") or "").split()) if isinstance(edu, dict) else ""
+        full = full_degree_name(degree)
+        if full:
+            findings.append(Finding(
+                "degree-short-form", "warning",
+                f'Write the degree in full: "{full}". Some systems and recruiters miss "{degree}".',
+                f"education.{i}.degree",
+            ))
 
     findings += _quality_findings(content, page_count, template_id)
     return findings

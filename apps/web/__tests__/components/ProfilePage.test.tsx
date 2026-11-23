@@ -819,19 +819,23 @@ describe("My Profile — student or working professional (lib/profile-layout)", 
     upsertCareerProfile.mockResolvedValue({});
   });
 
-  it("leads a student's Profile with the Career objective, Education and Projects", async () => {
+  it("leads a student's Profile with the summary, Education and Projects", async () => {
     getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
     renderPage();
-    expect(await screen.findByRole("heading", { name: "Career objective" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Professional summary" })).toBeNull();
-    before("Career objective", "Education");
+    // 2026-11-24, the user's call: campus hiring prefers a short summary
+    // to a career objective, so students get the summary and its writer.
+    expect(await screen.findByRole("heading", { name: "Professional summary" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /objective/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /generate with kripax/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Computer Science student/)).toBeInTheDocument();
+    before("Professional summary", "Education");
     before("Education", "Projects");
     before("Projects", "Experience");
     before("Experience", "Skills");
     expect(screen.getAllByRole("button", { name: /add internship/i }).length).toBeGreaterThan(0);
   });
 
-  it("suggests the student sections first, and keeps the summary on offer", async () => {
+  it("suggests the student sections first, and keeps the objective on offer", async () => {
     getCareerProfile.mockResolvedValue(profile({ role_status: "student" }));
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: /add section/i }));
@@ -839,8 +843,8 @@ describe("My Profile — student or working professional (lib/profile-layout)", 
       .getAllByRole("button").map((b) => b.textContent ?? "").filter((t) => t.trim());
     expect(options[0]).toMatch(/^Coursework/);
     expect(options[1]).toMatch(/^Leadership/);
-    expect(options.some((t) => t.startsWith("Professional summary"))).toBe(true);
-    expect(options.some((t) => t.startsWith("Objective"))).toBe(false);
+    expect(options.some((t) => t.startsWith("Objective"))).toBe(true);
+    expect(options.some((t) => t.startsWith("Professional summary"))).toBe(false);
   });
 
   it("keeps a working professional's Profile as it was", async () => {
@@ -857,10 +861,16 @@ describe("My Profile — student or working professional (lib/profile-layout)", 
     renderPage();
     await screen.findByRole("heading", { name: "Professional summary" });
     await userEvent.selectOptions(screen.getByLabelText(/experience level/i), "student");
-    expect(screen.getByRole("heading", { name: "Career objective" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Professional summary" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Professional summary" })).toHaveLength(1);
     expect(screen.getByDisplayValue("Backend engineer building payment APIs.")).toBeInTheDocument();
     before("Education", "Experience");
+  });
+
+  it("keeps a student's objective already written on the page", async () => {
+    getCareerProfile.mockResolvedValue(profile({ role_status: "student", objective: "Seeking an entry role in data." }));
+    renderPage();
+    expect(await screen.findByDisplayValue("Seeking an entry role in data.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remove objective section/i })).toBeInTheDocument();
   });
 
   it("starts a student's new entry as an internship", async () => {
