@@ -1405,6 +1405,32 @@ def test_honest_headline_takes_out_what_the_candidate_cannot_claim(new, level_fr
     assert honest_headline(new, level_from=level_from, evidence=_EVIDENCE) == expected
 
 
+from app.services.ats import same_role_by_wording
+
+
+@pytest.mark.parametrize("old,new", [
+    ("Java Developer", "Java Engineer | Java, Spring"),
+    ("Java Developer | Java", "Java Engineer | Java, AWS"),
+    ("Software Engineer", "Software Developer"),
+    ("Senior Python Programmer", "Senior Python Developer"),
+    ("Data Analyst | Excel", "Data Analyst | SQL"),
+])
+def test_a_developer_engineer_swap_is_the_same_role(old, new):
+    assert same_role_by_wording(old, new)
+
+
+@pytest.mark.parametrize("old,new", [
+    ("Data Analyst", "Data Engineer"),
+    ("QA Analyst", "Software Engineer"),
+    ("Java Developer", "Java Backend Engineer"),
+    ("Java Developer", "Python Engineer"),
+    ("Developer", "Engineer"),
+    ("", "Java Engineer"),
+])
+def test_another_job_is_not_the_same_role_by_wording(old, new):
+    assert not same_role_by_wording(old, new)
+
+
 def _headline_run(headline_out: str, same_role: bool, *, headline: str, job_title: str, spy=None):
     from app.services.tailoring import GapFillerOutput
 
@@ -1474,6 +1500,20 @@ async def test_pipeline_rewrite_that_fails_the_checks_is_offered_off():
     fix = next(f for f in result.ats_fixes if f.type == "headline")
     assert fix.text == "Cloud Software Engineer | Backend"
     assert fix.grounded is False and fix.default_accept is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_developer_to_engineer_starts_on_when_the_model_said_another_role():
+    # "Java Developer" against a "Lead Java Engineer" post: the model called
+    # it a different role (the Lead), wrote "Lead Java Engineer"; code takes
+    # the Lead out and sees the candidate's own job under the post's word.
+    result = await _headline_run(
+        "Lead Software Engineer | Python, AWS", False,
+        headline="Software Developer | Python", job_title="Software Developer",
+    )
+    fix = next(f for f in result.ats_fixes if f.type == "headline")
+    assert fix.text == "Software Engineer | Python, AWS"
+    assert fix.grounded is True and fix.default_accept is True
 
 
 @pytest.mark.asyncio

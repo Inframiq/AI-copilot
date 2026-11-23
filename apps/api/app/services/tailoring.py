@@ -29,7 +29,7 @@ from app.services.ats import (
     compute_delta, blend_scores, build_resume_text, title_match_verdict,
     default_importance, score_content, AtsFix, fix_slug, estimate_fix_delta,
     bullet_already_present, verdicts_with_rewrites, lost_jd_terms, with_carried_terms,
-    credited_terms, new_jd_terms, headline_rewrite_ok, honest_headline,
+    credited_terms, new_jd_terms, headline_rewrite_ok, honest_headline, same_role_by_wording,
 )
 from app.services.resume_spec import BANNED_GENERIC_PHRASES, HARD_LIMITS
 from app.services.bullet_guard import guard_rewrite
@@ -2359,7 +2359,9 @@ async def analyze_jd_match(
 #    side terms from the résumé; switched on when it is the same job
 #    (gap filler rule 4 + headline_rewrite_ok).
 # 6: every run writes the professional summary (services/summary_writer.py).
-TAILOR_PIPELINE_VERSION = "6"
+# 7: a headline that only swaps Developer / Engineer / Programmer is the
+#    same job even when the gap filler said otherwise (same_role_by_wording).
+TAILOR_PIPELINE_VERSION = "7"
 
 
 def tailor_fingerprint(
@@ -2619,10 +2621,13 @@ async def run_tailoring_pipeline(
     if new_headline != raw_headline:
         logger.info("headline tidied: %r -> %r", raw_headline, new_headline)
     if new_headline and " ".join(new_headline.lower().split()) != " ".join(old_headline.lower().split()):
-        same_job = gap_out.headline_same_role and headline_rewrite_ok(
+        # The model's "same role", or code's: the candidate's own role words
+        # with only Developer / Engineer / Programmer swapped.
+        same_role = gap_out.headline_same_role or same_role_by_wording(old_headline, new_headline)
+        same_job = same_role and headline_rewrite_ok(
             old_headline, new_headline, jd_titles, evidence,
         )
-        if gap_out.headline_same_role and not same_job:
+        if same_role and not same_job:
             logger.info("headline rewrite refused by the checks: %r -> %r", old_headline, new_headline)
         fixes.append(AtsFix(
             id="headline:job-title", type="headline", gap="job title",

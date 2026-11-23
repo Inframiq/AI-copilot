@@ -973,6 +973,32 @@ def honest_headline(new: str, *, level_from: str, evidence: str) -> str:
     return f"{role} | {', '.join(terms)}" if terms else role
 
 
+# Role words that name the same job: a "Java Developer" is a "Java Engineer".
+# Kept to this one family on purpose — "Data Analyst" / "Data Engineer" is
+# another job, and any wider list would start calling those the same.
+_SAME_JOB_WORDS = frozenset({"developer", "engineer", "programmer"})
+
+
+def same_role_by_wording(old: str, new: str) -> bool:
+    """True when `new`'s role part is `old`'s with nothing but a
+    Developer / Engineer / Programmer swap (level words aside), so it names
+    the candidate's own job. The gap filler judged "Java Developer" against
+    a "Lead Java Engineer" post a different role — the Lead made it look like
+    one — and left an honest "Java Engineer | …" switched off."""
+    old_words = _title_tokens(_headline_parts(old or "")[0]) - _LEVEL_TOKENS
+    new_words = _title_tokens(_headline_parts(new or "")[0]) - _LEVEL_TOKENS
+    if not old_words or not new_words:
+        return False
+    removed, added = old_words - new_words, new_words - old_words
+    if not removed and not added:
+        return True
+    return (
+        bool(old_words & new_words)
+        and len(removed) == 1 and len(added) == 1
+        and (removed | added) <= _SAME_JOB_WORDS
+    )
+
+
 def headline_rewrite_ok(old: str, new: str, jd_titles: list[str], evidence: str) -> bool:
     """True when `new` is the candidate's own headline rewritten for the job
     without claiming anything new — its role words in the job's wording (the
