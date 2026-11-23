@@ -135,6 +135,13 @@ class WriteSummaryRequest(BaseModel):
     # The review's "Rewrite for this job": the tailoring run whose job the
     # summary is written for. Absent in the Builder and Profile.
     session_id: uuid.UUID | None = None
+    # The review's Humanize and "tell the AI how to rewrite it": rework the
+    # summary on the card (`current`) instead of writing a new one, under
+    # the same rules and checks. Absent for a fresh summary.
+    rework: str | None = Field(default=None, pattern="^(humanize|custom)$")
+    current: str = Field(default="", max_length=3000)
+    instruction: str = Field(default="", max_length=1000)
+    humanize_level: int = Field(default=50, ge=0, le=100)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 

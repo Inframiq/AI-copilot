@@ -31,13 +31,12 @@ from app.services.prep_questions import (
     answer_followup_for_user, followups_by_question, latest_with_questions_per_jd, resume_fingerprint,
 )
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
-from app.services.summary_writer import write_summary
+from app.services.summary_writer import Rework, rework_request, write_summary
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
     verdicts_with_rewrites, with_carried_terms,
 )
-from app.services.resume_spec import HARD_LIMITS
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 logger = logging.getLogger("app")
@@ -413,12 +412,16 @@ async def rewrite_bullet(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rewrite, humanize, or custom-instruction-rewrite a single bullet or
-    the resume's Summary using AI. Same lightweight single-call shape either
-    way — field only changes prompt framing (one-line bullet vs. an
-    80-word-cap flowing paragraph) and applies the summary word cap as a
-    backstop, the same limit the Summary tab's textarea already enforces
-    when the user types directly (resume_spec.py HARD_LIMITS["summary"])."""
+    """Rewrite, humanize, or custom-instruction-rewrite a single bullet.
+    The summary is not rewritten here: Humanize and custom rewrites of it go
+    through /ai/write-summary, the summary writer with its fact checks
+    (2026-11-24, the user's call) — this one-call path never checked a
+    summary's numbers, tools or levels."""
+    if body.field == "summary":
+        raise HTTPException(
+            status_code=422,
+            detail="The summary is rewritten with /ai/write-summary.",
+        )
     if body.mode == "custom" and not body.custom_instruction.strip():
         raise HTTPException(status_code=422, detail="custom_instruction is required for mode=custom")
 
@@ -427,47 +430,30 @@ async def rewrite_bullet(
     await db.commit()
 
     provider = get_ai_provider()
-    is_summary = body.field == "summary"
-    label = "professional summary" if is_summary else "bullet"
-    format_rule = (
-        f"Write it as a single flowing paragraph (no bullet points, no line breaks), "
-        f"at most {HARD_LIMITS['summary']['max_words']} words."
-        if is_summary
-        else "Return a single resume bullet, one line."
-    )
+    format_rule = "Return a single resume bullet, one line."
 
     if body.mode == "custom":
         system = (
-            f"You are an expert resume writer. Rewrite this {label} following the user's instructions "
+            "You are an expert resume writer. Rewrite this bullet following the user's instructions "
             "exactly. Keep every factual claim, metric, and skill truthful to the original — never "
             f"invent experience that isn't there. {format_rule} "
             "Return ONLY the rewritten text — no quotes, no preamble, no explanation."
         )
-        user_msg = f"Original {label}:\n{body.bullet_text}\n\nInstructions:\n{body.custom_instruction}"
+        user_msg = f"Original bullet:\n{body.bullet_text}\n\nInstructions:\n{body.custom_instruction}"
     elif body.mode == "humanize":
         tone = (
-            f"Make this {label} sound natural and human. Reduce keyword density while keeping "
+            "Make this bullet sound natural and human. Reduce keyword density while keeping "
             "the meaning, metrics, and impact intact. The reader should feel it was written "
             "by a person, not an ATS optimiser."
             if body.humanize_level < 50
-            else f"Rewrite this {label} in fluent, confident prose — clear impact, reads like a "
+            else "Rewrite this bullet in fluent, confident prose — clear impact, reads like a "
             "senior professional wrote it naturally."
         )
         system = (
             f"You are an expert resume writer. {tone} {format_rule} "
             "Return ONLY the rewritten text — no quotes, no preamble, no explanation."
         )
-        user_msg = f"{label.capitalize()}:\n{body.bullet_text}"
-    elif is_summary:
-        # A summary is an 80-word paragraph, so the bullet rule set (action-verb
-        # opening, 35-word cap) would be the wrong instructions for it.
-        system = (
-            "You are an elite ATS resume writer. Rewrite the professional summary to better "
-            "match the job description below. Inject relevant keywords naturally and keep all "
-            f"metrics verbatim. {format_rule} Return ONLY the rewritten text — no quotes, no preamble."
-        )
-        jd_block = f"\nJob Description context:\n{body.jd_context}" if body.jd_context else ""
-        user_msg = f"Professional summary:\n{body.bullet_text}{jd_block}"
+        user_msg = f"Bullet:\n{body.bullet_text}"
     else:  # rewrite a bullet — same rule set the pipeline's Agent 3 uses
         # This endpoint used to carry a two-sentence prompt while Agent 3 carried
         # ~1300 words plus a fact-lock, so clicking "Rewrite" on a
@@ -476,10 +462,10 @@ async def rewrite_bullet(
         jd_block = f"\n\n<job_description>\n{body.jd_context}\n</job_description>" if body.jd_context else ""
         user_msg = f"<original_bullet>\n{body.bullet_text}\n</original_bullet>{jd_block}"
 
-    # Small, fixed-shape output (one bullet or an 80-word-cap summary) — a
-    # tight ceiling avoids giving the reasoning model unneeded headroom to
-    # burn extra (billed) reasoning tokens. See tailoring.py's per-call
-    # token-ceiling comment / docs/ai-pipeline.md.
+    # Small, fixed-shape output (one bullet) — a tight ceiling avoids giving
+    # the reasoning model unneeded headroom to burn extra (billed) reasoning
+    # tokens. See tailoring.py's per-call token-ceiling comment /
+    # docs/ai-pipeline.md.
     try:
         async with record_ai_usage(uid, "rewrite_bullet"):
             rewritten = await provider.complete(
@@ -497,15 +483,7 @@ async def rewrite_bullet(
     # Same deterministic fact-lock the pipeline applies to Agent 3: a rewrite
     # that invents a number, pads an ending or overruns comes back WITH the
     # reasons, and the review leaves it for the candidate to confirm.
-    reverted_reasons: list[str] = []
-    if not is_summary:
-        rewritten, reverted_reasons = guard_rewrite(body.bullet_text, rewritten)
-    if is_summary:
-        # Backstop — the prompt asks for the cap, but never trust it alone.
-        words = rewritten.split()
-        max_words = HARD_LIMITS["summary"]["max_words"]
-        if len(words) > max_words:
-            rewritten = " ".join(words[:max_words]).rstrip(",;:") + "."
+    rewritten, reverted_reasons = guard_rewrite(body.bullet_text, rewritten)
     return RewriteBulletOut(rewritten_text=rewritten, reverted_reasons=reverted_reasons)
 
 
@@ -596,7 +574,7 @@ async def write_resume_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """"Generate / Regenerate with KripaX" (Builder, Profile) and the review's
-    "Rewrite for this job": a professional summary to the same rules and
+    "Rewrite for this job", Humanize and custom rewrite: a professional summary to the same rules and
     checks as the one every tailoring run writes
     (services/summary_writer.py). With session_id it is written for that
     run's job; without, from the résumé alone. Saves nothing — the page
@@ -608,6 +586,16 @@ async def write_resume_summary(
             detail="Add your experience, projects or education first — the summary is written from them.",
         )
 
+    rework = None
+    if body.rework:
+        current = " ".join(plain_text(body.current).split())
+        if not current:
+            raise HTTPException(status_code=422, detail="There is no summary to rework yet.")
+        instruction = " ".join(plain_text(body.instruction).split())
+        if body.rework == "custom" and not instruction:
+            raise HTTPException(status_code=422, detail="Say how the summary should be rewritten.")
+        rework = Rework(current, rework_request(body.rework, body.humanize_level, instruction))
+
     uid = uuid.UUID(user["sub"])
     # Before charging: a session that isn't the user's, or has no job parse,
     # is refused for free.
@@ -616,7 +604,7 @@ async def write_resume_summary(
     await db.commit()
 
     async with record_ai_usage(uid, "write_summary"):
-        result = await write_summary(content, get_ai_provider(), jd)
+        result = await write_summary(content, get_ai_provider(), jd, rework=rework)
     if not result.text:
         # write_summary never raises; an empty result means the model failed.
         await refund_credits(db, uid, "write_summary", email=user.get("email"))

@@ -62,7 +62,6 @@ export function ReviewShell({
   const setBulletDecision = useTailoringStore((s) => s.setBulletDecision);
   const applyBulletDecisions = useTailoringStore((s) => s.applyBulletDecisions);
   const updatePendingBullet = useTailoringStore((s) => s.updatePendingBullet);
-  const updatePendingSummary = useTailoringStore((s) => s.updatePendingSummary);
   const setFixDecision = useTailoringStore((s) => s.setFixDecision);
   const setFixExperienceIndex = useTailoringStore((s) => s.setFixExperienceIndex);
   const fixExperienceIndex = useTailoringStore((s) => s.fixExperienceIndex);
@@ -210,23 +209,21 @@ export function ReviewShell({
     setSummaryLoading(mode);
     setSummaryError(null);
     try {
-      if (mode === "rewrite") {
-        // The summary writer, for this run's job (3 credits).
-        const { summary, problems } = await rewriteSummaryForJob();
-        setSummaryRewriteFlags({ text: summary, reasons: problems });
-        return;
-      }
-      if (!currentSummary) return;
-      const { rewritten_text } = await apiClient.rewriteBullet({
-        bullet_text: currentSummary,
-        mode,
-        humanize_level: humanizeLevel,
-        custom_instruction: mode === "custom" ? summaryPrompt.trim() : undefined,
-        field: "summary",
-      });
-      updatePendingSummary(rewritten_text);
-      setBulletDecision("summary", "accept");
-      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      // All three go through the summary writer for this run's job, with
+      // its checks (3 credits): Rewrite writes a new one, Humanize and a
+      // custom instruction rework the one on the card.
+      if (mode !== "rewrite" && !currentSummary) return;
+      const { summary, problems } = await rewriteSummaryForJob(
+        mode === "rewrite"
+          ? undefined
+          : {
+              mode,
+              current: currentSummary,
+              instruction: mode === "custom" ? summaryPrompt.trim() : undefined,
+              humanizeLevel,
+            },
+      );
+      setSummaryRewriteFlags({ text: summary, reasons: problems });
       if (mode === "custom") setSummaryPrompt("");
     } catch (err) {
       setSummaryError(

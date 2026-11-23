@@ -57,6 +57,21 @@ describe("review: the summary tailoring wrote", () => {
   });
 });
 
+describe("review: Humanize and the custom box use the summary writer", () => {
+  it("say they cost what the writer costs", () => {
+    card();
+    expect(screen.getByRole("button", { name: /Humanize/ }).getAttribute("title")).toContain(
+      `uses ${WRITE_SUMMARY_CREDITS} credits`,
+    );
+    expect(screen.getByRole("button", { name: `Apply custom rewrite — uses ${WRITE_SUMMARY_CREDITS} credits` })).toBeTruthy();
+  });
+
+  it("the review never sends the summary to the one-call rewrite", () => {
+    const shell = readFileSync(join(process.cwd(), "components/builder/ReviewShell.tsx"), "utf8");
+    expect(shell).not.toMatch(/field:s*"summary"/);
+  });
+});
+
 describe("Builder: Generate / Regenerate with KripaX", () => {
   const RESUME = {
     contact: { name: "A" },

@@ -342,3 +342,130 @@ async def test_rewrite_for_another_users_run_is_refused_for_free(ledger):
     r, balance = await _post_for_job(ledger, p, lookup)
     assert r.status_code == 404 and balance == 50
     p.complete_structured.assert_not_called()
+
+
+# ── the review's Humanize / custom rewrite: same writer, same checks ─────────
+# 2026-11-24, the user's call: these used to be a 1-credit fast rewrite with
+# no fact checks; now they rework the summary on the card through the
+# summary writer, 3 credits.
+
+from app.services.summary_writer import SUMMARY_SYSTEM, Rework, rework_request
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limit():
+    # This file posts to /ai/write-summary (10 a minute) more than ten times.
+    from app.core.rate_limit import limiter
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
+async def _post_rework(ledger, provider, body, credits=50):
+    ledger.set(TEST_USER_ID, credits)
+    override, _ = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    jd = _jd(["Senior Java Developer"], ["Java", "Kafka"])
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=provider), \
+             patch("app.routers.ai._completed_session_jd", AsyncMock(return_value=(None, None, jd))):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/ai/write-summary",
+                    json={"content": JAVA, "session_id": SESSION_ID, **body},
+                    headers=make_auth_header(),
+                )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    return r, ledger.balance(TEST_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_a_custom_rewrite_reworks_the_card_summary_under_the_rules(ledger):
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, balance = await _post_rework(ledger, p, {
+        "rework": "custom", "current": "Engineer who builds APIs.", "instruction": "Mention Kafka first.",
+    })
+    assert r.status_code == 200 and r.json() == {"summary": GOOD, "problems": []}
+    assert balance == 47
+    system, payload = p.complete_structured.call_args.args[:2]
+    # The system prompt is the one every summary uses, untouched.
+    assert system == SUMMARY_SYSTEM
+    assert "<current_summary>\nEngineer who builds APIs.\n</current_summary>" in payload
+    assert "<candidate_request>\nMention Kafka first.\n</candidate_request>" in payload
+    assert "keep to the rules" in payload
+
+
+@pytest.mark.asyncio
+async def test_a_rework_that_breaks_a_rule_is_retried_then_returned_with_its_problems(ledger):
+    bad = SummaryDraft(summary=GOOD.replace("400 stores", "450 stores"))
+    p = _provider(bad, bad)
+    r, balance = await _post_rework(ledger, p, {
+        "rework": "custom", "current": "Engineer.", "instruction": "Say 450 stores.",
+    })
+    assert r.status_code == 200 and any("450" in x for x in r.json()["problems"])
+    assert p.complete_structured.call_count == 2 and balance == 47
+    retry = p.complete_structured.call_args_list[1].args[1]
+    assert "<candidate_request>" in retry and "<fix_these>" in retry
+
+
+@pytest.mark.asyncio
+async def test_humanize_sends_the_natural_wording_request(ledger):
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, _ = await _post_rework(ledger, p, {"rework": "humanize", "current": "Engineer.", "humanize_level": 20})
+    assert r.status_code == 200
+    assert rework_request("humanize", 20) in p.complete_structured.call_args.args[1]
+    assert rework_request("humanize", 20) != rework_request("humanize", 80)
+
+
+@pytest.mark.parametrize("body", [
+    {"rework": "humanize", "current": "   "},
+    {"rework": "custom", "current": "Engineer.", "instruction": "  "},
+])
+@pytest.mark.asyncio
+async def test_a_rework_with_nothing_to_work_on_is_refused_for_free(ledger, body):
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, balance = await _post_rework(ledger, p, body)
+    assert r.status_code == 422 and balance == 50
+    p.complete_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_rework_mode_is_refused(ledger):
+    p = _provider(SummaryDraft(summary=GOOD))
+    r, balance = await _post_rework(ledger, p, {"rework": "rewrite", "current": "Engineer."})
+    assert r.status_code == 422 and balance == 50
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_summary_has_no_rework_block():
+    p = _provider(SummaryDraft(summary=GOOD))
+    await write_summary(JAVA, p, None)
+    assert "<candidate_request>" not in p.complete_structured.call_args.args[1]
+    p = _provider(SummaryDraft(summary=GOOD))
+    await write_summary(JAVA, p, None, rework=Rework("Engineer.", "Shorter."))
+    assert "<candidate_request>\nShorter.\n</candidate_request>" in p.complete_structured.call_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_the_old_one_call_summary_rewrite_is_closed(ledger):
+    """rewrite-bullet used to rewrite the summary for 1 credit with no
+    checks; it now refuses before charging."""
+    ledger.set(TEST_USER_ID, 50)
+    override, _ = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    p = MagicMock()
+    p.complete = AsyncMock(return_value="Anything.")
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=p):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                for mode in ("rewrite", "humanize", "custom"):
+                    r = await client.post("/ai/rewrite-bullet", json={
+                        "bullet_text": "Engineer.", "mode": mode, "field": "summary",
+                        "custom_instruction": "x",
+                    }, headers=make_auth_header())
+                    assert r.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert ledger.balance(TEST_USER_ID) == 50
+    p.complete.assert_not_called()

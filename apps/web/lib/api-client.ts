@@ -182,6 +182,14 @@ export interface RevertedBullet {
   rejected_text: string;
 }
 
+/** A rework of the summary on the review card (see apiClient.writeSummary). */
+export type SummaryRework = {
+  mode: "humanize" | "custom";
+  current: string;
+  instruction?: string;
+  humanizeLevel?: number;
+};
+
 export const apiClient = {
   // ── Resumes ──────────────────────────────────────────────────────────────
   getResumes: (): Promise<Resume[]> => request<Resume[]>("GET", "/resumes"),
@@ -532,8 +540,22 @@ export const apiClient = {
     content: ResumeContent,
     /** The review's "Rewrite for this job": write it for this run's job. */
     sessionId?: string,
+    /** The review's Humanize / "tell the AI how to rewrite it": rework the
+     * summary on the card under the same rules and checks (3 credits). */
+    rework?: SummaryRework,
   ): Promise<{ summary: string; problems: string[] }> =>
-    request("POST", "/ai/write-summary", sessionId ? { content, session_id: sessionId } : { content }),
+    request("POST", "/ai/write-summary", {
+      content,
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(rework
+        ? {
+            rework: rework.mode,
+            current: rework.current,
+            instruction: rework.instruction ?? "",
+            humanize_level: rework.humanizeLevel ?? 50,
+          }
+        : {}),
+    }),
 
   restructureNotes: (text: string): Promise<{
     /** `ask`: a question for a detail the note didn't give that would make

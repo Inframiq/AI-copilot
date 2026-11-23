@@ -1419,7 +1419,7 @@ async def test_rewrite_bullet_custom_mode_requires_instructions():
 async def test_rewrite_bullet_custom_mode_follows_instructions():
     override, mock_session = make_mock_db()
     mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(return_value="Rewritten per instructions.")
+    mock_provider.complete = AsyncMock(return_value="Rebuilt the checkout flow.")
     app.dependency_overrides[get_db] = override
     try:
         with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
@@ -1427,42 +1427,17 @@ async def test_rewrite_bullet_custom_mode_follows_instructions():
                 r = await client.post(
                     "/ai/rewrite-bullet",
                     json={
-                        "bullet_text": "Original summary text.",
+                        "bullet_text": "Built the checkout flow.",
                         "mode": "custom",
                         "custom_instruction": "Make it punchier and mention leadership.",
-                        "field": "summary",
                     },
                     headers=make_auth_header(),
                 )
         assert r.status_code == 200
-        assert r.json()["rewritten_text"] == "Rewritten per instructions."
+        assert r.json()["rewritten_text"] == "Rebuilt the checkout flow."
         system_prompt, user_msg = mock_provider.complete.call_args.args[:2]
         assert "instructions" in system_prompt.lower()
         assert "Make it punchier and mention leadership." in user_msg
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_rewrite_bullet_summary_field_truncates_to_word_cap():
-    from app.services.resume_spec import HARD_LIMITS
-
-    max_words = HARD_LIMITS["summary"]["max_words"]
-    overlong = " ".join(f"word{i}" for i in range(max_words + 30))
-    override, mock_session = make_mock_db()
-    mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(return_value=overlong)
-    app.dependency_overrides[get_db] = override
-    try:
-        with patch("app.routers.ai.get_ai_provider", return_value=mock_provider):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                r = await client.post(
-                    "/ai/rewrite-bullet",
-                    json={"bullet_text": "Original summary.", "mode": "rewrite", "field": "summary"},
-                    headers=make_auth_header(),
-                )
-        assert r.status_code == 200
-        assert len(r.json()["rewritten_text"].split()) <= max_words
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -2045,16 +2020,6 @@ async def test_rewrite_bullet_returns_a_clean_rewrite_untouched():
     r, _ = await _post_rewrite(body, "Engineered the checkout flow")
     assert r.json()["rewritten_text"] == "Engineered the checkout flow"
     assert r.json()["reverted_reasons"] == []
-
-
-@pytest.mark.asyncio
-async def test_the_summary_field_does_not_get_bullet_rules():
-    """A summary is an 80-word paragraph, not a bullet — the bullet word cap
-    and action-verb rule would be wrong instructions for it."""
-    body = {"bullet_text": "Engineer with six years experience.", "mode": "rewrite",
-            "humanize_level": 50, "field": "summary"}
-    _, provider = await _post_rewrite(body, "Backend engineer with six years experience.")
-    assert "PRESERVE SPECIFICS" not in provider.complete.call_args.args[0]
 
 
 # ── project-score must not lazy-load session.jd ──────────────────────────────

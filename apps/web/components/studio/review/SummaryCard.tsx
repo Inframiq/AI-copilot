@@ -7,7 +7,8 @@ import { WRITE_SUMMARY_CREDITS } from "@/components/resume/SummaryWriter";
  * The professional summary. Every tailoring run writes one for the job
  * (services/summary_writer.py); a two-way toggle picks between it and the
  * user's own. One that failed a check starts on the user's own and says
- * why. Rewrite / Humanize / a custom instruction replace the new version.
+ * why. Rewrite / Humanize / a custom instruction replace the new version,
+ * all through the same writer and checks.
  */
 export function SummaryCard({
   original,
@@ -102,7 +103,7 @@ export function SummaryCard({
           type="button"
           disabled={!!busy}
           onClick={() => onRewrite("humanize")}
-          title="Make it sound more natural — uses a credit"
+          title={`Make it sound more natural — uses ${WRITE_SUMMARY_CREDITS} credits`}
           className={`flex items-center gap-xs rounded-xl px-sm py-xs text-label-sm text-on-surface-variant hover:bg-tertiary/10 hover:text-tertiary active:bg-tertiary/20 disabled:opacity-40 ${PRESS} ${FOCUS_RING}`}
         >
           <Sparkle size={14} className={busy === "humanize" ? "animate-pulse" : ""} />
@@ -128,7 +129,7 @@ export function SummaryCard({
         <button
           type="submit"
           disabled={!!busy || !prompt.trim()}
-          aria-label="Apply custom rewrite"
+          aria-label={`Apply custom rewrite — uses ${WRITE_SUMMARY_CREDITS} credits`}
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary active:brightness-90 disabled:bg-surface-container disabled:text-on-surface-variant ${PRESS} ${FOCUS_RING}`}
         >
           {busy === "custom" ? (

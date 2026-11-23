@@ -1260,7 +1260,7 @@ describe("useTailoringStore", () => {
 
       const out = await useTailoringStore.getState().rewriteSummaryForJob();
 
-      expect(apiClient.writeSummary).toHaveBeenCalledWith(original, "sess-1");
+      expect(apiClient.writeSummary).toHaveBeenCalledWith(original, "sess-1", undefined);
       expect(out.summary).toBe("For the job.");
       expect(useTailoringStore.getState().pendingContent?.summary).toBe("For the job.");
       expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe("accept");
@@ -1275,6 +1275,21 @@ describe("useTailoringStore", () => {
 
       expect(out.problems).toEqual(["opens with a level (lead)"]);
       expect(useTailoringStore.getState().pendingContent?.summary).toBe("Lead engineer.");
+      expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe("reject");
+    });
+
+    it("Humanize and a custom instruction rework the card's summary through the writer", async () => {
+      const original = { contact: { name: "", email: "" }, summary: "Mine.", experience: [], education: [], skills: [] };
+      useResumeStore.getState().setResume("resume-abc", original, "ats_clean");
+      useTailoringStore.setState({ sessionId: "sess-1", pendingContent: { ...original, summary: "From the run." } } as never);
+      vi.mocked(apiClient.writeSummary).mockResolvedValueOnce({ summary: "Says 9 years.", problems: ["says 9 years"] });
+
+      const rework = { mode: "custom" as const, current: "From the run.", instruction: "Shorter." };
+      const out = await useTailoringStore.getState().rewriteSummaryForJob(rework);
+
+      expect(apiClient.writeSummary).toHaveBeenCalledWith(original, "sess-1", rework);
+      expect(out.problems).toEqual(["says 9 years"]);
+      expect(useTailoringStore.getState().pendingContent?.summary).toBe("Says 9 years.");
       expect(useTailoringStore.getState().bulletDecisions["summary"]).toBe("reject");
     });
 

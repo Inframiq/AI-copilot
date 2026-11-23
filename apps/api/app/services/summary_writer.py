@@ -307,7 +307,29 @@ acronym, you may write it once as "Spelled Out (ACRONYM)".
 <output>Output ONLY valid JSON: {"summary": "...", "same_role": true|false} — same_role true only when the candidate's own recent role is the target job (same work, same or another name); false for a different job or no target.</output>"""
 
 
-def _payload(content: dict, facts: SummaryFacts, jd, problems: list[str] | None, previous: str) -> str:
+@dataclass
+class Rework:
+    """The review's Humanize and "tell the AI how to rewrite it": rework the
+    summary the candidate is looking at, as asked, under every rule above.
+    Sent in the user message only, so SUMMARY_SYSTEM — and with it every
+    tailoring run's and Builder's summary — reads exactly as before."""
+    current: str
+    request: str
+
+
+def rework_request(mode: str, humanize_level: int = 50, instruction: str = "") -> str:
+    """What the candidate asked for, in words for the model."""
+    if mode == "custom":
+        return instruction.strip()
+    if humanize_level < 50:
+        return "Make it sound natural, as a person would write it: fewer keywords, plainer words, the same facts."
+    return "Make it read as fluent, confident prose with a clear result, the same facts."
+
+
+def _payload(
+    content: dict, facts: SummaryFacts, jd, problems: list[str] | None, previous: str,
+    rework: Rework | None = None,
+) -> str:
     resume = {k: v for k, v in content.items() if k not in ("contact", "photo_url")}
     body: dict = {
         "resume": resume,
@@ -326,6 +348,14 @@ def _payload(content: dict, facts: SummaryFacts, jd, problems: list[str] | None,
             "domain": jd.domain_expertise_themes or [],
         }
     text = json.dumps(body, ensure_ascii=False, default=str)
+    if rework is not None:
+        text += (
+            "\n\n<current_summary>\n" + rework.current + "\n</current_summary>\n"
+            "<candidate_request>\n" + rework.request + "\n</candidate_request>\n"
+            "Rework current_summary as candidate_request asks. Every rule still holds: "
+            "where the request asks for something the rules forbid (a number, tool, level "
+            "or claim the résumé doesn't show), keep to the rules."
+        )
     if problems:
         text += (
             "\n\n<previous_attempt>\n" + previous + "\n</previous_attempt>\n"
@@ -348,6 +378,7 @@ async def write_summary(
     jd=None,
     *,
     call_name: str = "write_summary",
+    rework: Rework | None = None,
 ) -> SummaryResult:
     """A summary for `content` (for the job in `jd` when given). Two tries;
     returns the last draft with whatever problems are left. Never raises:
@@ -357,7 +388,7 @@ async def write_summary(
     for attempt in range(2):
         try:
             draft = await provider.complete_structured(
-                SUMMARY_SYSTEM, _payload(content, facts, jd, problems, text), SummaryDraft,
+                SUMMARY_SYSTEM, _payload(content, facts, jd, problems, text, rework), SummaryDraft,
                 model_tier="premium", max_output_tokens=_MAX_TOKENS, call_name=call_name,
             )
         except Exception:
