@@ -11,6 +11,10 @@ export const SUMMARY_MAX_WORDS = 80;
 export function SummarySection() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
+  // Whether there are edits the cap is holding back: before any, the résumé
+  // is saved as it is (an upload's long summary included) and the header
+  // says "All changes saved" — the warning must not say otherwise.
+  const unsaved = useResumeStore((s) => s.isDirty);
   if (!content) return null;
 
   const words = (content.summary ?? "").trim().split(/\s+/).filter(Boolean);
@@ -50,7 +54,7 @@ export function SummarySection() {
       {count >= SUMMARY_MAX_WORDS && (
         <p className="text-caption text-error">
           {count > SUMMARY_MAX_WORDS
-            ? `Longer than ${SUMMARY_MAX_WORDS} words, so this résumé isn't being saved. Trim it to save.`
+            ? overCapNote(unsaved)
             : `A tight, ${SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long one — trim before adding more.`}
         </p>
       )}
@@ -75,4 +79,13 @@ export function SummarySection() {
       />
     </section>
   );
+}
+
+/** The warning under a summary past the cap, true to the save state: the
+ * autosave holds edits back while it's over (resume-store wordCapError), but
+ * what was there before the edits — an uploaded summary, say — stays saved. */
+export function overCapNote(unsaved: boolean): string {
+  return unsaved
+    ? `Longer than ${SUMMARY_MAX_WORDS} words, so changes to this résumé aren't saved. Trim it to ${SUMMARY_MAX_WORDS} or fewer to save them.`
+    : `Longer than ${SUMMARY_MAX_WORDS} words. Saved as it is; trim it to ${SUMMARY_MAX_WORDS} or fewer to save further changes.`;
 }

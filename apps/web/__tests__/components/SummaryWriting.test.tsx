@@ -93,6 +93,23 @@ describe("Builder: Generate / Regenerate with KripaX", () => {
       </QueryClientProvider>,
     );
 
+  describe("a summary past 80 words (an upload's, shown whole)", () => {
+    const long = Array.from({ length: 96 }, (_, i) => `word${i}`).join(" ");
+
+    it("doesn't say the résumé isn't saved while nothing is waiting to save", () => {
+      useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: false, saveError: null } as never);
+      renderSection();
+      expect(screen.getByText(/Longer than 80 words\. Saved as it is; trim it to 80 or fewer to save further changes\./)).toBeTruthy();
+      expect(screen.queryByText(/aren't saved|isn't being saved/)).toBeNull();
+    });
+
+    it("says changes aren't saved once there are edits the cap holds back", () => {
+      useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: true } as never);
+      renderSection();
+      expect(screen.getByText(/so changes to this résumé aren't saved\. Trim it to 80 or fewer to save them\./)).toBeTruthy();
+    });
+  });
+
   it("says what it costs", () => {
     renderSection();
     expect(screen.getByRole("button", { name: /regenerate with kripax/i }).textContent).toMatch(/uses 3 credits/);
