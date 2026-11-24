@@ -559,13 +559,18 @@ def _return_job_text(raw_text: str, data: dict, key: str) -> None:
 
     # The job whose title is printed last above the text. Jobs are matched
     # to title lines in order, so two jobs with one title each get their own.
+    # One pass over the lines, each title tidied once: it runs on the event
+    # loop, and lines × jobs re-tidied took 30 s on a crafted upload.
+    by_title: dict[str, list[int]] = {}
+    for j, job in enumerate(jobs):
+        title = job.get("title")
+        if isinstance(title, str) and title.strip():
+            by_title.setdefault(_norm_line(title), []).append(j)
     owner, next_job = None, 0
     for i in range(start + 1, inside[0]):
-        for j in range(next_job, len(jobs)):
-            title = jobs[j].get("title")
-            if isinstance(title, str) and title.strip() and norm[i] == _norm_line(title):
-                owner, next_job = j, j + 1
-                break
+        later = [j for j in by_title.get(norm[i], ()) if j >= next_job]
+        if later:
+            owner, next_job = later[0], later[0] + 1
     if owner is None:
         return
 

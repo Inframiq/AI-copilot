@@ -578,3 +578,27 @@ async def test_an_objective_read_from_inside_a_job_goes_back_to_that_job_too():
     out = await parse_resume_text(_JOB_PARAGRAPH_RESUME, _provider_returning(read))
     assert out["objective"] is None
     assert out["experience"][0]["bullets"][0].startswith("I am an experienced")
+
+
+def test_finding_the_job_does_work_in_step_with_the_text_not_lines_times_jobs(monkeypatch):
+    """It runs on the event loop. Matching every line against every job's
+    title, tidied afresh each time, took 30 s on a crafted upload (11,000
+    short lines, 400 jobs), stalling the API for everyone. Counted, not
+    timed: each line and each title is tidied once."""
+    from app.services import resume_parser as rp
+
+    calls = 0
+    real = rp._norm_line
+
+    def counting(line):
+        nonlocal calls
+        calls += 1
+        return real(line)
+
+    monkeypatch.setattr(rp, "_norm_line", counting)
+    lines = ["Experience", *["x y"] * 2000, "Job Title", _SUMMARY_FROM_THE_JOB]
+    jobs = [{"title": f"Title number {i}", "bullets": []} for i in range(200)] + [{"title": "Job Title", "bullets": []}]
+    data = {"summary": _SUMMARY_FROM_THE_JOB, "experience": jobs}
+    rp._return_job_text("\n".join(lines), data, "summary")
+    assert data["summary"] is None and jobs[-1]["bullets"]
+    assert calls <= len(lines) + len(jobs)
