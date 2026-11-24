@@ -96,17 +96,11 @@ describe("Builder: Generate / Regenerate with KripaX", () => {
   describe("a summary past 80 words (an upload's, shown whole)", () => {
     const long = Array.from({ length: 96 }, (_, i) => `word${i}`).join(" ");
 
-    it("doesn't say the résumé isn't saved while nothing is waiting to save", () => {
-      useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: false, saveError: null } as never);
+    it("shows a note that it saves as it is, never that it isn't saved", () => {
+      useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: true, saveError: null } as never);
       renderSection();
-      expect(screen.getByText(/Longer than 80 words\. Saved as it is; trim it to 80 or fewer to save further changes\./)).toBeTruthy();
-      expect(screen.queryByText(/aren't saved|isn't being saved/)).toBeNull();
-    });
-
-    it("says changes aren't saved once there are edits the cap holds back", () => {
-      useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: true } as never);
-      renderSection();
-      expect(screen.getByText(/so changes to this résumé aren't saved\. Trim it to 80 or fewer to save them\./)).toBeTruthy();
+      expect(screen.getByText("Longer than 80 words. It saves as it is, but 80 or fewer reads better on a résumé.")).toBeTruthy();
+      expect(screen.queryByText(/aren't saved|isn't being saved|Trim it to save/)).toBeNull();
     });
   });
 

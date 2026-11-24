@@ -525,7 +525,7 @@ describe("My Profile — every résumé section", () => {
     expect(saved.summary).toBe("Engineer.");
   });
 
-  it("shows an uploaded summary past 80 words whole, and won't save it until it's trimmed", async () => {
+  it("shows an uploaded summary past 80 words whole, with a note, and saves it as it is", async () => {
     const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
     getCareerProfile.mockResolvedValue(profile({ summary: long }));
     renderPage();
@@ -533,10 +533,11 @@ describe("My Profile — every résumé section", () => {
     const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
     expect(summary.value).toBe(long);
     expect(screen.getByText("330 / 80 words")).toBeInTheDocument();
+    expect(screen.getByText("Longer than 80 words. It saves as it is, but 80 or fewer reads better on a résumé.")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
-    expect(await screen.findByText("The summary is 330 words. Trim it to 80 or fewer to save.")).toBeInTheDocument();
-    expect(upsertCareerProfile).not.toHaveBeenCalled();
+    const saved = await save();
+    expect(saved.summary).toBe(long);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("scrolls up to a save error at the top, each time it's shown", async () => {
@@ -544,17 +545,17 @@ describe("My Profile — every résumé section", () => {
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
     try {
-      getCareerProfile.mockResolvedValue(profile({ summary: Array.from({ length: 90 }, (_, i) => `w${i}`).join(" ") }));
+      getCareerProfile.mockResolvedValue(profile());
       renderPage();
-      await screen.findByRole("heading", { name: "Professional summary" });
+      await userEvent.type(await screen.findByRole("textbox", { name: "GitHub profile link" }), "github.com/jane/kripax");
       await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
       const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent("Trim it to 80 or fewer to save.");
+      expect(alert).toHaveTextContent("Fix the GitHub link before saving.");
       await waitFor(() => expect(scrolled).toEqual([alert]));
       // The same message again still brings it back into view.
       await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
       await waitFor(() => expect(scrolled).toHaveLength(2));
-      expect(scrolled[1]).toHaveTextContent("Trim it to 80 or fewer to save.");
+      expect(scrolled[1]).toHaveTextContent("Fix the GitHub link before saving.");
     } finally {
       Element.prototype.scrollIntoView = original;
     }

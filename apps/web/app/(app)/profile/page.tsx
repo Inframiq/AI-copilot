@@ -75,7 +75,6 @@ import {
   fitProfileSections,
   resumeSectionsToProfile,
   sectionHasContent,
-  wordCapError,
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { profileLayout, type MainSection, type OptionalSection } from "@/lib/profile-layout";
@@ -361,9 +360,6 @@ export default function ProfilePage() {
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
     setError(null); setSaveOk(false);
-    // An uploaded summary past 80 words is shown whole; it saves once trimmed.
-    const overCap = wordCapError(sections);
-    if (overCap) { setError(overCap); return false; }
     // A LinkedIn or GitHub link typed or uploaded here has to be a profile
     // link. One saved before the rule, left as it is, still saves (the
     // database allows it too) — it's shown as needing a fix.

@@ -115,28 +115,20 @@ export function capWords(value: string, max: number): string {
   return words.length <= max ? value : words.slice(0, max).join(" ");
 }
 
-/** Why the summary or objective can't be saved yet: past its word cap. An
- * uploaded résumé's longer text is shown whole, never cut, but a save waits
- * until the person trims it — the Profile's Save and the Builder's autosave
- * both refuse with this. Null when both fit. */
-export function wordCapError(s: { summary?: string | null; objective?: string | null }): string | null {
-  const count = (v?: string | null) => (v ?? "").trim().split(/\s+/).filter(Boolean).length;
-  const summary = count(s.summary);
-  if (summary > PROFILE_LIMITS.summaryWords) {
-    return `The summary is ${summary} words. Trim it to ${PROFILE_LIMITS.summaryWords} or fewer to save.`;
-  }
-  const objective = count(s.objective);
-  if (objective > PROFILE_LIMITS.objectiveWords) {
-    return `The objective is ${objective} words. Trim it to ${PROFILE_LIMITS.objectiveWords} or fewer to save.`;
-  }
-  return null;
+/** The note under a summary or objective past its word cap (an uploaded
+ * résumé's, shown whole and never cut). Advice, not a refusal: the Profile's
+ * Save and the Builder's autosave both save it as it is. A save that refused
+ * held back every other edit too, while the header said all was saved. */
+export function wordCapNote(max: number): string {
+  return `Longer than ${max} words. It saves as it is, but ${max} or fewer reads better on a résumé.`;
 }
 
 /** What a word-capped box keeps when its text changes from `previous` to
  * `next`: up to `max` words as usual, and past that never more words than
  * were already there. Text that arrived longer (an uploaded résumé's
- * summary) is never cut by a keystroke — the person trims it themselves,
- * and every edit that shortens it goes through. */
+ * summary) is never cut by a keystroke and saves as it is (wordCapNote);
+ * the person trims it themselves, and every edit that shortens it goes
+ * through. */
 export function capEdit(previous: string, next: string, max: number): string {
   const had = previous.trim().split(/\s+/).filter(Boolean).length;
   return capWords(next, Math.max(max, had));
