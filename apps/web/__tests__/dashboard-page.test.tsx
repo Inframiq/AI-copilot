@@ -67,40 +67,36 @@ describe("Dashboard page", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  // Profile Health is how complete My Profile is (ten checks, 10% each).
-  // "Needs work" / "Good" / "Excellent" didn't say that, and "Good" at 50%
-  // overstated it.
-  describe("Profile Health wording", () => {
-    // `filled` of the ten checks pass; name is always one of them.
-    function profileWith(filled: number): CareerProfile {
-      const has = (i: number) => i < filled;
-      return {
-        contact: {
-          name: "Jane Doe",
-          email: has(1) ? "jane@example.com" : "",
-          phone: has(2) ? "+91 90000 00000" : "",
-          location: has(3) ? "Bengaluru" : "",
-          linkedin: has(4) ? "linkedin.com/in/jane" : "",
-          github: has(5) ? "github.com/jane" : "",
-        },
-        headline: has(6) ? "Backend engineer" : "",
-        experience: has(7) ? [{ title: "Engineer", company: "Acme", bullets: [] }] : [],
-        education: has(8) ? [{ school: "IIT", degree: "B.Tech" }] : [],
-        skills: has(9) ? ["a", "b", "c", "d", "e"] : [],
-      } as unknown as CareerProfile;
-    }
-
-    it.each([
-      [3, "30%", "Finish your profile"],
-      [6, "60%", "Partly filled in"],
-      [8, "80%", "Almost complete"],
-      [10, "100%", "Complete"],
-    ])("%i of 10 filled reads %s, %s", async (filled, pct, label) => {
-      vi.mocked(getCareerProfile).mockResolvedValueOnce(profileWith(filled));
+  // Profile Health is how complete My Profile is, part by part
+  // (lib/profile-health; its own tests cover the scoring). The card shows
+  // the step that adds the most, so it says what to do next.
+  describe("Profile Health", () => {
+    it("shows the score and the next step", async () => {
+      vi.mocked(getCareerProfile).mockResolvedValueOnce({
+        contact: { name: "Jane Doe", email: "jane@example.com" },
+        experience: [{ title: "Accountant", company: "Acme", start: "Jan 2020", end: "", current: true,
+                       responsibilities: "", achievements: "", impact: "" }],
+      } as unknown as CareerProfile);
       renderPage();
-      const card = await screen.findByRole("button", { name: new RegExp(`Profile Health.*${pct}`) });
-      expect(card).toHaveTextContent(label);
-      expect(card).not.toHaveTextContent(/needs work|excellent/i);
+      const card = await screen.findByRole("button", { name: /Profile Health.*8%/ });
+      expect(card).toHaveTextContent("Add points to 1 job");
+    });
+
+    it("says Complete when every part is filled in", async () => {
+      vi.mocked(getCareerProfile).mockResolvedValueOnce({
+        role_status: "working",
+        contact: { name: "Jane Doe", email: "jane@example.com", phone: "+91 90000 00000", location: "Pune",
+                   linkedin: "linkedin.com/in/jane" },
+        headline: "Accountant",
+        summary: "Accountant with six years of monthly closes.",
+        experience: [{ title: "Accountant", company: "Acme", start: "Jan 2020", end: "", current: true,
+                       responsibilities: "• Closed the books", achievements: "", impact: "" }],
+        education: [{ institution: "Pune University", degree: "B.Com", year: "2017" }],
+        skills: ["a", "b", "c", "d", "e", "f"],
+      } as unknown as CareerProfile);
+      renderPage();
+      const card = await screen.findByRole("button", { name: /Profile Health.*100%/ });
+      expect(card).toHaveTextContent("Complete");
     });
   });
 
@@ -123,6 +119,7 @@ describe("Dashboard page", () => {
     finish([{ id: "r1", title: "Backend CV", updated_at: "2026-10-01T00:00:00Z", ats_score: null }]);
     expect(await screen.findByText("Backend CV")).toBeInTheDocument();
     expect(container.querySelector("h1")).toHaveTextContent("Jane");
-    expect(screen.getByRole("button", { name: /Profile Health/ })).toHaveTextContent("20%");
+    // Name and email: 8 of the 100 points.
+    expect(screen.getByRole("button", { name: /Profile Health/ })).toHaveTextContent("8%");
   });
 });

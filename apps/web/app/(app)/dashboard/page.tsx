@@ -15,6 +15,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import type { CareerProfile } from "@/lib/career-profile-client";
 import { careerProfileQuery, useHoldShell, useShellDataReady } from "@/lib/reveal";
+import { computeProfileHealth } from "@/lib/profile-health";
 import { ConnectionErrorBanner } from "@/components/ui/ConnectionErrorBanner";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useTailoringStore } from "@/stores/tailoring-store";
@@ -39,43 +40,6 @@ const STATUS_COLOR: Record<LearningItem["status"], string> = {
   learning: "bg-secondary-container text-on-secondary-container",
   done: "bg-success-accent/15 text-success-accent",
 };
-
-// Profile Health measures the user's My Profile (career_profiles) — the
-// app's source of truth — NOT a resume. (It used to read resumes[0].content,
-// so a stub "Untitled Resume" created from this dashboard would peg it at 0%
-// even with a fully filled profile.) Ten equally-weighted signals; each
-// present one is 10 points.
-//
-// The score is how complete the profile is, so the label says that, and
-// below 50 says what to do: the card opens My Profile. "Needs work" didn't
-// say what needed it, and "Good" at 50% overstated half a profile.
-function computeProfileHealth(profile: CareerProfile | null): { score: number; label: string } {
-  if (!profile) return { score: 0, label: "Finish your profile" };
-  const contact = profile.contact ?? { name: "", email: "" };
-  const checks = [
-    !!contact.name?.trim(),
-    !!contact.email?.trim(),
-    !!contact.phone?.trim(),
-    !!contact.location?.trim(),
-    !!contact.linkedin?.trim(),
-    !!contact.github?.trim(),
-    !!profile.headline?.trim(),
-    Array.isArray(profile.experience) && profile.experience.length > 0,
-    Array.isArray(profile.education) && profile.education.length > 0,
-    Array.isArray(profile.skills) && profile.skills.length >= 5,
-  ];
-  const filled = checks.filter(Boolean).length;
-  const score = Math.round((filled / checks.length) * 100);
-  const label =
-    score === 100
-      ? "Complete"
-      : score >= 80
-      ? "Almost complete"
-      : score >= 50
-      ? "Partly filled in"
-      : "Finish your profile";
-  return { score, label };
-}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -265,7 +229,7 @@ export default function DashboardPage() {
   }> = [
     {
       label: "Profile Health",
-      tooltip: "How complete My Profile is — name, contact, work history, education, and skills. A fuller profile means better tailored resumes.",
+      tooltip: "How complete My Profile is: contact details, headline, summary, jobs with dates and points, education and skills. Résumés don't change it; the Profile's Save does. A fuller profile means better tailored resumes.",
       value: hasProfile ? `${profileScore}%` : "—",
       badge: hasProfile ? profileLabel : "Complete profile",
       icon: Heartbeat,
