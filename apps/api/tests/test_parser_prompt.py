@@ -71,3 +71,11 @@ def test_an_unknown_level_draws_no_proficiency_bar(monkeypatch):
     body = re.sub(r"(?s)<style.*?</style>", "", html)
     assert "Telugu" in body
     assert "lang-bar-fill" not in body
+
+
+def test_a_jobs_own_text_stays_with_the_job_even_in_the_first_person():
+    # A job described in the first person ("I am an experienced
+    # Accountant…") was read as the résumé's summary, leaving the job empty
+    # (resume_parser._return_job_text puts it back if the model still does).
+    assert re.search(r"under a job's title or dates is that job's own \"bullets\".{0,120}first person",
+                     PARSE_SYSTEM, re.S)

@@ -460,3 +460,121 @@ def test_the_prompt_keeps_loose_points_out_of_every_job():
     assert "the app splits" in PARSE_SYSTEM and "AWS (EC2, S3, Lambda)" in PARSE_SYSTEM
     assert re.search(r'"Publications".{0,120}goes in\s+"achievements"', PARSE_SYSTEM, re.S)
     assert re.search(r"EARLIER CAREER LINES.{0,500}Never\s+invent a title", PARSE_SYSTEM, re.S)
+
+
+# ── Text printed under a job is that job's, even when it reads like a summary ──
+# A job's description opening in the first person ("I am an experienced
+# Accountant…") was read as the résumé's Professional Summary, leaving the
+# job (the current one) with no points at all. Seen on a real Accountant
+# résumé, three reads out of three.
+
+_JOB_PARAGRAPH_RESUME = """ACCOUNTANT
+Skills
+QuickBooks, Excel
+Experience
+07/2014
+to
+Current
+ACCOUNTANT
+Company Name
+City , State
+I am an experienced and goal-oriented Accountant with a demonstrated track record in preparation and analysis of financial reports to
+summarize and forecast financial position.
+Independent contributor committed to superior quality, teamwork and proficient internal and external customer service.
+04/2010
+to
+07/2014
+Accounting Manager
+Company Name
+City , State
+Responsible for coordination of annual audit and government auditing.
+Implemented an inventory system.
+Education
+Bachelor of Science : Accounting
+"""
+
+_SUMMARY_FROM_THE_JOB = (
+    "I am an experienced and goal-oriented Accountant with a demonstrated track record in preparation "
+    "and analysis of financial reports to summarize and forecast financial position. Independent "
+    "contributor committed to superior quality, teamwork and proficient internal and external customer service."
+)
+
+
+def _job_paragraph_read(summary=_SUMMARY_FROM_THE_JOB, first_bullets=None):
+    return {
+        "contact": {"name": "", "email": ""},
+        "headline": "ACCOUNTANT",
+        "summary": summary,
+        "experience": [
+            {"company": "Company Name", "title": "ACCOUNTANT", "start": "07/2014", "end": "Current",
+             "bullets": first_bullets or []},
+            {"company": "Company Name", "title": "Accounting Manager", "start": "04/2010", "end": "07/2014",
+             "bullets": ["Responsible for coordination of annual audit and government auditing.",
+                         "Implemented an inventory system."]},
+        ],
+        "education": [{"institution": "", "degree": "Bachelor of Science : Accounting"}],
+        "skills": ["QuickBooks", "Excel"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_summary_read_from_inside_a_job_goes_back_to_that_job():
+    out = await parse_resume_text(_JOB_PARAGRAPH_RESUME, _provider_returning(_job_paragraph_read()))
+    assert out["summary"] is None
+    assert out["experience"][0]["bullets"] == [
+        "I am an experienced and goal-oriented Accountant with a demonstrated track record in preparation "
+        "and analysis of financial reports to summarize and forecast financial position.",
+        "Independent contributor committed to superior quality, teamwork and proficient internal and "
+        "external customer service.",
+    ]
+    # The other job is left exactly as read.
+    assert out["experience"][1]["bullets"] == [
+        "Responsible for coordination of annual audit and government auditing.",
+        "Implemented an inventory system.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_it_joins_the_points_the_job_already_has_without_repeating_them():
+    read = _job_paragraph_read(first_bullets=["Independent contributor committed to superior quality, "
+                                               "teamwork and proficient internal and external customer service."])
+    out = await parse_resume_text(_JOB_PARAGRAPH_RESUME, _provider_returning(read))
+    assert out["summary"] is None
+    bullets = out["experience"][0]["bullets"]
+    assert len(bullets) == 2 and bullets[0].startswith("I am an experienced")
+
+
+@pytest.mark.asyncio
+async def test_a_summary_at_the_top_stays_the_summary():
+    text = ("Jane Doe\nExperienced accountant with ten years in property and development accounting.\n"
+            + _JOB_PARAGRAPH_RESUME.split("Experience\n", 1)[1].join(["Experience\n", ""]))
+    summary = "Experienced accountant with ten years in property and development accounting."
+    read = _job_paragraph_read(summary=summary,
+                               first_bullets=["I am an experienced and goal-oriented Accountant."])
+    out = await parse_resume_text(text, _provider_returning(read))
+    assert out["summary"] == summary
+    assert out["experience"][0]["bullets"] == ["I am an experienced and goal-oriented Accountant."]
+
+
+@pytest.mark.asyncio
+async def test_a_summary_section_printed_after_the_jobs_stays_the_summary():
+    summary = "Accountant with a record of clean audits and on-time monthly closes for property firms."
+    text = _JOB_PARAGRAPH_RESUME.replace("Education\n", f"Professional Summary\n{summary}\nEducation\n")
+    out = await parse_resume_text(text, _provider_returning(_job_paragraph_read(summary=summary)))
+    assert out["summary"] == summary
+
+
+@pytest.mark.asyncio
+async def test_a_summary_printed_at_the_top_and_again_under_a_job_stays_the_summary():
+    text = _JOB_PARAGRAPH_RESUME.replace("Skills\n", _SUMMARY_FROM_THE_JOB + "\nSkills\n", 1)
+    out = await parse_resume_text(text, _provider_returning(_job_paragraph_read()))
+    assert out["summary"] == _SUMMARY_FROM_THE_JOB
+
+
+@pytest.mark.asyncio
+async def test_an_objective_read_from_inside_a_job_goes_back_to_that_job_too():
+    read = _job_paragraph_read(summary=None)
+    read["objective"] = _SUMMARY_FROM_THE_JOB
+    out = await parse_resume_text(_JOB_PARAGRAPH_RESUME, _provider_returning(read))
+    assert out["objective"] is None
+    assert out["experience"][0]["bullets"][0].startswith("I am an experienced")

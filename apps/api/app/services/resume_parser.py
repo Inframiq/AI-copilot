@@ -126,6 +126,10 @@ Rules:
   "About Me" or "Professional Summary" goes in "summary". A paragraph with
   no heading at the top of the resume is the summary. Never put the same
   text in both.
+- Text printed under a job's title or dates is that job's own "bullets",
+  even when it reads like a summary or is written in the first person ("I
+  am an experienced Accountant…"). A resume whose only summary-like text
+  sits under a job gives "summary": null.
 - "awards", "achievements", "leadership", "volunteer", "interests": take
   these only from a section with that heading or a close equivalent
   ("Honors & Awards", "Key Achievements", "Positions of Responsibility",
@@ -336,6 +340,9 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     # each would print it twice.
     if data["objective"] and data["objective"] == data["summary"]:
         data["objective"] = None
+    # A job's own description, read as the résumé's summary.
+    for key in ("summary", "objective"):
+        _return_job_text(raw_text, data, key)
     # Defense-in-depth against the model pulling a responsibility/summary
     # sentence into "skills" despite the prompt rule against it — same
     # prose-vs-skill-name filter tailoring.py applies to AI-suggested skills.
@@ -486,6 +493,87 @@ def _points_left_out(raw_text: str, data: dict) -> list[dict]:
             point += " " + line
     close()
     return [{"heading": h or RESPONSIBILITIES_HEADING, "points": _clean_points(p)} for h, p in groups.items()]
+
+
+# Where the jobs are printed, and the headings that end that part.
+_EXPERIENCE_HEADING = re.compile(
+    r"^(professional |work |relevant |employment |career )?(experience|employment( history)?|work history|career history)$",
+    re.I,
+)
+_SECTION_AFTER_JOBS = re.compile(
+    r"^((professional |executive |career )?(summary|profile|objective)|about me|education|academic.*|qualifications?|"
+    r"(technical |key |core )?skills.*|projects?|certifications?.*|licen[cs]es.*|awards?.*|hono(u)?rs.*|"
+    r"achievements?|publications?|languages?|interests|hobbies.*|volunteer.*|leadership.*|references?|"
+    r"personal (details|information)|declaration)$",
+    re.I,
+)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+def _norm_line(line: str) -> str:
+    return " ".join(plain_text(line).split()).strip(" :.").lower()
+
+
+def _return_job_text(raw_text: str, data: dict, key: str) -> None:
+    """Gives a job back the description the model read as the résumé's
+    summary (or objective). A job's text opening in the first person ("I am
+    an experienced Accountant…") reads like a summary, and the model took it
+    for one — the job, the current one, was left with no points at all.
+
+    Moved only when the text was printed inside Experience, after a job's
+    title and before any later section's heading, and nowhere before the
+    jobs: a summary at the top, or under its own heading anywhere, stays.
+    The text goes to the job printed above it, one point per sentence,
+    ahead of the points it already has."""
+    text = data.get(key)
+    if not isinstance(text, str) or not text.strip():
+        return
+    jobs = data.get("experience") or []
+    if not jobs:
+        return
+    lines = [ln.strip() for ln in raw_text.split("Hyperlinks found in this document")[0].splitlines()]
+    norm = [_norm_line(ln) for ln in lines]
+    start = next((i for i, n in enumerate(norm) if _EXPERIENCE_HEADING.match(n)), None)
+    if start is None:
+        return
+    end = next((i for i in range(start + 1, len(norm)) if _SECTION_AFTER_JOBS.match(norm[i])), len(norm))
+
+    wanted = _bigrams(text)
+    if not wanted:
+        return
+
+    def is_part(line: str) -> bool:
+        pairs = _bigrams(line)
+        return len(pairs) >= 2 and len(pairs & wanted) / len(pairs) >= 0.6
+
+    # Printed before the jobs too (the top of the résumé, a heading of its
+    # own): that copy is the summary.
+    if any(is_part(ln) for ln in lines[:start]) or any(is_part(ln) for ln in lines[end:]):
+        return
+    inside = [i for i in range(start + 1, end) if is_part(lines[i])]
+    if not inside:
+        return
+    found = set().union(*(_bigrams(lines[i]) for i in inside))
+    if len(found & wanted) / len(wanted) < 0.8:
+        return
+
+    # The job whose title is printed last above the text. Jobs are matched
+    # to title lines in order, so two jobs with one title each get their own.
+    owner, next_job = None, 0
+    for i in range(start + 1, inside[0]):
+        for j in range(next_job, len(jobs)):
+            title = jobs[j].get("title")
+            if isinstance(title, str) and title.strip() and norm[i] == _norm_line(title):
+                owner, next_job = j, j + 1
+                break
+    if owner is None:
+        return
+
+    job = jobs[owner]
+    have = {p.lower() for p in job.get("bullets") or []}
+    moved = [s.strip() for s in _SENTENCE_END.split(text) if s.strip() and s.strip().lower() not in have]
+    job["bullets"] = _clean_points(moved + list(job.get("bullets") or []))
+    data[key] = None
 
 
 def _strings(value) -> list[str]:
