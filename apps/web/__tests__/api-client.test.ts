@@ -10,7 +10,7 @@ vi.mock("@/lib/supabase", () => ({
   leaveEndedSession: () => leaveEndedSession(),
 }));
 
-import { apiClient, ApiError } from "../lib/api-client";
+import { apiClient, ApiError, NETWORK_ERROR_MESSAGE } from "../lib/api-client";
 import type { ResumeContent } from "@career-copilot/types";
 
 function jsonResponse(body: unknown, init: Partial<Response> = {}) {
@@ -39,6 +39,24 @@ describe("apiClient", () => {
     );
     await expect(apiClient.getResumes()).rejects.toBeInstanceOf(ApiError);
     expect(leaveEndedSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the server couldn't be reached instead of the browser's \"Failed to fetch\"", async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+    const file = new File(["fake"], "resume.pdf", { type: "application/pdf" });
+    const upload = apiClient.readResumeFile(file, "r1").catch((e: unknown) => e);
+    const read = (await upload) as ApiError;
+    expect(read).toBeInstanceOf(ApiError);
+    expect(read.status).toBe(0);
+    expect(read.message).toBe(NETWORK_ERROR_MESSAGE);
+
+    const list = (await apiClient.getResumes().catch((e: unknown) => e)) as ApiError;
+    expect(list.message).toBe(NETWORK_ERROR_MESSAGE);
+  });
+
+  it("leaves a cancelled request as a cancellation", async () => {
+    vi.mocked(fetch).mockRejectedValue(new DOMException("The user aborted a request.", "AbortError"));
+    await expect(apiClient.getResumes()).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("leaves an expired token to the next refresh", async () => {

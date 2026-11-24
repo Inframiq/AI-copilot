@@ -1835,13 +1835,16 @@ async def test_rewrite_bullet_refunds_the_credit_when_the_model_returns_nothing(
              patch("app.routers.ai.spend_credits", new=AsyncMock()), \
              patch("app.routers.ai.refund_credits", new=AsyncMock()) as refund:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                with pytest.raises(Exception):
-                    await c.post(
-                        "/ai/rewrite-bullet",
-                        json={"bullet_text": "Built checkout", "mode": "rewrite",
-                              "humanize_level": 50, "field": "bullet"},
-                        headers=make_auth_header(),
-                    )
+                # Answered as the app's 500 (main.unhandled_error_middleware),
+                # not left to escape: the site reads it rather than a
+                # "Failed to fetch".
+                r = await c.post(
+                    "/ai/rewrite-bullet",
+                    json={"bullet_text": "Built checkout", "mode": "rewrite",
+                          "humanize_level": 50, "field": "bullet"},
+                    headers=make_auth_header(),
+                )
+        assert r.status_code == 500
         refund.assert_awaited_once()
     finally:
         app.dependency_overrides.pop(get_db, None)

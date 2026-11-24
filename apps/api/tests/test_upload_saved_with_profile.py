@@ -34,7 +34,7 @@ def room_for_resumes():
         yield room
 
 
-async def _post(path, session, storage, data, parse=None, extract=None, raise_errors=True):
+async def _post(path, session, storage, data, parse=None, extract=None, raise_errors=True, headers=None):
     limiter.reset()
 
     async def override():
@@ -51,7 +51,7 @@ async def _post(path, session, storage, data, parse=None, extract=None, raise_er
                 return await client.post(
                     path,
                     files={"file": ("resume.pdf", io.BytesIO(_FAKE_PDF_BYTES), "application/pdf")},
-                    data=data, headers=make_auth_header(),
+                    data=data, headers={**make_auth_header(), **(headers or {})},
                 )
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -101,6 +101,21 @@ async def test_a_read_that_fails_gives_the_credit_back(ledger):
     r = await _post("/resumes/read-upload", _finding(None), MagicMock(), {},
                     parse=AsyncMock(side_effect=ResumeUnreadable("x")))
     assert r.status_code == 502
+    assert ledger.spent == ["parse_resume"] and ledger.refunded == ["parse_resume"]
+
+
+@pytest.mark.asyncio
+async def test_a_read_that_breaks_unexpectedly_tells_the_site_and_refunds(ledger):
+    """A model call failing some other way (a timeout, a dropped connection
+    to the provider) answers a 500 the site can read: with CORS, so the
+    browser shows the message rather than "Failed to fetch"."""
+    site = "https://kripax.inframiq.com"
+    r = await _post("/resumes/read-upload", _finding(None), MagicMock(), {},
+                    parse=AsyncMock(side_effect=TimeoutError("provider timed out")),
+                    raise_errors=False, headers={"origin": site})
+    assert r.status_code == 500
+    assert r.headers.get("access-control-allow-origin") == site
+    assert r.json() == {"detail": "Something went wrong. Please try again."}
     assert ledger.spent == ["parse_resume"] and ledger.refunded == ["parse_resume"]
 
 

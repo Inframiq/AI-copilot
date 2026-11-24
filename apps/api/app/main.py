@@ -92,7 +92,10 @@ async def ai_paused_handler(request: Request, exc: AIPausedError) -> JSONRespons
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(status_code=500, content={"detail": _SERVER_ERROR})
+
+
+_SERVER_ERROR = "Something went wrong. Please try again."
 
 # Paths an ADMIN_ONLY_EMAILS account may still reach — everything else 403s
 # for them, so a new normal-user route is locked out by default instead of
@@ -121,6 +124,24 @@ async def admin_only_restriction_middleware(request: Request, call_next):
                     status_code=403, content={"detail": "This account is admin-only."}
                 )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def unhandled_error_middleware(request: Request, call_next):
+    """The same 500 as unhandled_exception_handler, answered inside CORS.
+
+    Starlette sends an `Exception` handler's answer from its outermost
+    layer, outside every middleware here, so the 500 left without
+    Access-Control-Allow-Origin and the site's browser showed only "Failed
+    to fetch" (a résumé read whose model call failed, refunded, looked like
+    a dropped connection). Caught here, it gets the CORS and security
+    headers like any other answer. The handler above stays for anything the
+    outer layers raise."""
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": _SERVER_ERROR})
 
 
 # Registered after every middleware that can answer on its own (the

@@ -99,13 +99,30 @@ function isEndedSession(status: number, detail: unknown): boolean {
   return status === 401 && detail === "Invalid token";
 }
 
+/** Shown when the request never got an answer the page can read: the
+ * connection dropped, the server was restarting, or the device is offline.
+ * The browser's own wording ("Failed to fetch", "Load failed",
+ * "NetworkError when attempting to fetch resource") says nothing useful. */
+export const NETWORK_ERROR_MESSAGE = "Couldn't reach the server. Check the connection and try again.";
+
+/** `fetch`, with a failed connection as an ApiError (status 0) in words. */
+async function send(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    // A cancelled request stays what it is; callers tell it apart.
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError(0, NETWORK_ERROR_MESSAGE);
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown
 ): Promise<T> {
   const token = await getToken();
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await send(`${BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -130,7 +147,7 @@ async function request<T>(
 /** `request` for a form with a file in it. */
 async function postForm<T>(path: string, form: FormData, fallback: string): Promise<T> {
   const token = await getToken();
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await send(`${BASE}${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -771,7 +788,7 @@ export interface DeletionRequestInput {
 /** Sends a deletion request. No sign-in, so no token: the people this is
  *  for often can't sign in. */
 export async function submitDeletionRequest(input: DeletionRequestInput): Promise<void> {
-  const res = await fetch(`${BASE}/data-requests/deletion`, {
+  const res = await send(`${BASE}/data-requests/deletion`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
