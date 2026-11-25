@@ -93,14 +93,24 @@ describe("Builder: Generate / Regenerate with KripaX", () => {
       </QueryClientProvider>,
     );
 
-  describe("a summary past 80 words (an upload's, shown whole)", () => {
-    const long = Array.from({ length: 96 }, (_, i) => `word${i}`).join(" ");
+  describe("a summary past 100 words", () => {
+    const long = Array.from({ length: 106 }, (_, i) => `word${i}`).join(" ");
 
-    it("shows a note that it saves as it is, never that it isn't saved", () => {
+    it("shows a warning to rephrase it with KripaX or edit it, never that it's saved as it is", () => {
       useResumeStore.setState({ content: { ...RESUME, summary: long }, isDirty: true, saveError: null } as never);
       renderSection();
-      expect(screen.getByText("Longer than 80 words. It saves as it is, but 80 or fewer reads better on a résumé.")).toBeTruthy();
-      expect(screen.queryByText(/aren't saved|isn't being saved|Trim it to save/)).toBeNull();
+      expect(screen.getByText("106 / 100 words")).toBeTruthy();
+      expect(screen.getByText(
+        "A professional summary holds up to 100 words; this one has 106. Rephrase it with KripaX or edit it to 100 or fewer.",
+      )).toBeTruthy();
+      expect(screen.queryByText(/saves as it is/)).toBeNull();
+    });
+
+    it("keeps every word typed past the limit", () => {
+      useResumeStore.setState({ content: { ...RESUME, summary: "" } } as never);
+      renderSection();
+      fireEvent.change(screen.getByPlaceholderText(/professional summary/i), { target: { value: long } });
+      expect(useResumeStore.getState().content?.summary).toBe(long);
     });
   });
 

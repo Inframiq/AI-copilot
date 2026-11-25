@@ -29,6 +29,7 @@ import {
   PROFILE_LIMITS,
   SECTION_INFO,
   capEdit,
+  summaryCapError,
   emptyProfileSections,
   fitProfileSections,
   profileSectionsToResume,
@@ -150,6 +151,22 @@ describe("the limits", () => {
     const now = (name: string) => Number(new RegExp(`^${name} = (\\d+)`, "m").exec(raised)?.[1]);
     expect(now("MAX_SUMMARY_CHARS")).toBe(PROFILE_LIMITS.summaryChars);
     expect(now("MAX_OBJECTIVE_CHARS")).toBe(PROFILE_LIMITS.objectiveChars);
+  });
+
+  it("caps the summary at the same word count as the API's résumé rules", () => {
+    const spec = readFileSync(join(API, "app/services/resume_spec.py"), "utf8");
+    const max = Number(/"summary": \{"min_words": \d+, "max_words": (\d+)\}/.exec(spec)?.[1]);
+    expect(PROFILE_LIMITS.summaryWords).toBe(100);
+    expect(max).toBe(PROFILE_LIMITS.summaryWords);
+  });
+
+  it("refuses to save a summary past 100 words, with the way to fix it", () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
+    expect(summaryCapError(words(100))).toBeNull();
+    expect(summaryCapError(null)).toBeNull();
+    expect(summaryCapError(words(101))).toBe(
+      "A professional summary holds up to 100 words; this one has 101. Rephrase it with KripaX or edit it to 100 or fewer to save.",
+    );
   });
 
   it("never cut a text that arrived longer than the word cap", () => {

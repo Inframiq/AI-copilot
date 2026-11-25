@@ -9,6 +9,7 @@ import {
   PROFILE_LIMITS as L,
   SECTION_INFO,
   capEdit,
+  summaryCapNote,
   wordCapNote,
   type ExtraSection,
   type LanguageEntry,
@@ -27,10 +28,12 @@ const addRowCls =
 
 /** A paragraph capped at `maxWords` (and the database's `maxChars`), with a
  * running count. Text over the cap from an upload stays whole and saves,
- * with a note (capEdit, wordCapNote). */
-function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder }: {
+ * with a note (capEdit, wordCapNote). The summary (`summary`) takes any
+ * number of words, typed or pasted, never cut: past the cap it shows a
+ * warning, and the Profile's Save refuses it (summaryCapError). */
+function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder, summary = false }: {
   id: string; value: string; onChange: (v: string) => void;
-  maxWords: number; maxChars: number; rows: number; placeholder: string;
+  maxWords: number; maxChars: number; rows: number; placeholder: string; summary?: boolean;
 }) {
   const count = wordCount(value);
   return (
@@ -38,17 +41,19 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
       <textarea
         id={id}
         value={value}
-        onChange={(e) => onChange(capEdit(value, e.target.value, maxWords))}
+        onChange={(e) => onChange(summary ? e.target.value : capEdit(value, e.target.value, maxWords))}
         maxLength={maxChars}
         rows={rows}
         placeholder={placeholder}
         className={`${textareaCls} leading-relaxed`}
       />
-      <span className={`self-end tabular-nums text-caption ${count > maxWords ? "text-tertiary font-semibold" : "text-on-surface-variant"}`}>
+      <span className={`self-end tabular-nums text-caption ${count > maxWords ? (summary ? "text-error" : "text-tertiary") + " font-semibold" : "text-on-surface-variant"}`}>
         {count} / {maxWords} words
       </span>
       {count > maxWords && (
-        <p className="text-caption text-tertiary">{wordCapNote(maxWords)}</p>
+        <p className={`text-caption ${summary ? "text-error" : "text-tertiary"}`}>
+          {summary ? summaryCapNote(count) : wordCapNote(maxWords)}
+        </p>
       )}
     </div>
   );
@@ -86,6 +91,7 @@ export function SummaryCard({ value, onChange, title = "Professional summary", o
         onChange={onChange}
         maxWords={L.summaryWords}
         maxChars={L.summaryChars}
+        summary
         rows={4}
         placeholder={placeholder ?? "Backend engineer with four years building payment APIs in Go and PostgreSQL…"}
       />

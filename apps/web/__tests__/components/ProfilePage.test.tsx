@@ -525,19 +525,25 @@ describe("My Profile — every résumé section", () => {
     expect(saved.summary).toBe("Engineer.");
   });
 
-  it("shows an uploaded summary past 80 words whole, with a note, and saves it as it is", async () => {
+  it("shows an uploaded summary past 100 words whole, with a warning, and won't save it until it fits", async () => {
     const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
     getCareerProfile.mockResolvedValue(profile({ summary: long }));
     renderPage();
     await screen.findByRole("heading", { name: "Professional summary" });
     const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
     expect(summary.value).toBe(long);
-    expect(screen.getByText("330 / 80 words")).toBeInTheDocument();
-    expect(screen.getByText("Longer than 80 words. It saves as it is, but 80 or fewer reads better on a résumé.")).toBeInTheDocument();
+    expect(screen.getByText("330 / 100 words")).toBeInTheDocument();
+    expect(screen.getByText(
+      "A professional summary holds up to 100 words; this one has 330. Rephrase it with KripaX or edit it to 100 or fewer.",
+    )).toBeInTheDocument();
 
-    const saved = await save();
-    expect(saved.summary).toBe(long);
-    expect(screen.queryByRole("alert")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A professional summary holds up to 100 words; this one has 330. Rephrase it with KripaX or edit it to 100 or fewer to save.",
+    );
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+    // The words are all still there.
+    expect(summary.value).toBe(long);
   });
 
   it("scrolls up to a save error at the top, each time it's shown", async () => {
@@ -561,15 +567,25 @@ describe("My Profile — every résumé section", () => {
     }
   });
 
-  it("caps the summary at 80 words", async () => {
+  it("keeps every word typed or pasted past 100, and saves once it's edited down", async () => {
     getCareerProfile.mockResolvedValue(profile());
     renderPage();
     await screen.findByRole("heading", { name: "Professional summary" });
     const summary = document.getElementById("profile-summary") as HTMLTextAreaElement;
     await userEvent.click(summary);
-    await userEvent.paste(Array.from({ length: 90 }, (_, i) => `w${i}`).join(" "));
-    expect(summary.value.split(" ")).toHaveLength(80);
-    expect(screen.getByText("80 / 80 words")).toBeInTheDocument();
+    await userEvent.paste(Array.from({ length: 110 }, (_, i) => `w${i}`).join(" "));
+    expect(summary.value.split(" ")).toHaveLength(110);
+    expect(screen.getByText("110 / 100 words")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("this one has 110.");
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+
+    await userEvent.clear(summary);
+    await userEvent.click(summary);
+    await userEvent.paste(Array.from({ length: 100 }, (_, i) => `w${i}`).join(" "));
+    expect(screen.getByText("100 / 100 words")).toBeInTheDocument();
+    const saved = await save();
+    expect(saved.summary.split(" ")).toHaveLength(100);
   });
 
   it("isn't counted as unsaved just for loading a profile with sections", async () => {

@@ -1444,7 +1444,7 @@ async def test_rewrite_bullet_custom_mode_follows_instructions():
 
 @pytest.mark.asyncio
 async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
-    """The summary's 80-word cap must never be applied to a bullet.
+    """The summary's 100-word cap must never be applied to a bullet.
 
     This used to assert an over-long bullet came back verbatim — which was
     really the absence of ANY length enforcement on this endpoint. Bullets now
@@ -1471,7 +1471,7 @@ async def test_rewrite_bullet_bullet_field_not_truncated_by_summary_cap():
         assert r.status_code == 200
         body = r.json()
         # Kept whole and flagged for the candidate — not chopped at the
-        # summary's 80-word boundary.
+        # summary's 100-word boundary.
         assert body["rewritten_text"] == long_bullet
         assert len(body["rewritten_text"].split()) != max_words
         assert any("word" in reason for reason in body["reverted_reasons"])

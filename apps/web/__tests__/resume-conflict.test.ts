@@ -97,18 +97,24 @@ describe("saving a résumé open on more than one device", () => {
     expect(updateResume.mock.calls[1][1].content?.skills).toEqual(["Rust"]);
   });
 
-  it("a summary past 80 words saves as it is, and so does every other edit with it", async () => {
-    // It used to be held back until trimmed, and every other edit with it,
-    // while the summary's own note said the résumé wasn't saved.
+  it("a summary past 100 words isn't saved: the edits stay and the header says why", async () => {
     load();
     const long = Array.from({ length: 330 }, (_, i) => `w${i}`).join(" ");
+    useResumeStore.getState().updateContent({ summary: long });
+    await expect(useResumeStore.getState().saveNow()).rejects.toThrow(/this one has 330/);
+    expect(updateResume).not.toHaveBeenCalled();
+    expect(useResumeStore.getState().saveError).toBe(
+      "A professional summary holds up to 100 words; this one has 330. Rephrase it with KripaX or edit it to 100 or fewer to save.",
+    );
+    expect(useResumeStore.getState().isDirty).toBe(true);
+    expect(useResumeStore.getState().content?.summary).toBe(long);
+
+    // Edited down, it saves.
     updateResume.mockResolvedValueOnce(saved(V2));
-    useResumeStore.getState().updateContent({ summary: long, skills: ["Rust"] });
+    useResumeStore.getState().updateContent({ summary: "Backend engineer." });
     await useResumeStore.getState().saveNow();
     expect(updateResume).toHaveBeenCalledTimes(1);
-    expect(updateResume.mock.calls[0][1].content).toMatchObject({ summary: long, skills: ["Rust"] });
     expect(useResumeStore.getState().saveError).toBeNull();
-    expect(useResumeStore.getState().isDirty).toBe(false);
   });
 
   it("a refused save opens the conflict instead of an error, and keeps the edits unsaved", async () => {

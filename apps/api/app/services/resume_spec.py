@@ -57,7 +57,7 @@ TRAILING_OPTIONAL_SECTIONS = ["languages", "coursework", "awards", "volunteer", 
 # the validator enforces.
 
 HARD_LIMITS = {
-    "summary": {"min_words": 40, "max_words": 80},
+    "summary": {"min_words": 40, "max_words": 100},
     "objective": {"min_words": 25, "max_words": 50},
     "experience_bullets_per_role": {"min": 3, "max": 7, "prefer_max": 5},
     "internship_bullets_per_role": {"min": 2, "max": 5},

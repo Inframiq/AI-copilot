@@ -121,7 +121,7 @@ class RewriteBulletRequest(BaseModel):
     # enforced in the route handler rather than here since Pydantic can't
     # express "required if mode == X" declaratively without a validator.
     custom_instruction: str = Field(default="", max_length=1000)
-    # Changes prompt framing (single-line bullet vs. an 80-word-cap flowing
+    # Changes prompt framing (single-line bullet vs. a 100-word-cap flowing
     # paragraph) and applies the word cap backstop — see resume_spec.py
     # HARD_LIMITS["summary"], the same limit the Summary tab's textarea
     # already enforces when the user types directly.

@@ -536,7 +536,7 @@ export const apiClient = {
     humanize_level?: number;
     /** Required when mode is "custom" — free-text instructions for how to rewrite the text. */
     custom_instruction?: string;
-    /** Changes prompt framing: single-line bullet vs. an 80-word-cap paragraph. Defaults to "bullet". */
+    /** Changes prompt framing: single-line bullet vs. a 100-word-cap paragraph. Defaults to "bullet". */
     field?: "bullet" | "summary";
     /** Non-empty when the server's fact-lock rejected the model's rewrite, in
      * which case rewritten_text is the ORIGINAL, unchanged. */

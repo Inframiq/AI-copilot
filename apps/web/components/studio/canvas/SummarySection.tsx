@@ -1,12 +1,12 @@
 "use client";
 import { useResumeStore } from "@/stores/resume-store";
 import { wordCount } from "@/lib/misc-points";
-import { PROFILE_LIMITS, SECTION_INFO, capEdit, wordCapNote } from "@/lib/profile-sections";
+import { PROFILE_LIMITS, SECTION_INFO, capEdit, summaryCapNote } from "@/lib/profile-sections";
 import { SummaryWriter } from "@/components/resume/SummaryWriter";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
-export const SUMMARY_MAX_WORDS = 80;
+export const SUMMARY_MAX_WORDS = PROFILE_LIMITS.summaryWords;
 
 export function SummarySection() {
   const content = useResumeStore((s) => s.content);
@@ -17,9 +17,9 @@ export function SummarySection() {
   const count = words.length;
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    // Trimmed from the end so text typed at the front is never rewritten,
-    // and an uploaded summary already past the cap is never cut (capEdit).
-    updateContent({ summary: capEdit(content!.summary ?? "", e.target.value, SUMMARY_MAX_WORDS) });
+    // Never cut, typed or pasted: past the cap it's flagged below and the
+    // autosave waits until it fits (resume-store, summaryCapError).
+    updateContent({ summary: e.target.value });
   }
 
   return (
@@ -28,7 +28,9 @@ export function SummarySection() {
         <h2 className="text-label-caps text-on-surface-variant">Professional Summary</h2>
         <span
           className={`tabular text-caption ${
-            count >= SUMMARY_MAX_WORDS ? "text-tertiary font-semibold" : "text-on-surface-variant"
+            count > SUMMARY_MAX_WORDS
+              ? "text-error font-semibold"
+              : count === SUMMARY_MAX_WORDS ? "text-tertiary font-semibold" : "text-on-surface-variant"
           }`}
         >
           {count} / {SUMMARY_MAX_WORDS} words
@@ -48,10 +50,10 @@ export function SummarySection() {
         onUse={(summary) => updateContent({ summary })}
       />
       {count >= SUMMARY_MAX_WORDS && (
-        <p className="text-caption text-tertiary">
+        <p className={`text-caption ${count > SUMMARY_MAX_WORDS ? "text-error" : "text-tertiary"}`}>
           {count > SUMMARY_MAX_WORDS
-            ? wordCapNote(SUMMARY_MAX_WORDS)
-            : `A tight, ${SUMMARY_MAX_WORDS}-word summary reads stronger on an ATS resume than a long one — trim before adding more.`}
+            ? summaryCapNote(count)
+            : `${SUMMARY_MAX_WORDS} words is the limit for a professional summary.`}
         </p>
       )}
 

@@ -72,7 +72,7 @@ export const SECTION_INFO: Record<ExtraSection, { label: string; hint: string; p
  * inside it. The word counts are what a form lets a person type up to; the
  * character limits hold an uploaded résumé's longer text whole. */
 export const PROFILE_LIMITS = {
-  summaryWords: 80,
+  summaryWords: 100,
   summaryChars: 4000,
   objectiveWords: 50,
   objectiveChars: 2000,
@@ -115,20 +115,39 @@ export function capWords(value: string, max: number): string {
   return words.length <= max ? value : words.slice(0, max).join(" ");
 }
 
-/** The note under a summary or objective past its word cap (an uploaded
- * résumé's, shown whole and never cut). Advice, not a refusal: the Profile's
- * Save and the Builder's autosave both save it as it is. A save that refused
- * held back every other edit too, while the header said all was saved. */
+/** The note under an objective past its word cap (an uploaded résumé's,
+ * shown whole and never cut). Advice, not a refusal: it saves as it is. */
 export function wordCapNote(max: number): string {
   return `Longer than ${max} words. It saves as it is, but ${max} or fewer reads better on a résumé.`;
+}
+
+const countWords = (v?: string | null) => (v ?? "").trim().split(/\s+/).filter(Boolean).length;
+
+/** The warning under a summary past PROFILE_LIMITS.summaryWords. Text typed,
+ * pasted or uploaded past it is kept whole, never cut; it just can't be
+ * saved until it fits (summaryCapError). */
+export function summaryCapNote(count: number, toSave = false): string {
+  const max = PROFILE_LIMITS.summaryWords;
+  return `A professional summary holds up to ${max} words; this one has ${count}. Rephrase it with KripaX or edit it to ${max} or fewer${toSave ? " to save" : ""}.`;
+}
+
+/** Why a save is refused: the summary is past its word cap. The Profile's
+ * Save and the Builder's autosave both refuse with this (2026-11-25, the
+ * user's call: warn and stop at save, never drop the words). Null when it
+ * fits. */
+export function summaryCapError(summary?: string | null): string | null {
+  const count = countWords(summary);
+  if (count <= PROFILE_LIMITS.summaryWords) return null;
+  return summaryCapNote(count, true);
 }
 
 /** What a word-capped box keeps when its text changes from `previous` to
  * `next`: up to `max` words as usual, and past that never more words than
  * were already there. Text that arrived longer (an uploaded résumé's
- * summary) is never cut by a keystroke and saves as it is (wordCapNote);
+ * objective) is never cut by a keystroke and saves as it is (wordCapNote);
  * the person trims it themselves, and every edit that shortens it goes
- * through. */
+ * through. The summary isn't capped this way: it takes any length and the
+ * save waits for the trim (summaryCapError). */
 export function capEdit(previous: string, next: string, max: number): string {
   const had = previous.trim().split(/\s+/).filter(Boolean).length;
   return capWords(next, Math.max(max, had));

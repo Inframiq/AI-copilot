@@ -75,6 +75,7 @@ import {
   fitProfileSections,
   resumeSectionsToProfile,
   sectionHasContent,
+  summaryCapError,
   type ProfileSections,
 } from "@/lib/profile-sections";
 import { profileLayout, type MainSection, type OptionalSection } from "@/lib/profile-layout";
@@ -360,6 +361,10 @@ export default function ProfilePage() {
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave(): Promise<boolean> {
     setError(null); setSaveOk(false);
+    // A summary past 100 words is kept whole, never cut; it saves once it
+    // fits — rephrased with KripaX or edited by hand.
+    const overCap = summaryCapError(sections.summary);
+    if (overCap) { setError(overCap); return false; }
     // A LinkedIn or GitHub link typed or uploaded here has to be a profile
     // link. One saved before the rule, left as it is, still saves (the
     // database allows it too) — it's shown as needing a fix.
