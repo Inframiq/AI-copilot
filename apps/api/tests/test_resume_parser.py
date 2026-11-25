@@ -602,3 +602,232 @@ def test_finding_the_job_does_work_in_step_with_the_text_not_lines_times_jobs(mo
     rp._return_job_text("\n".join(lines), data, "summary")
     assert data["summary"] is None and jobs[-1]["bullets"]
     assert calls <= len(lines) + len(jobs)
+
+
+# ── A long résumé's sections the model dropped, with title-case headings and
+# no bullets (the Kaggle set; an Accountant's 5-page résumé lost its
+# Highlights, Accomplishments and Education notes on every read) ──
+
+_TITLE_CASE = """ACCOUNTANT
+Summary
+Financial Accountant specializing in financial planning within the Department of Defense.
+Highlights
+Account reconciliations
+Critical thinking
+ERP (Enterprise Resource Planning) software.
+Accomplishments
+Served on a tiger team which identified and resolved General Ledger postings in DEAMS totaling $360B in accounting adjustments. This allowed
+for the first successful fiscal year-end close for 2012.
+Experience
+Company Name July 2011 to November 2012 Accountant
+City , State
+I served on a tiger team designed to resolve General Ledger posting differences, supporting $360B in accounting adjustments.
+I identified duplicate obligations with an automated tool built with DFAS Europe.
+Education
+Northern Maine Community College 1994 Associate : Accounting
+Attended Husson College, major Accounting 78 semester hours toward Bachelors degree.
+Skills
+Accounting; General Accounting; Program Management.
+"""
+
+
+def _accountant(**overrides) -> dict:
+    payload = {
+        "contact": {"name": "", "email": ""},
+        "summary": "Financial Accountant specializing in financial planning within the Department of Defense.",
+        "experience": [{"company": "Company Name", "title": "Accountant", "start": "Jul 2011", "end": "Nov 2012",
+                        "bullets": ["I served on a tiger team designed to resolve General Ledger posting differences, "
+                                    "supporting $360B in accounting adjustments.",
+                                    "I identified duplicate obligations with an automated tool built with DFAS Europe."]}],
+        "education": [{"institution": "Northern Maine Community College", "degree": "Associate: Accounting", "year": "1994"}],
+        "skills": ["Accounting", "General Accounting", "Program Management"],
+        "achievements": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_unbulleted_lines_under_title_case_headings_the_model_dropped_come_back():
+    result = await parse_resume_text(_TITLE_CASE, _provider_returning(_accountant()))
+    # Short highlights are skills; the bracketed one by its name.
+    assert result["skills"] == ["Accounting", "General Accounting", "Program Management",
+                                "Account reconciliations", "Critical thinking", "ERP"]
+    # A wrapped line joined back up — though a job's bullet says much the same.
+    assert result["achievements"] == [
+        "Served on a tiger team which identified and resolved General Ledger postings in DEAMS totaling $360B "
+        "in accounting adjustments. This allowed for the first successful fiscal year-end close for 2012."
+    ]
+    # An Education note the model made no degree of: Miscellaneous, to place.
+    assert result["unplaced"] == [{"heading": "Education", "points": [
+        "Attended Husson College, major Accounting 78 semester hours toward Bachelors degree."]}]
+    # The jobs are the model's to read: nothing filed from them.
+    assert len(result["experience"]) == 1 and len(result["experience"][0]["bullets"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_unbulleted_lines_the_model_read_are_not_filed_again():
+    read = _accountant(
+        skills=["Accounting", "General Accounting", "Program Management", "Account reconciliations",
+                "Critical thinking", "ERP"],
+        achievements=["Served on a tiger team which identified and resolved General Ledger postings in DEAMS "
+                      "totaling $360B in accounting adjustments. This allowed for the first successful fiscal "
+                      "year-end close for 2012."],
+        education=[{"institution": "Northern Maine Community College", "degree": "Associate: Accounting", "year": "1994"},
+                   {"institution": "Husson College", "degree": "Accounting, 78 semester hours toward a Bachelors degree", "year": ""}],
+    )
+    result = await parse_resume_text(_TITLE_CASE, _provider_returning(read))
+    assert result["skills"] == read["skills"]
+    assert len(result["achievements"]) == 1
+    assert result["unplaced"] == []
+
+
+def test_a_skill_list_s_closing_full_stop_is_not_a_second_skill():
+    from app.services.resume_parser import _clean_skills
+    assert _clean_skills(["Program Management", "Accounting; Program Management."]) == ["Program Management", "Accounting"]
+    assert _clean_skills([".NET", "Node.js."]) == [".NET", "Node.js"]
+
+
+# ── A long résumé is read in parts: the rest, then its jobs a few at a time ──
+
+def _long_resume(jobs: int = 6, lines_per_job: int = 18) -> str:
+    out = ["Jane Doe", "jane@example.com", "Summary", "Accountant with twenty years in public finance.", "Experience"]
+    for j in range(jobs):
+        out += [f"Company {j} January {2000 + j} to December {2000 + j} Title {j}", "City , State"]
+        out += [f"Job {j} point {k}: reconciled ledgers and reported variances for the finance office." for k in range(lines_per_job)]
+    out += ["Education", "State College 1999 Associate : Accounting", "Skills", "Accounting; Payroll."]
+    return "\n".join(out)
+
+
+def test_a_short_resume_is_read_whole():
+    from app.services.resume_parser import _parts_to_read
+    text = _long_resume(jobs=2, lines_per_job=3)
+    assert _parts_to_read(text) == [text]
+
+
+def test_a_long_resume_is_read_as_its_rest_then_its_jobs_cut_at_their_headers():
+    from app.services.resume_parser import JOBS_PART_CHARS, READ_WHOLE_UP_TO, _parts_to_read
+    text = _long_resume()
+    assert len(text) > READ_WHOLE_UP_TO
+    parts = _parts_to_read(text)
+    rest, jobs = parts[0], parts[1:]
+    assert "Jane Doe" in rest and "Education" in rest and "Accounting; Payroll." in rest and "Company 0" not in rest
+    assert len(jobs) >= 2
+    seen = []
+    for part in jobs:
+        assert part.startswith("Experience\nCompany ")
+        assert len(part) <= JOBS_PART_CHARS + len("Experience\n")
+        seen += re.findall(r"^Company (\d)", part, re.M)
+    # Every job once, in order, never cut in two.
+    assert seen == [str(j) for j in range(6)]
+    for j in range(6):
+        assert sum(f"Job {j} point" in p for p in jobs) == 1
+
+
+def test_a_long_resume_without_an_experience_heading_is_read_whole():
+    from app.services.resume_parser import _parts_to_read
+    text = _long_resume().replace("\nExperience\n", "\nWhere I worked\n")
+    assert _parts_to_read(text) == [text]
+
+
+def test_a_job_header_takes_the_title_line_printed_above_its_dates():
+    from app.services.resume_parser import _job_starts
+    lines = ["Senior Engineer", "Acme Corp | Jan 2020 - Present", "Built the payments API.",
+             "Engineer", "Beta Ltd | Jun 2017 – Dec 2019", "Shipped the billing service in 2018 - 2019 with a team of four."]
+    assert _job_starts(lines) == [0, 3]
+
+
+@pytest.mark.asyncio
+async def test_the_parts_reads_are_put_back_together_in_page_order():
+    text = _long_resume()
+
+    def read(_system, part, **_kw):
+        if not part.startswith("Experience\n"):
+            return json.dumps({"contact": {"name": "Jane Doe", "email": "jane@example.com"},
+                               "summary": "Accountant with twenty years in public finance.",
+                               "experience": [], "education": [{"institution": "State College", "degree": "Associate", "year": "null"}],
+                               "skills": ["Accounting", "Payroll"]})
+        jobs = [{"company": f"Company {j}", "title": f"Title {j}", "start": f"Jan {2000 + j}", "end": f"Dec {2000 + j}",
+                 "bullets": re.findall(rf"^(Job {j} point .*)$", part, re.M)}
+                for j in map(int, re.findall(r"^Company (\d)", part, re.M))]
+        # A jobs' part has no contact: a name there is made up.
+        return json.dumps({"contact": {"name": "Full Name"}, "experience": jobs, "education": [], "skills": ["Ledgers"]})
+
+    provider = MagicMock()
+    provider.complete = AsyncMock(side_effect=read)
+    result = await parse_resume_text(text, provider)
+    assert provider.complete.await_count == len(__import__("app.services.resume_parser", fromlist=["_parts_to_read"])._parts_to_read(text))
+    assert result["contact"]["name"] == "Jane Doe"
+    assert result["summary"] == "Accountant with twenty years in public finance."
+    assert [j["company"] for j in result["experience"]] == [f"Company {j}" for j in range(6)]
+    assert all(len(j["bullets"]) == 18 for j in result["experience"])
+    assert result["skills"] == ["Accounting", "Payroll", "Ledgers"]
+    # The model's "null" isn't printed as a year.
+    assert result["education"][0]["year"] == ""
+
+
+@pytest.mark.asyncio
+async def test_a_part_that_comes_back_unreadable_is_read_once_more():
+    good = json.dumps({"contact": {"name": "S", "email": "s@x.com"}, "experience": [], "education": [], "skills": []})
+    provider = MagicMock()
+    provider.complete = AsyncMock(side_effect=['{"contact": {"name": "S"', good])
+    result = await parse_resume_text("<resume text>", provider)
+    assert result["contact"]["name"] == "S" and provider.complete.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_jobs_part_read_with_a_job_missing_is_read_once_more():
+    text = _long_resume()
+    calls: dict[str, int] = {}
+
+    def read(_system, part, **_kw):
+        if not part.startswith("Experience\n"):
+            return json.dumps({"contact": {"name": "Jane Doe", "email": "j@x.com"}, "experience": [], "education": [], "skills": []})
+        calls[part] = calls.get(part, 0) + 1
+        found = list(map(int, re.findall(r"^Company (\d)", part, re.M)))
+        # The first read of each part leaves its last job out.
+        if calls[part] == 1:
+            found = found[:-1]
+        return json.dumps({"contact": {}, "experience": [{"company": f"Company {j}", "title": f"Title {j}", "start": "2000",
+                                                          "bullets": ["Did the work."]} for j in found],
+                           "education": [], "skills": []})
+
+    provider = MagicMock()
+    provider.complete = AsyncMock(side_effect=read)
+    result = await parse_resume_text(text, provider)
+    assert [j["company"] for j in result["experience"]] == [f"Company {j}" for j in range(6)]
+    assert set(calls.values()) == {2}
+
+
+def test_a_stray_glyph_line_is_not_a_heading():
+    from app.services.resume_parser import _is_heading
+    assert not _is_heading("� ") and not _is_heading("Ä")
+    assert _is_heading("EXPERIENCE") and _is_heading("Roles & Responsibilities:")
+
+
+def test_a_job_is_never_cut_from_the_tail_of_the_bullet_above_it():
+    from app.services.resume_parser import _job_starts
+    lines = ["Director of Marketing 01/2014 to Current", "Company Name City , State",
+             "Grew sponsorship revenue and built brand",
+             "awareness of Virbac initiatives",
+             "Manage outside advertising and marketing agencies 01/2010 to 01/2014",
+             "Senior Account Executive 01/2001 to 01/2003", "Company Name City , State", "Ran the press office."]
+    # Line 4 follows a wrapped bullet, not the end of a job: no cut there.
+    assert _job_starts(lines) == [0, 5]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["Full Name", "ACCOUNTANT"])
+async def test_a_name_the_resume_does_not_print_or_its_job_title_is_left_blank(name):
+    text = "ACCOUNTANT\nSummary\nAccountant in public finance.\nExperience\nCompany Name 2011 to 2012 Accountant\nReconciled ledgers."
+    payload = {"contact": {"name": name}, "headline": "Accountant",
+               "experience": [{"company": "Company Name", "title": "Accountant", "start": "2011", "bullets": ["Reconciled ledgers."]}],
+               "education": [], "skills": []}
+    assert (await parse_resume_text(text, _provider_returning(payload)))["contact"]["name"] == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("printed", ["JANE DOE\njane@x.com", "J A N E   D O E\njane@x.com", "Jane\nDoe\njane@x.com"])
+async def test_a_printed_name_is_kept_however_it_is_spaced(printed):
+    payload = {"contact": {"name": "Jane Doe", "email": "jane@x.com"}, "experience": [], "education": [], "skills": []}
+    assert (await parse_resume_text(printed, _provider_returning(payload)))["contact"]["name"] == "Jane Doe"

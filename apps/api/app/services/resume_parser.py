@@ -1,4 +1,5 @@
 """Parse uploaded PDF resumes into structured ResumeContent dicts."""
+import asyncio
 import re
 import json
 from pydantic import BaseModel
@@ -295,28 +296,235 @@ _TEXT_FIELDS = ("headline", "summary", "objective")
 _LINE_LISTS = ("certifications", "awards", "achievements", "leadership", "volunteer", "interests", "coursework")
 
 
-async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
-    raw = await provider.complete(PARSE_SYSTEM, raw_text, model_tier="fast", call_name="parse_resume")
-    cleaned = _strip_json_fence(raw)
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        data = None
+# ── A long résumé read in parts ─────────────────────────────────────────────
+#
+# One model call retyping a whole long résumé as JSON dropped whole sections
+# and jobs at random (a 5-page Accountant's, 24,000 characters: two of nine
+# jobs, the Highlights, the Accomplishments — a different set each read).
+# Past READ_WHOLE_UP_TO the résumé is read in parts, each by the same prompt:
+# everything but the jobs in one, the jobs a few at a time, cut only where a
+# job's header line starts. The reads are put back together in page order
+# and tidied as one résumé, against the whole text. Accuracy over speed (the
+# user's call, 2026-11-26); the parts run side by side anyway.
+READ_WHOLE_UP_TO = 8_000
+JOBS_PART_CHARS = 5_000
+MAX_JOB_PARTS = 11
+_LINKS_MARK = "Hyperlinks found in this document"
+_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?"
+_WHEN = rf"(?:{_MONTH}\s+|\d{{1,2}}\s*[/.-]\s*)?(?:19|20)\d{{2}}"
+# "July 2011 to November 2012", "Jan 2020 – Present", "06/2019 - 2021".
+_DATE_RANGE = re.compile(
+    rf"\b{_WHEN}\s*(?:-|–|—|to|until|till)\s*(?:{_WHEN}|present|current(?:ly)?|now|date|today)\b", re.I,
+)
+
+
+def _title_like(line: str) -> bool:
+    """A job's title or company line: short, opening in capitals, most of
+    its words capitalised, and not a sentence — never a wrapped bullet's
+    tail ("awareness of Virbac initiatives")."""
+    words = line.split()
+    if not words or len(words) > 10 or line.endswith((".", "!", "?", ";", ",", ":")):
+        return False
+    if _LIST_MARK.match(line) or _DATE_RANGE.search(line) or not line[:1].isupper():
+        return False
+    caps = sum(w[:1].isupper() or not w[:1].isalpha() for w in words)
+    return caps * 2 >= len(words)
+
+
+def _ends_block(line: str) -> bool:
+    """A line a job can follow: a finished sentence, a bullet, a heading,
+    another job's header, or nothing."""
+    line = line.strip()
+    return (not line or line.endswith((".", "!", "?", ";")) or bool(_LIST_MARK.match(line))
+            or _is_heading(line) or bool(_DATE_RANGE.search(line)) or bool(_SECTION_NAME.match(line.strip(" :."))))
+
+
+def _job_starts(lines: list[str]) -> list[int]:
+    """Where each job's header begins: a short line carrying a date range,
+    with the title or company lines printed just above it — counted only
+    where the line before those plainly ends the job above, so a cut there
+    never takes a bullet from one job into the next."""
+    starts: list[int] = []
+    for i, line in enumerate(lines):
+        if not _DATE_RANGE.search(line) or _LIST_MARK.match(line) or len(line.split()) > 14 or line.rstrip().endswith("."):
+            continue
+        start = i
+        floor = starts[-1] + 1 if starts else 0
+        for _ in range(2):
+            if start - 1 >= floor and _title_like(lines[start - 1].strip()):
+                start -= 1
+            else:
+                break
+        if start > 0 and not _ends_block(lines[start - 1]):
+            continue
+        if not starts or start > starts[-1]:
+            starts.append(start)
+    return starts
+
+
+def _experience_span(lines: list[str]) -> tuple[int, int] | None:
+    """The line of the Experience heading and the line its section ends at."""
+    norm = [_norm_line(ln) for ln in lines]
+    start = next((i for i, n in enumerate(norm) if _EXPERIENCE_HEADING.match(n)), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(norm)) if _SECTION_AFTER_JOBS.match(norm[i])), len(norm))
+    return start, end
+
+
+def _parts_to_read(raw_text: str) -> list[str]:
+    """The text as the model reads it: whole, or — when it's long and its
+    jobs can be told apart — the rest first, then the jobs in parts."""
+    if len(raw_text) <= READ_WHOLE_UP_TO:
+        return [raw_text]
+    body, mark, links = raw_text.partition(_LINKS_MARK)
+    lines = body.splitlines()
+    span = _experience_span(lines)
+    if span is None:
+        return [raw_text]
+    start, end = span
+    jobs = lines[start + 1:end]
+    cuts = [c for c in _job_starts(jobs) if c > 0]
+    pieces = ["\n".join(jobs[a:b]) for a, b in zip([0, *cuts], [*cuts, len(jobs)])]
+    # At most MAX_JOB_PARTS reads (each may be read twice): one credit never
+    # buys more model calls than that, however long the upload. A longer
+    # résumé gets longer parts.
+    size = max(JOBS_PART_CHARS, -(-sum(len(p) + 1 for p in pieces) // MAX_JOB_PARTS))
+    parts: list[str] = []
+    for piece in pieces:
+        if parts and len(parts[-1]) + len(piece) <= size:
+            parts[-1] += "\n" + piece
+        else:
+            parts.append(piece)
+    while len(parts) > MAX_JOB_PARTS:
+        # Uneven jobs can still leave more: the smallest neighbours join.
+        i = min(range(len(parts) - 1), key=lambda k: len(parts[k]) + len(parts[k + 1]))
+        parts[i:i + 2] = [parts[i] + "\n" + parts[i + 1]]
+    rest = "\n".join(lines[:start] + lines[end:]) + (mark + links if mark else "")
+    heading = lines[start].strip()
+    return [rest] + [f"{heading}\n{p}" for p in parts if p.strip()]
+
+
+async def _read(text: str, provider: AIProvider) -> dict:
+    """One part read by the model, as a dict. A part that comes back cut off
+    or not JSON is read once more before the upload gives up."""
+    for _ in range(2):
+        raw = await provider.complete(PARSE_SYSTEM, text, model_tier="fast", call_name="parse_resume")
+        try:
+            data = json.loads(_strip_json_fence(raw))
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            return data
     # An empty résumé used to stand in here, created and charged for as if
     # the read had worked — the person just saw every field blank. Failing
     # lets the caller refund and say so.
-    if not isinstance(data, dict):
-        raise ResumeUnreadable("model output was not a JSON object")
+    raise ResumeUnreadable("model output was not a JSON object")
+
+
+_MERGED_LISTS = ("experience", "projects", "education", "skills", "languages", "unplaced", *(
+    "certifications", "awards", "achievements", "leadership", "volunteer", "interests", "coursework"))
+
+
+def _merge_reads(reads: list[dict], raw_text: str) -> dict:
+    """The parts' reads as one résumé, in page order. Contact, headline and
+    summary are the first part's (the jobs' parts have none; a name the
+    model put there is made up). A job's first-person text a jobs' part read
+    as a summary goes back to its job (_return_job_text)."""
+    data = dict(reads[0])
+    # The first part's jobs sit outside the main Experience section: before
+    # it (rare) or after it ("Military Experience"). Those after go after.
+    lines = raw_text.split(_LINKS_MARK)[0].splitlines()
+    span = _experience_span(lines)
+    before = "\n".join(lines[:span[0]]).lower() if span else ""
+    first_jobs = [j for j in data.get("experience") or [] if isinstance(j, dict)]
+    is_before = lambda j: any(isinstance(j.get(k), str) and j[k].strip() and j[k].strip().lower() in before
+                              for k in ("title", "company"))
+    data["experience"] = [j for j in first_jobs if is_before(j)]
+    for later in reads[1:]:
+        for key in _MERGED_LISTS:
+            if isinstance(later.get(key), list):
+                have = data.get(key) if isinstance(data.get(key), list) else []
+                data[key] = have + [v for v in later[key] if v not in have]
+    data["experience"] += [j for j in first_jobs if not is_before(j)]
+    for later in reads[1:]:
+        for key in ("summary", "objective"):
+            if isinstance(later.get(key), str) and later[key].strip():
+                stray = {"experience": data.get("experience") or [], key: later[key]}
+                _return_job_text(raw_text, stray, key)
+    return data
+
+
+def _drop_made_up_name(raw_text: str, data: dict) -> None:
+    """A résumé that prints no name (the Kaggle set's are taken out) came
+    back named "Full Name", or by its job title ("ACCOUNTANT"): neither is
+    a person, and either set off the "someone else's résumé" warning for
+    every account. A name the text doesn't print, or one that is the
+    résumé's job title, is left blank."""
+    name = data["contact"].get("name")
+    if not isinstance(name, str) or not name.strip():
+        return
+    key = " ".join(name.split()).lower()
+    printed = " ".join(plain_text(raw_text).split()).lower()
+    titles = {" ".join(j["title"].split()).lower() for j in data.get("experience") or [] if isinstance(j.get("title"), str)}
+    headline = data.get("headline")
+    if isinstance(headline, str):
+        titles.add(" ".join(headline.split()).lower())
+    # Spaces aside, so a name printed letter-spaced ("J A N E  D O E") or
+    # split over two lines still counts as printed.
+    if key.replace(" ", "") not in printed.replace(" ", "") or key in titles:
+        data["contact"]["name"] = ""
+
+
+_NULL_WORDS = {"null", "none", "n/a", "nil", "undefined"}
+
+
+def _without_null_words(value):
+    """The model's "null" typed as text (a college's year: "null") read as
+    nothing, not printed on the résumé."""
+    if isinstance(value, str):
+        return None if value.strip().lower() in _NULL_WORDS else value
+    if isinstance(value, list):
+        return [v for v in (_without_null_words(v) for v in value) if v is not None]
+    if isinstance(value, dict):
+        return {k: _without_null_words(v) for k, v in value.items()}
+    return value
+
+
+async def _read_jobs(part: str, provider: AIProvider) -> dict:
+    """A jobs' part read, and read once more when it came back with fewer
+    jobs than the part prints headers for: the read with more is kept. One
+    read of a long résumé's jobs left one of nine out."""
+    data = await _read(part, provider)
+    printed = len(_job_starts(part.splitlines()[1:]))
+    got = lambda d: len(d.get("experience")) if isinstance(d.get("experience"), list) else 0
+    if got(data) < printed:
+        again = await _read(part, provider)
+        if got(again) > got(data):
+            data = again
+    return data
+
+
+async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
+    parts = _parts_to_read(raw_text)
+    reads = await asyncio.gather(
+        *(_read(part, provider) if i == 0 else _read_jobs(part, provider) for i, part in enumerate(parts))
+    )
+    data = reads[0] if len(reads) == 1 else _merge_reads(list(reads), raw_text)
     for key in ("summary", "objective"):
         if isinstance(data.get(key), str):
             data[key] = _as_paragraph(data[key].strip())
     # Keyboard text only — what the upload and the model put there alike.
-    data = plain_deep(data)
+    data = _without_null_words(plain_deep(data))
     # Ensure required keys exist
     if not isinstance(data.get("contact"), dict):
         data["contact"] = {"name": "", "email": ""}
     if isinstance(data["contact"].get("phone"), str):
         data["contact"]["phone"] = tidy_phone(data["contact"]["phone"])
+    for key, required in _REQUIRED_TEXT.items():
+        data[key] = [_with_text(e, required) for e in data.get(key) or [] if isinstance(e, dict)] \
+            if isinstance(data.get(key), list) else []
+    _drop_made_up_name(raw_text, data)
     for key, required in _REQUIRED_TEXT.items():
         data[key] = [_with_text(e, required) for e in data.get(key) or [] if isinstance(e, dict)] \
             if isinstance(data.get(key), list) else []
@@ -353,7 +561,7 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     groups = data["unplaced"] + _points_left_out(raw_text, data)
     data["unplaced"] = []
     for group in groups:
-        _file_by_heading(data, group["heading"], group["points"])
+        _file_by_heading(data, group["heading"], group["points"], group.get("home"))
     # Last, so the points filed from the text are tidied too.
     return _tidy_spaces_deep(data)
 
@@ -423,8 +631,8 @@ def _home_of(heading: str) -> str | None:
     return next((h for pattern, h in _HEADING_HOMES if pattern.search(heading)), "unplaced")
 
 
-def _file_by_heading(data: dict, heading: str, points: list[str]) -> None:
-    home = _home_of(heading)
+def _file_by_heading(data: dict, heading: str, points: list[str], home: str | None = None) -> None:
+    home = home or _home_of(heading)
     if home is None:
         return
     if home == "skills":
@@ -446,7 +654,9 @@ def _file_by_heading(data: dict, heading: str, points: list[str]) -> None:
 # ("KEY RESPONSIBILITIES.", "Roles & Responsibilities:").
 def _is_heading(line: str) -> bool:
     letters = [c for c in line if c.isalpha()]
-    if not letters or len(line) > 60 or len(line.split()) > 6:
+    # Two letters at least: a stray glyph a PDF prints alone on a line ("�")
+    # isn't a heading, and read as one it hid the section it sat in.
+    if len(letters) < 2 or len(line) > 60 or len(line.split()) > 6:
         return False
     upper = sum(c.isupper() for c in letters) / len(letters)
     return upper > 0.8 or line.endswith(":")
@@ -457,6 +667,35 @@ def _bigrams(text: str) -> set[tuple[str, str]]:
     return set(zip(words, words[1:])) or {(w, "") for w in words}
 
 
+# A section heading printed in title case ("Highlights", "Skills",
+# "Accomplishments"): the whole line one of these names. _is_heading reads
+# only capitals or a closing colon, and the Kaggle résumé set (and many
+# Word ones) print neither.
+_SECTION_NAME = re.compile(
+    r"^((skill |career |key )?highlights|summary of qualifications|((key|core|career|notable|major) )?accomplishments|"
+    r"((key|core|career|notable|major) )?achievements|"
+    r"awards?(( and| &) hono(u)?rs)?|hono(u)?rs(( and| &) awards)?|certifications?(( and| &) licen[cs]es)?|"
+    r"licen[cs]es(( and| &) certifications)?|interests|hobbies(( and| &) interests)?|"
+    r"(core |key |technical |professional )?(skills|competencies)|core qualifications|additional skills|"
+    r"volunteer( experience| work)?|leadership|(extra.?curricular )?activities|languages|training|courses|"
+    r"(relevant )?coursework|education(( and| &) training)?|(professional |work |relevant )?experience|"
+    r"work history|employment history|(professional |career )?summary|(career )?objective|projects|"
+    r"publications|additional information)$",
+    re.I,
+)
+# Where a line printed without a bullet still counts as a point the model
+# must not lose: list sections, not jobs, degrees or the summary — those the
+# model rewrites into entries on purpose.
+_LIST_HOMES = {"skills", "achievements", "awards", "coursework", "certifications", "volunteer", "interests", "leadership"}
+_EDUCATION_HEADING = re.compile(r"^(education|academic|qualification)", re.I)
+_STOP = {"a", "an", "and", "the", "of", "in", "on", "for", "to", "with", "at", "by", "from", "as", "or"}
+
+
+def _words_read(text: str, read_words: set[str]) -> float:
+    words = [w for w in re.findall(r"[a-z0-9]+", plain_text(text).lower()) if w not in _STOP]
+    return sum(w in read_words for w in words) / len(words) if words else 1.0
+
+
 def _points_left_out(raw_text: str, data: dict) -> list[dict]:
     """The résumé's printed points (lines opening with a bullet, a dash or a
     number) that appear nowhere in what was read, grouped under the heading
@@ -465,34 +704,90 @@ def _points_left_out(raw_text: str, data: dict) -> list[dict]:
     paragraph don't flag it; one it dropped is all but absent. Under a
     skills heading every point comes back: the model sometimes keeps a
     line's group name and drops the tools in its brackets, and the skills
-    clean-up takes each skill once however often it arrives."""
-    read = set().union(*(_bigrams(s) for s in _strings(data)))
+    clean-up takes each skill once however often it arrives.
+
+    Under a list section's heading (_LIST_HOMES) a line printed with no
+    bullet is a point too, a wrapped one joined back up: the model dropped
+    a whole "Highlights" or "Accomplishments" section of these on a long
+    résumé, every read. Those count as read on most of their words as
+    well, so a line the model folded into another entry isn't filed twice.
+    A short one under "Highlights" ("Critical thinking") is a skill."""
+    strings = _strings(data)
+    read = set().union(*(_bigrams(s) for s in strings))
+    lists = _strings({k: data.get(k) for k in (*_LIST_HOMES, "unplaced", "summary", "objective", "headline")})
+    list_read = set().union(*(_bigrams(s) for s in lists))
+    list_words = {w for s in lists for w in re.findall(r"[a-z0-9]+", plain_text(s).lower())}
+    # Once, not per line: it runs on the event loop (see _return_job_text).
+    all_words = {w for s in strings for w in re.findall(r"[a-z0-9]+", plain_text(s).lower())}
     groups: dict[str, list[str]] = {}
-    heading, point = "", None
-    lines = raw_text.split("Hyperlinks found in this document")[0].splitlines()
+    homes: dict[str, str] = {}
+    heading, point, marked, previous = "", None, False, ""
 
     def close():
-        if point:
-            text = plain_text(" ".join(point.split()))
-            pairs = _bigrams(text)
-            if pairs and (_SKILL_HEADING.search(heading) or len(pairs & read) / len(pairs) < 0.5):
+        if not point:
+            return
+        text = plain_text(" ".join(point.split()))
+        pairs = _bigrams(text)
+        if not pairs:
+            return
+        if _SKILL_HEADING.search(heading):
+            groups.setdefault(heading, []).append(text)
+        elif (not marked and len(text.split()) <= 5 and re.search(r"highlight", heading, re.I)
+              and _looks_like_a_skill(text.rstrip(".").split("(", 1)[0].strip())):
+            groups.setdefault("Skills", []).append(text)
+        elif not marked and _EDUCATION_HEADING.search(heading):
+            # Against everything read: the model makes degrees of these.
+            if len(text.split()) >= 6 and len(pairs & read) / len(pairs) < 0.3 and _words_read(text, all_words) < 0.5:
                 groups.setdefault(heading, []).append(text)
+                homes[heading] = "unplaced"
+        elif marked:
+            if len(pairs & read) / len(pairs) < 0.5:
+                groups.setdefault(heading, []).append(text)
+        elif (len(pairs & list_read) / len(pairs) < 0.5
+              # A short line by its words too ("Issued by AWS, 2021" folded
+              # into its certificate); a long one's words are in any big
+              # skills list, so it's read only by its word pairs.
+              and (len(text.split()) > 6 or _words_read(text, list_words) < 0.6)
+              # Read word for word somewhere else (a project made of it).
+              and len(pairs & read) / len(pairs) < 0.8):
+            groups.setdefault(heading, []).append(text)
 
-    for raw in lines:
+    for raw in raw_text.split("Hyperlinks found in this document")[0].splitlines():
         line = raw.strip()
-        if not line or _is_heading(line):
+        if not line or _is_heading(line) or _SECTION_NAME.match(line.strip(" :.")):
             close()
             point = None
-            if line:
+            # "Project Management:" inside "Core Accomplishments" is a group
+            # of that section's points, not a section of its own.
+            sub = (line.endswith(":") and not line.isupper() and not _SECTION_NAME.match(line.strip(" :."))
+                   and not _RESPONSIBILITY_HEADING.search(line) and _home_of(heading) in _LIST_HOMES)
+            if line and not sub:
                 heading = line.strip(" :.").title() if line.isupper() else line.strip(" :.")
             continue
         if _LIST_MARK.match(line):
             close()
-            point = _LIST_MARK.sub("", line, count=1)
-        elif point is not None:
+            point, marked = _LIST_MARK.sub("", line, count=1), True
+        elif point is not None and (marked or _wraps(previous, line)):
             point += " " + line
+        elif _home_of(heading) in _LIST_HOMES or _EDUCATION_HEADING.search(heading):
+            close()
+            point, marked = line, False
+        else:
+            close()
+            point = None
+        previous = line
     close()
-    return [{"heading": h or RESPONSIBILITIES_HEADING, "points": _clean_points(p)} for h, p in groups.items()]
+    return [
+        {"heading": h or RESPONSIBILITIES_HEADING, "points": _clean_points(p), **({"home": homes[h]} if h in homes else {})}
+        for h, p in groups.items()
+    ]
+
+
+def _wraps(previous: str, line: str) -> bool:
+    """Whether `line` carries on the unbulleted point printed on the line
+    before it: that one ran to the page's edge without finishing, or this
+    one opens in lower case."""
+    return not previous.rstrip().endswith((".", "!", "?", ";")) and (len(previous) > 80 or line[:1].islower())
 
 
 # Where the jobs are printed, and the headings that end that part.
@@ -746,6 +1041,9 @@ def _clean_skills(value) -> list[str]:
         if not isinstance(line, str):
             continue
         for skill in _skill_items(line):
+            # A list's closing full stop isn't the skill's ("Program
+            # Management."), and kept it read as a second one.
+            skill = skill.rstrip(".").strip() if not skill.endswith("..") else skill
             # "Lean Six Sigma (Green Belt)" is too long for a chip; the name
             # before the bracket isn't.
             if not _looks_like_a_skill(skill) and "(" in skill:

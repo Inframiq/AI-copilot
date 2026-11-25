@@ -193,7 +193,7 @@ class _Model:
 
 
 async def test_every_parsed_field_is_tidied():
-    data = await parse_resume_text("Experience\n- Led  the  team .", _Model({
+    data = await parse_resume_text("Asha Rao\nExperience\n- Led  the  team .", _Model({
         "contact": {"name": "Asha  Rao ", "email": "asha@x.com"},
         "summary": "Analyst with 3 years ( retail ) .",
         "experience": [{"company": "Infosys ", "title": "Analyst", "start": "Jan 2023", "end": "Present",

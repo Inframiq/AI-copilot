@@ -46,6 +46,66 @@ def _page_fragments(page) -> list[tuple[float, float, str]]:
     return fragments
 
 
+# Some PDFs draw a table row (a job's "Company Name · July 2011 to November
+# 2012 · Accountant · City, State") as separately placed runs, and pypdf ends
+# a line after every one: thirteen lines for one row, and the model then
+# lost the dates and whole jobs (the Kaggle résumé set, Qt-made, all 2,484).
+# A break between two runs on the same baseline, the second starting right
+# where the first ended, isn't a line break; it's taken out. Columns are
+# far apart and rows sit at different heights, so they keep their breaks.
+SAME_ROW_GAP = 8.0  # points from one run's end to the next one's start
+SAME_BASELINE = 0.5
+
+
+def _page_text(page) -> str:
+    """The page's text as pypdf reads it, with the line breaks it puts
+    inside a row of side-by-side runs taken out (SAME_ROW_GAP)."""
+    runs: list[tuple[str, float, float]] = []
+
+    def visit(text, cm, tm, _font, _size):
+        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+        y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+        runs.append((text, x, y))
+
+    try:
+        plain = page.extract_text(visitor_text=visit) or ""
+    except Exception:
+        return page.extract_text() or ""
+    # Only where the runs are exactly pypdf's text, so nothing else moves.
+    if "".join(t for t, _, _ in runs) != plain:
+        return plain
+    out: list[str] = []
+    pending = False
+    # Where the last placed run was: pypdf's empty run after each piece of
+    # text marks where that text ended.
+    last: tuple[float, float] | None = None
+    for text, x, y in runs:
+        if text == "\n":
+            if pending:
+                out.append("\n")
+            pending = True
+            continue
+        if not text:
+            last = (x, y)
+            continue
+        if pending:
+            same_row = (
+                last is not None
+                and abs(y - last[1]) <= SAME_BASELINE
+                and 0 <= x - last[0] <= SAME_ROW_GAP
+            )
+            if not same_row:
+                out.append("\n")
+            elif out and not out[-1][-1:].isspace() and not text[:1].isspace():
+                out.append(" ")
+            pending = False
+        out.append(text)
+        last = (x, y)
+    if pending:
+        out.append("\n")
+    return "".join(out)
+
+
 def _join(fragments) -> str:
     return re.sub(r"\s+", " ", " ".join(t for _, _, t in sorted(fragments))).strip()
 
@@ -127,7 +187,7 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     pages = []
     links: list[_Link] = []
     for page in reader.pages:
-        pages.append(page.extract_text() or "")
+        pages.append(_page_text(page))
         links.extend(_extract_links(page))
     text = "\n".join(pages).strip()
     reference = _reference_words(file_bytes)
