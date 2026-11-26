@@ -1,7 +1,9 @@
 """Parse uploaded PDF resumes into structured ResumeContent dicts."""
 import asyncio
+import functools
 import re
 import json
+from pathlib import Path
 from pydantic import BaseModel
 from app.services.ai_engine.base import AIProvider
 from app.services.phone import tidy_phone
@@ -562,6 +564,8 @@ async def parse_resume_text(raw_text: str, provider: AIProvider) -> dict:
     data["unplaced"] = []
     for group in groups:
         _file_by_heading(data, group["heading"], group["points"], group.get("home"))
+    # After filing: the net above files a skills section's lines too.
+    data["skills"] = _without_scraped_words(raw_text, data["skills"])
     # Last, so the points filed from the text are tidied too.
     return _tidy_spaces_deep(data)
 
@@ -1053,6 +1057,101 @@ def _clean_skills(value) -> list[str]:
                 seen.add(key)
                 out.append(skill)
     return out
+
+
+# A skills list scraped from the résumé's own sentences (the Kaggle /
+# LiveCareer set closes every résumé with one): 50 words in a row — "Works"
+# from "Works with that department manager", "calculator" from "using
+# calculator", "phone" from "phone and emails". Told apart from a person's
+# own list by its length and its lowercase entries: people write skill
+# names capitalised ("Python, AWS, Excel"), the scraper copies the words
+# as the sentences have them.
+SCRAPED_LIST_MIN = 25
+_SCRAPED_LOWER_SHARE = 0.4
+_PLAIN_WORD = re.compile(r"[A-Za-z][a-z]+")
+
+
+@functools.cache
+def _known_skills() -> frozenset[str]:
+    """The skills the app suggests as you type — a copy of the web's list
+    (apps/web/lib/suggest/data/skills.json; a test keeps them equal), names
+    and the aliases people type for them. A scraped list's "Payroll" or
+    "sales" is one of these and stays."""
+    names = json.loads((Path(__file__).with_name("skill_names.json")).read_text(encoding="utf-8"))["names"]
+    return frozenset(n.lower() for entry in names for n in ([entry] if isinstance(entry, str) else entry))
+
+
+def _skills_sections(raw_text: str) -> tuple[list[list[str]], list[str]]:
+    """Each skills section's entries as printed, and every other line."""
+    sections: list[list[str]] = []
+    body: list[str] = []
+    current: list[str] | None = None
+    for raw in raw_text.split(_LINKS_MARK)[0].splitlines():
+        line = raw.strip()
+        if line and (_is_heading(line) or _SECTION_NAME.match(line.strip(" :."))):
+            current = [] if _home_of(line.strip(" :.")) == "skills" else None
+            if current is not None:
+                sections.append(current)
+            continue
+        if current is not None:
+            current.append(line)
+        else:
+            body.append(line)
+    def entries(lines: list[str]) -> list[str]:
+        # A comma list wraps mid-entry ("preparation of / financial
+        # statements"); a list of one skill per line doesn't.
+        joined = [" ".join(lines)] if any("," in ln or ";" in ln for ln in lines) else lines
+        return [s for ln in joined for s in _skill_items(ln) if s.strip(" .")]
+
+    return [entries([ln for ln in lines if ln]) for lines in sections], body
+
+
+def _without_scraped_words(raw_text: str, skills: list[str]) -> list[str]:
+    """The skills, less a scraped list's words that are only words: one the
+    résumé's sentences use as an ordinary word — lowercase ("calculator"),
+    or capitalised only where a sentence opens ("Works with that
+    department") — and a verb-led phrase lifted whole from a sentence
+    ("Maintains files"). Names stay: ATM, PeopleSoft, "using Excel", a
+    skill the app knows (Payroll, sales), "general ledger". A list that
+    isn't scraped is never touched."""
+    sections, body = _skills_sections(raw_text)
+    scraped: set[str] = set()
+    for items in sections:
+        lower = sum(i.strip()[:1].islower() for i in items)
+        if len(items) >= SCRAPED_LIST_MIN and lower >= _SCRAPED_LOWER_SHARE * len(items):
+            scraped |= {i.strip().rstrip(".").lower() for i in items}
+    if not scraped:
+        return skills
+    text = "\n".join(body)
+    lowercase = {w for w in re.findall(r"[A-Za-z]+", text) if w[:1].islower()}
+    # Capitalised only by opening a sentence: "Works with that department".
+    # Not "Finance" alone on a line, nor "Credit Union".
+    openers = {m.lower() for m in re.findall(r"(?:^|[.!?;]\s+)([A-Z][a-z]+) [a-z]", text, re.M)}
+    # Capitalised inside a sentence: a name ("using Excel", "Credit Union").
+    named = {m.lower() for m in re.findall(r"(?<=[A-Za-z0-9,)] )([A-Z][a-z]+)\b", text)}
+    ordinary = lowercase | openers
+    flat = " ".join(text.split()).lower()
+    known = _known_skills()
+
+    def scraped_word(skill: str) -> bool:
+        key = skill.lower()
+        if key not in scraped or key in known:
+            return False
+        words = skill.split()
+        if len(words) == 1:
+            if not _PLAIN_WORD.fullmatch(skill):
+                return False
+            if skill[:1].islower():
+                return key in lowercase
+            return key in ordinary and key not in named
+        # "Maintains files": a phrase lifted from a sentence whose verb opens
+        # the body's lines and is never written lowercase there ("accounts
+        # payable" is, so it stays).
+        first = words[0]
+        return (first[:1].isupper() and first.lower() in openers and first.lower() not in lowercase
+                and first.endswith("s") and not first.endswith("ss") and skill.lower() in flat)
+
+    return [s for s in skills if not scraped_word(s)]
 
 
 # A list marker opening a line: a bullet symbol (➢, •), a dash or star, or
