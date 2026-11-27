@@ -16,7 +16,7 @@ from app.schemas.ai import (
     TailorRequest, TailorStartOut, PrepQuestionOut, PrepQuestionWithJdOut, PrepFollowupOut, AnalyzeRequest, AnalyzeOut,
     RewriteBulletRequest, RewriteBulletOut,
     RestructureNotesRequest, RestructureNotesOut,
-    WriteSummaryRequest, WriteSummaryOut,
+    WriteSummaryRequest, WriteSummaryOut, CheckSummaryRequest, CheckSummaryOut,
     ProjectScoreRequest, ProjectScoreOut,
 )
 from app.services.ai_engine.factory import get_ai_provider
@@ -31,7 +31,7 @@ from app.services.prep_questions import (
     answer_followup_for_user, followups_by_question, latest_with_questions_per_jd, resume_fingerprint,
 )
 from app.services.misc_notes import NOTES_SYSTEM, NotesDraft, clean_points
-from app.services.summary_writer import Rework, rework_request, write_summary
+from app.services.summary_writer import Rework, rework_request, style_problems, summary_facts, write_summary
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
@@ -615,6 +615,25 @@ async def write_resume_summary(
         )
     return WriteSummaryOut(summary=result.text, problems=result.problems)
 
+
+@router.post("/check-summary", response_model=CheckSummaryOut)
+# Runs as the user types (debounced) and is pure code — no model call, so
+# no credits (charge only when a model ran).
+@limiter.limit("120/minute")
+async def check_resume_summary(
+    request: Request,
+    body: CheckSummaryRequest,
+    user=Depends(get_current_user),
+):
+    """The summary in the Builder or Profile box, checked against the
+    research's rules (services/summary_writer.style_problems): the length
+    for the candidate's career stage, filler words, "I"/"my", long
+    sentences, one paragraph."""
+    facts = summary_facts(plain_deep(body.content))
+    text = " ".join(plain_text(body.summary).split())
+    return CheckSummaryOut(
+        problems=style_problems(text, facts), min_words=facts.min_words, max_words=facts.max_words,
+    )
 
 @router.post("/project-score", response_model=ProjectScoreOut)
 # Fires on every tick in the review (debounced 400ms) and is pure scoring —

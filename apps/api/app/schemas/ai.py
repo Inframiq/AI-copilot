@@ -153,6 +153,23 @@ class WriteSummaryOut(BaseModel):
     problems: list[str] = []
 
 
+class CheckSummaryRequest(BaseModel):
+    # The résumé as the page holds it, for the career stage (years from the
+    # job dates, titles held). Nothing is sent to a model.
+    content: dict
+    summary: str = Field(default="", max_length=4000)
+
+    _check_content_size = field_validator("content")(_validate_content_size)
+
+
+class CheckSummaryOut(BaseModel):
+    # Where the summary departs from the research's rules ("uses filler
+    # words: passionate"); empty when it keeps to them.
+    problems: list[str] = []
+    min_words: int
+    max_words: int
+
+
 class RewriteBulletOut(BaseModel):
     rewritten_text: str
     # Non-empty when the deterministic fact-lock flagged the rewrite (a number

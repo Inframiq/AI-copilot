@@ -114,6 +114,27 @@ describe("Builder: Generate / Regenerate with KripaX", () => {
     });
   });
 
+  it("checks the summary in the box against the guide, for free", async () => {
+    const check = vi.spyOn(apiClient, "checkSummary").mockResolvedValue({
+      problems: ["uses filler words: passionate, seasoned"], min_words: 50, max_words: 65,
+    });
+    const write = vi.spyOn(apiClient, "writeSummary");
+    renderSection();
+    await waitFor(() => expect(screen.getByTestId("summary-guide")).toBeTruthy(), { timeout: 2000 });
+    expect(screen.getByTestId("summary-guide").textContent).toBe(
+      "Summary guide: this summary uses filler words: passionate, seasoned.",
+    );
+    expect(check).toHaveBeenCalledWith(RESUME, "My own words.");
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("shows no guide note when the summary keeps to it or the check can't be reached", async () => {
+    const check = vi.spyOn(apiClient, "checkSummary").mockRejectedValue(new Error("offline"));
+    renderSection();
+    await waitFor(() => expect(check).toHaveBeenCalled(), { timeout: 2000 });
+    expect(screen.queryByTestId("summary-guide")).toBeNull();
+  });
+
   it("says what it costs", () => {
     renderSection();
     expect(screen.getByRole("button", { name: /regenerate with kripax/i }).textContent).toMatch(/uses 3 credits/);

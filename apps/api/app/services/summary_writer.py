@@ -54,7 +54,7 @@ _LEADER = re.compile(
 # draft; the same words are in the prompt.
 _CLICHES = re.compile(
     r"\b(results[- ](?:driven|oriented)|proven track record|track record of success|dynamic|innovative"
-    r"|passionate|hard[- ]?working|team player|go[- ]getter|detail[- ]oriented|problem[- ]solver"
+    r"|passionate|hard[- ]?working|team player|go[- ]getter|detail(?:ed)?[- ]oriented|problem[- ]solver"
     r"|responsible for|assisted with|helped|worked on|successfully|synerg(?:y|ies)|leverag(?:e|ed|es|ing)"
     r"|spearhead(?:ed|ing|s)?|seeking a challenging|utili[sz](?:e|ed|es|ing)|(?:highly |self[- ])?motivated"
     r"|self[- ]starter|seasoned|orchestrated|pivotal|delve|transformative|cutting[- ]edge|world[- ]class)\b",
@@ -211,6 +211,18 @@ def summary_problems(
         if title_match_verdict(titles, [opening]) == "matched":
             out.append("opens with the target job title, a role the résumé doesn't show — it should open with the candidate's own role")
 
+    return out + style_problems(text, facts)
+
+
+def style_problems(text: str, facts: SummaryFacts) -> list[str]:
+    """The research's rules on how a summary reads — person, filler words,
+    length for the career stage, sentence length, one paragraph. No fact
+    checks: these apply as well to a summary the candidate wrote, whose
+    figures and titles are their own (POST /ai/check-summary)."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    out: list[str] = []
     if _FIRST_PERSON.search(text):
         out.append('uses "I", "my" or "we"')
     cliches = sorted({m.group(0).lower() for m in _CLICHES.finditer(text)})

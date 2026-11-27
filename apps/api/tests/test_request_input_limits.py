@@ -35,6 +35,13 @@ from tests.test_admin_routes_guarded import _flatten
 USER = {"sub": str(uuid.uuid4()), "email": "a@example.com"}
 SOME_ID = str(uuid.uuid4())
 REACHED = 299
+# Routes that answer from the request alone (pure code, no database): a
+# request reaching them is a 200, not the fake database's 299.
+NO_DATABASE = {"/ai/check-summary"}
+
+
+def _reached_codes(path: str) -> tuple[int, ...]:
+    return (REACHED, 202) + ((200,) if path in NO_DATABASE else ())
 
 # Values a baseline needs that the field's type alone doesn't give.
 KNOWN_VALUES = {
@@ -159,7 +166,8 @@ async def test_a_well_formed_request_reaches_the_endpoint(client, entry):
     """Without this, every refusal below could be the baseline's fault."""
     method, path, _, model = entry
     r = await client.request(method, _url(path), json=_baseline(model))
-    assert r.status_code in (REACHED, 202), r.text[:300]
+    reached = _reached_codes(path)
+    assert r.status_code in reached, r.text[:300]
 
 
 BROKEN_BODIES = {
@@ -237,7 +245,7 @@ async def test_a_wrong_type_never_crashes(client, entry, value):
     for name in model.model_fields:
         body = {**_baseline(model), name: WRONG_TYPES[value]}
         r = await client.request(method, _url(path), json=body)
-        assert r.status_code in (REACHED, 202) or r.status_code in (400, 413, 422), (name, r.text[:300])
+        assert r.status_code in _reached_codes(path) or r.status_code in (400, 413, 422), (name, r.text[:300])
 
 
 # --- NUL characters ---------------------------------------------------------

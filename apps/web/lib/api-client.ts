@@ -553,6 +553,15 @@ export const apiClient = {
    * this job" (3 credits): a professional summary. Saves nothing. `problems` is non-empty
    * when the draft failed a check (a number the résumé lacks…), so the
    * Builder shows why before the user decides to use it. */
+  /** The summary in a Builder or Profile box against the summary guide
+   * (length for the career stage, filler words, "I"/"my", long sentences).
+   * Free: no model runs. */
+  checkSummary: (
+    content: ResumeContent,
+    summary: string,
+  ): Promise<{ problems: string[]; min_words: number; max_words: number }> =>
+    request("POST", "/ai/check-summary", { content, summary }),
+
   writeSummary: (
     content: ResumeContent,
     /** The review's "Rewrite for this job": write it for this run's job. */

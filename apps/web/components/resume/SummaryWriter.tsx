@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleNotch, Sparkle, WarningCircle } from "@phosphor-icons/react";
 import type { ResumeContent } from "@career-copilot/types";
@@ -9,6 +9,39 @@ import { FOCUS_RING, PRESS } from "@/lib/focus";
 
 /** CREDIT_COSTS["write_summary"] in apps/api/app/core/credits.py. */
 export const WRITE_SUMMARY_CREDITS = 3;
+
+const GUIDE_WAIT_MS = 600;
+
+/** Where the summary in the box departs from the summary guide (POST
+ * /ai/check-summary — the same rules the KripaX summary is written to, no
+ * model, free): checked a moment after typing stops. Empty while the box is
+ * empty or the check can't be reached. */
+function useSummaryGuide(current: string, getContent: () => ResumeContent): string[] {
+  const [problems, setProblems] = useState<string[]>([]);
+  const contentRef = useRef(getContent);
+  useEffect(() => {
+    contentRef.current = getContent;
+  });
+  useEffect(() => {
+    const text = current.trim();
+    if (!text) {
+      setProblems([]);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      apiClient
+        .checkSummary(contentRef.current(), text)
+        .then((r) => live && setProblems(r.problems))
+        .catch(() => live && setProblems([]));
+    }, GUIDE_WAIT_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [current]);
+  return problems;
+}
 
 /**
  * "Generate / Regenerate with KripaX" under a summary box (Builder and
@@ -34,6 +67,7 @@ export function SummaryWriter({
   const [draft, setDraft] = useState<{ summary: string; problems: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const has = current.trim().length > 0;
+  const guide = useSummaryGuide(current, getContent);
 
   async function write() {
     setWriting(true);
@@ -64,6 +98,15 @@ export function SummaryWriter({
 
   return (
     <div className="flex flex-col gap-sm">
+      {has && guide.length > 0 && (
+        <p
+          data-testid="summary-guide"
+          className="flex items-start gap-xs rounded-xl bg-tertiary-container/60 px-sm py-xs text-caption text-on-tertiary-container"
+        >
+          <WarningCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
+          <span>Summary guide: this summary {guide.join("; ")}.</span>
+        </p>
+      )}
       {has ? (
         <div className="flex flex-wrap items-center gap-sm">{button}</div>
       ) : (

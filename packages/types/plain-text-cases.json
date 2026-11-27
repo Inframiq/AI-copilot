@@ -36,6 +36,20 @@
     ["Jane&rsquo;s &ldquo;team&rdquo; &bull; &rarr; &#8217;&#x2019;&#160;x", "Jane's \"team\" - -> '' x"],
     ["Tom &amp; Jerry, &lt;b&gt;, &copy; 2024, &eacute;", "Tom &amp; Jerry, &lt;b&gt;, &copy; 2024, &eacute;"],
     ["&amp;nbsp; is how HTML writes it", "&amp;nbsp; is how HTML writes it"],
+    ["FlexibleÂ accountant with ten years inÂ accounting.", "Flexible accountant with ten years in accounting."],
+    ["FlexibleÂ accountant", "Flexible accountant"],
+    ["Â Accounting Â\nx Â y", "Accounting\nx y"],
+    ["Janeâ€™s â€œteamâ€\u009d", "Jane's \"team\""],
+    ["2019â€“2021 â€¢ Led â€” fastâ€¦", "2019-2021 - Led - fast..."],
+    ["RÃ©sumÃ©, ZÃ¼rich, Â£10k, 30Â°", "Résumé, Zürich, £10k, 30°"],
+    ["SÃO PAULO, ROMÂNIA, Ângela, João", "SÃO PAULO, ROMÂNIA, Ângela, João"],
+    ["â— Led teams âž Ran ops", "- Led teams - Ran ops"],
+    ["•Â Responsible for AP, -Â filing", "- Responsible for AP, - filing"],
+    ["KnowledgeÂ​ of SAP, théâtre", "Knowledge of SAP, théâtre"],
+    ["CPA AUSTRALIAÂ member, IÂ manage", "CPA AUSTRALIA member, I manage"],
+    ["in a professional manner. â\nTrained staff", "in a professional manner. -\nTrained staff"],
+    ["Summary\nÂ Â Â I am\nInvestmentsÂ Â Â Â\nx", "Summary\nI am\nInvestments\nx"],
+    ["studentÂathletes, endÂofÂthe year, 16Â10 record, AllÂRookie", "student-athletes, end-of-the year, 16-10 record, All-Rookie"],
     ["", ""]
   ]
 }

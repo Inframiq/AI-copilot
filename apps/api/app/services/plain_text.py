@@ -89,6 +89,43 @@ def _entity_char(match: re.Match) -> str:
     return char if char and _plain(char) != char else match.group(0)
 
 
+# Broken encoding: UTF-8 text read as Windows-1252, as résumés exported from
+# a mis-set web page or database print it — "FlexibleÂ accountant", "Jane
+# â€™s", "RÃ©sumÃ©". Only the leads that mean it beyond doubt are read back:
+# Â or Ã before one continuation character (Latin-1 letters and signs, the
+# non-breaking space), â before two (quotes, dashes, bullets). "SÃO PAULO",
+# "ROMÂNIA" and "Ângela" are words, and stay.
+_CP1252_HIGH = (
+    "\u20ac\u0081\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u008d\u017d\u008f"
+    "\u0090\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u009d\u017e\u0178"
+)
+_CONT_BYTE = {c: 0x80 + i for i, c in enumerate(_CP1252_HIGH)} | {chr(b): b for b in range(0xA0, 0xC0)}
+_CONT = "[" + re.escape("".join(_CONT_BYTE)) + "]"
+_MISREAD = re.compile(f"[\u00c2\u00c3]{_CONT}|\u00e2{_CONT}{{2}}")
+# A bullet glyph whose last byte the PDF dropped ("â—" for ●, "âž" for ➢):
+# read as a bullet. So is an â standing alone, both bytes lost.
+_CUT_SHORT = re.compile(f"\u00e2{_CONT}(?!{_CONT})|(?<!\\S)\u00e2(?!\\S)")
+# What is left of a non-breaking space whose second half became a plain
+# space: an Â ending a word ("inÂ accounting", "AUSTRALIAÂ"), or standing
+# alone. No word in the languages that write Â ends in it.
+_A_RUN = "\u00c2(?:[ \t]+\u00c2)*"
+_LOOSE_A = re.compile(f"(?<=\\S){_A_RUN}(?=\\s|$)|[ \t]+{_A_RUN}(?=\\s|$)|^{_A_RUN}[ \t]*", re.M)
+# Between a lower-case letter or digit and a word, it was a hyphen the PDF
+# lost ("studentÂathletes", "endÂofÂthe year", "16Â10 record"); "ROMÂNIA"
+# has capitals either side, and stays.
+_A_HYPHEN = re.compile("(?<=[a-z0-9])\u00c2(?=[A-Za-z0-9])")
+
+
+def _read_back(match: re.Match) -> str:
+    lead = match.group(0)
+    raw = bytes([0xC2 if lead[0] == "\u00c2" else 0xC3 if lead[0] == "\u00c3" else 0xE2])
+    raw += bytes(_CONT_BYTE[c] for c in lead[1:])
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return lead
+
+
 def plain_text(text: str) -> str:
     """The same text, typed on a normal keyboard."""
     if not text:
@@ -97,7 +134,8 @@ def plain_text(text: str) -> str:
 
 
 def _plain(text: str) -> str:
-    text = _INVISIBLE.sub("", text)
+    text = _CUT_SHORT.sub("•", _MISREAD.sub(_read_back, text))
+    text = _A_HYPHEN.sub("-", _LOOSE_A.sub("", _INVISIBLE.sub("", text)))
     text = _JOINER.sub("", text)
     text = _SPACE_RUN.sub(" ", text)
     text = _LONG_DASH_BETWEEN.sub(" - ", text)

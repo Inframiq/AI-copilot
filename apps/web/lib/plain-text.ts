@@ -72,6 +72,40 @@ function entityChar(whole: string, ref: string): string {
   return char && plain(char) !== char ? char : whole;
 }
 
+// Broken encoding: UTF-8 text read as Windows-1252 ("FlexibleÂ accountant",
+// "Janeâ€™s", "RÃ©sumÃ©"). Same rules as the API's _MISREAD / _LOOSE_A: Â or Ã
+// before one continuation character, â before two; "SÃO PAULO", "ROMÂNIA"
+// and "Ângela" stay.
+const CP1252_HIGH =
+  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f" +
+  "\u0090‘’“”•–—˜™š›œ\u009džŸ";
+const CONT_BYTE = new Map<string, number>();
+[...CP1252_HIGH].forEach((c, i) => CONT_BYTE.set(c, 0x80 + i));
+for (let b = 0xa0; b < 0xc0; b++) CONT_BYTE.set(String.fromCharCode(b), b);
+const CONT = `[${[...CONT_BYTE.keys()].map((c) => c.replace(/[\]\\^-]/g, "\\$&")).join("")}]`;
+const MISREAD = new RegExp(`[ÂÃ]${CONT}|â${CONT}{2}`, "g");
+// A bullet glyph whose last byte the PDF dropped ("â—" for ●), or an â
+// standing alone with both lost: a bullet.
+const CUT_SHORT = new RegExp(`â${CONT}(?!${CONT})|(?<!\\S)â(?!\\S)`, "g");
+// What is left of a non-breaking space whose second half became a plain
+// space. No word in the languages that write Â ends in it.
+const A_RUN = "\u00c2(?:[ \\t]+\u00c2)*";
+const LOOSE_A = new RegExp(`(?<=\\S)${A_RUN}(?=\\s|$)|[ \\t]+${A_RUN}(?=\\s|$)|^${A_RUN}[ \\t]*`, "gm");
+// Between a lower-case letter or digit and a word, it was a hyphen the PDF
+// lost ("studentÂathletes"); "ROMÂNIA" has capitals either side, and stays.
+const A_HYPHEN = /(?<=[a-z0-9])\u00c2(?=[A-Za-z0-9])/g;
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+function readBack(lead: string): string {
+  const first = lead[0] === "Â" ? 0xc2 : lead[0] === "Ã" ? 0xc3 : 0xe2;
+  const bytes = Uint8Array.from([first, ...[...lead.slice(1)].map((c) => CONT_BYTE.get(c)!)]);
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    return lead;
+  }
+}
+
 /** The same text, typed on a normal keyboard. */
 export function plainText(text: string): string {
   if (!text) return text;
@@ -80,7 +114,11 @@ export function plainText(text: string): string {
 
 function plain(text: string): string {
   return text
+    .replace(MISREAD, readBack)
+    .replace(CUT_SHORT, "•")
     .replace(INVISIBLE, "")
+    .replace(LOOSE_A, "")
+    .replace(A_HYPHEN, "-")
     .replace(JOINER, "")
     .replace(SPACE_RUN, " ")
     .replace(LONG_DASH_BETWEEN, " - ")

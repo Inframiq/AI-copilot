@@ -469,3 +469,65 @@ async def test_the_old_one_call_summary_rewrite_is_closed(ledger):
         app.dependency_overrides.pop(get_db, None)
     assert ledger.balance(TEST_USER_ID) == 50
     p.complete.assert_not_called()
+
+
+# ── POST /ai/check-summary: the user's own summary against the guide, free ──
+
+from app.services.summary_writer import style_problems
+
+# The summary from the tester's screenshot (Kaggle ACCOUNTANT/14491649).
+FLEXIBLE = (
+    "Flexible accountant who adapts seamlessly to constantly evolving accounting processes and technology. "
+    "Seasoned staff accountant with ten year background in accounting. Core competencies include detailed "
+    "oriented, organized, and as well as excellent communication and time management skills. Handles tasks "
+    "with accuracy and efficiency. Passionate and motivated, with a drive for excellence."
+)
+
+
+def test_the_guide_names_the_filler_in_a_users_own_summary():
+    problems = style_problems(FLEXIBLE, _facts(JAVA))
+    assert problems == ["uses filler words: detailed oriented, motivated, passionate, seasoned"]
+
+
+def test_the_guide_leaves_a_clean_summary_alone_and_skips_fact_checks():
+    # Its own figures and titles are the candidate's: not checked here.
+    assert style_problems(GOOD.replace("400 stores", "450 stores"), _facts(JAVA)) == []
+    assert style_problems("", _facts(JAVA)) == []
+
+
+async def _check(ledger, body):
+    ledger.set(TEST_USER_ID, 50)
+    override, _ = make_mock_db()
+    app.dependency_overrides[get_db] = override
+    p = _provider()
+    try:
+        with patch("app.routers.ai.get_ai_provider", return_value=p):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/ai/check-summary", json=body, headers=make_auth_header())
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    p.complete_structured.assert_not_called()
+    return r, ledger.balance(TEST_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_check_summary_is_free_and_runs_no_model(ledger):
+    r, balance = await _check(ledger, {"content": JAVA, "summary": "I am a " + FLEXIBLE})
+    assert r.status_code == 200 and balance == 50
+    body = r.json()
+    assert '"I", "my" or "we"' in body["problems"][0]
+    assert "seasoned" in body["problems"][1]
+    assert body["min_words"] >= 30 and body["max_words"] <= 70
+
+
+@pytest.mark.asyncio
+async def test_check_summary_cleans_broken_encoding_first(ledger):
+    r, _ = await _check(ledger, {"content": JAVA, "summary": GOOD.replace(" with", "\u00c2 with")})
+    assert r.status_code == 200 and r.json()["problems"] == []
+
+
+@pytest.mark.asyncio
+async def test_check_summary_needs_sign_in():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post("/ai/check-summary", json={"content": JAVA, "summary": GOOD})
+    assert r.status_code in (401, 403)
