@@ -99,13 +99,21 @@ export function SummaryWriter({
   return (
     <div className="flex flex-col gap-sm">
       {has && guide.length > 0 && (
-        <p
+        <div
           data-testid="summary-guide"
           className="flex items-start gap-xs rounded-xl bg-tertiary-container/60 px-sm py-xs text-caption text-on-tertiary-container"
         >
           <WarningCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
-          <span>Summary guide: this summary {guide.join("; ")}.</span>
-        </p>
+          <div className="flex flex-col gap-0.5">
+            <p className="font-semibold">Not up to the professional summary standard:</p>
+            <ul className="flex flex-col gap-0.5">
+              {guide.map((p) => (
+                <li key={p}>This summary {p}.</li>
+              ))}
+            </ul>
+            <p>Rewrite it, or use Regenerate with KripaX.</p>
+          </div>
+        </div>
       )}
       {has ? (
         <div className="flex flex-wrap items-center gap-sm">{button}</div>

@@ -116,13 +116,21 @@ describe("Builder: Generate / Regenerate with KripaX", () => {
 
   it("checks the summary in the box against the guide, for free", async () => {
     const check = vi.spyOn(apiClient, "checkSummary").mockResolvedValue({
-      problems: ["uses filler words: passionate, seasoned"], min_words: 50, max_words: 65,
+      problems: [
+        "uses filler words: passionate, seasoned",
+        "is 112 words, over the standard: a professional summary for 7+ years of experience is 50 to 65 words",
+      ],
+      min_words: 50,
+      max_words: 65,
     });
     const write = vi.spyOn(apiClient, "writeSummary");
     renderSection();
     await waitFor(() => expect(screen.getByTestId("summary-guide")).toBeTruthy(), { timeout: 2000 });
     expect(screen.getByTestId("summary-guide").textContent).toBe(
-      "Summary guide: this summary uses filler words: passionate, seasoned.",
+      "Not up to the professional summary standard:" +
+        "This summary uses filler words: passionate, seasoned." +
+        "This summary is 112 words, over the standard: a professional summary for 7+ years of experience is 50 to 65 words." +
+        "Rewrite it, or use Regenerate with KripaX.",
     );
     expect(check).toHaveBeenCalledWith(RESUME, "My own words.");
     expect(write).not.toHaveBeenCalled();

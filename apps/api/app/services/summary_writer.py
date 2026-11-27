@@ -214,6 +214,17 @@ def summary_problems(
     return out + style_problems(text, facts)
 
 
+def _stage_words(facts: SummaryFacts) -> str:
+    """Who the word band is for, in the candidate's terms."""
+    if facts.stage == "senior" and not facts.years_phrase:
+        return "for a senior or leadership role"
+    if facts.years_phrase:
+        return f"for {facts.years_phrase} of experience"
+    if facts.stage == "fresher":
+        return "for a fresher"
+    return "at this career stage"
+
+
 def style_problems(text: str, facts: SummaryFacts) -> list[str]:
     """The research's rules on how a summary reads — person, filler words,
     length for the career stage, sentence length, one paragraph. No fact
@@ -230,10 +241,12 @@ def style_problems(text: str, facts: SummaryFacts) -> list[str]:
         out.append(f"uses filler words: {', '.join(cliches)}")
 
     words = len(text.split())
-    if words > facts.max_words + 5:
-        out.append(f"is {words} words, over the {facts.max_words}-word limit for this career stage")
-    elif words < min(25, facts.min_words - 15):
-        out.append(f"is {words} words, too short to cover role, results and fit")
+    if words > facts.max_words + 5 or words < min(25, facts.min_words - 15):
+        side = "over" if words > facts.max_words else "under"
+        out.append(
+            f"is {words} word{'s' if words != 1 else ''}, {side} the standard: a professional summary {_stage_words(facts)} "
+            f"is {facts.min_words} to {facts.max_words} words"
+        )
     if len(text) > MAX_CHARS + 40:
         out.append(f"runs past about 4 lines ({len(text)} characters)")
     long = [s for s in _SENTENCE.split(text) if len(s.split()) > _MAX_SENTENCE_WORDS]

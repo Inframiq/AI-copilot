@@ -93,9 +93,9 @@ def test_a_clean_summary_passes():
     (GOOD.replace("Brings", "Results-driven, brings"), "filler words: results-driven"),
     (GOOD + " Maintained Java batch jobs for an insurance client across many releases."
      " Works with Oracle and Spring Boot every day on the inventory system for stores."
-     " Reviews code for the team.", "over the 65-word limit"),
+     " Reviews code for the team.", "over the standard: a professional summary for 7+ years of experience is 50 to 65 words"),
     (GOOD.replace(". Built", "\nBuilt"), "single paragraph"),
-    ("Engineer.", "too short"),
+    ("Engineer.", "is 1 word, under the standard: a professional summary for 7+ years of experience is 50 to 65 words"),
 ])
 def test_each_check_names_its_problem(text, reason):
     jd = _jd(["Backend Engineer"], ["Java", "Kafka", "Docker"])
@@ -531,3 +531,14 @@ async def test_check_summary_needs_sign_in():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post("/ai/check-summary", json={"content": JAVA, "summary": GOOD})
     assert r.status_code in (401, 403)
+
+
+@pytest.mark.parametrize("content,who", [
+    ({"experience": [], "education": [{"degree": "B.Tech"}]}, "for a fresher is 30 to 45 words"),
+    ({"experience": [{"title": "Analyst"}]}, "at this career stage is 40 to 55 words"),
+    ({"experience": [{"title": "Director of Operations"}]}, "for a senior or leadership role is 55 to 70 words"),
+])
+def test_the_length_note_says_what_the_standard_is(content, who):
+    problems = style_problems(" ".join(["word"] * 120) + ".", _facts(content))
+    assert any(p.startswith("is 121 words, over the standard: a professional summary " + who) or
+               p.startswith("is 120 words, over the standard: a professional summary " + who) for p in problems), problems
