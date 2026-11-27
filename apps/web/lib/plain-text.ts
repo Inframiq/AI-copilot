@@ -41,6 +41,8 @@ for (const c of "\u2010\u2011\u2012\u2013\u2212") SINGLE.set(c, "-");
 SINGLE.set("\u2026", "...");
 for (const c of BULLETS) SINGLE.set(c, "-");
 for (const [plain, chars] of Object.entries(ARROWS)) for (const c of chars) SINGLE.set(c, plain);
+// Full-width forms ("：", "，", "（"): the keyboard's own characters.
+for (let i = 0; i < 94; i++) SINGLE.set(String.fromCharCode(0xff01 + i), String.fromCharCode(0x21 + i));
 const SINGLE_RE = new RegExp(`[${[...SINGLE.keys()].join("")}]`, "g");
 
 // Formatted text is stored as HTML, where a non-breaking space is written
@@ -74,8 +76,8 @@ function entityChar(whole: string, ref: string): string {
 
 // Broken encoding: UTF-8 text read as Windows-1252 ("FlexibleÂ accountant",
 // "Janeâ€™s", "RÃ©sumÃ©"). Same rules as the API's _MISREAD / _LOOSE_A: Â or Ã
-// before one continuation character, â before two; "SÃO PAULO", "ROMÂNIA"
-// and "Ângela" stay.
+// before one continuation character, â or ï before two; "SÃO PAULO",
+// "ROMÂNIA", "Ângela" and "naïve" stay.
 const CP1252_HIGH =
   "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f" +
   "\u0090‘’“”•–—˜™š›œ\u009džŸ";
@@ -83,10 +85,20 @@ const CONT_BYTE = new Map<string, number>();
 [...CP1252_HIGH].forEach((c, i) => CONT_BYTE.set(c, 0x80 + i));
 for (let b = 0xa0; b < 0xc0; b++) CONT_BYTE.set(String.fromCharCode(b), b);
 const CONT = `[${[...CONT_BYTE.keys()].map((c) => c.replace(/[\]\\^-]/g, "\\$&")).join("")}]`;
-const MISREAD = new RegExp(`[ÂÃ]${CONT}|â${CONT}{2}`, "g");
+const MISREAD = new RegExp(`[\u00c2\u00c3]${CONT}|[\u00e2\u00ef]${CONT}{2}`, "g");
 // A bullet glyph whose last byte the PDF dropped ("â—" for ●), or an â
 // standing alone with both lost: a bullet.
-const CUT_SHORT = new RegExp(`â${CONT}(?!${CONT})|(?<!\\S)â(?!\\S)`, "g");
+const CUT_SHORT = new RegExp(`\u00e2${CONT}(?!${CONT})|(?<!\\S)\u00e2(?!\\S)`, "g");
+// Full-width punctuation whose last byte the PDF dropped ("Company Name ï¼
+// City"): which mark it was is lost, so it goes.
+const CUT_FULL_WIDTH = new RegExp(`[ \\t]*\u00ef[\u00bc\u00bd](?!${CONT})`, "g");
+// The replacement character (U+FFFD): between numbers a dash; opening a
+// line a bullet; inside a word a lost letter, kept so the person puts it
+// back; anywhere else it goes.
+const LOST_DASH = /(?<=\d)[ \t]*\ufffd[ \t]*(?=\d)/g;
+const LOST_BULLET = /^([ \t]*)\ufffd/gm;
+const LETTER = "A-Za-z\u00c0-\u024f";
+const LOST_CHAR = new RegExp(`(?<![${LETTER}])[ \\t]*\ufffd|[ \\t]*\ufffd(?![${LETTER}])`, "g");
 // What is left of a non-breaking space whose second half became a plain
 // space. No word in the languages that write Â ends in it.
 const A_RUN = "\u00c2(?:[ \\t]+\u00c2)*";
@@ -97,7 +109,7 @@ const A_HYPHEN = /(?<=[a-z0-9])\u00c2(?=[A-Za-z0-9])/g;
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
 
 function readBack(lead: string): string {
-  const first = lead[0] === "Â" ? 0xc2 : lead[0] === "Ã" ? 0xc3 : 0xe2;
+  const first = ({ "\u00c2": 0xc2, "\u00c3": 0xc3, "\u00e2": 0xe2, "\u00ef": 0xef } as Record<string, number>)[lead[0]];
   const bytes = Uint8Array.from([first, ...[...lead.slice(1)].map((c) => CONT_BYTE.get(c)!)]);
   try {
     return UTF8.decode(bytes);
@@ -112,11 +124,24 @@ export function plainText(text: string): string {
   return plain(text.replace(ENTITY, entityChar));
 }
 
+/** Text broken twice ("Ã¢â‚¬Â¢" -> "â€¢" -> "•") takes a round per break. */
+function readBackAll(text: string): string {
+  for (let i = 0; i < 3; i++) {
+    const fixed = text.replace(MISREAD, readBack);
+    if (fixed === text) break;
+    text = fixed;
+  }
+  return text;
+}
+
 function plain(text: string): string {
-  return text
-    .replace(MISREAD, readBack)
-    .replace(CUT_SHORT, "•")
+  return readBackAll(text)
     .replace(INVISIBLE, "")
+    .replace(CUT_SHORT, "\u2022")
+    .replace(CUT_FULL_WIDTH, "")
+    .replace(LOST_DASH, "-")
+    .replace(LOST_BULLET, "$1\u2022")
+    .replace(LOST_CHAR, "")
     .replace(LOOSE_A, "")
     .replace(A_HYPHEN, "-")
     .replace(JOINER, "")

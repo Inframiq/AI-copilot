@@ -53,6 +53,8 @@ _SINGLE = {
     "\u2026": "...",
     **{c: "-" for c in _BULLETS},
     **{c: plain for plain, chars in _ARROWS.items() for c in chars},
+    # Full-width forms ("：", "，", "（"): the keyboard's own characters.
+    **{chr(0xFF01 + i): chr(0x21 + i) for i in range(94)},
 }
 _TABLE = str.maketrans(_SINGLE)
 
@@ -93,18 +95,30 @@ def _entity_char(match: re.Match) -> str:
 # a mis-set web page or database print it — "FlexibleÂ accountant", "Jane
 # â€™s", "RÃ©sumÃ©". Only the leads that mean it beyond doubt are read back:
 # Â or Ã before one continuation character (Latin-1 letters and signs, the
-# non-breaking space), â before two (quotes, dashes, bullets). "SÃO PAULO",
-# "ROMÂNIA" and "Ângela" are words, and stay.
+# non-breaking space), â before two (quotes, dashes, bullets), ï before two
+# (full-width punctuation, the byte-order mark). "SÃO PAULO", "ROMÂNIA",
+# "Ângela" and "naïve" are words, and stay.
 _CP1252_HIGH = (
     "\u20ac\u0081\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u008d\u017d\u008f"
     "\u0090\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u009d\u017e\u0178"
 )
 _CONT_BYTE = {c: 0x80 + i for i, c in enumerate(_CP1252_HIGH)} | {chr(b): b for b in range(0xA0, 0xC0)}
 _CONT = "[" + re.escape("".join(_CONT_BYTE)) + "]"
-_MISREAD = re.compile(f"[\u00c2\u00c3]{_CONT}|\u00e2{_CONT}{{2}}")
+_MISREAD = re.compile(f"[\u00c2\u00c3]{_CONT}|[\u00e2\u00ef]{_CONT}{{2}}")
 # A bullet glyph whose last byte the PDF dropped ("â—" for ●, "âž" for ➢):
 # read as a bullet. So is an â standing alone, both bytes lost.
 _CUT_SHORT = re.compile(f"\u00e2{_CONT}(?!{_CONT})|(?<!\\S)\u00e2(?!\\S)")
+# Full-width punctuation whose last byte the PDF dropped ("Company Name ï¼
+# City", where ： or ， stood): which mark it was is lost, so it goes.
+_CUT_FULL_WIDTH = re.compile(f"[ \t]*\u00ef[\u00bc\u00bd](?!{_CONT})")
+# The replacement character (U+FFFD, or "ï¿½" read back): a character the
+# writer's software couldn't print. Between numbers it was a dash ("2012�
+# 2013"); opening a line, a bullet; inside a word, a letter ("Andr�s") — kept,
+# so the person sees it and puts the letter back; anywhere else it goes.
+_LOST_DASH = re.compile("(?<=\\d)[ \t]*\ufffd[ \t]*(?=\\d)")
+_LOST_BULLET = re.compile("^([ \t]*)\ufffd", re.M)
+_LETTER = "A-Za-z\u00c0-\u024f"
+_LOST_CHAR = re.compile(f"(?<![{_LETTER}])[ \t]*\ufffd|[ \t]*\ufffd(?![{_LETTER}])")
 # What is left of a non-breaking space whose second half became a plain
 # space: an Â ending a word ("inÂ accounting", "AUSTRALIAÂ"), or standing
 # alone. No word in the languages that write Â ends in it.
@@ -118,7 +132,7 @@ _A_HYPHEN = re.compile("(?<=[a-z0-9])\u00c2(?=[A-Za-z0-9])")
 
 def _read_back(match: re.Match) -> str:
     lead = match.group(0)
-    raw = bytes([0xC2 if lead[0] == "\u00c2" else 0xC3 if lead[0] == "\u00c3" else 0xE2])
+    raw = bytes([{"\u00c2": 0xC2, "\u00c3": 0xC3, "\u00e2": 0xE2, "\u00ef": 0xEF}[lead[0]]])
     raw += bytes(_CONT_BYTE[c] for c in lead[1:])
     try:
         return raw.decode("utf-8")
@@ -134,8 +148,16 @@ def plain_text(text: str) -> str:
 
 
 def _plain(text: str) -> str:
-    text = _CUT_SHORT.sub("•", _MISREAD.sub(_read_back, text))
-    text = _A_HYPHEN.sub("-", _LOOSE_A.sub("", _INVISIBLE.sub("", text)))
+    # Text broken twice ("Ã¢â‚¬Â¢" -> "â€¢" -> "•") takes a round per break.
+    for _ in range(3):
+        fixed = _MISREAD.sub(_read_back, text)
+        if fixed == text:
+            break
+        text = fixed
+    text = _INVISIBLE.sub("", text)
+    text = _CUT_FULL_WIDTH.sub("", _CUT_SHORT.sub("•", text))
+    text = _LOST_CHAR.sub("", _LOST_BULLET.sub("\\1•", _LOST_DASH.sub("-", text)))
+    text = _A_HYPHEN.sub("-", _LOOSE_A.sub("", text))
     text = _JOINER.sub("", text)
     text = _SPACE_RUN.sub(" ", text)
     text = _LONG_DASH_BETWEEN.sub(" - ", text)

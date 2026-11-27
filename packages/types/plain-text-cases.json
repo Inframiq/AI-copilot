@@ -50,6 +50,15 @@
     ["in a professional manner. â\nTrained staff", "in a professional manner. -\nTrained staff"],
     ["Summary\nÂ Â Â I am\nInvestmentsÂ Â Â Â\nx", "Summary\nI am\nInvestments\nx"],
     ["studentÂathletes, endÂofÂthe year, 16Â10 record, AllÂRookie", "student-athletes, end-of-the year, 16-10 record, All-Rookie"],
+    ["Company Name ï¼​ City", "Company Name City"],
+    ["Company Name\n \nï¼​ \nCity", "Company Name\n \n \nCity"],
+    ["Puneï¼š India, SQLï¼Œ Python", "Pune: India, SQL, Python"],
+    ["ï»¿Jane Doe", "Jane Doe"],
+    ["Skills： SQL， Python （3 yrs）", "Skills: SQL, Python (3 yrs)"],
+    ["Presentations\nï¿½  The John Award\nWon � prize", "Presentations\n-  The John Award\nWon prize"],
+    ["naïve, Haïti, Citroën", "naïve, Haïti, Citroën"],
+    ["Andr�s Bello (2012� 2013), SUBWAY� manual", "Andr�s Bello (2012-2013), SUBWAY manual"],
+    ["PowerPoint Ã¢â‚¬Â¢Advanced, ELL studentsÃ¢â‚¬â„¢ needs", "PowerPoint -Advanced, ELL students' needs"],
     ["", ""]
   ]
 }
