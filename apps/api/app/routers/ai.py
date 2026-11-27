@@ -632,7 +632,7 @@ async def check_resume_summary(
     facts = summary_facts(plain_deep(body.content))
     text = " ".join(plain_text(body.summary).split())
     return CheckSummaryOut(
-        problems=style_problems(text, facts), min_words=facts.min_words, max_words=facts.max_words,
+        problems=style_problems(text, facts, own=True), min_words=facts.min_words, max_words=facts.max_words,
     )
 
 @router.post("/project-score", response_model=ProjectScoreOut)

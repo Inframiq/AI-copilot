@@ -542,3 +542,33 @@ def test_the_length_note_says_what_the_standard_is(content, who):
     problems = style_problems(" ".join(["word"] * 120) + ".", _facts(content))
     assert any(p.startswith("is 121 words, over the standard: a professional summary " + who) or
                p.startswith("is 120 words, over the standard: a professional summary " + who) for p in problems), problems
+
+def _words(n, word="word"):
+    """n words in sentences of ten."""
+    ws = [word] * n
+    return " ".join(" ".join(ws[i:i + 10]) + "." for i in range(0, n, 10))
+
+
+def test_a_users_own_summary_is_long_only_well_past_the_band():
+    # DA: 1-5 years, 40 to 55 words. Own text: over past 70; KripaX's draft past 60.
+    facts = _facts(DA)
+    assert style_problems(_words(62), facts, own=True) == []
+    assert style_problems(_words(70), facts, own=True) == []
+    (over,) = style_problems(_words(71), facts, own=True)
+    assert over.startswith("is 71 words, over the standard: a professional summary for 4+ years") and over.endswith("40 to 55 words")
+    assert any(p.startswith("is 62 words, over the standard") for p in style_problems(_words(62), facts))
+
+
+def test_a_users_own_summary_is_not_flagged_for_characters_alone():
+    facts = _facts(DA)
+    long_words = _words(40, "administration")  # 40 words, ~600 characters
+    assert style_problems(long_words, facts, own=True) == []
+    assert any("4 lines" in p for p in style_problems(long_words, facts))
+
+
+@pytest.mark.asyncio
+async def test_check_summary_uses_the_softer_threshold(ledger):
+    r, _ = await _check(ledger, {"content": DA, "summary": _words(62)})
+    assert r.status_code == 200 and r.json()["problems"] == []
+    r, _ = await _check(ledger, {"content": DA, "summary": _words(112)})
+    assert r.json()["problems"][0].startswith("is 112 words, over the standard: a professional summary")

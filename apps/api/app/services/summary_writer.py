@@ -225,11 +225,22 @@ def _stage_words(facts: SummaryFacts) -> str:
     return "at this career stage"
 
 
-def style_problems(text: str, facts: SummaryFacts) -> list[str]:
+# How far past the band's top a summary may run before it is "over the
+# standard": a few words for KripaX's own draft, which is written to the
+# band; more for one the candidate wrote (the user's call, 2026-11-28 — a
+# 62-word summary at 1-5 years is fine; a 112-word one is not).
+_DRAFT_SLACK = 5
+_OWN_SLACK = 15
+
+
+def style_problems(text: str, facts: SummaryFacts, *, own: bool = False) -> list[str]:
     """The research's rules on how a summary reads — person, filler words,
     length for the career stage, sentence length, one paragraph. No fact
     checks: these apply as well to a summary the candidate wrote, whose
-    figures and titles are their own (POST /ai/check-summary)."""
+    figures and titles are their own (POST /ai/check-summary, `own`). Their
+    own summary is judged long only past _OWN_SLACK words over the band —
+    the word count alone, not the 4-line character check, which would flag
+    the same text first."""
     text = (text or "").strip()
     if not text:
         return []
@@ -241,13 +252,14 @@ def style_problems(text: str, facts: SummaryFacts) -> list[str]:
         out.append(f"uses filler words: {', '.join(cliches)}")
 
     words = len(text.split())
-    if words > facts.max_words + 5 or words < min(25, facts.min_words - 15):
+    slack = _OWN_SLACK if own else _DRAFT_SLACK
+    if words > facts.max_words + slack or words < min(25, facts.min_words - 15):
         side = "over" if words > facts.max_words else "under"
         out.append(
             f"is {words} word{'s' if words != 1 else ''}, {side} the standard: a professional summary {_stage_words(facts)} "
             f"is {facts.min_words} to {facts.max_words} words"
         )
-    if len(text) > MAX_CHARS + 40:
+    if not own and len(text) > MAX_CHARS + 40:
         out.append(f"runs past about 4 lines ({len(text)} characters)")
     long = [s for s in _SENTENCE.split(text) if len(s.split()) > _MAX_SENTENCE_WORDS]
     if long:
