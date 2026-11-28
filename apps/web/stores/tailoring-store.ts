@@ -399,6 +399,94 @@ export function jdForOrdering(s: { matchedSkills: string[]; missingSkills: strin
   return { terms: [...s.matchedSkills, ...s.missingSkills], text: s.jdText };
 }
 
+/** The steps "+N from tailoring" is broken into, in order. */
+export const SCORE_STEPS = ["start", "headline", "summary", "reworded", "ai_points", "skills", "misc"] as const;
+export type ScoreStepKey = (typeof SCORE_STEPS)[number];
+
+export interface ScoreStep {
+  key: ScoreStepKey;
+  content: ResumeContent;
+  accepted_bullet_ids: string[];
+  accepted_fix_ids: string[];
+}
+
+/**
+ * The review's résumé built up one kind of change at a time, for the score
+ * breakdown: "start" has none of them (every rewrite off, no AI point, the
+ * user's own summary and skills, no Miscellaneous point), then each step adds
+ * the user's current choices for one kind — the headline, the summary for
+ * the job, the reworded points, the AI-written points, skills, Miscellaneous
+ * points. Each is built by buildMergedContent, so the last is exactly the
+ * résumé being scored. A point's own badge is what turning that one point
+ * off would change, so points sharing a job term each show ±0 — these steps
+ * are what say where the rest of the gain came from.
+ */
+export function scoreSteps(
+  pendingContent: ResumeContent,
+  originalContent: ResumeContent,
+  decisions: Record<string, BulletDecision>,
+  suggestedSkills: string[],
+  atsFixes: AtsFix[],
+  fixExperienceIndex: Record<string, number>,
+  misc: MiscMerge,
+  jd?: { terms: readonly string[]; text?: string },
+): ScoreStep[] {
+  const rewriteKeys = deriveBulletChanges(pendingContent, originalContent).map((c) => c.key);
+  const fixKeys = (type: AtsFix["type"]) => atsFixes.filter((f) => f.type === type).map((f) => `fix:${f.id}`);
+  const groups: Record<Exclude<ScoreStepKey, "start">, string[]> = {
+    headline: fixKeys("headline"),
+    summary: ["summary"],
+    reworded: rewriteKeys,
+    ai_points: fixKeys("bullet"),
+    skills: [
+      ...fixKeys("skill"),
+      ...suggestedSkills.map((s) => `skill_add:${s}`),
+      ...originalContent.skills.map((s) => `skill_keep:${s}`),
+    ],
+    misc: misc.points.map((p) => `misc:${p.id}`),
+  };
+  // Nothing on: the résumé as the user wrote it.
+  let stage: Record<string, BulletDecision> = {
+    summary: "reject",
+    ...Object.fromEntries(rewriteKeys.map((k) => [k, "reject" as const])),
+    ...Object.fromEntries(atsFixes.map((f) => [`fix:${f.id}`, "reject" as const])),
+    ...Object.fromEntries(suggestedSkills.map((s) => [`skill_add:${s}`, "reject" as const])),
+    ...Object.fromEntries(originalContent.skills.map((s) => [`skill_keep:${s}`, "accept" as const])),
+    ...Object.fromEntries(misc.points.map((p) => [`misc:${p.id}`, "reject" as const])),
+  };
+  const step = (key: ScoreStepKey, d: Record<string, BulletDecision>): ScoreStep => ({
+    key,
+    content: buildMergedContent(pendingContent, originalContent, d, suggestedSkills, atsFixes, fixExperienceIndex, misc, jd),
+    accepted_bullet_ids: rewriteKeys.filter((k) => (d[k] ?? "accept") !== "reject"),
+    accepted_fix_ids: atsFixes.filter((f) => d[`fix:${f.id}`] === "accept").map((f) => f.id),
+  });
+  const out: ScoreStep[] = [step("start", stage)];
+  for (const key of SCORE_STEPS.slice(1) as Exclude<ScoreStepKey, "start">[]) {
+    // The user's own choice for each of this kind, or the merge's default
+    // where they made none.
+    stage = { ...stage };
+    for (const k of groups[key]) {
+      if (k in decisions) stage[k] = decisions[k];
+      else delete stage[k];
+    }
+    out.push(step(key, stage));
+  }
+  return out;
+}
+
+/** What each step added: its score less the one before it. The first is
+ * "start" less the review's own "before" — zero unless the two disagree. */
+export function scoreStepDeltas(
+  partScores: Partial<Record<ScoreStepKey, number>>,
+  before: number | null,
+): { key: ScoreStepKey; delta: number }[] | null {
+  if (before === null || SCORE_STEPS.some((k) => partScores[k] === undefined)) return null;
+  return SCORE_STEPS.map((key, i) => ({
+    key,
+    delta: partScores[key]! - (i === 0 ? before : partScores[SCORE_STEPS[i - 1]]!),
+  }));
+}
+
 /** The current review's Miscellaneous state, for buildMergedContent. */
 function miscMerge(s: { miscPoints: MiscPoint[]; miscDestinations: Record<string, MiscDestination> }): MiscMerge {
   return { points: s.miscPoints, destinations: s.miscDestinations };
@@ -477,6 +565,9 @@ interface TailoringState {
   // Running ATS score for the résumé with the currently-accepted fixes folded
   // in — pure server re-score (POST /ai/project-score), null until computed.
   projectedAtsScore: number | null;
+  /** What each kind of change added to the score, in order (scoreSteps);
+   *  null until a re-score with the breakdown lands. */
+  scoreBreakdown: { key: ScoreStepKey; delta: number }[] | null;
   // Per-bullet-fix role override: {fixId: experienceIndex}. Set by the review
   // screen's role dropdown; buildMergedContent places the bullet there.
   fixExperienceIndex: Record<string, number>;
@@ -598,6 +689,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   fixDeltas: {},
   bulletDeltas: {},
   projectedAtsScore: null,
+  scoreBreakdown: null,
   fixExperienceIndex: {},
   humanizeLevel: 50,
   isLoading: false,
@@ -634,6 +726,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
       atsFixes: isDifferentJd ? [] : current.atsFixes,
       bulletImportance: isDifferentJd ? {} : current.bulletImportance,
       projectedAtsScore: isDifferentJd ? null : current.projectedAtsScore,
+      scoreBreakdown: isDifferentJd ? null : current.scoreBreakdown,
       fixExperienceIndex: isDifferentJd ? {} : current.fixExperienceIndex,
       pendingContent: null,
       sessionId: isDifferentJd ? null : current.sessionId,
@@ -688,7 +781,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   refreshProjectedScore: () => {
     const {
       sessionId, atsFixes, bulletDecisions, pendingContent,
-      suggestedSkills, fixExperienceIndex,
+      suggestedSkills, fixExperienceIndex, atsScoreBefore, atsScore,
     } = get();
     if (!sessionId) return;
     const acceptedIds = atsFixes
@@ -724,8 +817,17 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
         // The candidate's own text per rewrite: the session keeps only the
         // tailored side, so this is what lets the server price "turned off".
         const originalBullets = Object.fromEntries(changes.map((c) => [c.key, c.original]));
-        const { projected_score, fix_deltas, bullet_deltas } = await apiClient.projectScore(
-          sessionId, acceptedIds, merged, acceptedBulletIds, originalBullets,
+        // The same résumé built up one kind of change at a time, so the
+        // review can say what each kind added (scoreSteps).
+        const steps =
+          pendingContent && originalContent
+            ? scoreSteps(
+                pendingContent, originalContent, bulletDecisions, suggestedSkills, atsFixes,
+                fixExperienceIndex, miscMerge(get()), jdForOrdering(get()),
+              )
+            : undefined;
+        const { projected_score, fix_deltas, bullet_deltas, part_scores } = await apiClient.projectScore(
+          sessionId, acceptedIds, merged, acceptedBulletIds, originalBullets, steps,
         );
         if (seq !== _projectScoreSeq) return;
         set({
@@ -736,6 +838,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           // the badges fall back to the pipeline values rather than to zero.
           ...(fix_deltas ? { fixDeltas: fix_deltas } : {}),
           ...(bullet_deltas ? { bulletDeltas: bullet_deltas } : {}),
+          scoreBreakdown: scoreStepDeltas(part_scores ?? {}, atsScoreBefore ?? atsScore),
         });
       } catch (e) {
         // Keep the last number (better than blanking the UI) but mark it stale
@@ -935,6 +1038,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   fixDeltas: {},
   bulletDeltas: {},
       projectedAtsScore: null,
+      scoreBreakdown: null,
       fixExperienceIndex: {},
       sessionId: null,
       pendingContent: null,
@@ -1079,6 +1183,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
           bulletRationale: session.bullet_rationale ?? {},
           quantifyPrompts: session.quantify_prompts ?? {},
           projectedAtsScore: session.ats_score ?? null,
+          scoreBreakdown: null,
           pendingContent: session.tailored_content,
           bulletDecisions: initialDecisions,
           miscDestinations: {},
@@ -1301,6 +1406,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   fixDeltas: {},
   bulletDeltas: {},
       projectedAtsScore: null,
+      scoreBreakdown: null,
       fixExperienceIndex: {},
       mergedContent: null,
       previewPdfUrl: null,
@@ -1335,6 +1441,7 @@ export const useTailoringStore = create<TailoringState>((set, get) => ({
   fixDeltas: {},
   bulletDeltas: {},
       projectedAtsScore: null,
+      scoreBreakdown: null,
       fixExperienceIndex: {},
       humanizeLevel: 50,
       isLoading: false,

@@ -641,10 +641,14 @@ export const apiClient = {
     // the tailored side, so without this the server cannot score a rewrite
     // turned off, and its badge stays frozen at the pipeline value.
     originalBullets?: Record<string, string>,
+    // The same résumé built up one kind of change at a time (scoreSteps):
+    // each comes back scored, for the review's score breakdown.
+    parts?: { key: string; content: ResumeContent; accepted_bullet_ids: string[]; accepted_fix_ids: string[] }[],
   ): Promise<{
     projected_score: number;
     fix_deltas?: Record<string, number>;
     bullet_deltas?: Record<string, number>;
+    part_scores?: Record<string, number>;
   }> =>
     request<{ projected_score: number }>("POST", "/ai/project-score", {
       session_id: sessionId,
@@ -652,6 +656,7 @@ export const apiClient = {
       ...(content ? { content } : {}),
       ...(acceptedBulletIds ? { accepted_bullet_ids: acceptedBulletIds } : {}),
       ...(originalBullets ? { original_bullets: originalBullets } : {}),
+      ...(parts ? { parts } : {}),
     }),
 
   // Most recent completed session across every JD — resolves Interview

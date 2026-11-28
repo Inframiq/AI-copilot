@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 from app.schemas.resume import _validate_content_size
 
@@ -253,6 +253,21 @@ class GenerateResumeOut(BaseModel):
     underfilled: bool = False
 
 
+# The steps "+N from tailoring" is broken into, in the order the review adds
+# them: each is the résumé with that kind of change added on top of the steps
+# before it ("start" is the résumé with none of them).
+ScorePartKey = Literal["start", "headline", "summary", "reworded", "ai_points", "skills", "misc"]
+
+
+class ScorePart(BaseModel):
+    key: ScorePartKey
+    content: dict
+    accepted_bullet_ids: list[_ReviewId] = Field(default_factory=list, max_length=500)
+    accepted_fix_ids: list[_ReviewId] = Field(default_factory=list, max_length=500)
+
+    _check_content_size = field_validator("content")(_validate_content_size)
+
+
 class ProjectScoreRequest(BaseModel):
     session_id: uuid.UUID
     accepted_fix_ids: list[_ReviewId] = Field(default_factory=list, max_length=500)
@@ -273,6 +288,10 @@ class ProjectScoreRequest(BaseModel):
     # frozen at their pipeline values. Omitted by older clients, in which case
     # no rewrite deltas come back.
     original_bullets: dict[_ReviewId, _BulletText] | None = Field(default=None, max_length=500)
+    # The review's gain broken into steps (ScorePartKey). Each is scored like
+    # `content`; the differences between them are what each kind of change
+    # added. Omitted by older clients: no breakdown comes back.
+    parts: list[ScorePart] | None = Field(default=None, max_length=7)
 
     _check_content_size = field_validator("content")(_validate_content_size)
 
@@ -286,3 +305,5 @@ class ProjectScoreOut(BaseModel):
     fix_deltas: dict[str, int] = {}
     # The same, for each rewritten bullet, keyed by review id ("exp0_b2").
     bullet_deltas: dict[str, int] = {}
+    # Each requested part's score, by key (ProjectScoreRequest.parts).
+    part_scores: dict[str, int] = {}

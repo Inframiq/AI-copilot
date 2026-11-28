@@ -9,6 +9,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
+import type { ScoreStepKey } from "@/stores/tailoring-store";
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -189,7 +190,52 @@ export function RunAgain({
   );
 }
 
+/** What each kind of change added, in the order they're counted. */
+export type ScoreBreakdownRow = { key: ScoreStepKey; delta: number };
+
+const STEP_LABEL: Record<ScoreStepKey, string> = {
+  start: "Your résumé, re-scored",
+  headline: "Headline",
+  summary: "Summary for this job",
+  reworded: "Reworded points",
+  ai_points: "Points written by AI",
+  skills: "Skills",
+  misc: "Miscellaneous points",
+};
+
+const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "±0");
+
+/**
+ * Where "+N from tailoring" comes from. A point's own badge is what turning
+ * only that point off would change, so points that cover the same job terms
+ * each show ±0, and the summary for the job has no badge: a tester saw +81
+ * with one +39 badge and nothing else. Each row is what that kind of change
+ * added on top of the rows above it; together they make the whole gain.
+ */
+export function ScoreBreakdown({ rows, className = "" }: { rows: ScoreBreakdownRow[]; className?: string }) {
+  const shown = rows.filter((r) => r.delta !== 0);
+  if (shown.length === 0) return null;
+  return (
+    <div className={`flex w-full flex-col gap-xs ${className}`}>
+      <dl aria-label="Where the points come from" className="flex flex-col gap-0.5">
+        {shown.map((r) => (
+          <div key={r.key} className="flex items-baseline justify-between gap-sm text-body-sm">
+            <dt className="text-on-surface-variant">{STEP_LABEL[r.key]}</dt>
+            <dd className={`tabular font-semibold ${r.delta < 0 ? "text-error" : "text-on-surface"}`}>{signed(r.delta)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-caption text-on-surface-variant">
+        Counted in this order, each on top of the ones above. A point&apos;s own pts is what turning only it off
+        changes, so points that share job terms show ±0.
+      </p>
+    </div>
+  );
+}
+
 export interface ScoreRailProps {
+  /** What each kind of change added (ScoreBreakdown); null until scored. */
+  breakdown?: ScoreBreakdownRow[] | null;
   before: number | null;
   after: number | null;
   updating: boolean;
@@ -255,6 +301,7 @@ export function ScoreRail(props: ScoreRailProps) {
               {lift > 0 ? `+${lift}` : `−${Math.abs(lift)}`} from tailoring
             </span>
           )}
+          {props.breakdown && <ScoreBreakdown rows={props.breakdown} className="mt-xs" />}
           <ScoreStatus {...props} />
         </div>
       )}

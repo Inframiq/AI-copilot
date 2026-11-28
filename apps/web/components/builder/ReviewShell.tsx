@@ -22,7 +22,7 @@ import { ProfilePoints } from "@/components/studio/review/ProfilePoints";
 import { MiscNotesCanvas } from "@/components/misc/MiscNotesCanvas";
 import { WordingChecks } from "@/components/studio/review/WordingChecks";
 import { findRepetition, listBullets, numberGaps, quantifiedShare } from "@/lib/wording-checks";
-import { ScoreRail, ScoreDock, RunAgain, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
+import { ScoreRail, ScoreDock, RunAgain, ScoreBreakdown, type ScoreRailProps } from "@/components/studio/review/ScoreRail";
 import { SourcePanel } from "@/components/studio/canvas/SourcePanel";
 import { TailoringProgress } from "./TailoringProgress";
 import { FOCUS_RING, PRESS } from "@/lib/focus";
@@ -69,6 +69,7 @@ export function ReviewShell({
   const refreshProjectedScore = useTailoringStore((s) => s.refreshProjectedScore);
   const atsScore = useTailoringStore((s) => s.atsScore);
   const atsScoreBefore = useTailoringStore((s) => s.atsScoreBefore);
+  const scoreBreakdown = useTailoringStore((s) => s.scoreBreakdown);
   const projectedAtsScore = useTailoringStore((s) => s.projectedAtsScore);
   const projectedScoreStale = useTailoringStore((s) => s.projectedScoreStale);
   const isProjecting = useTailoringStore((s) => s.isProjecting);
@@ -265,6 +266,7 @@ export function ReviewShell({
     dedupedSuggestedSkills.filter((s) => bulletDecisions[`skill_add:${s}`] === "accept").length;
 
   const rail: ScoreRailProps = {
+    breakdown: scoreBreakdown,
     before,
     after,
     updating: isProjecting,
@@ -351,6 +353,15 @@ export function ReviewShell({
 
             {reviewing && (
               <>
+                {/* Phones have no rail: the breakdown folds above the points. */}
+                {scoreBreakdown && before !== null && after !== null && after !== before && (
+                  <details className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-md py-sm lg:hidden">
+                    <summary className="cursor-pointer text-label-md font-semibold text-on-surface">
+                      Where the {after - before > 0 ? `+${after - before}` : `−${before - after}`} comes from
+                    </summary>
+                    <ScoreBreakdown rows={scoreBreakdown} className="mt-sm" />
+                  </details>
+                )}
                 {originalContent && (
                   <PointsLedger
                     changes={bulletChanges}

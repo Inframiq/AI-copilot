@@ -82,4 +82,23 @@ describe("live fix deltas", () => {
     const originals = projectScore.mock.calls[0][4];
     expect(originals).toEqual({ exp0_b0: "b" });
   });
+
+  // "+81 from tailoring" with one +39 badge and nothing else: the re-score
+  // now sends the résumé built up step by step and keeps what each added.
+  it("sends the score steps and keeps what each step added", async () => {
+    useTailoringStore.setState({ atsScoreBefore: 19 } as never);
+    projectScore.mockResolvedValueOnce({
+      projected_score: 100, fix_deltas: {}, bullet_deltas: {},
+      part_scores: { start: 19, headline: 58, summary: 80, reworded: 100, ai_points: 100, skills: 100, misc: 100 },
+    } as never);
+    useTailoringStore.getState().refreshProjectedScore();
+    await vi.waitFor(() => expect(projectScore).toHaveBeenCalled());
+    const steps = projectScore.mock.calls[0][5]!;
+    expect(steps.map((p) => p.key)).toEqual(["start", "headline", "summary", "reworded", "ai_points", "skills", "misc"]);
+    await vi.waitFor(() =>
+      expect(useTailoringStore.getState().scoreBreakdown?.filter((r) => r.delta).map((r) => [r.key, r.delta])).toEqual([
+        ["headline", 39], ["summary", 22], ["reworded", 20],
+      ]),
+    );
+  });
 });

@@ -35,7 +35,7 @@ from app.services.summary_writer import Rework, rework_request, style_problems, 
 from app.services.ats import (
     credited_fixes, fix_deltas, bullet_deltas,
     build_resume_text, score_content, apply_fixes, verdicts_with_fixes, AtsFix,
-    verdicts_with_rewrites, with_carried_terms,
+    verdicts_with_rewrites, with_carried_terms, review_score,
 )
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -715,6 +715,20 @@ async def project_score(
             rationale, body.accepted_bullet_ids, tailored_by_id, body.original_bullets, fixes,
         )
 
+    # The gain in steps, each scored exactly as the projected score is: kept
+    # rewrites earn their terms, accepted fixes close their gaps. A point's
+    # own badge is what turning that one point off would change, so points
+    # covering the same terms each show ±0 — testers saw +81 with one +39
+    # badge and nothing saying where the rest came from.
+    part_scores: dict[str, int] = {}
+    if body.parts and body.accepted_bullet_ids is not None and stored.get("before") is not None:
+        for part in body.parts:
+            part_fixes = [f for f in all_fixes if f.id in set(part.accepted_fix_ids)]
+            part_scores[part.key] = review_score(
+                part.content, jd_analysis, stored.get("before") or {}, stored.get("after") or {},
+                rationale, part.accepted_bullet_ids, part_fixes,
+            )
+
     return ProjectScoreOut(
         projected_score=score_content(
             merged, jd_analysis,
@@ -722,6 +736,7 @@ async def project_score(
         ).ats_score,
         fix_deltas=fix_deltas(merged, jd_analysis, verdicts, all_fixes, fixes),
         bullet_deltas=rewrite_deltas,
+        part_scores=part_scores,
     )
 
 
