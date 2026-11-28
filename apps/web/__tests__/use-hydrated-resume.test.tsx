@@ -76,10 +76,49 @@ describe("useHydratedResume", () => {
     });
   });
 
-  it("does not fetch a résumé the store has fully loaded", async () => {
-    useResumeStore.setState({ resumeId: "r1", content: { summary: "x" } } as never);
+  it("does not fetch a résumé that has unsaved edits in the store", async () => {
+    useResumeStore.setState({ resumeId: "r1", content: { summary: "x" }, isDirty: true } as never);
     await mount();
     expect(apiClient.getResume).not.toHaveBeenCalled();
+  });
+
+  // The Profile saves an uploaded résumé over the master under the same id.
+  // The Builder held the copy from before and never looked again, so the
+  // new summary showed in the Profile and the old one in the Builder.
+  it("takes a newer saved copy over a clean one in the store", async () => {
+    useResumeStore.setState({
+      resumeId: "r1", content: { summary: "old" }, updatedAt: "2026-11-01T00:00:00Z",
+    } as never);
+    vi.mocked(apiClient.getResume).mockResolvedValueOnce({
+      id: "r1", content: { contact: { name: "Jane" }, summary: "new", experience: [], education: [], skills: [] },
+      template_id: "ats_clean", updated_at: "2026-11-28T00:00:00Z",
+    } as never);
+    await mount();
+    await waitFor(() => expect(useResumeStore.getState().content?.summary).toBe("new"));
+    expect(useResumeStore.getState().updatedAt).toBe("2026-11-28T00:00:00Z");
+  });
+
+  it("keeps the store's copy when the saved one is not newer", async () => {
+    useResumeStore.setState({
+      resumeId: "r1", content: { summary: "mine" }, updatedAt: "2026-11-28T00:00:00Z",
+    } as never);
+    vi.mocked(apiClient.getResume).mockResolvedValueOnce({
+      id: "r1", content: { summary: "older" }, template_id: "ats_clean", updated_at: "2026-11-01T00:00:00Z",
+    } as never);
+    await mount();
+    await waitFor(() => expect(apiClient.getResume).toHaveBeenCalled());
+    expect(useResumeStore.getState().content?.summary).toBe("mine");
+  });
+
+  it("never replaces a tailored draft with the saved copy", async () => {
+    useResumeStore.setState({
+      resumeId: "r1", content: { summary: "draft" }, draftJdId: "jd1", updatedAt: "2026-11-01T00:00:00Z",
+    } as never);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function DraftProbe() { useHydratedResume("r1", { allowDraft: true }); return null; }
+    await act(async () => { render(<QueryClientProvider client={qc}><DraftProbe /></QueryClientProvider>); });
+    expect(apiClient.getResume).not.toHaveBeenCalled();
+    expect(useResumeStore.getState().content?.summary).toBe("draft");
   });
 });
 

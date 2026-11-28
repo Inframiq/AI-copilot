@@ -30,22 +30,39 @@ export function useHydratedResume(
   // The right id with no content is still not loaded — the JD path reaches
   // the review before anything has filled the store.
   const loaded = storeResumeId === resumeId && hasContent && (allowDraft || !isDraft);
+  // Nothing of this device's waits to be saved: no edit, no save queued or
+  // in flight, no draft, no conflict to settle. Only then may a newer copy
+  // from the server replace what the store holds.
+  const settled = useResumeStore(
+    (s) => !s.isDirty && !s.isSaving && s._saveTimer === null && s.draftJdId === null && s.conflictUpdatedAt === null,
+  );
+  const storeUpdatedAt = useResumeStore((s) => s.updatedAt);
 
   const { data: resume, isLoading, isError } = useQuery<Resume>({
     queryKey: ["resume", resumeId],
     queryFn: () => apiClient.getResume(resumeId),
-    enabled: !!resumeId && !loaded,
+    // Also while the store holds it, as long as nothing there is unsaved:
+    // the résumé can be replaced elsewhere under the same id — the Profile
+    // saves an uploaded résumé over the master — and the Builder then kept
+    // showing the copy it had before.
+    enabled: !!resumeId && (!loaded || settled),
     // Serve straight from the list the dashboard and studio index already hold.
     initialData: () =>
       queryClient.getQueryData<Resume[]>(["resumes"])?.find((r) => r.id === resumeId),
     staleTime: 2 * 60 * 1000,
   });
 
+  // A copy the server saved after the one in the store, with nothing unsaved
+  // here, is the résumé as it now is.
+  const newer =
+    loaded && settled && !!resume?.updated_at && !!storeUpdatedAt &&
+    Date.parse(resume.updated_at) > Date.parse(storeUpdatedAt);
+
   useEffect(() => {
-    // Only when the store holds a different résumé. Re-applying the fetched
-    // copy over the one already loaded would discard unsaved edits and the
-    // tailoring the review just wrote into it.
-    if (resume && resume.id === resumeId && !loaded) {
+    // When the store holds a different résumé, or an older copy of this one
+    // with nothing unsaved. Re-applying the fetched copy over unsaved edits,
+    // or over the tailoring the review just wrote into it, would lose them.
+    if (resume && resume.id === resumeId && (!loaded || newer)) {
       setResume(
         resume.id,
         resume.content,
@@ -60,7 +77,7 @@ export function useHydratedResume(
         resume.page_size,
       );
     }
-  }, [resume, resumeId, loaded, setResume]);
+  }, [resume, resumeId, loaded, newer, setResume]);
 
   return { resume, isLoading: !loaded && isLoading, isError: !loaded && isError };
 }

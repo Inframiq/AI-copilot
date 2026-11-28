@@ -401,7 +401,9 @@ export default function ProfilePage() {
         setMasterResumeDeleted(false);
         setPendingUpload(null);
         setMiscToKeep([]);
-        await queryClient.invalidateQueries({ queryKey: ["resume", saved.id] });
+        // The Builder opens this copy straight away instead of the one it
+        // held before the upload (lib/use-hydrated-resume).
+        queryClient.setQueryData(["resume", saved.id], saved);
       }
       const profileInput: CareerProfileInput = {
         master_resume_id: resumeId,

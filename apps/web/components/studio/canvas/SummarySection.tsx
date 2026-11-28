@@ -3,6 +3,7 @@ import { useResumeStore } from "@/stores/resume-store";
 import { wordCount } from "@/lib/misc-points";
 import { PROFILE_LIMITS, SECTION_INFO, capEdit, summaryCapNote } from "@/lib/profile-sections";
 import { SummaryWriter } from "@/components/resume/SummaryWriter";
+import { ProfileDifference } from "./ProfileDifference";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
@@ -36,6 +37,7 @@ export function SummarySection() {
           {count} / {SUMMARY_MAX_WORDS} words
         </span>
       </header>
+      <ProfileDifference field="summary" />
       <textarea
         value={content.summary ?? ""}
         onChange={handleChange}
@@ -67,6 +69,7 @@ export function SummarySection() {
           {wordCount(content.objective ?? "")} / {PROFILE_LIMITS.objectiveWords} words
         </span>
       </header>
+      <ProfileDifference field="objective" />
       <textarea
         id="builder-objective"
         value={content.objective ?? ""}
