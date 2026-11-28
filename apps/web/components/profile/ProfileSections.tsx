@@ -55,7 +55,7 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
         {count} / {maxWords} words
       </span>
       {count > maxWords && (
-        <p className={`text-caption ${summary ? "text-error" : "text-tertiary"}`}>
+        <p className={`text-caption ${summary && !kept ? "text-error" : "text-tertiary"}`}>
           {summary
             ? kept ? `Your version is kept: ${count} words, past the ${maxWords}-word standard.` : summaryCapNote(count)
             : wordCapNote(maxWords)}

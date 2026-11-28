@@ -58,7 +58,7 @@ export function SummarySection() {
         onUse={(summary) => updateContent({ summary })}
       />
       {count >= SUMMARY_MAX_WORDS && (
-        <p className={`text-caption ${count > SUMMARY_MAX_WORDS ? "text-error" : "text-tertiary"}`}>
+        <p className={`text-caption ${count > SUMMARY_MAX_WORDS && !longSummaryKept ? "text-error" : "text-tertiary"}`}>
           {count > SUMMARY_MAX_WORDS
             ? longSummaryKept
               ? `Your version is kept: ${count} words, past the ${SUMMARY_MAX_WORDS}-word standard.`
