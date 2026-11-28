@@ -4,6 +4,7 @@ import { wordCount } from "@/lib/misc-points";
 import { PROFILE_LIMITS, SECTION_INFO, capEdit, summaryCapNote } from "@/lib/profile-sections";
 import { SummaryWriter } from "@/components/resume/SummaryWriter";
 import { ProfileDifference } from "./ProfileDifference";
+import { sameSummary } from "@/lib/kept-summary";
 
 // Matches resume_spec.py HARD_LIMITS["summary"]["max_words"] — the backend
 // from-scratch generator enforces the same cap.
@@ -12,14 +13,19 @@ export const SUMMARY_MAX_WORDS = PROFILE_LIMITS.summaryWords;
 export function SummarySection() {
   const content = useResumeStore((s) => s.content);
   const updateContent = useResumeStore((s) => s.updateContent);
+  const keptSummary = useResumeStore((s) => s.keptSummary);
+  const keepLongSummary = useResumeStore((s) => s.keepLongSummary);
+  const isSaving = useResumeStore((s) => s.isSaving);
   if (!content) return null;
+  const longSummaryKept = keptSummary !== null && sameSummary(content.summary, keptSummary);
 
   const words = (content.summary ?? "").trim().split(/\s+/).filter(Boolean);
   const count = words.length;
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     // Never cut, typed or pasted: past the cap it's flagged below and the
-    // autosave waits until it fits (resume-store, summaryCapError).
+    // autosave waits until it fits (resume-store, summaryCapError), or until
+    // the user keeps their own version ("Save my version").
     updateContent({ summary: e.target.value });
   }
 
@@ -54,9 +60,17 @@ export function SummarySection() {
       {count >= SUMMARY_MAX_WORDS && (
         <p className={`text-caption ${count > SUMMARY_MAX_WORDS ? "text-error" : "text-tertiary"}`}>
           {count > SUMMARY_MAX_WORDS
-            ? summaryCapNote(count)
+            ? longSummaryKept
+              ? `Your version is kept: ${count} words, past the ${SUMMARY_MAX_WORDS}-word standard.`
+              : summaryCapNote(count)
             : `${SUMMARY_MAX_WORDS} words is the limit for a professional summary.`}
         </p>
+      )}
+      {count > SUMMARY_MAX_WORDS && !longSummaryKept && (
+        <button type="button" onClick={() => { void keepLongSummary().catch(() => {}); }} disabled={isSaving}
+          className="self-start rounded-full border border-error/40 px-md py-xs text-label-md font-semibold text-error hover:bg-error/10 transition-colors disabled:opacity-50">
+          Save my version
+        </button>
       )}
 
       {/* The Profile's Objective, here too (lib/profile-sections.ts). A

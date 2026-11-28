@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SuggestInput } from "@/components/ui/SuggestInput";
+import { SuggestInput, settleSuggestions } from "@/components/ui/SuggestInput";
 import { loadSuggestions, type SuggestKind } from "@/lib/suggest";
 
 function Field({ kind = "skill", list = false, onPick, onKeyDown, onSaved }: {
@@ -35,6 +35,20 @@ beforeAll(async () => {
 }, 60_000);
 
 describe("SuggestInput", () => {
+  // A form's Save waits on this: saving straight from a field saved the
+  // typed text, and the tidy that landed after left the form unsaved.
+  it("lets a form wait for the tidy started by leaving the field", async () => {
+    const saved = vi.fn();
+    render(<Field onSaved={saved} />);
+    await userEvent.type(field(), "javascript");
+    saved.mockClear();
+    // Left, and the wait asked for at once — as a click on Save does.
+    act(() => { fireEvent.blur(field()); });
+    expect(await settleSuggestions()).toBe(true);
+    expect(saved).toHaveBeenCalledWith("JavaScript");
+    expect(await settleSuggestions()).toBe(false);
+  });
+
   it("suggests as you type, and Enter takes the standard name for an alias", async () => {
     const saved = vi.fn();
     render(<Field onSaved={saved} />);

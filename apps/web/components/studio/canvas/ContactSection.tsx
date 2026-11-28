@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { authUserQuery, careerProfileQuery } from "@/lib/reveal";
 import { accountContact } from "@/lib/contact-lock";
+import { ProfileDifference } from "./ProfileDifference";
 
 // Ported from EditorPanel's "Contact Tab" — same store calls, same fields.
 const CONTACT_FIELDS: Array<{ key: keyof ResumeContent["contact"]; label: string; type?: string }> = [
@@ -37,6 +38,7 @@ export function ContactSection() {
   return (
     <section className="flex flex-col gap-md">
       <h2 className="text-label-caps text-on-surface-variant">Contact</h2>
+      <ProfileDifference field="headline" />
       <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
         {templateRequiresPhoto(templateId) && (
           <div className="flex flex-col gap-xs">

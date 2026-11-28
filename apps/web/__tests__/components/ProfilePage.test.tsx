@@ -546,6 +546,54 @@ describe("My Profile — every résumé section", () => {
     expect(summary.value).toBe(long);
   });
 
+  // The user's call (2026-11-28): after the note, the user may keep their
+  // own version as it is.
+  it("Save my version saves a summary past 100 words, and later saves don't refuse it again", async () => {
+    localStorage.clear();
+    const long = Array.from({ length: 130 }, (_, i) => `w${i}`).join(" ");
+    getCareerProfile.mockResolvedValue(profile({ summary: long }));
+    upsertCareerProfile.mockResolvedValue(profile({ summary: long }));
+    renderPage();
+    await screen.findByRole("heading", { name: "Professional summary" });
+
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    const alert = await screen.findByRole("alert");
+    expect(upsertCareerProfile).not.toHaveBeenCalled();
+    await userEvent.click(within(alert).getByRole("button", { name: "Save my version" }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalledTimes(1));
+    expect(upsertCareerProfile.mock.calls[0][0].summary).toBe(long);
+    expect(await screen.findByText("Your version is kept: 130 words, past the 100-word standard.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save my version" })).toBeNull();
+
+    // The same version saves with a plain Save from now on.
+    await userEvent.click(screen.getByRole("button", { name: /^(save profile|saved!)$/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalledTimes(2));
+  });
+
+  it("offers Save my version under the summary note too", async () => {
+    localStorage.clear();
+    const long = Array.from({ length: 120 }, (_, i) => `w${i}`).join(" ");
+    getCareerProfile.mockResolvedValue(profile({ summary: long }));
+    renderPage();
+    await screen.findByRole("heading", { name: "Professional summary" });
+    await userEvent.click(screen.getByRole("button", { name: "Save my version" }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalledTimes(1));
+  });
+
+  // Clicking Save straight from a field that tidies what's typed ("english"
+  // → "English") saved the typed text, then the tidy left the form unsaved:
+  // a second click was needed.
+  it("one click saves the tidied text of a field left by clicking Save", async () => {
+    getCareerProfile.mockResolvedValue(profile({ languages: [{ name: "Hindi", level: "Native" }] }));
+    renderPage();
+    const language = await screen.findByRole("combobox", { name: "Language 1" });
+    await userEvent.clear(language);
+    await userEvent.type(language, "english");
+    await userEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(upsertCareerProfile).toHaveBeenCalledTimes(1));
+    expect(upsertCareerProfile.mock.calls[0][0].languages).toEqual([{ name: "English", level: "Native" }]);
+  });
+
   it("scrolls up to a save error at the top, each time it's shown", async () => {
     const scrolled: Element[] = [];
     const original = Element.prototype.scrollIntoView;

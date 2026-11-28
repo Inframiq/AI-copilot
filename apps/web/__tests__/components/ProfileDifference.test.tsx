@@ -4,17 +4,26 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/career-profile-client", () => ({ getCareerProfile: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiClient: {}, isResumeChanged: () => false }));
+vi.mock("@/lib/api-client", () => ({ apiClient: { getResume: vi.fn() }, isResumeChanged: () => false }));
 
-import { ProfileDifference } from "@/components/studio/canvas/ProfileDifference";
+import { ProfileDifference, type DifferenceField } from "@/components/studio/canvas/ProfileDifference";
 import { useResumeStore } from "@/stores/resume-store";
 
-const PROFILE = { master_resume_id: "r1", summary: "Rephrased summary from the profile.", objective: null };
+const PROFILE = {
+  master_resume_id: "r1",
+  headline: "Senior Backend Engineer",
+  summary: "Rephrased summary from the profile.",
+  objective: null,
+  languages: [{ name: "English", level: "Native" }, { name: "Hindi", level: "" }],
+  awards: ["Hackathon winner 2024"],
+};
+const UPLOADED = { id: "r1", original_file_name: "resume.pdf" };
 
-function mount(profile: object = PROFILE) {
+function mount(field: DifferenceField = "summary", profile: object = PROFILE, resume: object = UPLOADED) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(["careerProfile"], profile);
-  return render(<QueryClientProvider client={qc}><ProfileDifference field="summary" /></QueryClientProvider>);
+  qc.setQueryData(["resume", "r1"], resume);
+  return render(<QueryClientProvider client={qc}><ProfileDifference field={field} /></QueryClientProvider>);
 }
 
 beforeEach(() => {
@@ -22,7 +31,11 @@ beforeEach(() => {
   useResumeStore.getState().resetStore();
   useResumeStore.setState({
     resumeId: "r1",
-    content: { contact: { name: "", email: "" }, summary: "Summary the file printed.", experience: [], education: [], skills: [] },
+    content: {
+      contact: { name: "", email: "" }, headline: "Software Engineer",
+      summary: "Summary the file printed.", languages: [{ name: "English", level: "Native" }],
+      experience: [], education: [], skills: [],
+    },
   } as never);
   // No autosave reaching a server in these tests.
   useResumeStore.setState({ _triggerAutoSave: () => {} } as never);
@@ -37,14 +50,14 @@ describe("ProfileDifference", () => {
     expect(useResumeStore.getState().content?.summary).toBe("Summary the file printed.");
   });
 
-  it("applies the profile's summary only when the user picks it", () => {
+  it("applies the profile's version only when the user picks it", () => {
     mount();
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Use profile summary" })); });
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Use profile version" })); });
     expect(useResumeStore.getState().content?.summary).toBe("Rephrased summary from the profile.");
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("goes away on Keep this one, until the profile's text changes", () => {
+  it("goes away on Keep this one, until the profile's version changes", () => {
     const first = mount();
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Keep this one" })); });
     expect(screen.queryByRole("status")).toBeNull();
@@ -55,10 +68,31 @@ describe("ProfileDifference", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("comes back when the profile's summary changes after a keep", () => {
+  it("comes back when the profile's version changes after a keep", () => {
     localStorage.setItem("kripax.profile-difference.r1.summary", "An older profile summary.");
     mount();
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("offers the headline too", () => {
+    mount("headline");
+    expect(screen.getByRole("status", { name: "Profile Headline" })).toHaveTextContent("Senior Backend Engineer");
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Use profile version" })); });
+    expect(useResumeStore.getState().content?.headline).toBe("Senior Backend Engineer");
+  });
+
+  it("offers a list section as its items", () => {
+    mount("languages");
+    const offer = screen.getByRole("status", { name: "Profile Languages" });
+    expect(offer).toHaveTextContent("English (Native)");
+    expect(offer).toHaveTextContent("Hindi");
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Use profile version" })); });
+    expect(useResumeStore.getState().content?.languages).toEqual(PROFILE.languages);
+  });
+
+  it("offers a section the résumé doesn't have at all", () => {
+    mount("awards");
+    expect(screen.getByRole("status", { name: "Profile Awards" })).toHaveTextContent("Hackathon winner 2024");
   });
 
   it("stays quiet when the two match but for spacing", () => {
@@ -69,8 +103,14 @@ describe("ProfileDifference", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  // The user's call: only a résumé that came from an uploaded file.
+  it("never shows on a master résumé that wasn't uploaded", () => {
+    mount("summary", PROFILE, { id: "r1", original_file_name: null });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("never shows on a résumé that isn't the profile's master", () => {
-    mount({ ...PROFILE, master_resume_id: "other" });
+    mount("summary", { ...PROFILE, master_resume_id: "other" });
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -80,8 +120,10 @@ describe("ProfileDifference", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("offers nothing when the profile has no summary", () => {
-    mount({ ...PROFILE, summary: "" });
+  it("offers nothing when the profile's section is empty", () => {
+    mount("summary", { ...PROFILE, summary: "" });
+    expect(screen.queryByRole("status")).toBeNull();
+    mount("objective");
     expect(screen.queryByRole("status")).toBeNull();
   });
 });

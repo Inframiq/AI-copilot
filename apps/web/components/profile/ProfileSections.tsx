@@ -30,10 +30,14 @@ const addRowCls =
  * running count. Text over the cap from an upload stays whole and saves,
  * with a note (capEdit, wordCapNote). The summary (`summary`) takes any
  * number of words, typed or pasted, never cut: past the cap it shows a
- * warning, and the Profile's Save refuses it (summaryCapError). */
-function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder, summary = false }: {
+ * warning, and the Profile's Save refuses it (summaryCapError) unless the
+ * user keeps their own version with "Save my version" (`onSaveAsIs`). */
+function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder, summary = false, onSaveAsIs, saving = false, kept = false }: {
   id: string; value: string; onChange: (v: string) => void;
   maxWords: number; maxChars: number; rows: number; placeholder: string; summary?: boolean;
+  onSaveAsIs?: () => void; saving?: boolean;
+  /** The summary is saved as it is, past the cap: the user's own version. */
+  kept?: boolean;
 }) {
   const count = wordCount(value);
   return (
@@ -52,8 +56,16 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
       </span>
       {count > maxWords && (
         <p className={`text-caption ${summary ? "text-error" : "text-tertiary"}`}>
-          {summary ? summaryCapNote(count) : wordCapNote(maxWords)}
+          {summary
+            ? kept ? `Your version is kept: ${count} words, past the ${maxWords}-word standard.` : summaryCapNote(count)
+            : wordCapNote(maxWords)}
         </p>
+      )}
+      {summary && onSaveAsIs && !kept && count > maxWords && (
+        <button type="button" onClick={onSaveAsIs} disabled={saving}
+          className="self-start rounded-full border border-error/40 px-md py-xs text-label-md font-semibold text-error hover:bg-error/10 transition-colors disabled:opacity-50">
+          Save my version
+        </button>
       )}
     </div>
   );
@@ -61,9 +73,15 @@ function CappedText({ id, value, onChange, maxWords, maxChars, rows, placeholder
 
 /** The always-shown Professional summary, after Contact, on every
  * Profile (lib/profile-layout). */
-export function SummaryCard({ value, onChange, title = "Professional summary", onRemove, writeFrom, placeholder }: {
+export function SummaryCard({ value, onChange, title = "Professional summary", onRemove, writeFrom, placeholder, onSaveAsIs, saving, kept }: {
   value: string;
   onChange: (v: string) => void;
+  /** "Save my version": saves the profile with a summary past 100 words,
+   * the user's own call. Shown only while it is past them. */
+  onSaveAsIs?: () => void;
+  saving?: boolean;
+  /** The summary shown is the one saved: a long one was the user's call. */
+  kept?: boolean;
   title?: string;
   /** The box's example; a student's Profile gives a student's. */
   placeholder?: string;
@@ -92,6 +110,9 @@ export function SummaryCard({ value, onChange, title = "Professional summary", o
         maxWords={L.summaryWords}
         maxChars={L.summaryChars}
         summary
+        onSaveAsIs={onSaveAsIs}
+        saving={saving}
+        kept={kept}
         rows={4}
         placeholder={placeholder ?? "Backend engineer with four years building payment APIs in Go and PostgreSQL…"}
       />

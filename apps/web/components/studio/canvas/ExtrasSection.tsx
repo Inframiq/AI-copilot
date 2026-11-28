@@ -5,6 +5,7 @@ import { LINE_SECTIONS, SECTION_INFO } from "@/lib/profile-sections";
 import { SuggestInput } from "@/components/ui/SuggestInput";
 import { LinesTextarea } from "./LinesTextarea";
 import { repeatedAt } from "@/lib/duplicates";
+import { ProfileDifference } from "./ProfileDifference";
 
 // Languages, Certifications, and every one-per-line section the Profile
 // holds too — a section added there is edited here as well.
@@ -22,6 +23,7 @@ export function ExtrasSection() {
 
       <div className="flex flex-col gap-md">
         <h3 className="text-label-caps text-on-surface-variant">Languages</h3>
+        <ProfileDifference field="languages" />
         {(content.languages ?? []).map((lang, i) => (
           <div
             key={i}
@@ -133,6 +135,7 @@ export function ExtrasSection() {
       {LINE_SECTIONS.map((key) => (
         <div key={key} className="flex flex-col gap-md">
           <h3 className="text-label-caps text-on-surface-variant">{SECTION_INFO[key].label}</h3>
+          <ProfileDifference field={key} />
           <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant/20 flex flex-col gap-md">
             <div className="flex flex-col gap-xs">
               <label htmlFor={`extras-${key}`} className="text-label-sm text-on-surface-variant">

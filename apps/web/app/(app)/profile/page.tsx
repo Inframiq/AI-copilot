@@ -97,6 +97,8 @@ import { canonicalFor, findRepeat } from "@/lib/suggest/client";
 import { repeatedAt } from "@/lib/duplicates";
 import { SOCIAL_HINT, isSocialLinkOk, tidySocialLink } from "@/lib/social-links";
 import { tidyPhone } from "@/lib/phone";
+import { settleSuggestions } from "@/components/ui/SuggestInput";
+import { isKeptSummary, keepSummary, sameSummary } from "@/lib/kept-summary";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID();
@@ -133,6 +135,9 @@ export default function ProfilePage() {
   // The message sits at the top of the page; each one shown (the same one
   // again too, after a second Save) scrolls up to it.
   const [errorShown, setErrorShown] = useState(0);
+  // The last save was refused only for a summary past 100 words: the error
+  // offers "Save my version".
+  const [summaryRefused, setSummaryRefused] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const setError = (message: string | null) => {
     setErrorText(message);
@@ -187,6 +192,9 @@ export default function ProfilePage() {
   const [shownSections, setShownSections] = useState<OptionalSection[]>([]);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const savedLinks = useRef({ linkedin: "", github: "" });
+  // A summary past 100 words the user saved as it is ("Save my version",
+  // lib/kept-summary): later saves don't refuse that version again.
+  const [keptSummary, setKeptSummary] = useState<string | null>(null);
   const [masterResumeTitle, setMasterResumeTitle] = useState<string | null>(null);
   const [masterResumeTemplateId, setMasterResumeTemplateId] = useState<string>("ats_clean");
   // An upload read into the form and not saved yet: the résumé is written
@@ -287,6 +295,8 @@ export default function ProfilePage() {
     setPhotoUrl(profile.photo_url ?? null);
     setPhotoPath(profile.photo_path ?? null);
     showSections(fitProfileSections(profile));
+    const loadedSummary = fitProfileSections(profile).summary;
+    setKeptSummary(isKeptSummary(loadedSummary) ? loadedSummary : null);
     rememberSavedLinks(profile.contact);
   }
 
@@ -359,12 +369,14 @@ export default function ProfilePage() {
   );
 
   // ── save ───────────────────────────────────────────────────────────────────
-  async function handleSave(): Promise<boolean> {
-    setError(null); setSaveOk(false);
+  async function handleSave({ longSummary = false } = {}): Promise<boolean> {
+    setError(null); setSaveOk(false); setSummaryRefused(false);
     // A summary past 100 words is kept whole, never cut; it saves once it
-    // fits — rephrased with KripaX or edited by hand.
-    const overCap = summaryCapError(sections.summary);
-    if (overCap) { setError(overCap); return false; }
+    // fits — rephrased with KripaX or edited by hand — or when the user
+    // keeps their own version with "Save my version" (longSummary).
+    const kept = keptSummary !== null && sameSummary(sections.summary, keptSummary);
+    const overCap = longSummary || kept ? null : summaryCapError(sections.summary);
+    if (overCap) { setError(overCap); setSummaryRefused(true); return false; }
     // A LinkedIn or GitHub link typed or uploaded here has to be a profile
     // link. One saved before the rule, left as it is, still saves (the
     // database allows it too) — it's shown as needing a fix.
@@ -420,6 +432,7 @@ export default function ProfilePage() {
         ...sections,
       };
       const savedRow = await upsertCareerProfile(profileInput);
+      if (longSummary) { keepSummary(sections.summary); setKeptSummary(sections.summary); }
       setSavedName(profileInput.contact.name ?? "");
       setSavedPhone((profileInput.contact.phone ?? "").trim());
       if (savedRow && "phone_changed_at" in savedRow) setPhoneChangedAt(savedRow.phone_changed_at ?? null);
@@ -456,6 +469,28 @@ export default function ProfilePage() {
       return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  // One click is one save. A field just left may still be putting in the
+  // list's spelling ("google" → "Google", SuggestInput): the save waits for
+  // it and then runs on the form as it is after, instead of saving the typed
+  // text and leaving the form "unsaved" for a second click. A click while a
+  // save is starting or running does nothing.
+  const latestSave = useRef(handleSave);
+  latestSave.current = handleSave;
+  const saveRunning = useRef(false);
+  async function saveOnce(options?: { longSummary?: boolean }): Promise<boolean> {
+    if (saveRunning.current) return false;
+    saveRunning.current = true;
+    try {
+      if (await settleSuggestions()) {
+        // Let the tidied values render, so latestSave reads them.
+        await new Promise<void>((done) => setTimeout(done, 0));
+      }
+      return await latestSave.current(options);
+    } finally {
+      saveRunning.current = false;
     }
   }
 
@@ -1287,8 +1322,14 @@ export default function ProfilePage() {
       </div>
 
       {error && (
-        <div ref={errorRef} role="alert" className="bg-error-container/30 border border-error/30 rounded-xl px-lg py-md text-body-sm text-error">
-          {error}
+        <div ref={errorRef} role="alert" className="bg-error-container/30 border border-error/30 rounded-xl px-lg py-md text-body-sm text-error flex flex-col gap-sm">
+          <span>{error}</span>
+          {summaryRefused && (
+            <button type="button" onClick={() => saveOnce({ longSummary: true })} disabled={saving}
+              className="self-start rounded-full border border-error/40 px-md py-xs text-label-md font-semibold text-error hover:bg-error/10 transition-colors disabled:opacity-50">
+              Save my version
+            </button>
+          )}
         </div>
       )}
 
@@ -1532,6 +1573,9 @@ export default function ProfilePage() {
       <SummaryCard
         value={sections.summary ?? ""}
         onChange={(summary) => updateSections({ summary })}
+        onSaveAsIs={() => saveOnce({ longSummary: true })}
+        kept={keptSummary !== null && sameSummary(sections.summary, keptSummary)}
+        saving={saving}
         writeFrom={summarySource}
         placeholder={layout.summaryPlaceholder}
       />
@@ -1572,13 +1616,19 @@ export default function ProfilePage() {
       {/* Floating save — above the phone's bottom tab bar, which otherwise
           covered it and left the profile with no way to save. */}
       <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-xl right-gutter z-50">
+        {/* The button's own box never moves: the lift and press are drawn on
+            the span inside. Pressed near its edge, a button that shrank
+            under the pointer lost the click (it ended outside), and the
+            save took a second click. */}
         <button
-          onClick={handleSave}
+          onClick={() => saveOnce()}
           disabled={saving}
-          className="flex items-center gap-sm px-xl py-md rounded-full text-label-md text-on-primary bg-primary shadow-xl shadow-primary/30 hover:-translate-y-0.5 hover:shadow-2xl active:scale-95 active:translate-y-0 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
+          className="group block rounded-full disabled:cursor-not-allowed"
         >
-          {saving ? <Spinner size={18} className="animate-spin" /> : saveOk ? <CheckCircle size={18} weight="fill" /> : <FloppyDisk size={18} />}
-          {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}
+          <span className="flex items-center gap-sm px-xl py-md rounded-full text-label-md text-on-primary bg-primary shadow-xl shadow-primary/30 group-hover:-translate-y-0.5 group-hover:shadow-2xl group-active:scale-95 group-active:translate-y-0 transition-all duration-200 group-disabled:opacity-50 group-disabled:translate-y-0">
+            {saving ? <Spinner size={18} className="animate-spin" /> : saveOk ? <CheckCircle size={18} weight="fill" /> : <FloppyDisk size={18} />}
+            {saving ? "Saving…" : saveOk ? "Saved!" : "Save Profile"}
+          </span>
         </button>
       </div>
 

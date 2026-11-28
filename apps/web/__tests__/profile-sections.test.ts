@@ -119,7 +119,7 @@ describe("every Profile section is a résumé section", () => {
 
   it("can be edited in the Résumé Builder", () => {
     useResumeStore.setState({ content: RESUME } as never);
-    render(createElement(ExtrasSection));
+    render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(ExtrasSection)));
     for (const key of ["languages", ...LINE_SECTIONS] as const) {
       expect(screen.getByRole("heading", { name: SECTION_INFO[key].label }), key).toBeInTheDocument();
     }
@@ -259,7 +259,7 @@ describe("a one-per-line box in the Builder", () => {
   it("keeps the new line Enter makes, and saves the item once it has text", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     useResumeStore.setState({ content: { ...RESUME, awards: ["Dean's List, 2024"] } } as never);
-    render(createElement(ExtrasSection));
+    render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(ExtrasSection)));
     const box = screen.getByLabelText(/^Awards/) as HTMLTextAreaElement;
     await userEvent.click(box);
     await userEvent.keyboard("{End}{Enter}");
@@ -270,7 +270,7 @@ describe("a one-per-line box in the Builder", () => {
 
   it("follows a change made elsewhere", async () => {
     useResumeStore.setState({ content: { ...RESUME, interests: ["Chess"] } } as never);
-    render(createElement(ExtrasSection));
+    render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(ExtrasSection)));
     const { act } = await import("@testing-library/react");
     act(() => useResumeStore.getState().updateContent({ interests: ["Chess", "Trekking"] }));
     expect(screen.getByLabelText(/^Interests/)).toHaveValue("Chess\nTrekking");

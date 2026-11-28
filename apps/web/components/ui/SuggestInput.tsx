@@ -7,6 +7,21 @@ import { ask, canonicalFor, warm, type Answer } from "@/lib/suggest/client";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "list">;
 
+/** Tidies started by leaving a field, still on their way. */
+const tidying = new Set<Promise<unknown>>();
+
+/**
+ * Waits for every field just left to finish putting in the list's spelling.
+ * True when one was still working. A form's Save awaits it: clicking Save
+ * straight from a field saved the text as typed, and the tidy that landed a
+ * moment later left the form "unsaved" — so Save took a second click.
+ */
+export async function settleSuggestions(): Promise<boolean> {
+  if (!tidying.size) return false;
+  await Promise.allSettled([...tidying]);
+  return true;
+}
+
 /**
  * A text field that suggests names from one of the app's lists as you type
  * (lib/suggest). Anything not in the list can still be typed. Picking a
@@ -177,10 +192,12 @@ export const SuggestInput = forwardRef<HTMLInputElement, InputProps & {
           setOpen(false);
           if (!onPick && value.trim()) {
             const left = value;
-            void tidy(left).then((tidied) => {
+            const done = tidy(left).then((tidied) => {
               // Only if nothing was typed since leaving.
               if (valueRef.current === left && tidied !== left && tidied !== left.trim()) onValueChange(tidied);
             });
+            tidying.add(done);
+            void done.finally(() => tidying.delete(done));
           }
           input.onBlur?.(e);
         }}

@@ -4,6 +4,7 @@ import { apiClient, isResumeChanged } from "@/lib/api-client";
 import { queryClient } from "@/lib/query-client";
 import type { PageSize, Resume, ResumeContent } from "@career-copilot/types";
 import { summaryCapError } from "@/lib/profile-sections";
+import { isKeptSummary, keepSummary, sameSummary } from "@/lib/kept-summary";
 
 // 1.15: the top of the 1.0-1.15 band the ATS reference gives. Résumés saved
 // before keep their own value; this is only what a new one starts at.
@@ -106,6 +107,10 @@ interface ResumeState {
    *  here, unsaved) until ResumeConflictModal's choice — keepMine or
    *  loadTheirs. */
   conflictUpdatedAt: string | null;
+  /** A summary past 100 words the user kept as it is ("Save my version",
+   *  lib/kept-summary): while the summary is still this version, autosave
+   *  doesn't wait for it to fit. */
+  keptSummary: string | null;
 
   setResume: (
     id: string,
@@ -153,6 +158,9 @@ interface ResumeState {
   /** After a conflict: drop this device's unsaved edits and load the résumé
    *  as the other device saved it. */
   loadTheirs: () => Promise<void>;
+  /** "Save my version": save this résumé with its summary past 100 words,
+   *  as it is now. */
+  keepLongSummary: () => Promise<void>;
   /** Internal — exposed for testing */
   _triggerAutoSave: () => void;
 }
@@ -198,6 +206,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   _draftBase: null,
   updatedAt: null,
   conflictUpdatedAt: null,
+  keptSummary: null,
 
   setResume: (
     id, content, templateId, lineSpacing, paragraphSpacing, fontChoice, accentColor,
@@ -208,6 +217,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       _draftBase: null,
       updatedAt: updatedAt ?? null,
       conflictUpdatedAt: null,
+      keptSummary: isKeptSummary(content?.summary) ? content.summary ?? null : null,
       resumeId: id,
       content: withSkillList(content),
       templateId,
@@ -376,7 +386,15 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       _draftBase: null,
       updatedAt: null,
       conflictUpdatedAt: null,
+      keptSummary: null,
     });
+  },
+
+  keepLongSummary: async () => {
+    const summary = get().content?.summary ?? null;
+    keepSummary(summary);
+    set({ keptSummary: summary, saveError: null });
+    await get().saveNow();
   },
 
   _triggerAutoSave: () => {
@@ -408,6 +426,7 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       const {
         resumeId, content, templateId, lineSpacing, paragraphSpacing, fontChoice,
         accentColor, headingSizeDelta, bodySizeDelta, pageSize, draftJdId, updatedAt, conflictUpdatedAt,
+        keptSummary,
       } = get();
       // resumeId is the draft's source (usually the master) — never write it.
       if (!resumeId || !content || draftJdId) return;
@@ -415,8 +434,10 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       // again. The conflict popup is already asking which to keep.
       if (conflictUpdatedAt) throw new Error("This résumé was changed on another device.");
       // A summary past 100 words is kept whole on screen but not saved until
-      // it fits; the edits stay, unsaved, and the header says why.
-      const overCap = summaryCapError(content.summary);
+      // it fits; the edits stay, unsaved, and the header says why. Unless
+      // the user kept their own version ("Save my version").
+      const kept = keptSummary !== null && sameSummary(content.summary, keptSummary);
+      const overCap = kept ? null : summaryCapError(content.summary);
       if (overCap) {
         set({ saveError: overCap });
         throw new Error(overCap);
