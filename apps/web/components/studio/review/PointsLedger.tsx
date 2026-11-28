@@ -65,13 +65,17 @@ export function pointsByChange(
 }
 
 /** Clear all: every point off, AI-written and the profile's Miscellaneous
- * points included. */
+ * points included, and the summary back to the user's own (or none). With
+ * all of it off, Apply gives back the résumé as it was. The summary written
+ * for the job used to stay on, so "everything off" still added a summary —
+ * the résumé came out longer, not shorter. */
 export function clearDecisions(
   changes: BulletChange[],
   aiFixes: AtsFix[],
   miscIds: string[] = [],
 ): Record<string, Decision> {
   return {
+    summary: "reject",
     ...Object.fromEntries(changes.map((c) => [c.key, "reject" as const])),
     ...Object.fromEntries(aiFixes.map((f) => [`fix:${f.id}`, "reject" as const])),
     ...Object.fromEntries(miscIds.map((id) => [`misc:${id}`, "reject" as const])),

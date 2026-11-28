@@ -194,11 +194,13 @@ describe("PointsLedger", () => {
     expect(p.onBulk).toHaveBeenCalledWith({ exp0_b1: "accept", exp0_b0: "accept" });
   });
 
-  it("clears every point, AI-written included", () => {
+  // The summary too: left on, "everything off" still added the summary
+  // written for the job, and the résumé came out longer.
+  it("clears every point, AI-written included, and the summary for the job", () => {
     const p = setup({ decisions: { exp0_b1: "accept", "fix:bullet:terraform": "accept" } });
     fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
     expect(p.onBulk).toHaveBeenCalledWith({
-      exp0_b1: "reject", exp0_b0: "reject", "fix:bullet:terraform": "reject",
+      summary: "reject", exp0_b1: "reject", exp0_b0: "reject", "fix:bullet:terraform": "reject",
     });
   });
 

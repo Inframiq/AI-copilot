@@ -469,7 +469,7 @@ export default function StudioPreviewPage({
           </>
         )}
         <div className="mx-auto mb-sm w-full max-w-[793.7px]">
-          <PageMeter pages={pages} />
+          <PageMeter pages={pages} tailored={!!draftJdId} />
         </div>
         {body()}
       </div>

@@ -6,10 +6,18 @@ import { Files, Warning } from "@phosphor-icons/react";
  *
  * Two pages is a judgement call rather than a failure — plenty of résumés
  * should be two — so this reports rather than warns. What it must do is name
- * the remedy: the points that caused the overflow are chosen on the previous
- * screen, so there is nothing to act on here.
+ * remedies that work. It used to say only "go back and turn points off", but
+ * turning a reworded point off puts back the original wording, which is
+ * usually the longer one: users turned everything off and got a longer
+ * résumé. Spacing and Type are in this screen's header; going back helps
+ * only with what tailoring added (`tailored`: a draft from the review).
  */
-export function PageMeter({ pages, className = "" }: { pages: number; className?: string }) {
+export function PageMeter({ pages, tailored = false, className = "" }: {
+  pages: number;
+  /** A tailored draft, with a review to go back to. */
+  tailored?: boolean;
+  className?: string;
+}) {
   const overflows = pages > 1;
   return (
     <div className={`flex flex-wrap items-center gap-sm ${className}`}>
@@ -26,7 +34,10 @@ export function PageMeter({ pages, className = "" }: { pages: number; className?
       </span>
       {overflows && (
         <span role="status" className="text-caption text-on-surface-variant">
-          The dashed line is where page&nbsp;2 starts. To shorten it, go back and turn points off.
+          The dashed line is where page&nbsp;2 starts. To shorten it, choose Compact in Spacing or Small in Type
+          {tailored
+            ? ", or go back and turn off added points and the summary for this job. A reworded point turned off returns to your original wording, which is often longer."
+            : ", or shorten points in Edit."}
         </span>
       )}
     </div>

@@ -14,11 +14,23 @@ describe("PageMeter", () => {
     expect(screen.getByTestId("page-count").textContent).toMatch(/3 pages/i);
   });
 
-  // The user cannot fix an overflow here — the points that caused it are
-  // chosen on the previous screen — so the message has to say where to go.
-  it("names the remedy when the résumé spills past one page", () => {
+  // "Go back and turn points off" was the only advice, and it didn't work:
+  // a reworded point turned off returns to the original wording, usually
+  // longer. The remedies named now are ones that shorten.
+  it("names remedies that shorten: Spacing and Type, here", () => {
     render(<PageMeter pages={2} />);
-    expect(screen.getByRole("status").textContent).toMatch(/go back/i);
+    const text = screen.getByRole("status").textContent ?? "";
+    expect(text).toMatch(/Compact in Spacing/);
+    expect(text).toMatch(/Small in Type/);
+    // Nothing to go back to on a résumé that wasn't tailored.
+    expect(text).not.toMatch(/go back/i);
+  });
+
+  it("on a tailored draft, says what going back can shorten and what it can't", () => {
+    render(<PageMeter pages={2} tailored />);
+    const text = screen.getByRole("status").textContent ?? "";
+    expect(text).toMatch(/go back and turn off added points and the summary for this job/i);
+    expect(text).toMatch(/reworded point turned off returns to your original wording/i);
   });
 
   it("says nothing extra when it fits", () => {
